@@ -3731,6 +3731,7 @@ class CircadianScenesPanel extends HTMLElement {
           pointer-events: none;
         }
         .save-dialog ha-input,
+        .save-dialog ha-textfield,
         .save-dialog ha-textarea,
         .save-dialog ha-labels-picker,
         .save-dialog ha-category-picker,
@@ -4183,7 +4184,11 @@ class CircadianScenesPanel extends HTMLElement {
 
   _openCreateDialog({ areaId, areaName } = {}) {
     const dialog = document.createElement("ha-dialog");
-    dialog.heading = this._t("frontend.create.title", "Create scene");
+    dialog.className = "save-dialog";
+    dialog.setAttribute(
+      "header-title",
+      this._t("frontend.create.title", "Create scene")
+    );
     const body = document.createElement("div");
     body.style.display = "flex";
     body.style.flexDirection = "column";
@@ -4211,12 +4216,17 @@ class CircadianScenesPanel extends HTMLElement {
       themeSelect.appendChild(opt);
     }
     themeSelect.value = "default";
-    const nameInput = document.createElement("ha-textfield");
+    const nameInput = customElements.get("ha-input")
+      ? document.createElement("ha-input")
+      : document.createElement("ha-selector");
     nameInput.label = this._t("frontend.common.name", "Name");
     nameInput.value = areaName
       ? `${areaName} Circadian`
       : this._t("frontend.common.new_scene", "New scene");
-    nameInput.style.display = "block";
+    if (nameInput.localName === "ha-selector") {
+      nameInput.hass = this._hass;
+      nameInput.selector = { text: {} };
+    }
     kindSelect.addEventListener("change", () => {
       themeLabel.hidden = kindSelect.value === "simple";
       themeSelect.hidden = kindSelect.value === "simple";
@@ -4229,12 +4239,17 @@ class CircadianScenesPanel extends HTMLElement {
     });
     body.append(kindLabel, kindSelect, themeLabel, themeSelect, nameInput);
     dialog.appendChild(body);
-    const footer = document.createElement("div");
-    footer.slot = "primaryAction";
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
     const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
     cancel.appearance = "plain";
     cancel.textContent = this._t("frontend.common.cancel", "Cancel");
     const create = document.createElement("ha-button");
+    create.slot = "primaryAction";
+    create.variant = "brand";
     create.textContent = this._t("frontend.common.save", "Save");
     cancel.addEventListener("click", () => {
       dialog.open = false;
@@ -6413,6 +6428,319 @@ class CircadianScenesPanel extends HTMLElement {
       this._handleOverflow(ev.detail?.item?.value);
     });
     return menu;
+  }
+
+  _listSceneOverflowMenu(scene) {
+    const menu = document.createElement("ha-dropdown");
+    menu.activatable = true;
+    const trigger = document.createElement("ha-icon-button");
+    trigger.slot = "trigger";
+    trigger.label = this._loc("ui.common.menu", "Menu");
+    const icon = document.createElement("ha-icon");
+    icon.setAttribute("icon", "mdi:dots-vertical");
+    trigger.appendChild(icon);
+    // ha-dropdown opens from the trigger click; do not stopPropagation here.
+    menu.appendChild(trigger);
+
+    const addItem = (value, label, iconName, { disabled = false, danger = false } = {}) => {
+      const item = document.createElement("ha-dropdown-item");
+      item.value = value;
+      item.disabled = disabled;
+      if (danger) {
+        item.variant = "danger";
+      }
+      const itemIcon = document.createElement("ha-icon");
+      itemIcon.setAttribute("icon", iconName);
+      itemIcon.slot = "icon";
+      item.append(itemIcon, document.createTextNode(label));
+      menu.appendChild(item);
+    };
+
+    const hasEntity = Boolean(scene.entity_id);
+    addItem(
+      "activate",
+      this._t("frontend.actions.activate_scene", "Activate scene"),
+      "mdi:play"
+    );
+    addItem(
+      "show-info",
+      this._loc("ui.panel.config.scene.picker.show_info", "Information"),
+      "mdi:information-outline",
+      { disabled: !hasEntity }
+    );
+    addItem(
+      "show-settings",
+      this._loc("ui.panel.config.automation.picker.show_settings", "Settings"),
+      "mdi:cog",
+      { disabled: !hasEntity }
+    );
+    addItem(
+      "edit-category",
+      scene.category
+        ? this._loc("ui.panel.config.scene.picker.edit_category", "Edit category")
+        : this._loc(
+            "ui.panel.config.scene.picker.assign_category",
+            "Assign category"
+          ),
+      "mdi:tag"
+    );
+    addItem(
+      "rename",
+      this._loc("ui.panel.config.scene.editor.rename", "Rename"),
+      "mdi:pencil"
+    );
+    if (customElements.get("wa-divider")) {
+      menu.appendChild(document.createElement("wa-divider"));
+    }
+    addItem(
+      "duplicate",
+      this._loc("ui.panel.config.scene.picker.duplicate_scene", "Duplicate"),
+      "mdi:content-duplicate"
+    );
+    addItem(
+      "delete",
+      this._loc("ui.panel.config.scene.picker.delete_scene", "Delete"),
+      "mdi:delete",
+      { danger: true }
+    );
+    menu.addEventListener("wa-select", (ev) => {
+      ev.stopPropagation();
+      this._handleListSceneOverflow(scene, ev.detail?.item?.value);
+    });
+    return menu;
+  }
+
+  async _handleListSceneOverflow(scene, action) {
+    if (!action) {
+      return;
+    }
+    if (action === "activate") {
+      if (!scene.entity_id) {
+        return;
+      }
+      await this._hass.callService("scene", "turn_on", {
+        entity_id: scene.entity_id,
+      });
+      return;
+    }
+    if (action === "show-info") {
+      this._showEntityMoreInfo(scene.entity_id);
+      return;
+    }
+    if (action === "show-settings") {
+      this._showEntityMoreInfo(scene.entity_id, "settings");
+      return;
+    }
+    if (action === "edit-category") {
+      await this._openListSceneMetaDialog(scene, { focus: "category" });
+      return;
+    }
+    if (action === "rename") {
+      await this._openListSceneMetaDialog(scene, {});
+      return;
+    }
+    if (action === "duplicate") {
+      await this._duplicateSceneFromList(scene);
+      return;
+    }
+    if (action === "delete") {
+      this._confirmDeleteScene(scene);
+    }
+  }
+
+  async _openListSceneMetaDialog(scene, { focus } = {}) {
+    const form = { ...(scene.form || {}) };
+    this.shadowRoot.querySelector("ha-dialog.save-dialog")?.remove();
+    const data = {
+      scene_name: form.scene_name || scene.scene_name || "Scene",
+      area: form.area || scene.area || null,
+      description: form.description || "",
+      labels: [...(form.labels || scene.labels || [])],
+      category: form.category || scene.category || "",
+    };
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "save-dialog";
+    dialog.setAttribute(
+      "header-title",
+      this._loc("ui.panel.config.scene.editor.rename", "Rename")
+    );
+    dialog.open = true;
+    const bindValue = (el, onValue) => {
+      el.addEventListener("value-changed", (ev) => {
+        ev.stopPropagation();
+        onValue(ev.detail?.value);
+      });
+      el.addEventListener("input", () => onValue(el.value));
+    };
+    const nameInput = customElements.get("ha-input")
+      ? document.createElement("ha-input")
+      : document.createElement("ha-selector");
+    nameInput.label = this._t("frontend.common.name", "Name");
+    nameInput.required = true;
+    nameInput.value = data.scene_name;
+    if (nameInput.localName === "ha-selector") {
+      nameInput.hass = this._hass;
+      nameInput.selector = { text: {} };
+    }
+    bindValue(nameInput, (value) => {
+      data.scene_name = value ?? "";
+    });
+    const areaPicker = document.createElement("ha-selector");
+    areaPicker.hass = this._hass;
+    areaPicker.label = this._fieldLabel("area");
+    areaPicker.required = true;
+    areaPicker.value = data.area;
+    areaPicker.selector = { area: {} };
+    bindValue(areaPicker, (value) => {
+      data.area = value || null;
+    });
+    dialog.append(nameInput, areaPicker);
+    if (focus === "category") {
+      const cat = customElements.get("ha-input")
+        ? document.createElement("ha-input")
+        : document.createElement("ha-selector");
+      cat.label = this._t("frontend.common.category", "Category");
+      cat.value = data.category || "";
+      if (cat.localName === "ha-selector") {
+        cat.hass = this._hass;
+        cat.selector = { text: {} };
+      }
+      bindValue(cat, (value) => {
+        data.category = value ?? "";
+      });
+      dialog.appendChild(cat);
+    }
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
+    const save = document.createElement("ha-button");
+    save.slot = "primaryAction";
+    save.variant = "brand";
+    save.textContent = this._t("frontend.common.save", "Save");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    save.addEventListener("click", async () => {
+      const name = (data.scene_name || "").trim();
+      if (!name) {
+        nameInput.reportValidity?.();
+        return;
+      }
+      if (!data.area) {
+        areaPicker.reportValidity?.();
+        return;
+      }
+      try {
+        await this._hass.callWS({
+          type: `${DOMAIN}/save`,
+          scene_id: scene.id,
+          data: {
+            ...form,
+            scene_name: name,
+            area: data.area,
+            description: data.description,
+            labels: data.labels,
+            category: data.category || null,
+          },
+        });
+        dialog.open = false;
+        await this._loadList();
+      } catch (err) {
+        this._error = err.message || String(err);
+        dialog.open = false;
+        this._renderList();
+      }
+    });
+    footer.append(cancel, save);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
+  }
+
+  async _duplicateSceneFromList(scene) {
+    const suffix = this._loc(
+      "ui.panel.config.scene.picker.duplicate",
+      "duplicate"
+    );
+    const form = { ...(scene.form || scene) };
+    delete form.id;
+    form.scene_name = `${form.scene_name || scene.scene_name || "Scene"} (${suffix})`;
+    try {
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save`,
+        data: form,
+      });
+      await this._loadList();
+      if (saved?.id) {
+        this._go(`edit/${saved.id}`);
+      }
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._renderList();
+    }
+  }
+
+  _confirmDeleteScene(scene) {
+    this.shadowRoot.querySelector("ha-dialog.confirm-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "confirm-dialog";
+    dialog.setAttribute(
+      "header-title",
+      this._loc(
+        "ui.panel.config.scene.picker.delete_confirm_title",
+        "Delete scene?"
+      )
+    );
+    dialog.open = true;
+    const displayName = scene.scene_name || scene.name || "Scene";
+    const text = document.createElement("p");
+    text.textContent = this._loc(
+      "ui.panel.config.scene.picker.delete_confirm_text",
+      `Are you sure you want to delete ${displayName}?`,
+      { name: displayName }
+    );
+    dialog.appendChild(text);
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._loc("ui.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    const confirm = document.createElement("ha-button");
+    confirm.slot = "primaryAction";
+    confirm.variant = "danger";
+    confirm.textContent = this._loc("ui.common.delete", "Delete");
+    confirm.addEventListener("click", async () => {
+      dialog.open = false;
+      try {
+        await this._hass.callWS({
+          type: `${DOMAIN}/delete`,
+          scene_id: scene.id,
+        });
+        if (this._editId === scene.id) {
+          this._go("");
+          return;
+        }
+        await this._loadList();
+      } catch (err) {
+        this._error = err.message || String(err);
+        this._renderList();
+      }
+    });
+    footer.append(cancel, confirm);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
   }
 
   _handleOverflow(action) {

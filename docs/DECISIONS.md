@@ -434,6 +434,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Editor overflow matches the native scene page
 
 - **Date:** 2026-08-26
+- **Superseded in part:** 2026-09-03 — landing scene cards use the same overflow (Activate, Information, Settings, Assign/Edit category, Rename, Duplicate, Delete). Card tap still opens the editor; do not put an activate switch on the card. Do not `stopPropagation` on the dots trigger — `ha-dropdown` opens from that click.
 - **Decision:** Create and edit both show the native scene overflow (`ha-dropdown` + dots). Items: Activate, Information, Settings, Assign/Edit category, Rename, Duplicate, Delete. Actions that need a saved entity are disabled on `#new`. Skip Edit YAML — this panel has no YAML mode. Category opens our Save dialog with the category field visible so the store and registry stay in sync. Delete uses an `ha-dialog` with the native confirm strings, not `window.confirm`.
 - **Why:** Users already know that menu from Settings → Scenes. A shorter custom menu hid Apply / info / duplicate.
 - **Do not reverse without user ask.**

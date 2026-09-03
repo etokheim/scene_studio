@@ -65,21 +65,34 @@ export const LANDING_CSS = `
     gap: 12px;
     min-height: 64px;
     margin: 0 0 8px;
-    padding: 10px 12px;
+    padding: 10px 8px 10px 12px;
     border: 0;
     border-radius: 14px;
     color: #fff;
     cursor: pointer;
-    overflow: hidden;
+    overflow: visible;
     width: 100%;
     text-align: left;
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  .scene-card .card-overflow {
+    position: relative;
+    z-index: 2;
+    margin-left: auto;
+    flex: 0 0 auto;
+    color: #fff;
+    --mdc-icon-button-size: 36px;
+  }
+  .scene-card .card-overflow ha-icon-button {
+    color: #fff;
   }
   .scene-card.selected { box-shadow: inset 0 0 0 2px #fff; }
   .scene-card .card-bg {
     position: absolute;
     inset: 0;
     z-index: 0;
+    border-radius: inherit;
+    overflow: hidden;
   }
   .scene-card .card-body {
     position: relative;
@@ -363,11 +376,10 @@ function renderAreaBlock(panel, area, scenes) {
 }
 
 function renderSceneCard(panel, scene) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "scene-card";
+  const cardEl = document.createElement("div");
+  cardEl.className = "scene-card";
   if (panel._editId === scene.id) {
-    btn.classList.add("selected");
+    cardEl.classList.add("selected");
   }
   const bg = document.createElement("div");
   bg.className = "card-bg";
@@ -389,9 +401,16 @@ function renderSceneCard(panel, scene) {
       ? panel._t("frontend.kinds.simple", "Simple scene")
       : panel._t("frontend.kinds.circadian", "Circadian scene");
   body.append(name, sub);
-  btn.append(bg, body);
-  btn.addEventListener("click", () => panel._go(`edit/${scene.id}`));
-  return btn;
+  const overflow = panel._listSceneOverflowMenu(scene);
+  overflow.classList.add("card-overflow");
+  cardEl.append(bg, body, overflow);
+  cardEl.addEventListener("click", (ev) => {
+    if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
+      return;
+    }
+    panel._go(`edit/${scene.id}`);
+  });
+  return cardEl;
 }
 
 function renderEmptyHero(panel) {
