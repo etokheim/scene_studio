@@ -31,11 +31,8 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from .activation_cache import cached_in_memory_scenes, cached_solar_events
-from .apply_entities import (
-    apply_entities_parallel,
-    get_scene_by_uuid,
-)
+from .activation_cache import cached_solar_events
+from .apply_entities import apply_entities_parallel
 from .const import (
     AREA,
     CATEGORY,
@@ -44,14 +41,11 @@ from .const import (
     DATA_STORE,
     DEFAULT_SCENE_NAME,
     DOMAIN,
+    KIND_SIMPLE,
     LABELS,
-    SCENE_DAWN,
-    SCENE_DUSK,
     SCENE_DUSK_MINIMUM_TIME_OF_DAY,
     SCENE_NAME,
-    SCENE_NOON,
-    SCENE_SUNRISE,
-    SCENE_SUNSET,
+    SOLAR_EVENTS,
 )
 from .continuous import (
     automatically_update_lights_interval_seconds,
@@ -73,6 +67,7 @@ from .extrapolation_math import (
     transition_progress_percent,
 )
 from .native_scene import scenes_in_area
+from .snapshots import circadian_anchor, simple_anchor
 from .solar import EVENT_ORDER, dusk_start_seconds
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,12 +85,21 @@ async def async_setup_entry(
 
     to_add = []
     for item in store.list():
-        entity = CircadianScene(hass, config_entry, item)
+        entity = _make_entity(hass, config_entry, item)
         entities[item["id"]] = entity
         to_add.append(entity)
     if to_add:
         async_add_entities(to_add)
     return True
+
+
+def _make_entity(
+    hass: HomeAssistant, config_entry: ConfigEntry, item: dict
+) -> CircadianScene | SimpleScene:
+    """Instantiate the platform entity for a stored scene."""
+    if item.get("kind") == KIND_SIMPLE:
+        return SimpleScene(hass, config_entry, item)
+    return CircadianScene(hass, config_entry, item)
 
 
 async def async_create_or_update_entity(
@@ -104,13 +108,18 @@ async def async_create_or_update_entity(
     item: dict,
     async_add_entities: AddEntitiesCallback,
     entities: dict,
-) -> CircadianScene:
+) -> CircadianScene | SimpleScene:
     """Create or update a scene entity for a stored config."""
     existing = entities.get(item["id"])
+    want_simple = item.get("kind") == KIND_SIMPLE
     if existing:
-        await existing.async_update_config(item)
-        return existing
-    entity = CircadianScene(hass, config_entry, item)
+        if want_simple != isinstance(existing, SimpleScene):
+            await existing.async_remove(force_remove=True)
+            entities.pop(item["id"], None)
+        else:
+            await existing.async_update_config(item)
+            return existing
+    entity = _make_entity(hass, config_entry, item)
     entities[item["id"]] = entity
     async_add_entities([entity])
     return entity
@@ -267,12 +276,6 @@ class CircadianScene(Scene):
         updates["categories"] = categories
         entity_reg.async_update_entity(self.entity_id, **updates)
 
-    async def async_get_in_memory_scenes(self):
-        """Get scenes from in-memory scene entities instead of reading YAML."""
-        scenes = cached_in_memory_scenes(self.hass)
-        _LOGGER.debug("Loaded %d scenes from in-memory entities", len(scenes))
-        return scenes
-
     @property
     def name(self):
         """Return the display name of this device."""
@@ -304,18 +307,10 @@ class CircadianScene(Scene):
         if self._target_date_time is not None:
             attrs["target_date_time"] = self._target_date_time.isoformat()
 
-        # Expose scene entity_ids as attributes
-        for attr_name, key in (
-            ("dawn_scene", SCENE_DAWN),
-            ("sunrise_scene", SCENE_SUNRISE),
-            ("noon_scene", SCENE_NOON),
-            ("sunset_scene", SCENE_SUNSET),
-            ("dusk_scene", SCENE_DUSK),
-        ):
-            value = self._cfg(key)
-            if value:
-                attrs[attr_name] = value
-
+        attrs["kind"] = "circadian"
+        theme_id = self._cfg("theme_id")
+        if theme_id:
+            attrs["theme_id"] = theme_id
         return attrs
 
     def _cancel_automatically_update_lights(self) -> None:
@@ -649,14 +644,6 @@ class CircadianScene(Scene):
             )
 
         ##############################################
-        #                Load scenes                 #
-        ##############################################
-        # Get scenes from in-memory scene entities (no file I/O)
-        scenes = await self.async_get_in_memory_scenes()
-
-        _LOGGER.debug("Time getting native scenes: %.3fs", time.time() - start_time)
-
-        ##############################################
         #          Calculate solar events            #
         ##############################################
         start_time_calculate_solar_events = time.time()
@@ -692,14 +679,16 @@ class CircadianScene(Scene):
         )
         dusk_original_time = dusk_solar_seconds if dusk_was_overridden else None
 
+        store = self.hass.data[DOMAIN][DATA_STORE]
+        anchors = {
+            event: circadian_anchor(self.hass, store, self._scene_config, event)
+            for event in SOLAR_EVENTS
+        }
         sun_events = {
             "dawn": SunEvent(
                 name="Dawn",
                 key="dawn",
-                scene=get_scene_by_uuid(
-                    scenes,
-                    self._cfg(SCENE_DAWN),
-                ),
+                scene=anchors["dawn"],
                 start_time=self.datetime_to_seconds_since_midnight(
                     solar_events["dawn"]
                 ),
@@ -707,10 +696,7 @@ class CircadianScene(Scene):
             "sunrise": SunEvent(
                 name="Sunrise",
                 key="sunrise",
-                scene=get_scene_by_uuid(
-                    scenes,
-                    self._cfg(SCENE_SUNRISE),
-                ),
+                scene=anchors["sunrise"],
                 start_time=self.datetime_to_seconds_since_midnight(
                     solar_events["sunrise"]
                 ),
@@ -718,10 +704,7 @@ class CircadianScene(Scene):
             "noon": SunEvent(
                 name="Noon",
                 key="noon",
-                scene=get_scene_by_uuid(
-                    scenes,
-                    self._cfg(SCENE_NOON),
-                ),
+                scene=anchors["noon"],
                 start_time=self.datetime_to_seconds_since_midnight(
                     solar_events["noon"]
                 ),
@@ -729,10 +712,7 @@ class CircadianScene(Scene):
             "sunset": SunEvent(
                 name="Sunset",
                 key="sunset",
-                scene=get_scene_by_uuid(
-                    scenes,
-                    self._cfg(SCENE_SUNSET),
-                ),
+                scene=anchors["sunset"],
                 start_time=self.datetime_to_seconds_since_midnight(
                     solar_events["sunset"]
                 ),
@@ -740,10 +720,7 @@ class CircadianScene(Scene):
             "dusk": SunEvent(
                 name="Dusk",
                 key="dusk",
-                scene=get_scene_by_uuid(
-                    scenes,
-                    self._cfg(SCENE_DUSK),
-                ),
+                scene=anchors["dusk"],
                 start_time=dusk_seconds,
             ),
         }
@@ -821,17 +798,15 @@ class CircadianScene(Scene):
             sorted_sun_events = sorted(sun_events.values(), key=lambda x: x.start_time)
             for sun_event in sorted_sun_events:
                 event_time_str = self._format_seconds_to_time(sun_event.start_time)
-                scene_entity_id = sun_event.scene.get("entity_id", "N/A")
                 if sun_event.key == "dusk" and dusk_was_overridden:
                     dusk_original_str = self._format_seconds_to_time(dusk_original_time)
                     event_time_str = (
                         f"{event_time_str} ({dusk_original_str} was overridden)"
                     )
                 _LOGGER.info(
-                    "  %s %s - %s",
+                    "  %s %s",
                     (sun_event.name + ":").ljust(14),
                     event_time_str,
-                    scene_entity_id,
                 )
 
             _LOGGER.info("")
@@ -1015,3 +990,87 @@ class CircadianScene(Scene):
             starts[current_key], starts[next_key], seconds
         )
         return day_transition_percent(current_key, next_key, intra)
+
+
+class SimpleScene(Scene):
+    """Fixed lighting scene that can reference color variables."""
+
+    def __init__(
+        self, hass: HomeAssistant, config_entry: ConfigEntry, scene_config: dict
+    ):
+        """Initialize a simple scene entity."""
+        name = scene_config.get(SCENE_NAME) or DEFAULT_SCENE_NAME
+        self.entity_id = "scene." + name.replace(" ", "_").casefold()
+        self._scene_id = self.entity_id
+        self.hass = hass
+        self.config_entry = config_entry
+        self._scene_config = scene_config
+        self._attr_icon = "mdi:palette"
+        self._attr_name = name
+        self._attr_unique_id = scene_config["id"]
+        self._attr_integration = "circadian_scenes"
+        self._area_id = scene_config.get(AREA)
+
+    @property
+    def name(self):
+        """Return the display name."""
+        return self._attr_name
+
+    @property
+    def unique_id(self):
+        """Return the unique ID."""
+        return self._attr_unique_id
+
+    @property
+    def extra_state_attributes(self):
+        """Return state attributes."""
+        return {"kind": KIND_SIMPLE, "integration": self._attr_integration}
+
+    async def async_added_to_hass(self) -> None:
+        """Assign the configured area once the entity is registered."""
+        await super().async_added_to_hass()
+        await self._async_sync_registry()
+
+    async def async_update_config(self, scene_config: dict) -> None:
+        """Apply an updated store item."""
+        self._scene_config = scene_config
+        self._attr_name = scene_config.get(SCENE_NAME) or self._attr_name
+        self._area_id = scene_config.get(AREA)
+        await self._async_sync_registry()
+        self.async_write_ha_state()
+
+    async def _async_sync_registry(self) -> None:
+        """Keep entity registry area, labels, and category in sync."""
+        entity_reg = er.async_get(self.hass)
+        entry = entity_reg.async_get(self.entity_id)
+        if not entry:
+            return
+        updates: dict[str, Any] = {"area_id": self._area_id}
+        labels = self._scene_config.get(LABELS)
+        if labels is not None:
+            updates["labels"] = set(labels)
+        categories = dict(entry.categories or {})
+        category = self._scene_config.get(CATEGORY)
+        if category:
+            categories["scene"] = category
+        else:
+            categories.pop("scene", None)
+        updates["categories"] = categories
+        entity_reg.async_update_entity(self.entity_id, **updates)
+
+    async def async_activate(self, transition=0, **kwargs):
+        """Apply the resolved fixed snapshot."""
+        store = self.hass.data[DOMAIN][DATA_STORE]
+        anchor = simple_anchor(self.hass, store, self._scene_config)
+        entity_changes = []
+        for entity_id, state in (anchor.get("entities") or {}).items():
+            item = {ATTR_ENTITY_ID: entity_id, **state}
+            entity_changes.append(item)
+        if entity_changes:
+            await apply_entities_parallel(
+                entity_changes,
+                self.hass,
+                transition,
+            )
+        if hasattr(self, "_async_record_activation"):
+            self._async_record_activation()

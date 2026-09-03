@@ -6,8 +6,8 @@ import logging
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
@@ -21,7 +21,7 @@ from .const import (
     LEGACY_DOMAIN,
     SCENE_NAME,
 )
-from .native_scene import apply_managed_native_scene_visibility
+from .migrate_native import async_freeze_migrate
 from .panel import async_setup_panel, async_unload_panel
 from .store import CircadianScenesStore
 from .websocket_api import async_setup_websocket
@@ -197,9 +197,21 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     if not domain_data["store_loaded"]:
         await store.async_load()
         domain_data["store_loaded"] = True
-        if store.pending_hide_sync and store.settings.get("hide_managed_native_scenes"):
-            apply_managed_native_scene_visibility(hass, hidden=True)
-            store.pending_hide_sync = False
+
+        async def _freeze(_event: Event | None = None) -> None:
+            changed = await async_freeze_migrate(hass, store)
+            if not changed:
+                return
+            entities = hass.data.get(DOMAIN, {}).get(DATA_ENTITIES) or {}
+            for item in store.list():
+                entity = entities.get(item["id"])
+                if entity is not None:
+                    await entity.async_update_config(item)
+
+        if hass.data.get("scene"):
+            await _freeze()
+        else:
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _freeze)
 
     if not domain_data["legacy_entities_purged"]:
         _purge_legacy_platform_entities(hass)

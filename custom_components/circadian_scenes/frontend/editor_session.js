@@ -75,18 +75,17 @@ function formatClockHm(seconds) {
 
 function emptyFormData() {
   return {
+    kind: "circadian",
     scene_name: "Circadian",
     description: "",
     labels: [],
     category: null,
     area: null,
-    display_scenes_combined: true,
-    scene_dawn_sunrise_sunset: null,
-    scene_dawn: null,
-    scene_sunrise: null,
-    scene_noon: null,
-    scene_sunset: null,
-    scene_dusk: null,
+    theme_id: "default",
+    membership: { exclude: [], include: [] },
+    overrides: {},
+    lights: {},
+    automatically_update_lights: true,
     scene_dusk_minimum_time_of_day: "22:00:00",
   };
 }

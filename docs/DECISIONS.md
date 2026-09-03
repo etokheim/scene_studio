@@ -3,6 +3,14 @@
 Durable product and architecture choices for Circadian Scenes.
 Agents: do not reverse these without an explicit user request. Supersede entries in the same change set when intentionally changing course.
 
+## Store owns light snapshots; variables and themes are house-wide (v6)
+
+- **Date:** 2026-09-03
+- **Supersedes:** native YAML scenes as the editable database; “use my existing scenes” wizard; Created-scenes tab; `hide_managed_native_scenes`; per-event native scene attributes on the circadian entity.
+- **Decision:** Circadian and simple scenes persist light state in `circadian_scenes.scenes` (store v4). Color **variables** and **circadian themes** are house-wide, store-only (not HA helpers). Circadian scenes resolve membership `(area lights − exclude) ∪ include`, then theme → variable or per-light override. Simple scenes are the same membership plus a single snapshot that may reference variables. Both kinds stay `scene.*` entities. Wheel-pin edits **detach** a light to a fixed color; variable/theme library edits are the only way to change a shared color. Variable edits apply on next activate / automatic-update tick, not live. v3 rooms freeze-migrate to full overrides with the default theme as a reset target; managed YAML scenes this integration created are deleted. Combined color+kelvin control is `O)` (disk + crescent, gap hysteresis). Desktop landing is a ~320–360px area rail plus library/editor; cards have no activate switch.
+- **Why:** Generating five native HA scenes per room was MVP baggage. Area membership plus themes is how new lights pick up a look without re-editing every snapshot. Freeze migration keeps existing rooms pixel-identical instead of guessing theme links.
+- **Do not reverse without user ask.**
+
 ## Live preview throttle while dragging the color wheel
 
 - **Date:** 2026-09-02

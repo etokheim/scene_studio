@@ -29,6 +29,9 @@ from .color_math import (
     same_color_mode,
 )
 from .const import (
+    DATA_STORE,
+    DOMAIN,
+    KIND_SIMPLE,
     SCENE_DAWN,
     SCENE_DUSK,
     SCENE_NOON,
@@ -47,6 +50,8 @@ from .extrapolation_math import (
     transition_progress_percent,
 )
 from .native_scene import lights_in_area, scene_entity_payload
+from .resolve import build_circadian_event_snapshot, build_simple_snapshot
+from .snapshots import modes_map, scene_members
 from .solar import SECONDS_PER_DAY, build_sun_path
 
 _LOGGER = logging.getLogger(__name__)
@@ -96,7 +101,8 @@ def build_preview(
     *,
     dusk_minimum: int | None,
     target_date: str | None,
-    scene_ids: dict[str, str | None],
+    scene: dict[str, Any] | None = None,
+    scene_ids: dict[str, str | None] | None = None,
     overlay: dict[str, Any] | list[dict[str, Any]] | None = None,
     location: dict[str, Any] | None = None,
     area_id: str | None = None,
@@ -105,9 +111,14 @@ def build_preview(
     t0 = time.perf_counter()
     sun_path = build_sun_path(hass, dusk_minimum, target_date, location)
     t_sun = time.perf_counter() - t0
-    lights, warnings, split = _light_series(
-        hass, sun_path["events"], scene_ids, overlay, area_id
-    )
+    if scene is not None:
+        lights, warnings, split = _light_series_from_store(
+            hass, sun_path["events"], scene
+        )
+    else:
+        lights, warnings, split = _light_series(
+            hass, sun_path["events"], scene_ids or {}, overlay, area_id
+        )
     t_total = time.perf_counter() - t0
     # Debug-only split so we can tell sun math vs YAML load vs segment samples.
     _LOGGER.debug(
@@ -196,6 +207,120 @@ def _overlay_native_scenes(
             patched["name"] = patch["name"]
             result = {**result, scene_id: patched}
     return result
+
+
+def _light_series_from_store(
+    hass: HomeAssistant,
+    events: list[dict[str, Any]],
+    scene: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, float | int]]:
+    """Build light series from a v4 store scene (theme + overrides)."""
+    store = hass.data[DOMAIN][DATA_STORE]
+    members = scene_members(hass, scene)
+    modes = modes_map(hass, members)
+    area_id = scene.get("area")
+    area_lights = set(lights_in_area(hass, area_id)) if area_id else set()
+    bound: list[dict[str, Any]] = []
+    if scene.get("kind") == KIND_SIMPLE:
+        entities = build_simple_snapshot(scene, store.variables, members, modes)
+        for event in events:
+            bound.append(
+                {
+                    **event,
+                    "scene": {
+                        "id": scene.get("id"),
+                        "name": scene.get("scene_name"),
+                        "entity_id": scene.get("id"),
+                        "entities": entities,
+                    },
+                }
+            )
+    else:
+        for event in events:
+            entities = build_circadian_event_snapshot(
+                scene,
+                event["id"],
+                store.variables,
+                store.themes,
+                members,
+                modes,
+            )
+            bound.append(
+                {
+                    **event,
+                    "scene": {
+                        "id": scene.get("id"),
+                        "name": event["id"],
+                        "entity_id": scene.get("id"),
+                        "entities": entities,
+                    },
+                }
+            )
+    empty_split: dict[str, float | int] = {
+        "load_native_ms": 0.0,
+        "samples_ms": 0.0,
+        "light_count": 0,
+    }
+    if not members:
+        suggested = []
+        for entity_id in sorted(area_lights):
+            state = hass.states.get(entity_id)
+            suggested.append(
+                {
+                    "entity_id": entity_id,
+                    "name": state.name if state else entity_id,
+                    "samples": [],
+                    "gaps": [],
+                    "event_states": _event_states_for_light(bound, entity_id),
+                    "suggested": True,
+                    "in_area": True,
+                }
+            )
+        empty_split["light_count"] = len(suggested)
+        return suggested, [], empty_split
+
+    t_samples = time.perf_counter()
+    sample_seconds = _segment_sample_seconds(bound)
+    lights = []
+    for entity_id in members:
+        state = hass.states.get(entity_id)
+        samples = []
+        for seconds in sample_seconds:
+            brightness_pct, rgb = _sample_light(bound, entity_id, seconds)
+            samples.append([seconds, brightness_pct, rgb[0], rgb[1], rgb[2]])
+        lights.append(
+            {
+                "entity_id": entity_id,
+                "name": state.name if state else entity_id,
+                "samples": samples,
+                "gaps": [],
+                "event_states": _event_states_for_light(bound, entity_id),
+                "suggested": False,
+                "in_area": entity_id in area_lights if area_lights else None,
+            }
+        )
+    for entity_id in sorted(area_lights - set(members)):
+        state = hass.states.get(entity_id)
+        lights.append(
+            {
+                "entity_id": entity_id,
+                "name": state.name if state else entity_id,
+                "samples": [],
+                "gaps": [],
+                "event_states": _event_states_for_light(bound, entity_id),
+                "suggested": True,
+                "in_area": True,
+            }
+        )
+    return (
+        lights,
+        [],
+        {
+            "load_native_ms": 0.0,
+            "samples_ms": (time.perf_counter() - t_samples) * 1000,
+            "light_count": len(lights),
+        },
+    )
 
 
 def _light_series(
