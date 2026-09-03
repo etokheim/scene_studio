@@ -17,6 +17,17 @@ export const LANDING_CSS = `
     padding: 12px 12px 80px;
     box-sizing: border-box;
   }
+  .stage-col {
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage-col .sun-path {
+    margin-top: 0;
+    flex: 1 1 auto;
+  }
   .library-col {
     flex: 1 1 auto;
     min-width: 0;
@@ -43,8 +54,14 @@ export const LANDING_CSS = `
     margin: 0;
     flex: 1;
   }
+  .area-head .floor-label {
+    flex: 1;
+    margin: 0;
+  }
   .area-add {
     --mdc-icon-button-size: 32px;
+    --mdc-icon-size: 22px;
+    color: var(--primary-text-color);
   }
   .area-empty {
     border: 1px dashed var(--divider-color);
@@ -62,20 +79,22 @@ export const LANDING_CSS = `
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     min-height: 64px;
     margin: 0 0 8px;
-    padding: 10px 8px 10px 12px;
+    padding: 10px 4px 10px 12px;
     border: 0;
     border-radius: 14px;
     color: #fff;
     cursor: pointer;
     overflow: visible;
     width: 100%;
+    box-sizing: border-box;
     text-align: left;
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
   }
-  .scene-card .card-overflow {
+  /* ha-dropdown is display:contents — margin-left:auto must live on a real box. */
+  .scene-card .card-overflow-slot {
     position: relative;
     z-index: 2;
     margin-left: auto;
@@ -83,7 +102,7 @@ export const LANDING_CSS = `
     color: #fff;
     --mdc-icon-button-size: 36px;
   }
-  .scene-card .card-overflow ha-icon-button {
+  .scene-card .card-overflow-slot ha-icon-button {
     color: #fff;
   }
   .scene-card.selected { box-shadow: inset 0 0 0 2px #fff; }
@@ -93,6 +112,7 @@ export const LANDING_CSS = `
     z-index: 0;
     border-radius: inherit;
     overflow: hidden;
+    background-size: 100% 100%;
   }
   .scene-card .card-body {
     position: relative;
@@ -101,6 +121,7 @@ export const LANDING_CSS = `
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+    flex: 1 1 auto;
   }
   .scene-card .card-name {
     font-weight: 650;
@@ -127,7 +148,7 @@ export const LANDING_CSS = `
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    margin: 0 0 24px;
+    margin: 0 0 16px;
   }
   .var-dot {
     width: 44px;
@@ -177,6 +198,36 @@ export const LANDING_CSS = `
   .auto-configure {
     margin-top: 16px;
   }
+  .empty-select {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 52vh;
+    padding: 32px 16px;
+    text-align: center;
+  }
+  .empty-select-rings {
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    margin: 0 auto 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(circle, var(--card-background-color, #2b2b2b) 0 38%, transparent 39%),
+      radial-gradient(circle, transparent 0 54%, rgba(255,255,255,0.14) 55% 56%, transparent 57%),
+      radial-gradient(circle, transparent 0 72%, rgba(255,255,255,0.12) 73% 74%, transparent 75%),
+      radial-gradient(circle, transparent 0 90%, rgba(255,255,255,0.1) 91% 92%, transparent 93%);
+  }
+  .empty-select-rings span {
+    max-width: 7.5em;
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--primary-text-color);
+  }
   @media (max-width: 870px) {
     .workspace { flex-direction: column; }
     .area-rail {
@@ -218,19 +269,20 @@ function meshBackground(dots) {
 }
 
 function rampBackground(ramps) {
-  const paths = (ramps || []).slice(0, 6);
-  if (!paths.length) {
+  const stops = (ramps || []).flatMap((ramp) => ramp.stops || []);
+  if (!stops.length) {
     return "linear-gradient(90deg, #2b2b2b, #1c1c1c)";
   }
-  const layers = paths.map((ramp, i) => {
-    const stops = ramp.stops || [];
-    const n = Math.max(stops.length - 1, 1);
-    const parts = stops.map((rgb, j) => `${rgbCss(rgb)} ${(j / n) * 100}%`);
-    const top = (i / Math.max(paths.length, 1)) * 100;
-    const bot = ((i + 1) / Math.max(paths.length, 1)) * 100;
-    return `linear-gradient(90deg, ${parts.join(", ")}) ${top}% / 100% ${bot - top + 2}% no-repeat`;
-  });
-  return layers.join(", ");
+  const unique = [];
+  for (const rgb of stops) {
+    const key = rgbCss(rgb);
+    if (!unique.includes(key)) {
+      unique.push(key);
+    }
+  }
+  const n = Math.max(unique.length - 1, 1);
+  const parts = unique.map((c, j) => `${c} ${(j / n) * 100}%`);
+  return `linear-gradient(90deg, ${parts.join(", ")})`;
 }
 
 function themeConic(theme, variables) {
@@ -267,12 +319,23 @@ function themeConic(theme, variables) {
   return `conic-gradient(${stops})`;
 }
 
-export function renderLanding(panel, { fullLibrary = true } = {}) {
+function iconButton(iconName, label) {
+  const add = document.createElement("ha-icon-button");
+  add.className = "area-add";
+  add.label = label;
+  const icon = document.createElement("ha-icon");
+  icon.setAttribute("icon", iconName);
+  add.appendChild(icon);
+  return add;
+}
+
+export function renderLanding(panel, { includeStage = true } = {}) {
   const page = document.createElement("div");
   page.className = "workspace";
 
   const rail = document.createElement("div");
   rail.className = "area-rail";
+  rail.appendChild(renderLibrary(panel, { compact: true }));
 
   const floors = panel._floors || [];
   const items = panel._items || [];
@@ -307,27 +370,30 @@ export function renderLanding(panel, { fullLibrary = true } = {}) {
     }
   }
 
-  const library = document.createElement("div");
-  library.className = "library-col";
-  if (fullLibrary) {
-    if (!items.length) {
-      library.appendChild(renderEmptyHero(panel));
-    } else {
-      library.appendChild(renderLibrary(panel));
-    }
-  }
-
   if (panel._narrow) {
     if (panel._view === "variables") {
+      const library = document.createElement("div");
+      library.className = "library-col";
+      library.appendChild(renderLibrary(panel, { compact: false }));
       page.appendChild(library);
-    } else {
-      page.appendChild(rail);
+      return page;
     }
-  } else {
     page.appendChild(rail);
-    if (fullLibrary) {
-      page.appendChild(library);
+    return page;
+  }
+
+  page.appendChild(rail);
+  if (includeStage) {
+    const stage = document.createElement("div");
+    stage.className = "stage-col";
+    if (panel._view !== "edit") {
+      if (!items.length) {
+        stage.appendChild(renderEmptyHero(panel));
+      } else {
+        stage.appendChild(renderSelectEmpty(panel));
+      }
     }
+    page.appendChild(stage);
   }
   return page;
 }
@@ -339,16 +405,10 @@ function renderAreaBlock(panel, area, scenes) {
   head.className = "area-head";
   const title = document.createElement("h2");
   title.textContent = area.name;
-  const add = document.createElement("ha-icon-button");
-  add.className = "area-add";
-  add.setAttribute(
-    "label",
+  const add = iconButton(
+    "mdi:plus",
     panel._t("frontend.actions.add_scene", "Add scene")
   );
-  const icon = document.createElement("ha-icon");
-  icon.setAttribute("icon", "mdi:plus");
-  icon.slot = "icon";
-  add.appendChild(icon);
   add.addEventListener("click", (ev) => {
     ev.stopPropagation();
     panel._openCreateDialog({ areaId: area.id, areaName: area.name });
@@ -401,9 +461,12 @@ function renderSceneCard(panel, scene) {
       ? panel._t("frontend.kinds.simple", "Simple scene")
       : panel._t("frontend.kinds.circadian", "Circadian scene");
   body.append(name, sub);
+  const overflowSlot = document.createElement("div");
+  overflowSlot.className = "card-overflow-slot";
   const overflow = panel._listSceneOverflowMenu(scene);
   overflow.classList.add("card-overflow");
-  cardEl.append(bg, body, overflow);
+  overflowSlot.appendChild(overflow);
+  cardEl.append(bg, body, overflowSlot);
   cardEl.addEventListener("click", (ev) => {
     if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
       return;
@@ -437,23 +500,52 @@ function renderEmptyHero(panel) {
   return el;
 }
 
-function renderLibrary(panel) {
-  const wrap = document.createElement("div");
-  const title = document.createElement("h1");
-  title.className = "library-title";
-  title.textContent = panel._t("frontend.library.title", "Variables & themes");
-  const hint = document.createElement("p");
-  hint.className = "library-hint";
-  hint.textContent = panel._t(
-    "frontend.library.hint",
-    "Changing a variable or theme updates scenes that still use it. Lights change on the next activate or automatic update — not instantly."
+function renderSelectEmpty(panel) {
+  const el = document.createElement("div");
+  el.className = "empty-select";
+  const rings = document.createElement("div");
+  rings.className = "empty-select-rings";
+  const label = document.createElement("span");
+  label.textContent = panel._t(
+    "frontend.empty.select_scene",
+    "Select a scene to get started"
   );
-  wrap.append(title, hint);
+  rings.appendChild(label);
+  el.appendChild(rings);
+  return el;
+}
 
+function renderLibrary(panel, { compact } = {}) {
+  const wrap = document.createElement("div");
+  if (!compact) {
+    const title = document.createElement("h1");
+    title.className = "library-title";
+    title.textContent = panel._t("frontend.library.title", "Variables & themes");
+    const hint = document.createElement("p");
+    hint.className = "library-hint";
+    hint.textContent = panel._t(
+      "frontend.library.hint",
+      "Changing a variable or theme updates scenes that still use it. Lights change on the next activate or automatic update — not instantly."
+    );
+    wrap.append(title, hint);
+  }
+
+  const varHead = document.createElement("div");
+  varHead.className = "area-head";
   const varLabel = document.createElement("div");
   varLabel.className = "floor-label";
   varLabel.textContent = panel._t("frontend.library.variables", "Variables");
-  wrap.appendChild(varLabel);
+  const addVar = iconButton(
+    "mdi:plus",
+    panel._t("frontend.library.add_variable", "Add variable")
+  );
+  addVar.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    panel._openCreateVariableDialog();
+  });
+  varHead.append(varLabel, addVar);
+  wrap.appendChild(varHead);
+
   const varRow = document.createElement("div");
   varRow.className = "var-row";
   for (const variable of panel._variables || []) {
@@ -479,10 +571,22 @@ function renderLibrary(panel) {
   }
   wrap.appendChild(varRow);
 
+  const themeHead = document.createElement("div");
+  themeHead.className = "area-head";
   const themeLabel = document.createElement("div");
   themeLabel.className = "floor-label";
   themeLabel.textContent = panel._t("frontend.library.themes", "Circadian themes");
-  wrap.appendChild(themeLabel);
+  const addTheme = iconButton(
+    "mdi:plus",
+    panel._t("frontend.library.add_theme", "Add theme")
+  );
+  addTheme.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    panel._openCreateThemeDialog();
+  });
+  themeHead.append(themeLabel, addTheme);
+  wrap.appendChild(themeHead);
+
   const themeRow = document.createElement("div");
   themeRow.className = "theme-row";
   for (const theme of panel._themes || []) {

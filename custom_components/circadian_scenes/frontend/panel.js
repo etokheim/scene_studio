@@ -268,6 +268,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._sidebarEventId = null;
     this._sidebarLightId = null;
     this._clockStickySeconds = undefined;
+    this._layoutDialChromeFn = undefined;
+    this._clockResizeObserver = undefined;
+    this._sunPathHome = undefined;
     this._aulResumeInterval = 300;
     this._hashConfirming = false;
     this._lightView = "dial";
@@ -3452,6 +3455,12 @@ class CircadianScenesPanel extends HTMLElement {
           width: 100%;
           box-sizing: border-box;
         }
+        .content.workspace-split {
+          padding-bottom: 0;
+        }
+        .content.workspace-split .workspace {
+          min-height: calc(100vh - 88px);
+        }
         .card-content {
           padding: 16px;
         }
@@ -3873,6 +3882,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._appBar.narrow = Boolean(this._narrow);
     this._headerEl = this.shadowRoot.querySelector("[slot='title']");
     this._sunPathEl = this.shadowRoot.querySelector(".sun-path");
+    this._sunPathHome = this._sunPathEl?.parentNode;
     this._sunPathStage = this.shadowRoot.querySelector(".sun-path-stage");
     this._sunPathBodyEl = this.shadowRoot.querySelector(".sun-path-body");
     this._clockScrubRail = this.shadowRoot.querySelector(".sun-year-scrub-rail");
@@ -4018,12 +4028,24 @@ class CircadianScenesPanel extends HTMLElement {
 
   async _loadItem(sceneId) {
     try {
-      const item = await this._hass.callWS({
-        type: `${DOMAIN}/get`,
-        scene_id: sceneId,
-      });
+      const [item, payload] = await Promise.all([
+        this._hass.callWS({
+          type: `${DOMAIN}/get`,
+          scene_id: sceneId,
+        }),
+        this._hass.callWS({ type: `${DOMAIN}/list` }),
+      ]);
       this._entityId = item.entity_id || null;
       this._formData = { ...emptyFormData(), ...(item.form || item) };
+      this._items = payload?.scenes || [];
+      this._variables = payload?.variables || [];
+      this._themes = payload?.themes || [];
+      this._floors = payload?.floors || [];
+      this._settings = {
+        automatically_update_lights_interval: 300,
+        ...(payload?.settings || {}),
+      };
+      this._error = null;
     } catch (err) {
       this._error = err.message || String(err);
       this._entityId = null;
@@ -4101,8 +4123,30 @@ class CircadianScenesPanel extends HTMLElement {
       this._draftRestore = null;
       this._renderList();
     }
-    this._ensureSunPath();
+    if (this._view === "edit") {
+      this._ensureSunPath();
+    }
     this._syncDraftBanner();
+  }
+
+  _parkSunPath() {
+    if (!this._sunPathEl) {
+      return;
+    }
+    if (this._sunPathHome && this._sunPathEl.parentNode !== this._sunPathHome) {
+      this._sunPathHome.appendChild(this._sunPathEl);
+    }
+    this._sunPathEl.hidden = true;
+  }
+
+  _mountSunPath(stage) {
+    if (!this._sunPathEl || !stage) {
+      return;
+    }
+    if (this._sunPathEl.parentNode !== stage) {
+      stage.appendChild(this._sunPathEl);
+    }
+    this._sunPathEl.hidden = false;
   }
 
   _renderList({ keepSidebar = false } = {}) {
@@ -4118,11 +4162,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._cancelSunPathMorph();
     this._forgetClockDom();
     this._form = undefined;
-    // Drop dial preview state so the list chart uses the light sun_path API.
-    if (this._sunPathKey && !String(this._sunPathKey).startsWith("list-sun:")) {
-      this._sunPath = null;
-      this._sunPathKey = undefined;
-    }
+    this._parkSunPath();
+    this._sunPath = null;
+    this._sunPathKey = undefined;
     this._headerEl.textContent = this._t(
       "frontend.title",
       "Circadian Scenes"
@@ -4131,11 +4173,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._view === "variables" ? this._backButton() : this._menuButton()
     );
     this._contentEl.classList.remove("wide");
+    this._contentEl.classList.remove("workspace-split");
     this._syncEditorChrome();
-
-    if (this._sunPathEl) {
-      this._sunPathEl.hidden = true;
-    }
 
     if (this._error) {
       const error = document.createElement("p");
@@ -4147,9 +4186,7 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
 
-    const page = renderLanding(this, {
-      fullLibrary: this._view !== "edit",
-    });
+    const page = renderLanding(this, { includeStage: true });
     this._contentEl.replaceChildren(page);
     this._setActionItems(this._listSettingsButton());
     if (this._narrow && this._view === "list") {
@@ -4182,6 +4219,19 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
+  _selectSelector(label, options, value, onChange) {
+    const field = document.createElement("ha-selector");
+    field.hass = this._hass;
+    field.label = label;
+    field.value = value;
+    field.selector = { select: { options, mode: "dropdown" } };
+    field.addEventListener("value-changed", (ev) => {
+      ev.stopPropagation();
+      onChange(ev.detail?.value);
+    });
+    return field;
+  }
+
   _openCreateDialog({ areaId, areaName } = {}) {
     const dialog = document.createElement("ha-dialog");
     dialog.className = "save-dialog";
@@ -4193,29 +4243,7 @@ class CircadianScenesPanel extends HTMLElement {
     body.style.display = "flex";
     body.style.flexDirection = "column";
     body.style.gap = "12px";
-    const kindLabel = document.createElement("div");
-    kindLabel.textContent = this._t("frontend.create.kind", "Scene type");
-    const kindSelect = document.createElement("ha-select");
-    kindSelect.style.display = "block";
-    const optC = document.createElement("mwc-list-item");
-    optC.value = "circadian";
-    optC.textContent = this._t("frontend.kinds.circadian", "Circadian scene");
-    const optS = document.createElement("mwc-list-item");
-    optS.value = "simple";
-    optS.textContent = this._t("frontend.kinds.simple", "Simple scene");
-    kindSelect.append(optC, optS);
-    kindSelect.value = "circadian";
-    const themeLabel = document.createElement("div");
-    themeLabel.textContent = this._t("frontend.create.theme", "Theme");
-    const themeSelect = document.createElement("ha-select");
-    themeSelect.style.display = "block";
-    for (const theme of this._themes || []) {
-      const opt = document.createElement("mwc-list-item");
-      opt.value = theme.id;
-      opt.textContent = theme.name;
-      themeSelect.appendChild(opt);
-    }
-    themeSelect.value = "default";
+    const createState = { kind: "circadian", theme_id: "default" };
     const nameInput = customElements.get("ha-input")
       ? document.createElement("ha-input")
       : document.createElement("ha-selector");
@@ -4227,17 +4255,44 @@ class CircadianScenesPanel extends HTMLElement {
       nameInput.hass = this._hass;
       nameInput.selector = { text: {} };
     }
-    kindSelect.addEventListener("change", () => {
-      themeLabel.hidden = kindSelect.value === "simple";
-      themeSelect.hidden = kindSelect.value === "simple";
-      if (areaName) {
-        nameInput.value =
-          kindSelect.value === "simple"
-            ? `${areaName}`
-            : `${areaName} Circadian`;
+    let themeSelect;
+    const kindSelect = this._selectSelector(
+      this._t("frontend.create.kind", "Scene type"),
+      [
+        {
+          value: "circadian",
+          label: this._t("frontend.kinds.circadian", "Circadian scene"),
+        },
+        {
+          value: "simple",
+          label: this._t("frontend.kinds.simple", "Simple scene"),
+        },
+      ],
+      createState.kind,
+      (value) => {
+        createState.kind = value || "circadian";
+        themeSelect.style.display =
+          createState.kind === "simple" ? "none" : "";
+        if (areaName) {
+          nameInput.value =
+            createState.kind === "simple"
+              ? `${areaName}`
+              : `${areaName} Circadian`;
+        }
       }
-    });
-    body.append(kindLabel, kindSelect, themeLabel, themeSelect, nameInput);
+    );
+    themeSelect = this._selectSelector(
+      this._t("frontend.create.theme", "Theme"),
+      (this._themes || []).map((theme) => ({
+        value: theme.id,
+        label: theme.name,
+      })),
+      createState.theme_id,
+      (value) => {
+        createState.theme_id = value || "default";
+      }
+    );
+    body.append(kindSelect, themeSelect, nameInput);
     dialog.appendChild(body);
     const footer = customElements.get("ha-dialog-footer")
       ? document.createElement("ha-dialog-footer")
@@ -4255,12 +4310,12 @@ class CircadianScenesPanel extends HTMLElement {
       dialog.open = false;
     });
     create.addEventListener("click", async () => {
-      const kind = kindSelect.value || "circadian";
+      const kind = createState.kind || "circadian";
       const data = {
         kind,
         scene_name: nameInput.value || "Scene",
         area: areaId || null,
-        theme_id: kind === "circadian" ? themeSelect.value || "default" : undefined,
+        theme_id: kind === "circadian" ? createState.theme_id || "default" : undefined,
         membership: { exclude: [], include: [] },
         overrides: {},
         lights: {},
@@ -4285,38 +4340,163 @@ class CircadianScenesPanel extends HTMLElement {
     dialog.open = true;
   }
 
-  _openVariableEditor(variable) {
+  _libraryDialog({ title, children, primaryLabel, onPrimary }) {
     const dialog = document.createElement("ha-dialog");
-    dialog.heading = variable.name;
+    dialog.className = "save-dialog";
+    dialog.setAttribute("header-title", title);
+    for (const child of children) {
+      dialog.appendChild(child);
+    }
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    const save = document.createElement("ha-button");
+    save.slot = "primaryAction";
+    save.variant = "brand";
+    save.textContent = primaryLabel;
+    save.addEventListener("click", () => onPrimary(dialog));
+    footer.append(cancel, save);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
+    dialog.open = true;
+    return dialog;
+  }
+
+  _haInput(label, value, { type } = {}) {
+    const field = customElements.get("ha-input")
+      ? document.createElement("ha-input")
+      : document.createElement("ha-selector");
+    field.label = label;
+    field.value = value;
+    if (field.localName === "ha-selector") {
+      field.hass = this._hass;
+      field.selector = type === "number" ? { number: { min: 1000, max: 8000, step: 1, mode: "box" } } : { text: {} };
+    } else if (type === "number") {
+      field.type = "number";
+    }
+    return field;
+  }
+
+  _openCreateVariableDialog() {
+    const nameInput = this._haInput(
+      this._t("frontend.common.name", "Name"),
+      this._t("frontend.library.new_variable", "New variable")
+    );
+    const kelvinInput = this._haInput(
+      this._t("frontend.library.kelvin", "Kelvin"),
+      "3000",
+      { type: "number" }
+    );
+    this._libraryDialog({
+      title: this._t("frontend.library.add_variable", "Add variable"),
+      children: [nameInput, kelvinInput],
+      primaryLabel: this._t("frontend.common.save", "Save"),
+      onPrimary: async (dialog) => {
+        const name = (nameInput.value || "").trim();
+        const kelvin = Number(kelvinInput.value);
+        if (!name || !Number.isFinite(kelvin)) {
+          return;
+        }
+        await this._hass.callWS({
+          type: `${DOMAIN}/save_variable`,
+          data: {
+            name,
+            brightness: 255,
+            color: { color_mode: "color_temp", color_temp_kelvin: kelvin },
+          },
+        });
+        dialog.open = false;
+        await this._refreshCatalog();
+      },
+    });
+  }
+
+  _openCreateThemeDialog() {
+    const source = (this._themes || [])[0];
+    if (!source?.events) {
+      return;
+    }
+    const nameInput = this._haInput(
+      this._t("frontend.common.name", "Name"),
+      this._t("frontend.library.new_theme", "New theme")
+    );
+    this._libraryDialog({
+      title: this._t("frontend.library.add_theme", "Add theme"),
+      children: [nameInput],
+      primaryLabel: this._t("frontend.common.save", "Save"),
+      onPrimary: async (dialog) => {
+        const name = (nameInput.value || "").trim();
+        if (!name) {
+          return;
+        }
+        await this._hass.callWS({
+          type: `${DOMAIN}/save_theme`,
+          data: {
+            name,
+            events: structuredClone(source.events),
+          },
+        });
+        dialog.open = false;
+        await this._refreshCatalog();
+      },
+    });
+  }
+
+  async _refreshCatalog() {
+    const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+    this._items = payload?.scenes || [];
+    this._variables = payload?.variables || [];
+    this._themes = payload?.themes || [];
+    this._floors = payload?.floors || [];
+    this._render();
+  }
+
+  _openVariableEditor(variable) {
     const p = document.createElement("p");
     p.textContent = this._t(
       "frontend.library.variable_edit_hint",
       "Use the color wheels in a scene editor to detach a light. Edit the shared color here by Kelvin."
     );
-    const field = document.createElement("ha-textfield");
-    field.type = "number";
-    field.label = "Kelvin";
-    field.value = String(variable.color?.color_temp_kelvin || 3000);
-    dialog.append(p, field);
-    const save = document.createElement("ha-button");
-    save.slot = "primaryAction";
-    save.textContent = this._t("frontend.common.save", "Save");
-    save.addEventListener("click", async () => {
-      const kelvin = Number(field.value);
-      await this._hass.callWS({
-        type: `${DOMAIN}/save_variable`,
-        data: {
-          ...variable,
-          color: { color_mode: "color_temp", color_temp_kelvin: kelvin },
-        },
-      });
-      dialog.open = false;
-      await this._loadList();
+    const nameInput = this._haInput(
+      this._t("frontend.common.name", "Name"),
+      variable.name
+    );
+    const kelvinInput = this._haInput(
+      this._t("frontend.library.kelvin", "Kelvin"),
+      String(variable.color?.color_temp_kelvin || 3000),
+      { type: "number" }
+    );
+    this._libraryDialog({
+      title: variable.name,
+      children: [p, nameInput, kelvinInput],
+      primaryLabel: this._t("frontend.common.save", "Save"),
+      onPrimary: async (dialog) => {
+        const kelvin = Number(kelvinInput.value);
+        const name = (nameInput.value || "").trim();
+        if (!name || !Number.isFinite(kelvin)) {
+          return;
+        }
+        await this._hass.callWS({
+          type: `${DOMAIN}/save_variable`,
+          data: {
+            ...variable,
+            name,
+            color: { color_mode: "color_temp", color_temp_kelvin: kelvin },
+          },
+        });
+        dialog.open = false;
+        await this._refreshCatalog();
+      },
     });
-    dialog.appendChild(save);
-    dialog.addEventListener("closed", () => dialog.remove());
-    this.shadowRoot.appendChild(dialog);
-    dialog.open = true;
   }
 
   _openThemeEditor(theme) {
@@ -5439,7 +5619,9 @@ class CircadianScenesPanel extends HTMLElement {
 
   _syncEditorChrome() {
     const dial =
-      this._view === "edit" && this._lightView === "dial";
+      this._view === "edit" &&
+      this._lightView === "dial" &&
+      this._formData?.kind !== "simple";
     this.shadowRoot?.querySelector(".page")?.classList.toggle("dial-wide", dial);
     this._sunPathEl?.classList.toggle("dial-view", dial);
     // Host-level vignette (not .sun-path) — must not track sidebar gutter.
@@ -7240,18 +7422,34 @@ class CircadianScenesPanel extends HTMLElement {
 
   _renderEditor() {
     this._syncEditorSceneTitle();
-    this._setNavigationIcon(this._backButton());
+    this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
     this._setEditorActions();
     this._syncEditorChrome();
     this._syncSaveFab();
     this._contentEl.classList.add("wide");
+    const split = !this._narrow;
+    this._contentEl.classList.toggle("workspace-split", split);
+
+    this._parkSunPath();
+    const page = renderLanding(this, { includeStage: true });
+    const stage = page.querySelector(".stage-col");
+    if (this._error) {
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = this._error;
+      stage?.replaceChildren(error);
+    }
 
     if (this._formData.kind === "simple") {
-      if (this._sunPathEl) {
-        this._sunPathEl.hidden = true;
-      }
+      this._parkSunPath();
       const host = document.createElement("div");
-      this._contentEl.replaceChildren(host);
+      if (this._narrow) {
+        this._contentEl.classList.remove("workspace-split");
+        this._contentEl.replaceChildren(host);
+      } else {
+        stage?.replaceChildren(host);
+        this._contentEl.replaceChildren(page);
+      }
       const areaId = this._formData.area;
       const floorAreas = (this._floors || []).flatMap((f) => f.areas || []);
       const area = floorAreas.find((a) => a.id === areaId);
@@ -7266,16 +7464,21 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
 
-    if (this._sunPathEl) {
-      this._sunPathEl.hidden = false;
-    }
-    if (this._error) {
-      const error = document.createElement("p");
-      error.className = "error";
-      error.textContent = this._error;
-      this._contentEl.replaceChildren(error);
-    } else {
+    if (this._narrow) {
+      this._parkSunPath();
       this._contentEl.replaceChildren();
+      this._contentEl.classList.remove("workspace-split");
+      if (this._sunPathHome) {
+        this._sunPathHome.appendChild(this._sunPathEl);
+      }
+      if (this._sunPathEl) {
+        this._sunPathEl.hidden = false;
+      }
+    } else {
+      this._contentEl.replaceChildren(page);
+      if (stage) {
+        this._mountSunPath(stage);
+      }
     }
     if (this._sunPath?.curve?.length) {
       this._forgetClockDom();
@@ -7394,11 +7597,14 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _eventSceneId(eventId) {
-    const sceneId =
+    const assigned =
       LINKED_EVENTS.includes(eventId) && this._formData.display_scenes_combined
         ? this._formData.scene_dawn_sunrise_sunset || null
         : this._formData[EVENT_SCENE_KEYS[eventId]] || null;
-    return this._resolvableSceneId(sceneId);
+    return (
+      this._resolvableSceneId(assigned) ||
+      this._resolvableSceneId(this._entityId)
+    );
   }
 
   _sceneName(entityId) {
@@ -7520,16 +7726,21 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _toggleEventSceneDialog(event) {
+    const lights = this._clockRingLights(this._sunPath?.lights || []);
+    if (!lights.length) {
+      return;
+    }
     const existing = this.shadowRoot?.querySelector(".scene-sidebar");
     if (
       existing &&
       !existing._closing &&
-      this._sidebarEventId === event.id
+      this._sidebarEventId === event.id &&
+      this._sidebarLightId === lights[0].entity_id
     ) {
       await this._requestCloseSceneSidebar(existing);
       return;
     }
-    await this._openEventSceneDialog(event);
+    await this._openLightEditDialog(lights[0], event);
   }
 
   async _openEventSceneDialog(event) {
@@ -8189,7 +8400,6 @@ class CircadianScenesPanel extends HTMLElement {
 
   async _openLightEditDialog(light, event) {
     if (!this._eventSceneId(event.id)) {
-      this._openEventSceneDialog(event);
       return;
     }
     const existing = this.shadowRoot?.querySelector(".scene-sidebar.light-dialog");
@@ -9915,6 +10125,10 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _ensureSunPath() {
+    if (this._view !== "edit" || this._formData?.kind === "simple") {
+      this._parkSunPath();
+      return;
+    }
     if (!this._hass || !this._sunPathEl) {
       return;
     }
@@ -10975,6 +11189,10 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _drawSunPath() {
+    if (this._view !== "edit" || this._formData?.kind === "simple") {
+      this._parkSunPath();
+      return;
+    }
     if (!this._sunPathEl || !this._sunPath || !this._sunPath.curve?.length) {
       return;
     }
@@ -12958,6 +13176,8 @@ class CircadianScenesPanel extends HTMLElement {
    * would succeed and skip rebuilding the visible dial.
    */
   _forgetClockDom() {
+    this._clockResizeObserver?.disconnect();
+    this._clockResizeObserver = undefined;
     this._clockRingsHost = undefined;
     this._clockOverlayEl = undefined;
     this._clockGlowLayer = undefined;
@@ -13485,8 +13705,6 @@ class CircadianScenesPanel extends HTMLElement {
         continue;
       }
       const { cos, sin } = polarForSeconds(buttonSeconds);
-      const sceneId = this._eventSceneId(event.id);
-      const sceneName = this._sceneName(sceneId);
       const timeText = event.fallback ? `${event.time}*` : event.time;
 
       const anchor = document.createElement("div");
@@ -13500,18 +13718,7 @@ class CircadianScenesPanel extends HTMLElement {
       const heading = document.createElement("span");
       heading.className = "clock-event-heading";
       heading.textContent = `${event.name} · ${timeText}`;
-      const sceneEl = document.createElement("span");
-      sceneEl.className = "clock-event-scene";
-      if (sceneName) {
-        sceneEl.textContent = sceneName;
-      } else {
-        sceneEl.textContent = this._t(
-          "frontend.chart.choose_scene",
-          "Choose scene"
-        );
-        sceneEl.classList.add("empty");
-      }
-      meta.append(heading, sceneEl);
+      meta.append(heading);
 
       const btn = document.createElement(editable ? "button" : "div");
       btn.className = "clock-event";
@@ -13523,12 +13730,7 @@ class CircadianScenesPanel extends HTMLElement {
         event.overridden && event.solar_time
           ? ` (solar ${event.solar_time})`
           : "";
-      btn.title = sceneName
-        ? `${event.name} · ${timeText}${solarHint} · ${sceneName}`
-        : `${event.name} · ${timeText}${solarHint}`;
-      if (!sceneName) {
-        btn.classList.add("missing");
-      }
+      btn.title = `${event.name} · ${timeText}${solarHint}`;
       if (this._sidebarEventId === event.id) {
         btn.classList.add("selected");
         btn.setAttribute("aria-current", "true");
@@ -13537,12 +13739,7 @@ class CircadianScenesPanel extends HTMLElement {
       icon.setAttribute("icon", event.icon);
       btn.appendChild(icon);
       if (editable) {
-        btn.setAttribute(
-          "aria-label",
-          sceneName
-            ? `${event.name} ${timeText}: ${sceneName}`
-            : `${event.name} ${timeText}: choose scene`
-        );
+        btn.setAttribute("aria-label", `${event.name} ${timeText}`);
         btn.addEventListener("click", (ev) => {
           ev.stopPropagation();
           this._toggleEventSceneDialog(event);
@@ -13659,15 +13856,15 @@ class CircadianScenesPanel extends HTMLElement {
     };
     layoutEventAnchors();
     const layoutDialChrome = () => {
-      this._layoutDialChromeFn();
+      this._layoutDialChromeFn?.();
     };
     layoutDialChrome();
+    this._clockResizeObserver?.disconnect();
     if (typeof ResizeObserver === "function") {
-      const ro = new ResizeObserver(() => {
+      this._clockResizeObserver = new ResizeObserver(() => {
         layoutDialChrome();
       });
-      ro.observe(face);
-      ro.observe(this);
+      this._clockResizeObserver.observe(face);
     }
     requestAnimationFrame(() => layoutDialChrome());
 

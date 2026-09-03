@@ -27,6 +27,7 @@
       "extrapolation_example": "Create a scene for a room from an area, or auto configure all areas that have lights.",
       "auto_configure_body": "Auto configure creates a circadian scene for every area that has lights, using the default theme. You can edit variables and themes here anytime — lights update the next time a scene runs.",
       "area_no_scenes": "No scenes yet — create one for this area",
+      "select_scene": "Select a scene to get started",
       "no_areas": "No Home Assistant areas yet. Add floors and areas in Settings, then come back.",
       "learn_more": "Learn more"
     },
@@ -36,7 +37,12 @@
       "variables": "Variables",
       "themes": "Circadian themes",
       "variable_edit_hint": "Use the color wheels in a scene editor to detach a light. Edit the shared color here by Kelvin.",
-      "theme_hint": "This theme’s colors come from the sun-event variables. Change those variables to restyle every scene that still uses the theme."
+      "theme_hint": "This theme’s colors come from the sun-event variables. Change those variables to restyle every scene that still uses the theme.",
+      "add_variable": "Add variable",
+      "add_theme": "Add theme",
+      "new_variable": "New variable",
+      "new_theme": "New theme",
+      "kelvin": "Kelvin"
     },
     "kinds": {
       "circadian": "Circadian scene",
@@ -80,6 +86,7 @@
       "preview": "Preview",
       "search": "Search",
       "name": "Name",
+      "new_scene": "New scene",
       "description": "Description",
       "category": "Category",
       "labels": "Labels",
