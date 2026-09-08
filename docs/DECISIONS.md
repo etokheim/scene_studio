@@ -317,7 +317,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-08
 - **Supersedes:** “Earliest dusk time lives on the dusk event dialog” (2026-08-26).
-- **Decision:** `dusk_minimum_time_of_day` is an integration setting (seconds since midnight, default 22:00). Activation, preview, theme dial, and table/dial ghost+clamp visualization all use that one floor. Edit it in Settings and in the dusk solar-event sidebar (each event button opens its own sidebar; non-dusk event sidebars are empty for now). Per-scene `scene_dusk_minimum_time_of_day` is lifted into settings on load and dropped. Theme color/brightness still opens from a ring click, not from the event buttons.
+- **Decision:** `dusk_minimum_time_of_day` is an integration setting (seconds since midnight, default 22:00). Activation, preview, theme dial, and table/dial ghost+clamp visualization all use that one floor. Edit it in Settings and at the **bottom** of the light / theme / dusk solar-event sidebar while dusk is the open event (hidden for other events). Per-scene `scene_dusk_minimum_time_of_day` is lifted into settings on load and dropped. Theme color/brightness still opens from a ring click, not from the event buttons.
 - **Why:** The floor is about when dusk is allowed to happen in the house, not a property of one room scene. Event buttons are the place to inspect that solar event; Settings is the house-wide copy of the same control.
 - **Do not reverse without user ask.**
 
@@ -402,7 +402,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Superseded in part:** 2026-08-30 — hour labels outside the ticks (white @ ~40%); hourly ticks 3px / 4px major (white @ ~28% / ~50%), slightly shorter; light-ring glow sits on the face (master blur/scale) with uncapped elevation opacity.
 - **Superseded in part:** 2026-08-30 — dial chrome order (outer → inner): hour tick tips on the face edge with numbers just inside the tips (same tick lengths as before), then solar-event buttons, then the inset dial core (path/planet). Chrome inset grows if needed so event buttons stay outside the core.
 - **Superseded in part:** 2026-08-30 — hour numbers clear the inward tick stroke (past major length + ~half glyph); solar-event buttons sit at sun-path radius + 10 core-viewBox units (fixed gap as the path scales); sticky override arc/glow maps to the outer tip of the face hour ticks (not a fixed core r=94); chrome inset is driven by ticks/labels only.
-- **Superseded in part:** 2026-08-30 — desktop dial chrome is a fixed px inset (no lerp toward a min as the face shrinks); mobile (≤870px) keeps tick-only chrome with events on the sun path.
+- **Superseded in part:** 2026-09-08 — desktop solar-event buttons sit twice as far from the sun-path circle (`CLOCK_EVENT_GAP_FROM_PATH` 20 viewBox units; chrome floor 80px so labels still fit). Mobile (≤870px) still places events on the path.
 - **Superseded in part:** 2026-08-30 — dial light list layout is its own decision (under the face; never shrink `--dial-face-max`; left gutter stays empty).
 - **Superseded in part:** 2026-08-30 — light-ring glow is core-sized (scale 1.75 / blur 96px / screen blend, opacity ≥0.85); no sky wash; no solid sunrise/sunset rays; dashed sun path only on night arcs; horizon rim band ~2.5h; event path dots 6px; snap capture +25% (~19.5 min).
 - **Superseded in part:** 2026-08-30 — light-ring glow has no blur and no screen blend (hard disc, opacity ≥0.85) so the elevation tint is visible behind the rings.
