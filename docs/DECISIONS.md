@@ -3,12 +3,12 @@
 Durable product and architecture choices for Circadian Scenes.
 Agents: do not reverse these without an explicit user request. Supersede entries in the same change set when intentionally changing course.
 
-## Desktop drawer uses one FLIP stage transform; simple cards use a raster mesh
+## Desktop drawer overlays the stage; simple cards use a raster mesh
 
 - **Date:** 2026-09-08
-- **Supersedes in part:** “Scene editors use the automation sidebar / bottom sheet” — the final docked gutter remains, but it is no longer animated as layout.
-- **Decision:** On desktop, apply the drawer’s final gutter immediately and animate only the editor stage’s FLIP translation. Do not transition shell padding, page width/margins, or the landscape scrub grid, and do not remeasure the dial horizon every animation frame; reconcile dial geometry once after motion settles. Simple-scene card backgrounds are a deterministic triangle mesh rasterized once to canvas with barycentric color interpolation in linear-light RGB, not stacked radial CSS gradients.
-- **Why:** Concurrent layout transitions, scrub-column collapse, and per-frame geometry writes made the drawer and stage visibly fight each other. A compositor transform keeps the persistent area rail stable and motion monotonic. CSS has no interoperable native mesh-gradient primitive; a small canvas mesh provides actual two-dimensional interpolation without WebGL contexts or translucent gradient-layer chroma buildup.
+- **Supersedes in part:** “Scene editors use the automation sidebar / bottom sheet” — desktop drawers overlay instead of reserving a gutter or shifting/scaling the stage.
+- **Decision:** On desktop, keep the editor stage and landscape year rail at their existing geometry while the drawer slides above them. The drawer uses the same translucent, blurred surface treatment as the area rail so the full-panel dial horizon remains visible underneath. Do not animate shell padding, page width/margins, the stage, or the landscape scrub grid. Simple-scene card backgrounds are a deterministic triangle mesh rasterized once to canvas with barycentric color interpolation in linear-light RGB, not stacked radial CSS gradients.
+- **Why:** Any final gutter changes the dial’s available width, so transform-only FLIP motion still begins with a visible scale jump and clips the full-panel background before the drawer arrives. Overlaying preserves dial size and lets one transform animate independently. CSS has no interoperable native mesh-gradient primitive; a small canvas mesh provides actual two-dimensional interpolation without WebGL contexts or translucent gradient-layer chroma buildup.
 - **Do not reverse without user ask.**
 
 ## Store owns light snapshots; variables and themes are house-wide (v6)

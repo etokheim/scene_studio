@@ -280,10 +280,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._roomPreview = false;
     this._roomPreviewSnapshots = null;
     this._loadGeneration = 0;
-    this._sidebarMotionGeneration = 0;
-    this._sidebarMotionRaf = undefined;
-    this._sidebarMotionTimer = undefined;
-    this._sidebarLayoutInProgress = false;
     this._onHashChange = () => this._syncHash();
     this._onEditorKeydown = (ev) => this._handleEditorShortcut(ev);
     this._onPageHide = (ev) => {
@@ -440,14 +436,6 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._hoverRaf) {
       window.cancelAnimationFrame(this._hoverRaf);
       this._hoverRaf = undefined;
-    }
-    if (this._sidebarMotionRaf) {
-      window.cancelAnimationFrame(this._sidebarMotionRaf);
-      this._sidebarMotionRaf = undefined;
-    }
-    if (this._sidebarMotionTimer) {
-      window.clearTimeout(this._sidebarMotionTimer);
-      this._sidebarMotionTimer = undefined;
     }
     this._cancelSunPathMorph();
   }
@@ -2735,6 +2723,11 @@ class CircadianScenesPanel extends HTMLElement {
           margin-top: 16px;
         }
         .scene-sidebar.desktop {
+          --scene-sidebar-surface: color-mix(
+            in srgb,
+            var(--primary-background-color) 58%,
+            transparent
+          );
           --ha-card-border-radius: var(
             --ha-dialog-border-radius,
             var(--ha-border-radius-2xl, 28px)
@@ -2805,6 +2798,17 @@ class CircadianScenesPanel extends HTMLElement {
           border-width: 2px;
           --ha-card-border-width: 2px;
           --ha-card-border-color: var(--primary-color);
+        }
+        .scene-sidebar.desktop .scene-sidebar-card {
+          --ha-card-background: var(--scene-sidebar-surface);
+          --ha-dialog-surface-background: transparent;
+          background: var(--scene-sidebar-surface);
+          backdrop-filter: blur(18px) saturate(1.2);
+          -webkit-backdrop-filter: blur(18px) saturate(1.2);
+        }
+        .scene-sidebar.desktop
+          .scene-sidebar-footer:has(.sidebar-actions-bar) {
+          background: transparent;
         }
         .scene-sidebar-card ha-dialog-header {
           border-radius: var(--ha-card-border-radius);
@@ -7120,80 +7124,16 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _setSidebarDocked(docked) {
-    // Width + drawer’s right inset only — no extra “left margin” gap; banners
-    // and page content keep their own inline spacing.
+    // Desktop drawers overlay the stage. Reserving a gutter makes the dial
+    // resize while the drawer slides and clips the horizon before motion ends.
     const on = Boolean(docked && !this._isEditorNarrow());
     const wasOn = this.hasAttribute("data-sidebar-docked");
     if (on === wasOn) {
       return;
     }
-    const stage = this.shadowRoot?.querySelector(".workspace .stage-col");
-    const before = stage?.getBoundingClientRect();
-    this._sidebarLayoutInProgress = true;
-    const gutter = on
-      ? "calc(var(--scene-sidebar-width, 375px) + 16px)"
-      : "0px";
-    this.style.setProperty("--scene-sidebar-gutter", gutter);
+    this.style.setProperty("--scene-sidebar-gutter", "0px");
     this.toggleAttribute("data-sidebar-docked", on);
     this._syncYearScrubLayout();
-    const after = stage?.getBoundingClientRect();
-    const delta =
-      before && after
-        ? before.left + before.width / 2 - (after.left + after.width / 2)
-        : 0;
-    this._animateSidebarStage(stage, delta);
-  }
-
-  _animateSidebarStage(stage, delta) {
-    this._sidebarMotionGeneration += 1;
-    const generation = this._sidebarMotionGeneration;
-    const duration = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")
-      .matches
-      ? 1
-      : SIDEBAR_ANIMATION_MS;
-    if (this._sidebarMotionRaf) {
-      cancelAnimationFrame(this._sidebarMotionRaf);
-    }
-    if (this._sidebarMotionTimer) {
-      clearTimeout(this._sidebarMotionTimer);
-    }
-    const finish = () => {
-      if (generation !== this._sidebarMotionGeneration) {
-        return;
-      }
-      this._sidebarMotionRaf = undefined;
-      this._sidebarMotionTimer = undefined;
-      this._sidebarLayoutInProgress = false;
-      if (stage) {
-        stage.style.transition = "";
-        stage.style.transform = "";
-        stage.style.willChange = "";
-      }
-      if (this._layoutDialChromeFn) {
-        this._layoutDialChromeFn();
-      } else {
-        this._layoutClockHorizonBack();
-      }
-    };
-    if (!stage || Math.abs(delta) < 0.5) {
-      finish();
-      return;
-    }
-    stage.style.transition = "none";
-    stage.style.transform = `translate3d(${delta}px, 0, 0)`;
-    stage.style.willChange = "transform";
-    stage.getBoundingClientRect();
-    this._sidebarMotionRaf = requestAnimationFrame(() => {
-      if (generation !== this._sidebarMotionGeneration) {
-        return;
-      }
-      stage.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0, 0, 1)`;
-      stage.style.transform = "translate3d(0, 0, 0)";
-      this._sidebarMotionTimer = window.setTimeout(
-        finish,
-        duration + 50
-      );
-    });
   }
 
   _fillSidebarHeader(header, { title, subtitle, actionItems, host }) {
@@ -11111,9 +11051,9 @@ class CircadianScenesPanel extends HTMLElement {
     const sidebarOpen = this._sceneSidebarIsOpen();
     // Portrait chrome below this width — empty left rail reads as a black bar.
     const landscapeClock = landscape && clock && this._landscapeScrubFits();
-    // Collapse the rail (animated width) instead of yanking it out — that
-    // fought the sidebar/page-gutter transition and looked jagged.
-    const collapse = landscapeClock && sidebarOpen;
+    // Overlay drawers do not change dial geometry; keep the landscape rail
+    // in place under the drawer instead of scaling the face on open.
+    const collapse = false;
     const hideToolbarScrub = landscape && sidebarOpen && !clock;
 
     this._yearScrub.classList.toggle("vertical", landscapeClock);
@@ -13993,9 +13933,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockResizeObserver?.disconnect();
     if (typeof ResizeObserver === "function") {
       this._clockResizeObserver = new ResizeObserver(() => {
-        if (this._sidebarLayoutInProgress) {
-          return;
-        }
         layoutDialChrome();
       });
       this._clockResizeObserver.observe(face);
