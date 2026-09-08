@@ -46,8 +46,28 @@ export const LANDING_CSS = `
     z-index: 1;
     display: flex;
     flex-direction: column;
-    /* Visible so horizon can bleed under the frosted rail. */
+    /* Visible so horizon / wheel glow can bleed under the frosted rail.
+       In-flow scrolling lives on .stage-scroll (overflow-x clip + y auto). */
     overflow: visible;
+  }
+  .stage-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+  .stage-scroll {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-x: clip;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .stage-col .sun-path {
     margin-top: 0;
@@ -392,18 +412,29 @@ export function renderLanding(panel, { includeStage = true } = {}) {
 
   page.appendChild(rail);
   if (includeStage) {
-    const stage = document.createElement("div");
-    stage.className = "stage-col";
-    if (panel._view !== "edit") {
+    const { stage, scroll } = makeStageCol();
+    if (panel._view !== "edit" && panel._view !== "theme") {
       if (!items.length) {
-        stage.appendChild(renderEmptyHero(panel));
+        scroll.appendChild(renderEmptyHero(panel));
       } else {
-        stage.appendChild(renderSelectEmpty(panel));
+        scroll.appendChild(renderSelectEmpty(panel));
       }
     }
     page.appendChild(stage);
   }
   return page;
+}
+
+function makeStageCol() {
+  const stage = document.createElement("div");
+  stage.className = "stage-col";
+  const bg = document.createElement("div");
+  bg.className = "stage-bg";
+  bg.setAttribute("aria-hidden", "true");
+  const scroll = document.createElement("div");
+  scroll.className = "stage-scroll";
+  stage.append(bg, scroll);
+  return { stage, bg, scroll };
 }
 
 function renderAreaBlock(panel, area, scenes) {

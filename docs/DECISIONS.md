@@ -3,6 +3,14 @@
 Durable product and architecture choices for Circadian Scenes.
 Agents: do not reverse these without an explicit user request. Supersede entries in the same change set when intentionally changing course.
 
+## Stage chrome: background glow vs scrolling column
+
+- **Date:** 2026-09-08
+- **Supersedes in part:** “Desktop drawer overlays backgrounds” (horizon reach) and “Use HA’s top app bar” (workspace scrollport).
+- **Decision:** Workspace `.content` has no top padding. `.stage-col` stays `overflow: visible` and splits into `.stage-bg` (pointer-events none; clock horizon and simple-scene wheel glow) plus `.stage-scroll` (`overflow-y: auto`, `overflow-x: clip`) for the face and light list. Horizon/glow are laid out from the face/wheel center and may paint under the frosted area rail. The app-bar scroller stays `overflow: hidden` while a workspace is shown. Simple-scene wheel diameter uses the same `--dial-face-max` budget as the circadian dial. Circadian themes open `#theme/<id>` on that dial; each solar event stores color **and** brightness on the shared theme (wheel-pin detaches a `variable_ref` on that event only).
+- **Why:** Padding plus `overflow: visible` on the stage left a header gap and no middle-column scroll. Putting glow in the same box as `overflow-y: auto` clips bleed (CSS overflow axis quirk). A sibling background layer keeps graphics full-bleed while the list can scroll.
+- **Do not reverse without user ask.**
+
 ## Desktop drawer overlays backgrounds; dial yields with one FLIP
 
 - **Date:** 2026-09-08

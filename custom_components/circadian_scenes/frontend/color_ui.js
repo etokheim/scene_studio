@@ -1954,9 +1954,42 @@ function createSceneColorWheel({
     sync();
   };
 
+  const layoutGlow = () => {
+    if (!glow.parentElement || glow.parentElement === canvasWrap) {
+      return;
+    }
+    const host = glow.parentElement;
+    const wr = canvasWrap.getBoundingClientRect();
+    const hr = host.getBoundingClientRect();
+    if (wr.width < 8 || hr.width < 8) {
+      return;
+    }
+    glow.style.left = `${wr.left - hr.left}px`;
+    glow.style.top = `${wr.top - hr.top}px`;
+    glow.style.width = `${wr.width}px`;
+    glow.style.height = `${wr.height}px`;
+  };
+
+  const attachGlow = (host) => {
+    if (!host) {
+      if (glow.parentElement !== canvasWrap) {
+        canvasWrap.insertBefore(glow, canvasWrap.firstChild);
+      }
+      glow.style.left = "";
+      glow.style.top = "";
+      glow.style.width = "";
+      glow.style.height = "";
+      return layoutGlow;
+    }
+    host.appendChild(glow);
+    layoutGlow();
+    return layoutGlow;
+  };
+
   const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
     sync();
     updatePresetOverflow();
+    layoutGlow();
   });
   ro?.observe(canvasWrap);
   ro?.observe(presets);
@@ -1973,9 +2006,12 @@ function createSceneColorWheel({
       window.removeEventListener("pointercancel", onPointerUp);
       drag = null;
     }
+    if (glow.parentElement !== canvasWrap) {
+      canvasWrap.insertBefore(glow, canvasWrap.firstChild);
+    }
   };
 
-  return { el: stage, setMode, sync, syncPresets, disconnect };
+  return { el: stage, setMode, sync, syncPresets, attachGlow, disconnect };
 }
 
 function medianNumber(values) {

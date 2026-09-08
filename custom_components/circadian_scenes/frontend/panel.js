@@ -232,6 +232,8 @@ class CircadianScenesPanel extends HTMLElement {
     this._narrow = false;
     this._view = "list";
     this._editId = null;
+    this._themeId = null;
+    this._themeDraft = null;
     this._items = [];
     this._managedScenes = [];
     this._variables = [];
@@ -524,7 +526,7 @@ class CircadianScenesPanel extends HTMLElement {
           background: transparent;
           border: none;
           border-radius: 0;
-          margin-top: var(--ha-space-3);
+          margin-top: 0;
           overflow: visible;
           position: relative;
         }
@@ -1079,6 +1081,9 @@ class CircadianScenesPanel extends HTMLElement {
           overflow: visible;
           isolation: isolate;
           backface-visibility: hidden;
+        }
+        .stage-bg .clock-horizon-back {
+          z-index: 0;
         }
         /* Light-band bloom between horizon wash and planet (same chrome inset
            as the core so clones stay aligned with the rings). Promoted so sun
@@ -3492,7 +3497,29 @@ class CircadianScenesPanel extends HTMLElement {
           flex: 1 1 auto;
           min-height: 0;
           overflow: hidden;
-          padding-bottom: 0;
+          padding: 0;
+        }
+        /* Stage wheel matches the circadian dial face budget. Sidebar wheels
+           stay at 320px. */
+        .stage-col .hue-wheel-stage {
+          width: min(100%, 86vh, var(--dial-face-max, 86vh));
+          max-width: min(100%, 86vh, var(--dial-face-max, 86vh));
+          margin: 0 auto;
+          padding: 40px 0 16px;
+        }
+        .stage-col .hue-wheel-canvas {
+          width: 100%;
+          max-width: none;
+        }
+        .stage-bg .hue-wheel-glow {
+          position: absolute;
+          pointer-events: none;
+          z-index: 0;
+          transform: scale(1.85);
+          transform-origin: center center;
+          filter: blur(54px) saturate(1.45);
+          opacity: 0.55;
+          border-radius: 50%;
         }
         .card-content {
           padding: 16px;
@@ -3949,6 +3976,9 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._view === "edit") {
       return this._editId ? `edit/${this._editId}` : "new";
     }
+    if (this._view === "theme") {
+      return this._themeId ? `theme/${this._themeId}` : "";
+    }
     if (this._view === "variables") {
       return "variables";
     }
@@ -3999,6 +4029,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._pendingNewForm = null;
       this._view = "edit";
       this._editId = null;
+      this._themeId = null;
+      this._themeDraft = null;
       this._entityId = null;
       this._formData = pending
         ? { ...emptyFormData(), ...pending }
@@ -4017,13 +4049,27 @@ class CircadianScenesPanel extends HTMLElement {
     if (match) {
       this._view = "edit";
       this._editId = match[1];
+      this._themeId = null;
+      this._themeDraft = null;
       this._error = null;
       this._loadItem(this._editId);
+      return;
+    }
+    const themeMatch = hash.match(/^theme\/(.+)$/);
+    if (themeMatch) {
+      this._view = "theme";
+      this._themeId = themeMatch[1];
+      this._editId = null;
+      this._entityId = null;
+      this._error = null;
+      this._loadTheme(this._themeId);
       return;
     }
     if (hash === "variables") {
       this._view = "variables";
       this._editId = null;
+      this._themeId = null;
+      this._themeDraft = null;
       this._entityId = null;
       void this._stopRoomPreview({ restore: true });
       this._loadList();
@@ -4031,6 +4077,8 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._view = "list";
     this._editId = null;
+    this._themeId = null;
+    this._themeDraft = null;
     this._entityId = null;
     void this._stopRoomPreview({ restore: true });
     this._loadList();
@@ -4044,7 +4092,7 @@ class CircadianScenesPanel extends HTMLElement {
     const token = {
       generation: ++this._loadGeneration,
       view: this._view,
-      sceneId: this._editId,
+      sceneId: this._view === "theme" ? this._themeId : this._editId,
     };
     return token;
   }
@@ -4053,7 +4101,7 @@ class CircadianScenesPanel extends HTMLElement {
     return panelLoadIsCurrent(token, {
       generation: this._loadGeneration,
       view: this._view,
-      sceneId: this._editId,
+      sceneId: this._view === "theme" ? this._themeId : this._editId,
     });
   }
 
@@ -4190,11 +4238,13 @@ class CircadianScenesPanel extends HTMLElement {
     }
     if (this._view === "edit") {
       this._renderEditor();
+    } else if (this._view === "theme") {
+      this._renderThemeEditor();
     } else {
       this._draftRestore = null;
       this._renderList();
     }
-    if (this._view === "edit") {
+    if (this._view === "edit" || this._view === "theme") {
       this._ensureSunPath();
     }
     this._syncDraftBanner();
@@ -4210,14 +4260,39 @@ class CircadianScenesPanel extends HTMLElement {
     this._sunPathEl.hidden = true;
   }
 
+  _stageScrollEl(stage) {
+    return stage?.querySelector(":scope > .stage-scroll") || stage;
+  }
+
+  _stageBgEl(stage) {
+    return stage?.querySelector(":scope > .stage-bg") || null;
+  }
+
   _mountSunPath(stage) {
     if (!this._sunPathEl || !stage) {
       return;
     }
-    if (this._sunPathEl.parentNode !== stage) {
-      stage.appendChild(this._sunPathEl);
+    const scroll = this._stageScrollEl(stage);
+    if (this._sunPathEl.parentNode !== scroll) {
+      scroll.appendChild(this._sunPathEl);
     }
     this._sunPathEl.hidden = false;
+    this._bindStageScrollLayout(scroll);
+  }
+
+  _bindStageScrollLayout(scroll) {
+    if (!scroll || scroll === this._stageScrollBound) {
+      return;
+    }
+    if (this._stageScrollBound && this._onStageScroll) {
+      this._stageScrollBound.removeEventListener("scroll", this._onStageScroll);
+    }
+    this._onStageScroll = () => {
+      this._layoutDialChromeFn?.();
+      this._simpleWheelGlowLayout?.();
+    };
+    this._stageScrollBound = scroll;
+    scroll.addEventListener("scroll", this._onStageScroll, { passive: true });
   }
 
   _appBarScroller() {
@@ -4250,10 +4325,33 @@ class CircadianScenesPanel extends HTMLElement {
       const hostH = this.clientHeight || window.innerHeight;
       const available = Math.max(120, Math.floor(hostH - (contentTop - hostTop)));
       workspace.style.height = `${available}px`;
+      this._syncStageFaceMax();
+      this._bindStageScrollLayout(workspace.querySelector(".stage-scroll"));
     } else if (workspace) {
       workspace.style.height = "";
     }
     requestAnimationFrame(() => this._layoutDialChromeFn?.());
+  }
+
+  _syncStageFaceMax() {
+    const stage = this._contentEl?.querySelector(".stage-col");
+    if (!stage) {
+      return;
+    }
+    const hostH = this.clientHeight || window.innerHeight;
+    const headerVar = parseFloat(
+      getComputedStyle(this).getPropertyValue("--header-height")
+    );
+    const headerH = Number.isFinite(headerVar) && headerVar > 0 ? headerVar : 64;
+    const hostTop = this.getBoundingClientRect().top;
+    const stageTop = stage.getBoundingClientRect().top;
+    const bannerH = Math.max(0, Math.round(stageTop - (hostTop + headerH)));
+    const overhead = 40 + 16;
+    const maxPx = Math.max(
+      160,
+      Math.floor(hostH - headerH - bannerH - overhead - DIAL_LIST_PEEK_PX)
+    );
+    stage.style.setProperty("--dial-face-max", `${maxPx}px`);
   }
 
   _renderList({ keepSidebar = false } = {}) {
@@ -4546,7 +4644,7 @@ class CircadianScenesPanel extends HTMLElement {
         if (!name) {
           return;
         }
-        await this._hass.callWS({
+        const item = await this._hass.callWS({
           type: `${DOMAIN}/save_theme`,
           data: {
             name,
@@ -4554,7 +4652,11 @@ class CircadianScenesPanel extends HTMLElement {
           },
         });
         dialog.open = false;
-        await this._refreshCatalog();
+        if (item?.id) {
+          this._go(`theme/${item.id}`);
+        } else {
+          await this._refreshCatalog();
+        }
       },
     });
   }
@@ -4608,24 +4710,390 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _openThemeEditor(theme) {
-    const dialog = document.createElement("ha-dialog");
-    dialog.heading = theme.name;
-    const p = document.createElement("p");
-    p.textContent = this._t(
-      "frontend.library.theme_hint",
-      "This theme’s colors come from the sun-event variables. Change those variables to restyle every scene that still uses the theme."
+    if (theme?.id) {
+      this._go(`theme/${theme.id}`);
+    }
+  }
+
+  async _loadTheme(themeId) {
+    const token = this._startPanelLoad();
+    try {
+      const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
+      this._items = payload?.scenes || [];
+      this._variables = payload?.variables || [];
+      this._themes = payload?.themes || [];
+      this._floors = payload?.floors || [];
+      const theme = (this._themes || []).find((item) => item.id === themeId);
+      if (!theme) {
+        this._error = this._t("frontend.library.theme_missing", "Theme not found");
+        this._view = "list";
+        this._themeId = null;
+        this._render();
+        return;
+      }
+      this._themeDraft = structuredClone(theme);
+      this._error = null;
+    } catch (err) {
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
+      this._error = err.message || String(err);
+      this._themeDraft = null;
+    }
+    if (!this._panelLoadIsCurrent(token)) {
+      return;
+    }
+    this._resetSession();
+    this._render();
+  }
+
+  _renderThemeEditor() {
+    if (!this._headerEl) {
+      return;
+    }
+    this._headerEl.textContent =
+      this._themeDraft?.name ||
+      this._t("frontend.library.themes", "Circadian themes");
+    this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
+    this._lightView = "dial";
+    this._setEditorActions();
+    this._syncEditorChrome();
+    this._syncSaveFab();
+    this._contentEl.classList.add("wide");
+    const split = !this._narrow;
+    this._contentEl.classList.toggle("workspace-split", split);
+    this._parkSunPath();
+    const page = renderLanding(this, { includeStage: true });
+    const stage = page.querySelector(".stage-col");
+    if (this._error) {
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = this._error;
+      this._stageScrollEl(stage)?.replaceChildren(error);
+    }
+    if (this._narrow) {
+      this._contentEl.replaceChildren();
+      this._contentEl.classList.remove("workspace-split");
+      if (this._sunPathHome) {
+        this._sunPathHome.appendChild(this._sunPathEl);
+      }
+      if (this._sunPathEl) {
+        this._sunPathEl.hidden = false;
+      }
+    } else {
+      this._contentEl.replaceChildren(page);
+      if (stage) {
+        this._mountSunPath(stage);
+      }
+    }
+    this._syncWorkspaceScrollport();
+  }
+
+  async _saveTheme() {
+    if (!this._themeDraft) {
+      return;
+    }
+    this._saving = true;
+    this._error = null;
+    try {
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save_theme`,
+        data: this._themeDraft,
+      });
+      this._themeDraft = structuredClone(saved);
+      this._themeId = saved.id;
+      this._sessionBaseline = this._snapshotSession();
+      this._undoStack = [];
+      this._redoStack = [];
+      this._syncUndoButtons();
+      this._syncSaveFab();
+      this._headerEl.textContent = saved.name;
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._renderThemeEditor();
+    } finally {
+      this._saving = false;
+    }
+  }
+
+  _themeEventDraft(eventId) {
+    const ev = this._themeDraft?.events?.[eventId] || {};
+    let color = { ...(ev.color || {}) };
+    const ref = color.variable_ref;
+    if (ref) {
+      const variable = (this._variables || []).find((item) => item.id === ref);
+      color = { ...(variable?.color || {}), variable_ref: ref };
+    }
+    return {
+      state: "on",
+      brightness: ev.brightness ?? 200,
+      ...color,
+    };
+  }
+
+  _writeThemeEventFromDraft(eventId, draft) {
+    if (!this._themeDraft) {
+      return;
+    }
+    const brightness = Number(draft.brightness);
+    const value = Number.isFinite(brightness) ? brightness : 0;
+    if (draft.variable_ref) {
+      this._themeDraft.events[eventId] = {
+        color: { variable_ref: draft.variable_ref },
+        brightness: value,
+      };
+      return;
+    }
+    const color = {};
+    if (draft.color_mode) {
+      color.color_mode = draft.color_mode;
+    }
+    if (draft.color_temp_kelvin != null) {
+      color.color_temp_kelvin = draft.color_temp_kelvin;
+    }
+    if (draft.hs_color) {
+      color.hs_color = draft.hs_color;
+    }
+    if (draft.rgb_color) {
+      color.rgb_color = draft.rgb_color;
+    }
+    this._themeDraft.events[eventId] = { color, brightness: value };
+  }
+
+  _themeRingLight(events) {
+    const drafts = {};
+    for (const event of events || []) {
+      drafts[event.id] = this._themeEventDraft(event.id);
+    }
+    return {
+      entity_id: `theme:${this._themeId || "draft"}`,
+      name: this._themeDraft?.name || "Theme",
+      theme_ring: true,
+      suggested: false,
+      in_area: true,
+      event_states: (events || []).map((event) => ({
+        event: event.id,
+        present: true,
+        scene_entity_id: `theme-event:${event.id}`,
+        state: drafts[event.id],
+      })),
+    };
+  }
+
+  async _ensureThemeSunPath() {
+    if (!this._hass || !this._sunPathEl || !this._themeDraft) {
+      this._parkSunPath();
+      return;
+    }
+    const solarKey = `theme-sun:${this._previewDate}`;
+    if (!this._themeSolar || this._themeSolarKey !== solarKey) {
+      const msg = {
+        type: `${DOMAIN}/sun_path`,
+        date: this._previewDate,
+      };
+      this._themeSolar = await this._hass.callWS(msg);
+      this._themeSolarKey = solarKey;
+    }
+    const solar = this._themeSolar;
+    const lights = resampleLightsForEvents(
+      [this._themeRingLight(solar.events)],
+      solar.events,
+      draftRgb,
+      { intermediatesPerSegment: 5 }
     );
-    dialog.appendChild(p);
-    const close = document.createElement("ha-button");
-    close.slot = "primaryAction";
-    close.textContent = this._t("frontend.common.close", "Close");
-    close.addEventListener("click", () => {
-      dialog.open = false;
+    this._sunPath = { ...solar, lights };
+    this._sunPathEl.hidden = false;
+    this._drawSunPath();
+  }
+
+  _rebuildThemeDial() {
+    if (this._view !== "theme" || !this._sunPath?.events) {
+      return;
+    }
+    this._sunPath = {
+      ...this._sunPath,
+      lights: resampleLightsForEvents(
+        [this._themeRingLight(this._sunPath.events)],
+        this._sunPath.events,
+        draftRgb,
+        { intermediatesPerSegment: 5 }
+      ),
+    };
+    this._drawSunPath();
+  }
+
+  async _toggleThemeEventSidebar(event) {
+    const existing = this.shadowRoot?.querySelector(".scene-sidebar");
+    if (
+      existing &&
+      !existing._closing &&
+      this._sidebarEventId === event.id &&
+      this._view === "theme"
+    ) {
+      await this._requestCloseSceneSidebar(existing);
+      return;
+    }
+    await this._openThemeEventSidebar(event);
+  }
+
+  async _openThemeEventSidebar(event) {
+    const events = this._sunPath?.events || [];
+    const drafts = new Map();
+    for (const item of events) {
+      drafts.set(item.id, this._themeEventDraft(item.id));
+    }
+    let currentId = event.id;
+    const opened = await this._openSceneSidebar({
+      title: event.name,
+      className: "theme-event-dialog",
+      onDismiss: () => {
+        this._setSidebarEvent(null);
+      },
     });
-    dialog.appendChild(close);
-    dialog.addEventListener("closed", () => dialog.remove());
-    this.shadowRoot.appendChild(dialog);
-    dialog.open = true;
+    if (!opened) {
+      return;
+    }
+    this._setSidebarEvent(event.id);
+    this._setSidebarLight(`theme:${this._themeId || "draft"}`);
+    const { body } = opened;
+    const hint = document.createElement("p");
+    hint.className = "sidebar-note";
+    hint.textContent = this._t(
+      "frontend.library.theme_edit_hint",
+      "Editing this theme changes every circadian scene that still uses it. Per-light overrides on those scenes stay as they are."
+    );
+    body.appendChild(hint);
+
+    let wheelCtl = null;
+    let brightnessGraphCtl = null;
+    let undoCommitted = false;
+    const persist = ({ history = true } = {}) => {
+      if (history && !undoCommitted) {
+        this._commitUndo({ type: "theme", eventId: currentId });
+        undoCommitted = true;
+      }
+      for (const item of events) {
+        this._writeThemeEventFromDraft(item.id, drafts.get(item.id));
+      }
+      this._syncSaveFab();
+      this._rebuildThemeDial();
+    };
+    brightnessGraphCtl = createLightBrightnessGraph({
+      title: this._t("frontend.lights.brightness", "Brightness"),
+      subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
+      getPoints: () =>
+        events.map((item) => {
+          const draft = drafts.get(item.id);
+          return {
+            eventId: item.id,
+            sceneId: item.id,
+            seconds: item.seconds,
+            name: item.name,
+            icon: item.icon,
+            member: true,
+            brightness: Number(draft?.brightness) || 0,
+            rgb: draftRgb(draft),
+            draft,
+            active: item.id === currentId,
+          };
+        }),
+      onSelect: (eventId) => {
+        const next = events.find((item) => item.id === eventId);
+        if (!next) {
+          return;
+        }
+        currentId = eventId;
+        this._setSidebarEvent(eventId);
+        const titleEl =
+          opened.host.querySelector("ha-dialog-header .title") ||
+          opened.host.querySelector("[slot='title']");
+        if (titleEl) {
+          titleEl.textContent = next.name;
+        }
+        wheelCtl?.sync();
+        brightnessGraphCtl?.sync();
+      },
+      onBrightness: (sceneId, brightness) => {
+        const draft = drafts.get(sceneId);
+        if (!draft) {
+          return;
+        }
+        draft.brightness = brightness;
+        if (brightness > 0) {
+          draft.state = "on";
+        }
+        persist();
+        wheelCtl?.sync();
+      },
+    });
+    body.appendChild(brightnessGraphCtl.el);
+    wheelCtl = createSceneColorWheel({
+      hasColor: true,
+      hasTemp: true,
+      tempMin: 2000,
+      tempMax: 6500,
+      getState: () => ({
+        scenes: events.map((item, index) => ({
+          id: item.id,
+          index: index + 1,
+          draft: drafts.get(item.id),
+          event: item,
+        })),
+        sequence: events.map((item) => item.id),
+        activeId: currentId,
+      }),
+      onSelect: (eventId) => {
+        currentId = eventId;
+        this._setSidebarEvent(eventId);
+        brightnessGraphCtl?.sync();
+        wheelCtl?.sync();
+      },
+      onChange: () => {
+        const draft = drafts.get(currentId);
+        if (draft) {
+          delete draft.variable_ref;
+        }
+        persist();
+        brightnessGraphCtl?.sync();
+      },
+    });
+    body.appendChild(wheelCtl.el);
+    const palette = document.createElement("div");
+    palette.className = "var-palette";
+    for (const variable of this._variables || []) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.title = variable.name;
+      const t = variable.color?.color_temp_kelvin;
+      if (t) {
+        const u = Math.max(0, Math.min(1, (t - 2000) / 4000));
+        btn.style.background = `rgb(255, ${Math.round(150 + u * 70)}, ${Math.round(90 + u * 130)})`;
+      } else if (variable.color?.hs_color) {
+        btn.style.background = `hsl(${variable.color.hs_color[0]}, ${variable.color.hs_color[1]}%, 55%)`;
+      } else {
+        btn.style.background = "#666";
+      }
+      btn.addEventListener("click", () => {
+        const draft = drafts.get(currentId);
+        if (!draft) {
+          return;
+        }
+        Object.assign(draft, variable.color || {}, {
+          variable_ref: variable.id,
+          state: "on",
+        });
+        persist();
+        wheelCtl?.sync();
+        brightnessGraphCtl?.sync();
+      });
+      palette.appendChild(btn);
+    }
+    body.appendChild(palette);
+    wheelCtl.sync();
+    brightnessGraphCtl.sync();
   }
 
   _buildEmptyState({ icon, title, paragraphs, learnMore = false }) {
@@ -5148,6 +5616,33 @@ class CircadianScenesPanel extends HTMLElement {
 
   /** Editor Save FAB: always on #new; only while dirty for existing scenes. */
   _syncSaveFab() {
+    if (this._view === "theme") {
+      const show = this._sessionIsDirty();
+      if (!show) {
+        if (this._saveFabVisible || this._fabEl?.childElementCount) {
+          this._setFab(null);
+        }
+        this._saveFabVisible = false;
+        return;
+      }
+      if (
+        this._saveFabVisible &&
+        this._fabEl &&
+        !this._fabEl.classList.contains("is-hidden") &&
+        this._fabEl.childElementCount
+      ) {
+        return;
+      }
+      this._saveFabVisible = true;
+      this._setFab(
+        this._fabButton(
+          this._t("frontend.common.save", "Save"),
+          "mdi:content-save",
+          () => this._saveTheme()
+        )
+      );
+      return;
+    }
     if (this._view !== "edit") {
       return;
     }
@@ -5214,6 +5709,23 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _setEditorActions() {
+    if (this._view === "theme") {
+      this._liveEditSwitch = null;
+      this._roomPreviewSwitch = null;
+      this._locationBtn = null;
+      this._lightViewToggleBtn = null;
+      if (this._narrow) {
+        this._setActionItems();
+        return;
+      }
+      const undo = this._undoRedoButton("undo");
+      const redo = this._undoRedoButton("redo");
+      this._undoBtn = undo;
+      this._redoBtn = redo;
+      this._setActionItems(undo, redo);
+      this._syncUndoButtons();
+      return;
+    }
     this._lightView = this._readLightView();
     this._liveEdit = this._readLiveEditPref();
     // Live preview lives in the light sidebar — clear any stale app-bar switch.
@@ -5372,6 +5884,7 @@ class CircadianScenesPanel extends HTMLElement {
     return {
       form: structuredClone(this._formData),
       nativeDrafts: structuredClone(this._nativeDrafts),
+      theme: this._themeDraft ? structuredClone(this._themeDraft) : null,
     };
   }
 
@@ -5395,8 +5908,11 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._leaveConfirmDone) {
       return false;
     }
-    if (this._view !== "edit") {
+    if (this._view !== "edit" && this._view !== "theme") {
       return false;
+    }
+    if (this._view === "theme") {
+      return this._sessionIsDirty();
     }
     // Never persisted to HA yet.
     if (!this._editId) {
@@ -5727,9 +6243,10 @@ class CircadianScenesPanel extends HTMLElement {
 
   _syncEditorChrome() {
     const dial =
-      this._view === "edit" &&
-      this._lightView === "dial" &&
-      this._formData?.kind !== "simple";
+      this._view === "theme" ||
+      (this._view === "edit" &&
+        this._lightView === "dial" &&
+        this._formData?.kind !== "simple");
     this.shadowRoot?.querySelector(".page")?.classList.toggle("dial-wide", dial);
     this._sunPathEl?.classList.toggle("dial-view", dial);
     // Host-level vignette (not .sun-path) — must not track sidebar gutter.
@@ -5972,7 +6489,13 @@ class CircadianScenesPanel extends HTMLElement {
     this._forceCloseSceneSidebar();
     this._formData = structuredClone(snapshot.form);
     this._nativeDrafts = structuredClone(snapshot.nativeDrafts);
+    if (snapshot.theme) {
+      this._themeDraft = structuredClone(snapshot.theme);
+    }
     this._syncEditorSceneTitle();
+    if (this._view === "theme" && this._themeDraft && this._headerEl) {
+      this._headerEl.textContent = this._themeDraft.name;
+    }
     this._syncPreviewOverlay();
     this._sunPath = null;
     this._clearPreviewCache();
@@ -7586,7 +8109,7 @@ class CircadianScenesPanel extends HTMLElement {
       const error = document.createElement("p");
       error.className = "error";
       error.textContent = this._error;
-      stage?.replaceChildren(error);
+      this._stageScrollEl(stage)?.replaceChildren(error);
     }
 
     if (this._formData.kind === "simple") {
@@ -7595,9 +8118,12 @@ class CircadianScenesPanel extends HTMLElement {
       if (this._narrow) {
         this._contentEl.classList.remove("workspace-split");
         this._contentEl.replaceChildren(host);
+        this._simpleEditorHost = host;
       } else {
-        stage?.replaceChildren(host);
+        const scroll = this._stageScrollEl(stage);
+        scroll?.replaceChildren(host);
         this._contentEl.replaceChildren(page);
+        this._simpleEditorHost = host;
       }
       const areaId = this._formData.area;
       const floorAreas = (this._floors || []).flatMap((f) => f.areas || []);
@@ -7609,8 +8135,10 @@ class CircadianScenesPanel extends HTMLElement {
         ...areaLights.filter((id) => !exclude.has(id)),
         ...include.filter((id) => !areaLights.includes(id)),
       ];
-      renderSimpleEditor(this, host);
+      const glowHost = this._narrow ? null : this._stageBgEl(stage);
+      renderSimpleEditor(this, host, { glowHost });
       this._syncWorkspaceScrollport();
+      requestAnimationFrame(() => this._simpleWheelGlowLayout?.());
       return;
     }
 
@@ -7819,17 +8347,25 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _lightIsUnavailable(entityId) {
+    if (String(entityId || "").startsWith("theme:")) {
+      return false;
+    }
     const state = this._hass?.states?.[entityId];
     return !state || state.state === "unavailable";
   }
 
   _clockRingLights(lights) {
     return (lights || []).filter(
-      (light) => !light.suggested && !this._lightIsUnavailable(light.entity_id)
+      (light) =>
+        light.theme_ring ||
+        (!light.suggested && !this._lightIsUnavailable(light.entity_id))
     );
   }
 
   _legendLights(lights) {
+    if (this._view === "theme") {
+      return [];
+    }
     const rows = [...(lights || [])];
     const rank = (light) =>
       this._lightIsUnavailable(light.entity_id) ? 2 : light.suggested ? 1 : 0;
@@ -7877,6 +8413,10 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _toggleEventSceneDialog(event) {
+    if (this._view === "theme") {
+      await this._toggleThemeEventSidebar(event);
+      return;
+    }
     const lights = this._clockRingLights(this._sunPath?.lights || []);
     if (!lights.length) {
       return;
@@ -10282,6 +10822,10 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _ensureSunPath() {
+    if (this._view === "theme") {
+      await this._ensureThemeSunPath();
+      return;
+    }
     if (this._view !== "edit" || this._formData?.kind === "simple") {
       this._parkSunPath();
       return;
@@ -11346,17 +11890,21 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _drawSunPath() {
-    if (this._view !== "edit" || this._formData?.kind === "simple") {
+    if (this._view === "theme") {
+      /* Theme editor uses the same dial as circadian scenes. */
+    } else if (this._view !== "edit" || this._formData?.kind === "simple") {
       this._parkSunPath();
       return;
     }
     if (!this._sunPathEl || !this._sunPath || !this._sunPath.curve?.length) {
       return;
     }
-    if (this._view === "edit" && !this._dateToolbar) {
-      this._lightView = this._readLightView();
+    if ((this._view === "edit" || this._view === "theme") && !this._dateToolbar) {
+      this._lightView = this._view === "theme" ? "dial" : this._readLightView();
     }
-    const useClock = this._view === "edit" && this._lightView === "dial";
+    const useClock =
+      this._view === "theme" ||
+      (this._view === "edit" && this._lightView === "dial");
     if (
       useClock &&
       this._clockRingsHost?.isConnected &&
@@ -11436,7 +11984,7 @@ class CircadianScenesPanel extends HTMLElement {
 
     const eventsRow = document.createElement("div");
     eventsRow.className = "sun-events";
-    const editable = this._view === "edit";
+    const editable = this._view === "edit" || this._view === "theme";
     for (const event of events) {
       const item = document.createElement(editable ? "button" : "div");
       item.className = "sun-event";
@@ -11615,7 +12163,7 @@ class CircadianScenesPanel extends HTMLElement {
     hoverLine.className = "sun-hover-line";
     this._hoverLine = hoverLine;
     let clockEl = null;
-    if (this._view === "edit") {
+    if (this._view === "edit" || this._view === "theme") {
       if (useClock) {
         clockEl = this._buildLightClock(events);
       } else {
@@ -11642,7 +12190,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
 
     const children = [];
-    if (this._view === "edit") {
+    if (this._view === "edit" || this._view === "theme") {
       if (!this._dateToolbar) {
         this._dateToolbar = this._buildDateToolbar();
       }
@@ -11679,7 +12227,7 @@ class CircadianScenesPanel extends HTMLElement {
 
     this._sunPathEl.hidden = false;
     this._sunPathBodyEl.replaceChildren(...children);
-    if (this._view === "edit") {
+    if (this._view === "edit" || this._view === "theme") {
       this._syncEditorChrome();
       this._syncYearScrubLayout();
     } else {
@@ -12196,15 +12744,22 @@ class CircadianScenesPanel extends HTMLElement {
     if (!back || !face) {
       return;
     }
+    const stage = this._contentEl?.querySelector(".stage-col");
+    const bg = this._stageBgEl(stage);
+    if (bg && back.parentNode !== bg) {
+      bg.appendChild(back);
+    }
     const host = this.getBoundingClientRect();
-    // Bleed under the frosted area rail; the rail’s z-index keeps cards on top.
-    const clip = host;
+    const originRect = bg ? bg.getBoundingClientRect() : host;
+    const clip = this._contentEl?.querySelector(".workspace")?.getBoundingClientRect() || host;
     const fr = face.getBoundingClientRect();
     if (fr.width < 8 || host.width < 8) {
       return;
     }
     const cx = fr.left + fr.width / 2;
     const cy = fr.top + fr.height / 2;
+    back.style.left = `${cx - originRect.left}px`;
+    back.style.top = `${cy - originRect.top}px`;
     // Reach the light list under the face so horizon/bloom fill behind it —
     // but stop ~156px past the list so an abspos back cannot inflate scroll
     // height when an ancestor becomes a scrollport (overflow-x: clip quirk).
@@ -12215,8 +12770,8 @@ class CircadianScenesPanel extends HTMLElement {
       clock?.getBoundingClientRect().bottom ??
       fr.bottom;
     const contentBottom = listBottom + 156;
-    // Cover the editor stage from the face center. Do not extend under the
-    // area rail — that column is an opaque scrollport beside the dial.
+    // Cover the workspace from the face center, including under the frosted
+    // area rail. Rails sit at a higher z-index; glow paints through the frost.
     const reach = Math.max(
       cx - clip.left,
       clip.right - cx,
@@ -13340,6 +13895,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockOverlayEl = undefined;
     this._clockGlowLayer = undefined;
     this._layoutDialChromeFn = undefined;
+    this._clockHorizonBackEl?.remove();
+    this._clockHorizonBackEl = undefined;
+    this._clockFaceEl = undefined;
   }
 
   _patchLightClock(payload, { morphing = false } = {}) {
@@ -13693,14 +14251,21 @@ class CircadianScenesPanel extends HTMLElement {
         this._requestCloseSceneSidebar();
         return;
       }
-      const assigned = events.filter((item) => this._eventSceneId(item.id));
-      if (!assigned.length) {
-        return;
-      }
       const seconds =
         this._clockSunDisplayedSeconds ??
         this._clockStickySeconds ??
         this._clockSunIdleSeconds();
+      if (this._view === "theme") {
+        const closest = this._closestEvent(events, seconds);
+        if (closest) {
+          this._openThemeEventSidebar(closest);
+        }
+        return;
+      }
+      const assigned = events.filter((item) => this._eventSceneId(item.id));
+      if (!assigned.length) {
+        return;
+      }
       const closest = this._closestEvent(assigned, seconds);
       if (closest) {
         this._openLightEditDialog(light, closest);
@@ -13847,7 +14412,7 @@ class CircadianScenesPanel extends HTMLElement {
     // Horizon → light bloom → planet; face ticks under event buttons / labels.
     face.append(horizonBack, glowLayer, core, faceTicks);
 
-    const editable = this._view === "edit";
+    const editable = this._view === "edit" || this._view === "theme";
     const eventLayer = document.createElement("div");
     eventLayer.className = "clock-event-layer";
     const eventAnchors = [];
@@ -14045,7 +14610,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     wrap.appendChild(face);
 
-    if (!ringLights.length) {
+    if (!ringLights.length && this._view !== "theme") {
       const hint = document.createElement("p");
       hint.className = "sun-light-clock-empty-hint";
       hint.textContent = suggested.length
@@ -14063,8 +14628,12 @@ class CircadianScenesPanel extends HTMLElement {
     if (addBtn) {
       legend.appendChild(addBtn);
     }
-    this._clockLegendEl = legend;
-    wrap.appendChild(legend);
+    if (legendLights.length || addBtn) {
+      this._clockLegendEl = legend;
+      wrap.appendChild(legend);
+    } else {
+      this._clockLegendEl = null;
+    }
     return wrap;
   }
 
