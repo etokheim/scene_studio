@@ -554,6 +554,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .sun-path-stage.landscape-clock-scrub.scrub-collapsed {
           --scrub-rail-width: 0px;
+          padding-right: 0;
         }
         .sun-path-stage.landscape-clock-scrub .sun-path-body {
           grid-column: 2;
