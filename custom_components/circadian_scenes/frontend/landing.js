@@ -1,5 +1,7 @@
 /** Area rail, scene cards, and variable/theme library for the list view. */
 
+import { createSimpleCardMesh } from "./card_mesh.js";
+
 const AREA_RAIL_PX = 340;
 
 export const LANDING_CSS = `
@@ -134,6 +136,8 @@ export const LANDING_CSS = `
   .scene-card .card-bg {
     position: absolute;
     inset: 0;
+    width: 100%;
+    height: 100%;
     z-index: 0;
     border-radius: inherit;
     overflow: hidden;
@@ -270,28 +274,6 @@ function rgbCss(rgb) {
     return "rgb(48,48,48)";
   }
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-}
-
-function meshBackground(dots) {
-  const colors = (dots || []).map((d) => rgbCss(d.rgb));
-  if (!colors.length) {
-    return "linear-gradient(180deg, #2b2b2b, #1c1c1c)";
-  }
-  const unique = [];
-  for (const c of colors) {
-    if (!unique.includes(c)) {
-      unique.push(c);
-    }
-    if (unique.length >= 8) {
-      break;
-    }
-  }
-  const blobs = unique.map((c, i) => {
-    const x = 18 + ((i * 37) % 70);
-    const y = 20 + ((i * 53) % 60);
-    return `radial-gradient(circle at ${x}% ${y}%, ${c} 0%, transparent 55%)`;
-  });
-  return `${blobs.join(", ")}, #1a1a1a`;
 }
 
 function rampBackground(ramps) {
@@ -467,12 +449,13 @@ function renderSceneCard(panel, scene) {
   if (panel._editId === scene.id) {
     cardEl.classList.add("selected");
   }
-  const bg = document.createElement("div");
-  bg.className = "card-bg";
   const card = scene.card || {};
+  let bg;
   if (scene.kind === "simple") {
-    bg.style.background = meshBackground(card.dots);
+    bg = createSimpleCardMesh(card.dots);
   } else {
+    bg = document.createElement("div");
+    bg.className = "card-bg";
     bg.style.background = rampBackground(card.ramps);
   }
   const body = document.createElement("div");

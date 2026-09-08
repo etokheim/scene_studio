@@ -3,6 +3,14 @@
 Durable product and architecture choices for Circadian Scenes.
 Agents: do not reverse these without an explicit user request. Supersede entries in the same change set when intentionally changing course.
 
+## Desktop drawer uses one FLIP stage transform; simple cards use a raster mesh
+
+- **Date:** 2026-09-08
+- **Supersedes in part:** “Scene editors use the automation sidebar / bottom sheet” — the final docked gutter remains, but it is no longer animated as layout.
+- **Decision:** On desktop, apply the drawer’s final gutter immediately and animate only the editor stage’s FLIP translation. Do not transition shell padding, page width/margins, or the landscape scrub grid, and do not remeasure the dial horizon every animation frame; reconcile dial geometry once after motion settles. Simple-scene card backgrounds are a deterministic triangle mesh rasterized once to canvas with barycentric color interpolation in linear-light RGB, not stacked radial CSS gradients.
+- **Why:** Concurrent layout transitions, scrub-column collapse, and per-frame geometry writes made the drawer and stage visibly fight each other. A compositor transform keeps the persistent area rail stable and motion monotonic. CSS has no interoperable native mesh-gradient primitive; a small canvas mesh provides actual two-dimensional interpolation without WebGL contexts or translucent gradient-layer chroma buildup.
+- **Do not reverse without user ask.**
+
 ## Store owns light snapshots; variables and themes are house-wide (v6)
 
 - **Date:** 2026-09-03

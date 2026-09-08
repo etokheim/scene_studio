@@ -278,6 +278,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._liveEditSidebarHandler = null;
     this._roomPreview = false;
     this._roomPreviewSnapshots = null;
+    this._sidebarMotionGeneration = 0;
+    this._sidebarMotionRaf = undefined;
+    this._sidebarMotionTimer = undefined;
     this._onHashChange = () => this._syncHash();
     this._onEditorKeydown = (ev) => this._handleEditorShortcut(ev);
     this._onPageHide = (ev) => {
@@ -435,6 +438,14 @@ class CircadianScenesPanel extends HTMLElement {
       window.cancelAnimationFrame(this._hoverRaf);
       this._hoverRaf = undefined;
     }
+    if (this._sidebarMotionRaf) {
+      window.cancelAnimationFrame(this._sidebarMotionRaf);
+      this._sidebarMotionRaf = undefined;
+    }
+    if (this._sidebarMotionTimer) {
+      window.clearTimeout(this._sidebarMotionTimer);
+      this._sidebarMotionTimer = undefined;
+    }
     this._cancelSunPathMorph();
   }
 
@@ -536,8 +547,6 @@ class CircadianScenesPanel extends HTMLElement {
              matching left column still optically centers the dial. */
           padding-right: ${CLOCK_SCRUB_RAIL_PAD_PX}px;
           overflow: visible;
-          transition: grid-template-columns ${SIDEBAR_ANIMATION_MS}ms
-            cubic-bezier(0.2, 0, 0, 1);
         }
         .sun-path-stage.landscape-clock-scrub.scrub-collapsed {
           --scrub-rail-width: 0px;
@@ -3346,7 +3355,6 @@ class CircadianScenesPanel extends HTMLElement {
           padding-right: var(--scene-sidebar-gutter);
           overflow-x: clip;
           overflow-y: hidden;
-          transition: padding-right ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1);
         }
         .page {
           --page-max-width: 1024px;
@@ -3372,10 +3380,6 @@ class CircadianScenesPanel extends HTMLElement {
           /* Event chips sit near the face edge — do not clip them here; clip X
              on the shell below so horizon bleed cannot widen the app-bar scroller. */
           overflow: visible;
-          transition:
-            margin-right ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1),
-            width ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1),
-            padding-right ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1);
         }
         /* Clip X on the wide page. Horizon may bleed under the frosted rail;
            height is capped in _layoutClockHorizonBack. */
@@ -3729,7 +3733,6 @@ class CircadianScenesPanel extends HTMLElement {
           --ha-button-box-shadow: var(--ha-box-shadow-l);
           transform-origin: bottom right;
           transition:
-            right ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1),
             opacity 180ms cubic-bezier(0.2, 0, 0, 1),
             transform 180ms cubic-bezier(0.2, 0, 0, 1),
             visibility 180ms;
@@ -7078,41 +7081,72 @@ class CircadianScenesPanel extends HTMLElement {
     // Width + drawer’s right inset only — no extra “left margin” gap; banners
     // and page content keep their own inline spacing.
     const on = Boolean(docked && !this._isEditorNarrow());
+    const wasOn = this.hasAttribute("data-sidebar-docked");
+    if (on === wasOn) {
+      return;
+    }
+    const stage = this.shadowRoot?.querySelector(".workspace .stage-col");
+    const before = stage?.getBoundingClientRect();
     const gutter = on
       ? "calc(var(--scene-sidebar-width, 375px) + 16px)"
       : "0px";
     this.style.setProperty("--scene-sidebar-gutter", gutter);
     this.toggleAttribute("data-sidebar-docked", on);
     this._syncYearScrubLayout();
-    // Face translates with the gutter padding transition; ResizeObserver only
-    // sees size changes, so remeasure horizon reach through the slide.
-    this._scheduleClockHorizonRelayout();
+    const after = stage?.getBoundingClientRect();
+    const delta =
+      before && after
+        ? before.left + before.width / 2 - (after.left + after.width / 2)
+        : 0;
+    this._animateSidebarStage(stage, delta);
   }
 
-  _scheduleClockHorizonRelayout() {
-    if (this._horizonRelayoutRaf != null) {
-      cancelAnimationFrame(this._horizonRelayoutRaf);
-      this._horizonRelayoutRaf = undefined;
+  _animateSidebarStage(stage, delta) {
+    this._sidebarMotionGeneration += 1;
+    const generation = this._sidebarMotionGeneration;
+    const duration = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")
+      .matches
+      ? 1
+      : SIDEBAR_ANIMATION_MS;
+    if (this._sidebarMotionRaf) {
+      cancelAnimationFrame(this._sidebarMotionRaf);
     }
-    if (this._horizonRelayoutTimer != null) {
-      clearTimeout(this._horizonRelayoutTimer);
-      this._horizonRelayoutTimer = undefined;
+    if (this._sidebarMotionTimer) {
+      clearTimeout(this._sidebarMotionTimer);
     }
-    const started = performance.now();
-    const tick = (now) => {
-      this._layoutClockHorizonBack();
-      if (now - started < SIDEBAR_ANIMATION_MS + 32) {
-        this._horizonRelayoutRaf = requestAnimationFrame(tick);
+    const finish = () => {
+      if (generation !== this._sidebarMotionGeneration) {
         return;
       }
-      this._horizonRelayoutRaf = undefined;
-      // One more pass after transition settles (subpixel / late layout).
-      this._horizonRelayoutTimer = window.setTimeout(() => {
-        this._horizonRelayoutTimer = undefined;
-        this._layoutClockHorizonBack();
-      }, 48);
+      this._sidebarMotionRaf = undefined;
+      this._sidebarMotionTimer = undefined;
+      if (stage) {
+        stage.style.transition = "";
+        stage.style.transform = "";
+        stage.style.willChange = "";
+      }
+      this._layoutClockHorizonBack();
+      this._layoutDialChromeFn?.();
     };
-    this._horizonRelayoutRaf = requestAnimationFrame(tick);
+    if (!stage || Math.abs(delta) < 0.5) {
+      finish();
+      return;
+    }
+    stage.style.transition = "none";
+    stage.style.transform = `translate3d(${delta}px, 0, 0)`;
+    stage.style.willChange = "transform";
+    stage.getBoundingClientRect();
+    this._sidebarMotionRaf = requestAnimationFrame(() => {
+      if (generation !== this._sidebarMotionGeneration) {
+        return;
+      }
+      stage.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0, 0, 1)`;
+      stage.style.transform = "translate3d(0, 0, 0)";
+      this._sidebarMotionTimer = window.setTimeout(
+        finish,
+        duration + 50
+      );
+    });
   }
 
   _fillSidebarHeader(header, { title, subtitle, actionItems, host }) {
