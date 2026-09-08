@@ -3,12 +3,12 @@
 Durable product and architecture choices for Circadian Scenes.
 Agents: do not reverse these without an explicit user request. Supersede entries in the same change set when intentionally changing course.
 
-## Desktop drawer overlays the stage; simple cards use a raster mesh
+## Desktop drawer overlays backgrounds; dial yields with one FLIP
 
 - **Date:** 2026-09-08
-- **Supersedes in part:** “Scene editors use the automation sidebar / bottom sheet” — desktop drawers overlay instead of reserving a gutter or shifting/scaling the stage.
-- **Decision:** On desktop, keep the editor stage and landscape year rail at their existing geometry while the drawer slides above them. The drawer uses the same translucent, blurred surface treatment as the area rail so the full-panel dial horizon remains visible underneath. Do not animate shell padding, page width/margins, the stage, or the landscape scrub grid. Simple-scene card backgrounds are a deterministic triangle mesh rasterized once to canvas with barycentric color interpolation in linear-light RGB, not stacked radial CSS gradients.
-- **Why:** Any final gutter changes the dial’s available width, so transform-only FLIP motion still begins with a visible scale jump and clips the full-panel background before the drawer arrives. Overlaying preserves dial size and lets one transform animate independently. CSS has no interoperable native mesh-gradient primitive; a small canvas mesh provides actual two-dimensional interpolation without WebGL contexts or translucent gradient-layer chroma buildup.
+- **Supersedes in part:** “Scene editors use the automation sidebar / bottom sheet” — desktop drawers overlay full-width background graphics, while foreground dial content yields to their width.
+- **Decision:** On desktop, keep the workspace and full-panel dial horizon at full width beneath the translucent, blurred drawer. Give only `.stage-col` a final right content gutter so the dial is centered in the unobscured view; animate the dial face from its old bounds to those final bounds with one FLIP translation+scale using the drawer’s curve. The landscape year rail collapses into that same FLIP. Do not animate shell padding, page width/margins, or background geometry. Simple-scene card backgrounds are a deterministic triangle mesh rasterized once to canvas with barycentric color interpolation in linear-light RGB, not stacked radial CSS gradients.
+- **Why:** A fully overlaid drawer covered the dial; a shell gutter clipped the background and changed dial geometry before the drawer arrived. Separating foreground content from background reach lets the horizon remain visible under the drawer while the dial continuously moves and scales into the remaining view. CSS has no interoperable native mesh-gradient primitive; a small canvas mesh provides actual two-dimensional interpolation without WebGL contexts or translucent gradient-layer chroma buildup.
 - **Do not reverse without user ask.**
 
 ## Store owns light snapshots; variables and themes are house-wide (v6)

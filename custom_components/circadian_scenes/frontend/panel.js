@@ -280,6 +280,10 @@ class CircadianScenesPanel extends HTMLElement {
     this._roomPreview = false;
     this._roomPreviewSnapshots = null;
     this._loadGeneration = 0;
+    this._sidebarMotionGeneration = 0;
+    this._sidebarMotionRaf = undefined;
+    this._sidebarMotionTimer = undefined;
+    this._sidebarLayoutInProgress = false;
     this._onHashChange = () => this._syncHash();
     this._onEditorKeydown = (ev) => this._handleEditorShortcut(ev);
     this._onPageHide = (ev) => {
@@ -437,6 +441,14 @@ class CircadianScenesPanel extends HTMLElement {
       window.cancelAnimationFrame(this._hoverRaf);
       this._hoverRaf = undefined;
     }
+    if (this._sidebarMotionRaf) {
+      window.cancelAnimationFrame(this._sidebarMotionRaf);
+      this._sidebarMotionRaf = undefined;
+    }
+    if (this._sidebarMotionTimer) {
+      window.clearTimeout(this._sidebarMotionTimer);
+      this._sidebarMotionTimer = undefined;
+    }
     this._cancelSunPathMorph();
   }
 
@@ -461,6 +473,7 @@ class CircadianScenesPanel extends HTMLElement {
           background: var(--primary-background-color);
           color: var(--primary-text-color);
           --scene-sidebar-gutter: 0px;
+          --scene-sidebar-content-gutter: 0px;
           /* Night wedges: warm gray in light; near-black in dark. */
           --clock-night-outer: ${CLOCK_NIGHT_OUTER_LIGHT};
           --clock-night-deep: ${CLOCK_NIGHT_DEEP_LIGHT};
@@ -3392,6 +3405,12 @@ class CircadianScenesPanel extends HTMLElement {
            height is capped in _layoutClockHorizonBack. */
         .page.dial-wide {
           overflow-x: clip;
+        }
+        /* Keep full-panel backgrounds at workspace width. Only the content
+           stage yields to the overlay drawer, so horizon graphics remain
+           visible beneath its translucent surface. */
+        :host([data-sidebar-docked]) .workspace .stage-col {
+          margin-right: var(--scene-sidebar-content-gutter);
         }
         /* Sidebar open: keep path/face overflow visible for chips / underpaint;
            leave page-shell x-clipped so the horizontal scrollbar stays gone. */
@@ -7124,16 +7143,83 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _setSidebarDocked(docked) {
-    // Desktop drawers overlay the stage. Reserving a gutter makes the dial
-    // resize while the drawer slides and clips the horizon before motion ends.
+    // The drawer overlays full-width background graphics. Only the dial's
+    // content stage yields, then FLIP animates its scale/position smoothly.
     const on = Boolean(docked && !this._isEditorNarrow());
     const wasOn = this.hasAttribute("data-sidebar-docked");
     if (on === wasOn) {
       return;
     }
+    const face = this.shadowRoot?.querySelector(".sun-light-clock-face");
+    const before = face?.getBoundingClientRect();
+    this._sidebarLayoutInProgress = true;
     this.style.setProperty("--scene-sidebar-gutter", "0px");
+    this.style.setProperty(
+      "--scene-sidebar-content-gutter",
+      on ? "calc(var(--scene-sidebar-width, 375px) + 16px)" : "0px"
+    );
     this.toggleAttribute("data-sidebar-docked", on);
     this._syncYearScrubLayout();
+    const after = face?.getBoundingClientRect();
+    this._animateSidebarDial(face, before, after);
+  }
+
+  _animateSidebarDial(face, before, after) {
+    this._sidebarMotionGeneration += 1;
+    const generation = this._sidebarMotionGeneration;
+    const duration = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")
+      .matches
+      ? 1
+      : SIDEBAR_ANIMATION_MS;
+    if (this._sidebarMotionRaf) {
+      cancelAnimationFrame(this._sidebarMotionRaf);
+    }
+    if (this._sidebarMotionTimer) {
+      clearTimeout(this._sidebarMotionTimer);
+    }
+    const finish = () => {
+      if (generation !== this._sidebarMotionGeneration) {
+        return;
+      }
+      this._sidebarMotionRaf = undefined;
+      this._sidebarMotionTimer = undefined;
+      this._sidebarLayoutInProgress = false;
+      if (face) {
+        face.style.transition = "";
+        face.style.transform = "";
+        face.style.willChange = "";
+      }
+      this._layoutDialChromeFn?.();
+    };
+    if (!face || !before || !after || after.width < 1) {
+      finish();
+      return;
+    }
+    const dx =
+      before.left + before.width / 2 - (after.left + after.width / 2);
+    const dy =
+      before.top + before.height / 2 - (after.top + after.height / 2);
+    const scale = before.width / after.width;
+    if (
+      Math.abs(dx) < 0.5 &&
+      Math.abs(dy) < 0.5 &&
+      Math.abs(scale - 1) < 0.001
+    ) {
+      finish();
+      return;
+    }
+    face.style.transition = "none";
+    face.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`;
+    face.style.willChange = "transform";
+    face.getBoundingClientRect();
+    this._sidebarMotionRaf = requestAnimationFrame(() => {
+      if (generation !== this._sidebarMotionGeneration) {
+        return;
+      }
+      face.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0, 0, 1)`;
+      face.style.transform = "translate3d(0, 0, 0) scale(1)";
+      this._sidebarMotionTimer = window.setTimeout(finish, duration + 50);
+    });
   }
 
   _fillSidebarHeader(header, { title, subtitle, actionItems, host }) {
@@ -11051,9 +11137,9 @@ class CircadianScenesPanel extends HTMLElement {
     const sidebarOpen = this._sceneSidebarIsOpen();
     // Portrait chrome below this width — empty left rail reads as a black bar.
     const landscapeClock = landscape && clock && this._landscapeScrubFits();
-    // Overlay drawers do not change dial geometry; keep the landscape rail
-    // in place under the drawer instead of scaling the face on open.
-    const collapse = false;
+    // The drawer owns the right-side space while open; the face FLIP absorbs
+    // this rail collapse into the same smooth scale/translation.
+    const collapse = landscapeClock && sidebarOpen;
     const hideToolbarScrub = landscape && sidebarOpen && !clock;
 
     this._yearScrub.classList.toggle("vertical", landscapeClock);
@@ -13933,6 +14019,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockResizeObserver?.disconnect();
     if (typeof ResizeObserver === "function") {
       this._clockResizeObserver = new ResizeObserver(() => {
+        if (this._sidebarLayoutInProgress) {
+          return;
+        }
         layoutDialChrome();
       });
       this._clockResizeObserver.observe(face);
