@@ -317,7 +317,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-08
 - **Supersedes:** “Earliest dusk time lives on the dusk event dialog” (2026-08-26).
-- **Decision:** `dusk_minimum_time_of_day` is an integration setting (seconds since midnight, default 22:00). Activation, preview, theme dial, and table/dial ghost+clamp visualization all use that one floor. Edit it in Settings and at the **bottom** of the light / theme / dusk solar-event sidebar while dusk is the open event (hidden for other events). Per-scene `scene_dusk_minimum_time_of_day` is lifted into settings on load and dropped. Theme color/brightness still opens from a ring click, not from the event buttons.
+- **Decision:** `dusk_minimum_time_of_day` is an integration setting (seconds since midnight, default 22:00). Activation, preview, theme dial, and table/dial ghost+clamp visualization all use that one floor. Edit it in Settings and as the **last item in the scrollable body** of the light / theme / dusk solar-event sidebar while dusk is the open event (hidden for other events; not in the sticky action footer). Per-scene `scene_dusk_minimum_time_of_day` is lifted into settings on load and dropped. Theme color/brightness still opens from a ring click, not from the event buttons.
 - **Why:** The floor is about when dusk is allowed to happen in the house, not a property of one room scene. Event buttons are the place to inspect that solar event; Settings is the house-wide copy of the same control.
 - **Do not reverse without user ask.**
 

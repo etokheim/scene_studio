@@ -2866,18 +2866,11 @@ class CircadianScenesPanel extends HTMLElement {
           flex-direction: column;
           align-items: stretch;
           gap: 8px;
-          padding: 12px 16px 8px;
+          margin-top: 16px;
           box-sizing: border-box;
         }
         .scene-sidebar .dusk-minimum-row ha-selector {
           width: 100%;
-        }
-        .scene-sidebar-footer:has(.dusk-minimum-row) {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 0;
-          padding: 0;
-          border-top: 1px solid var(--divider-color);
         }
         .scene-sidebar-footer:has(.sidebar-actions-bar) {
           flex-direction: column;
@@ -5131,7 +5124,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._setSidebarEvent(event.id);
     this._setSidebarLight(`theme:${this._themeId || "draft"}`);
-    const { body, footer } = opened;
+    const { body } = opened;
     const duskSlot = document.createElement("div");
     const hint = document.createElement("p");
     hint.className = "sidebar-note";
@@ -5268,8 +5261,7 @@ class CircadianScenesPanel extends HTMLElement {
       });
       palette.appendChild(btn);
     }
-    body.appendChild(palette);
-    footer.appendChild(duskSlot);
+    body.append(palette, duskSlot);
     this._syncDuskMinimumSlot(duskSlot, currentId);
     wheelCtl.sync();
     brightnessGraphCtl.sync();
@@ -8734,7 +8726,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._setSidebarEvent(event.id);
     this._setSidebarLight(null);
-    const { host, header, body, footer } = opened;
+    const { host, header, body } = opened;
     const titleEl = () =>
       header.querySelector("[slot='title']") ||
       header.querySelector("ha-dialog-header .title");
@@ -8744,7 +8736,7 @@ class CircadianScenesPanel extends HTMLElement {
         heading.textContent = next.name;
       }
       body.replaceChildren();
-      this._syncDuskMinimumSlot(footer, next.id);
+      this._syncDuskMinimumSlot(body, next.id);
     };
     host._switchSolarEvent = (next) => {
       this._setSidebarEvent(next.id);
@@ -9697,7 +9689,8 @@ class CircadianScenesPanel extends HTMLElement {
       colorBriMount,
       whiteBriMount,
       wheelMount,
-      effectMount
+      effectMount,
+      duskSlot
     );
 
     let effectMenu = null;
@@ -10174,7 +10167,7 @@ class CircadianScenesPanel extends HTMLElement {
     undo.id = "sidebar-button-undo";
     redo.id = "sidebar-button-redo";
     bar.append(undo, redo, liveToggle, activateBtn);
-    footer.append(duskSlot, bar);
+    footer.append(bar);
     this._syncDuskMinimumSlot(duskSlot, currentEvent.id);
     this._sidebarUndoBtn = undo;
     this._sidebarRedoBtn = redo;
