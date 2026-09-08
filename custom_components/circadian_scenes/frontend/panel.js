@@ -8995,9 +8995,15 @@ class CircadianScenesPanel extends HTMLElement {
       chipsHost.appendChild(list);
       if (selectedBtn) {
         requestAnimationFrame(() => {
-          selectedBtn.scrollIntoView({
-            inline: "nearest",
-            block: "nearest",
+          const left = Math.max(
+            0,
+            selectedBtn.offsetLeft -
+              (list.clientWidth - selectedBtn.offsetWidth) / 2
+          );
+          // scrollIntoView also pans HA's outer panel scrollport, making the
+          // entire page rebound while this drawer opens. Scroll only this row.
+          list.scrollTo({
+            left,
             behavior: "smooth",
           });
         });
