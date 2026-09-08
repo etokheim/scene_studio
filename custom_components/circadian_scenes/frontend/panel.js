@@ -72,8 +72,8 @@ const CLOCK_SNAP_CAPTURE_SEC = Math.round(12 * 60 * 1.3 * 1.25);
 const CLOCK_DRAG_CLICK_PX = 7;
 /* Event spokes aim near the face edge; buttons sit in chrome outside the core. */
 const CLOCK_EVENT_ICON_R = 92;
-/* Fixed px band around the dial for event buttons + labels (do not scale).
-   Actual chrome is set per layout from face size (shrinks on small screens). */
+/* Fixed px band around the dial for hour ticks + labels (do not scale).
+   Event-button gap from the path is also screen pixels (see below). */
 const CLOCK_CHROME_PX = 80;
 const CLOCK_EVENT_BTN_PX = 32;
 const CLOCK_SCRUB_RAIL_PX = 104;
@@ -108,9 +108,11 @@ const CLOCK_SUN_SCALE_MAX = 2;
 const CLOCK_TICK_OUTER = 94;
 const CLOCK_TICK_MAJOR_LEN = 5;
 const CLOCK_TICK_MINOR_LEN = 3;
-/* Core-viewBox gap from sun-path radius to event-button center (constant as
-   the path scales seasonally). */
-const CLOCK_EVENT_GAP_FROM_PATH = 20;
+/* Desktop px from sun-path radius to event-button center. Screen pixels so a
+   narrower viewport does not eat the margin (core-viewBox units shrank with
+   the fixed chrome inset). Seasonal path radius still moves the buttons.
+   ≈ twice the old 10-unit core gap on a ~570px core. Mobile sits on the path. */
+const CLOCK_EVENT_GAP_FROM_PATH_PX = 56;
 /* Fallback override radius until layout maps face tick tips into core space. */
 const CLOCK_OVERRIDE_R = CLOCK_TICK_OUTER;
 const CLOCK_SUN_STROKE_MIN_PX = 0.2;
@@ -14820,7 +14822,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       // Face chrome: tick tips near the edge, hour numbers just inside the
       // ticks (clear of the stroke). Event buttons track the sun path at a
-      // fixed core-viewBox gap (desktop) or on the path (mobile ≤870px).
+      // fixed screen-px gap (desktop) or on the path (mobile ≤870px).
       const tickOuterPad = w >= 871 ? 10 : 6;
       const labelFontPx = w >= 871 ? 32 : 16;
       // Past major tick length + ~half glyph + air so digits do not sit on ticks.
@@ -14862,9 +14864,9 @@ class CircadianScenesPanel extends HTMLElement {
       }
       const pathR = this._clockSunPathRadius();
       // Mobile: event buttons sit on the path so the dial can grow larger.
-      const eventGap = narrowFace ? 0 : CLOCK_EVENT_GAP_FROM_PATH;
-      const eventRCore = pathR + eventGap;
-      const eventRFacePx = (eventRCore / 100) * (coreW / 2);
+      const pathPx = (pathR / 100) * (coreW / 2);
+      const eventGapPx = narrowFace ? 0 : CLOCK_EVENT_GAP_FROM_PATH_PX;
+      const eventRFacePx = pathPx + eventGapPx;
       const iconR = (eventRFacePx / w) * 100;
       for (const anchor of eventAnchors) {
         const { cos, sin } = anchor._clockPolar;
