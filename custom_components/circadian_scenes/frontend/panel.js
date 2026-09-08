@@ -293,6 +293,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       this._resizeRaf = window.requestAnimationFrame(() => {
         this._resizeRaf = undefined;
+        this._syncWorkspaceScrollport();
         this._syncYearScrubLayout();
       });
     };
@@ -3338,8 +3339,13 @@ class CircadianScenesPanel extends HTMLElement {
         .page-shell {
           box-sizing: border-box;
           width: 100%;
+          height: 100%;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
           padding-right: var(--scene-sidebar-gutter);
-          overflow: visible;
+          overflow-x: clip;
+          overflow-y: hidden;
           transition: padding-right ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1);
         }
         .page {
@@ -3371,12 +3377,8 @@ class CircadianScenesPanel extends HTMLElement {
             width ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1),
             padding-right ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1);
         }
-        /* Clip X on the shell (all widths). .clock-horizon-back is sized to the
-           full panel and was widening ha-top-app-bar’s .ha-scrollbar. Do not
-           clip stage/body/clock — overflow-x:clip promotes overflow-y to a
-           scrollport and abspos horizon used to inflate scroll height; that
+        /* Clip X on the wide page. Horizon may bleed under the frosted rail;
            height is capped in _layoutClockHorizonBack. */
-        .page-shell,
         .page.dial-wide {
           overflow-x: clip;
         }
@@ -3455,11 +3457,11 @@ class CircadianScenesPanel extends HTMLElement {
           width: 100%;
           box-sizing: border-box;
         }
-        .content.workspace-split {
+        .content:has(.workspace) {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: hidden;
           padding-bottom: 0;
-        }
-        .content.workspace-split .workspace {
-          min-height: calc(100vh - 88px);
         }
         .card-content {
           padding: 16px;
@@ -4149,6 +4151,42 @@ class CircadianScenesPanel extends HTMLElement {
     this._sunPathEl.hidden = false;
   }
 
+  _appBarScroller() {
+    if (this._appBarScrollEl?.isConnected) {
+      return this._appBarScrollEl;
+    }
+    const root = this._appBar?.shadowRoot;
+    if (!root) {
+      return undefined;
+    }
+    const el =
+      root.querySelector(".ha-scrollbar") ||
+      [...root.querySelectorAll("*")].find((node) => {
+        const overflowY = getComputedStyle(node).overflowY;
+        return overflowY === "auto" || overflowY === "scroll";
+      });
+    this._appBarScrollEl = el;
+    return el;
+  }
+
+  _syncWorkspaceScrollport() {
+    const workspace = this._contentEl?.querySelector(".workspace");
+    const scroller = this._appBarScroller();
+    if (scroller) {
+      scroller.style.overflow = workspace ? "hidden" : "";
+    }
+    if (workspace && this._contentEl) {
+      const hostTop = this.getBoundingClientRect().top;
+      const contentTop = this._contentEl.getBoundingClientRect().top;
+      const hostH = this.clientHeight || window.innerHeight;
+      const available = Math.max(120, Math.floor(hostH - (contentTop - hostTop)));
+      workspace.style.height = `${available}px`;
+    } else if (workspace) {
+      workspace.style.height = "";
+    }
+    requestAnimationFrame(() => this._layoutDialChromeFn?.());
+  }
+
   _renderList({ keepSidebar = false } = {}) {
     if (!keepSidebar) {
       this._closeSceneSidebar();
@@ -4188,6 +4226,7 @@ class CircadianScenesPanel extends HTMLElement {
 
     const page = renderLanding(this, { includeStage: true });
     this._contentEl.replaceChildren(page);
+    this._syncWorkspaceScrollport();
     this._setActionItems(this._listSettingsButton());
     if (this._narrow && this._view === "list") {
       this._setFab(this._variablesButton());
@@ -7461,6 +7500,7 @@ class CircadianScenesPanel extends HTMLElement {
         ...include.filter((id) => !areaLights.includes(id)),
       ];
       renderSimpleEditor(this, host);
+      this._syncWorkspaceScrollport();
       return;
     }
 
@@ -7484,6 +7524,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._forgetClockDom();
       this._drawSunPath();
     }
+    this._syncWorkspaceScrollport();
   }
 
   /** App-bar / dialogs: prefer HA friendly_name over stored scene_name. */
@@ -12040,6 +12081,8 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     const host = this.getBoundingClientRect();
+    // Bleed under the frosted area rail; the rail’s z-index keeps cards on top.
+    const clip = host;
     const fr = face.getBoundingClientRect();
     if (fr.width < 8 || host.width < 8) {
       return;
@@ -12056,19 +12099,18 @@ class CircadianScenesPanel extends HTMLElement {
       clock?.getBoundingClientRect().bottom ??
       fr.bottom;
     const contentBottom = listBottom + 156;
-    // Cover the full panel host from the face center — including when the
-    // dial shifts left for an open sidebar (gutter). Axis + corners so a
-    // square always fills the viewport under the drawer.
+    // Cover the editor stage from the face center. Do not extend under the
+    // area rail — that column is an opaque scrollport beside the dial.
     const reach = Math.max(
-      cx - host.left,
-      host.right - cx,
-      cy - host.top,
-      Math.min(host.bottom, contentBottom) - cy,
+      cx - clip.left,
+      clip.right - cx,
+      cy - clip.top,
+      Math.min(clip.bottom, contentBottom) - cy,
       contentBottom - cy,
-      Math.hypot(cx - host.left, cy - host.top),
-      Math.hypot(host.right - cx, cy - host.top),
-      Math.hypot(cx - host.left, Math.min(host.bottom, contentBottom) - cy),
-      Math.hypot(host.right - cx, Math.min(host.bottom, contentBottom) - cy),
+      Math.hypot(cx - clip.left, cy - clip.top),
+      Math.hypot(clip.right - cx, cy - clip.top),
+      Math.hypot(cx - clip.left, Math.min(clip.bottom, contentBottom) - cy),
+      Math.hypot(clip.right - cx, Math.min(clip.bottom, contentBottom) - cy),
       fr.width * 0.62
     );
     const side = reach * 2 + 2;

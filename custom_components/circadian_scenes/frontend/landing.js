@@ -6,23 +6,46 @@ export const LANDING_CSS = `
   .workspace {
     display: flex;
     align-items: stretch;
-    min-height: 100%;
+    height: 100%;
+    min-height: 0;
     gap: 0;
+    overflow: hidden;
   }
   .area-rail {
     width: ${AREA_RAIL_PX}px;
     flex: 0 0 ${AREA_RAIL_PX}px;
     max-width: 100%;
+    min-height: 0;
+    height: 100%;
     border-right: 1px solid var(--divider-color);
-    padding: 12px 12px 80px;
+    padding: 12px 8px 24px 12px;
     box-sizing: border-box;
+    /* Sit above dial horizon/vignette; frost so that wash still reads through. */
+    position: relative;
+    z-index: 8;
+    isolation: isolate;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    background: color-mix(
+      in srgb,
+      var(--primary-background-color) 58%,
+      transparent
+    );
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
   }
   .stage-col {
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 0;
     position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
+    /* Visible so horizon can bleed under the frosted rail. */
+    overflow: visible;
   }
   .stage-col .sun-path {
     margin-top: 0;
@@ -31,7 +54,9 @@ export const LANDING_CSS = `
   .library-col {
     flex: 1 1 auto;
     min-width: 0;
-    padding: 16px 20px 80px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px 20px 24px;
   }
   .floor-label {
     font-size: 11px;
@@ -232,7 +257,8 @@ export const LANDING_CSS = `
     .workspace { flex-direction: column; }
     .area-rail {
       width: 100%;
-      flex-basis: auto;
+      flex: 1 1 42%;
+      height: auto;
       border-right: 0;
       border-bottom: 1px solid var(--divider-color);
     }
