@@ -170,6 +170,14 @@ export const LANDING_CSS = `
     border-radius: inherit;
     overflow: hidden;
   }
+  /* Same overlap as table light rows: later bands fade in over the previous
+     (feather = 1/3 of a full bar). No filter:blur(). */
+  .scene-card .card-bg-band {
+    position: absolute;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+  }
   .scene-card .card-body {
     position: relative;
     z-index: 1;
@@ -303,34 +311,47 @@ function rgbCss(rgb) {
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
-/** One horizontal day-ramp per light (dawn→dusk), stacked as equal bands. */
+/** One horizontal day-ramp per light (dawn→dusk). Stack like table rows:
+    later bands overlap the previous and fade in over the top third. */
 function applyRampBackground(el, ramps) {
+  el.replaceChildren();
+  el.style.backgroundImage = "";
+  el.style.backgroundSize = "";
+  el.style.backgroundPosition = "";
+  el.style.backgroundRepeat = "";
   const bands = (ramps || []).filter((ramp) => (ramp.stops || []).length);
   if (!bands.length) {
     el.style.backgroundImage = "linear-gradient(90deg, #2b2b2b, #1c1c1c)";
-    el.style.backgroundSize = "100% 100%";
-    el.style.backgroundPosition = "0 0";
-    el.style.backgroundRepeat = "no-repeat";
     return;
   }
   const n = bands.length;
-  const images = [];
-  const sizes = [];
-  const positions = [];
+  const visiblePct = 100 / n;
+  // Table: 36px feather on a 108px bar (LIGHT_FEATHER_PX / LIGHT_BAR_HEIGHT).
+  const featherFrac = 1 / 3;
   bands.forEach((ramp, index) => {
     const stops = ramp.stops;
     const last = Math.max(stops.length - 1, 1);
     const parts = stops.map(
       (rgb, j) => `${rgbCss(rgb)} ${(j / last) * 100}%`
     );
-    images.push(`linear-gradient(90deg, ${parts.join(", ")})`);
-    sizes.push(`100% ${100 / n}%`);
-    positions.push(`0 ${(index * 100) / n}%`);
+    const layer = document.createElement("div");
+    layer.className = "card-bg-band";
+    layer.style.backgroundImage = `linear-gradient(90deg, ${parts.join(", ")})`;
+    layer.style.zIndex = String(index);
+    if (n === 1) {
+      layer.style.inset = "0";
+    } else if (index === 0) {
+      layer.style.top = "0";
+      layer.style.height = `${visiblePct}%`;
+    } else {
+      layer.style.top = `${(index - 0.5) * visiblePct}%`;
+      layer.style.height = `${1.5 * visiblePct}%`;
+      const fade = `linear-gradient(to bottom, transparent 0%, #000 ${featherFrac * 100}%, #000 100%)`;
+      layer.style.webkitMaskImage = fade;
+      layer.style.maskImage = fade;
+    }
+    el.appendChild(layer);
   });
-  el.style.backgroundImage = images.join(", ");
-  el.style.backgroundSize = sizes.join(", ");
-  el.style.backgroundPosition = positions.join(", ");
-  el.style.backgroundRepeat = "no-repeat";
 }
 
 function themeConic(theme, variables) {
