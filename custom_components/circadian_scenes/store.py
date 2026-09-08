@@ -32,8 +32,10 @@ from .const import (
     SCENE_DAWN,
     SCENE_DAWN_SUNRISE_SUNSET,
     SCENE_DUSK,
+    DATA_STORE,
     SCENE_DUSK_MINIMUM_TIME_OF_DAY,
     SCENE_KEYS,
+    SETTINGS_DUSK_MINIMUM_TIME_OF_DAY,
     SCENE_NAME,
     SCENE_NOON,
     SCENE_SUNRISE,
@@ -56,6 +58,8 @@ DEFAULT_DUSK_MINIMUM_SECONDS = 22 * 3600
 DEFAULT_SETTINGS: dict[str, Any] = {
     # Seconds; 0 disables. Same value is the light transition on auto-update ticks.
     "automatically_update_lights_interval": 300,
+    # Seconds since midnight; delays dusk until this clock time when solar dusk is earlier.
+    SETTINGS_DUSK_MINIMUM_TIME_OF_DAY: DEFAULT_DUSK_MINIMUM_SECONDS,
 }
 
 # ---------------------------------------------------------------------------
@@ -150,6 +154,33 @@ def seconds_to_time(value: Any) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def strip_scene_dusk_minimum(scenes: dict[str, dict[str, Any]]) -> int | None:
+    """Remove legacy per-scene dusk floors; return the first value found."""
+    found = None
+    for item in scenes.values():
+        if not isinstance(item, dict) or SCENE_DUSK_MINIMUM_TIME_OF_DAY not in item:
+            continue
+        value = time_to_seconds(item.pop(SCENE_DUSK_MINIMUM_TIME_OF_DAY))
+        if found is None:
+            found = value
+    return found
+
+
+def dusk_minimum_seconds(hass: HomeAssistant, override: int | None = None) -> int:
+    """House-wide earliest dusk in seconds since midnight."""
+    if override is not None:
+        return int(override)
+    domain_data = hass.data.get(DOMAIN) or {}
+    store = domain_data.get(DATA_STORE)
+    if store is None:
+        return DEFAULT_DUSK_MINIMUM_SECONDS
+    return time_to_seconds(
+        store.settings.get(
+            SETTINGS_DUSK_MINIMUM_TIME_OF_DAY, DEFAULT_DUSK_MINIMUM_SECONDS
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Scene normalizers (v4).
 # ---------------------------------------------------------------------------
@@ -189,9 +220,6 @@ def normalize_circadian_scene(
         },
         "overrides": raw.get("overrides") or {},
         AUTOMATICALLY_UPDATE_LIGHTS: automatically_update_lights,
-        SCENE_DUSK_MINIMUM_TIME_OF_DAY: time_to_seconds(
-            raw.get(SCENE_DUSK_MINIMUM_TIME_OF_DAY)
-        ),
     }
 
 
@@ -379,9 +407,6 @@ def normalize_scene_config(
         AREA: raw.get(AREA) or None,
         DISPLAY_SCENES_COMBINED: combined,
         AUTOMATICALLY_UPDATE_LIGHTS: automatically_update_lights,
-        SCENE_DUSK_MINIMUM_TIME_OF_DAY: time_to_seconds(
-            raw.get(SCENE_DUSK_MINIMUM_TIME_OF_DAY)
-        ),
         "theme_id": raw.get("theme_id") or "default",
         "membership": raw.get("membership") or {"exclude": [], "include": []},
         "overrides": raw.get("overrides") or {},
@@ -443,9 +468,6 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
         data["overrides"] = item.get("overrides") or {}
         data[AUTOMATICALLY_UPDATE_LIGHTS] = bool(
             item.get(AUTOMATICALLY_UPDATE_LIGHTS, True)
-        )
-        data[SCENE_DUSK_MINIMUM_TIME_OF_DAY] = seconds_to_time(
-            item.get(SCENE_DUSK_MINIMUM_TIME_OF_DAY)
         )
     elif kind == KIND_SIMPLE:
         data["lights"] = item.get("lights") or {}
@@ -535,13 +557,20 @@ class CircadianScenesStore:
             self.scenes[item["id"]] = item
 
         # --- Settings ---
+        raw_settings = dict(raw.get("settings") or {})
+        lifted = strip_scene_dusk_minimum(self.scenes)
+        if SETTINGS_DUSK_MINIMUM_TIME_OF_DAY not in raw_settings and lifted is not None:
+            raw_settings[SETTINGS_DUSK_MINIMUM_TIME_OF_DAY] = lifted
         settings = {
             **DEFAULT_SETTINGS,
-            **(raw.get("settings") or {}),
+            **raw_settings,
         }
         for alias in ("continuous_interval", "follow_up_interval"):
             settings.pop(alias, None)
         settings.pop("hide_managed_native_scenes", None)
+        settings[SETTINGS_DUSK_MINIMUM_TIME_OF_DAY] = time_to_seconds(
+            settings.get(SETTINGS_DUSK_MINIMUM_TIME_OF_DAY)
+        )
         self.settings = settings
 
         # Legacy migration data (only present during v3→v4 transition).
@@ -806,6 +835,17 @@ class CircadianScenesStore:
                 if value < 0 or value > 30 * 60:
                     raise HomeAssistantError(
                         "automatically_update_lights_interval must be 0–1800 seconds"
+                    )
+            if key == SETTINGS_DUSK_MINIMUM_TIME_OF_DAY:
+                try:
+                    value = time_to_seconds(value)
+                except (TypeError, ValueError) as err:
+                    raise HomeAssistantError(
+                        "dusk_minimum_time_of_day must be a time or seconds since midnight"
+                    ) from err
+                if value < 0 or value > 24 * 3600:
+                    raise HomeAssistantError(
+                        "dusk_minimum_time_of_day must be 0–86400 seconds"
                     )
             self.settings[key] = value
         await self.async_save()

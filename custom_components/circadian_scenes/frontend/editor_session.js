@@ -86,7 +86,6 @@ function emptyFormData() {
     overrides: {},
     lights: {},
     automatically_update_lights: true,
-    scene_dusk_minimum_time_of_day: "22:00:00",
   };
 }
 
@@ -99,6 +98,24 @@ function timeToSeconds(value) {
   }
   const parts = String(value).split(":").map(Number);
   return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+}
+
+function secondsToTime(value) {
+  if (value == null || value === "") {
+    return "22:00:00";
+  }
+  if (typeof value === "string" && value.includes(":")) {
+    const parts = value.split(":");
+    if (parts.length === 2) {
+      return `${parts[0]}:${parts[1]}:00`;
+    }
+    return value;
+  }
+  const seconds = Math.round(Number(value) || 0);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
 function nowSecondsSinceMidnight() {
@@ -124,6 +141,7 @@ export {
   formatClockHm,
   emptyFormData,
   timeToSeconds,
+  secondsToTime,
   nowSecondsSinceMidnight,
   formatClock,
 };

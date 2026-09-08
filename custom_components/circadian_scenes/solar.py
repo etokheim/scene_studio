@@ -226,6 +226,10 @@ def build_sun_path(
         longitude=longitude,
     )
     observer = place.observer
+    if dusk_minimum is None:
+        from .store import dusk_minimum_seconds
+
+        dusk_minimum = dusk_minimum_seconds(hass)
 
     events_by_name, fallbacks = resolve_solar_events(
         latitude=latitude,

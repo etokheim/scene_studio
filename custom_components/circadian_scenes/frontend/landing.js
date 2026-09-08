@@ -152,7 +152,15 @@ export const LANDING_CSS = `
   .scene-card .card-overflow-slot ha-icon-button {
     color: #fff;
   }
-  .scene-card.selected { box-shadow: inset 0 0 0 2px #fff; }
+  .scene-card.selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 2px #fff;
+  }
   .scene-card .card-bg {
     position: absolute;
     inset: 0;
@@ -477,9 +485,13 @@ function renderAreaBlock(panel, area, scenes) {
 function renderSceneCard(panel, scene) {
   const cardEl = document.createElement("div");
   cardEl.className = "scene-card";
-  if (panel._editId === scene.id) {
+  const selected = panel._view === "edit" && panel._editId === scene.id;
+  if (selected) {
     cardEl.classList.add("selected");
   }
+  cardEl.setAttribute("role", "button");
+  cardEl.tabIndex = 0;
+  cardEl.setAttribute("aria-pressed", selected ? "true" : "false");
   const card = scene.card || {};
   let bg;
   if (scene.kind === "simple") {
@@ -507,11 +519,28 @@ function renderSceneCard(panel, scene) {
   overflow.classList.add("card-overflow");
   overflowSlot.appendChild(overflow);
   cardEl.append(bg, body, overflowSlot);
+  const activate = () => {
+    if (selected) {
+      panel._go("");
+      return;
+    }
+    panel._go(`edit/${scene.id}`);
+  };
   cardEl.addEventListener("click", (ev) => {
     if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
       return;
     }
-    panel._go(`edit/${scene.id}`);
+    activate();
+  });
+  cardEl.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") {
+      return;
+    }
+    if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
+      return;
+    }
+    ev.preventDefault();
+    activate();
   });
   return cardEl;
 }

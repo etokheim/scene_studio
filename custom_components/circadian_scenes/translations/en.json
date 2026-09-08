@@ -70,7 +70,9 @@
       "automatically_update_lights_interval_helper": "After a scene is activated, keep updating the lights this often with the same transition length (target = how the room should look at the end of the transition). 0 turns automatic updates off for every room — same as the control at the top of the list.",
       "automatically_update_lights_interval_minutes": "Minutes",
       "scene_settings": "Scene settings",
-      "hidden_in_ha": "Hidden in Home Assistant"
+      "hidden_in_ha": "Hidden in Home Assistant",
+      "dusk_minimum_time_of_day": "Earliest time for dusk",
+      "dusk_minimum_time_of_day_helper": "To avoid lights dimming too much, too early. Applies to every circadian scene and theme."
     },
     "common": {
       "untitled": "Untitled",

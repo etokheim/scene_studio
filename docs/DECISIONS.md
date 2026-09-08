@@ -311,10 +311,19 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Most rooms need a sensible first draft; power users want to wire existing HA scenes without leaving the flow. Event-named scenes match the dial; Bright/Dimmed/Low described brightness, not which solar event they belonged to.
 - **Do not reverse without user ask.**
 
+## Earliest dusk is a house-wide setting
+
+- **Date:** 2026-09-08
+- **Supersedes:** “Earliest dusk time lives on the dusk event dialog” (2026-08-26).
+- **Decision:** `dusk_minimum_time_of_day` is an integration setting (seconds since midnight, default 22:00). Activation, preview, theme dial, and table/dial ghost+clamp visualization all use that one floor. Edit it in Settings and in the dusk solar-event sidebar (each event button opens its own sidebar; non-dusk event sidebars are empty for now). Per-scene `scene_dusk_minimum_time_of_day` is lifted into settings on load and dropped. Theme color/brightness still opens from a ring click, not from the event buttons.
+- **Why:** The floor is about when dusk is allowed to happen in the house, not a property of one room scene. Event buttons are the place to inspect that solar event; Settings is the house-wide copy of the same control.
+- **Do not reverse without user ask.**
+
 ## Earliest dusk time lives on the dusk event dialog
 
 - **Date:** 2026-08-26
 - **Superseded in part:** 2026-08-29 — earliest dusk only delays a same-day solar dusk; if solar dusk is already past midnight of that calendar day, keep end-of-day (24:00) and do not pull back to the floor (shared `dusk_start_seconds` in preview and activation).
+- **Superseded:** 2026-09-08 — earliest dusk is a house-wide setting (`dusk_minimum_time_of_day`), not a per-scene field. See “Earliest dusk is a house-wide setting”.
 - **Decision:** `scene_dusk_minimum_time_of_day` is edited in the dusk solar-event dialog, next to that event’s scene picker. It is not on `ha-form`.
 - **Why:** The override only applies to dusk. Putting it on the main form made it look like a global setting.
 - **Do not reverse without user ask.**
@@ -452,6 +461,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Editor overflow matches the native scene page
 
 - **Date:** 2026-08-26
+- **Superseded in part:** 2026-09-08 — landing scene cards paint a selected ring above the card mesh (`::after`) because inset box-shadow sat under the background. Tapping the selected card deselects and returns to the empty stage (leave-confirm still applies). The HA sidebar Circadian Scenes item (`/circadian_scenes` with no hash) also deselects: `pushState` does not fire `hashchange`, so the panel listens for `location-changed` / capture clicks on that link. Do not put an activate switch on the card. Do not `stopPropagation` on the dots trigger — `ha-dropdown` opens from that click.
 - **Superseded in part:** 2026-09-03 — landing scene cards use the same overflow (Activate, Information, Settings, Assign/Edit category, Rename, Duplicate, Delete). Card tap still opens the editor; do not put an activate switch on the card. Do not `stopPropagation` on the dots trigger — `ha-dropdown` opens from that click.
 - **Decision:** Create and edit both show the native scene overflow (`ha-dropdown` + dots). Items: Activate, Information, Settings, Assign/Edit category, Rename, Duplicate, Delete. Actions that need a saved entity are disabled on `#new`. Skip Edit YAML — this panel has no YAML mode. Category opens our Save dialog with the category field visible so the store and registry stay in sync. Delete uses an `ha-dialog` with the native confirm strings, not `window.confirm`.
 - **Why:** Users already know that menu from Settings → Scenes. A shorter custom menu hid Apply / info / duplicate.

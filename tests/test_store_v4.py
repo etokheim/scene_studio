@@ -158,7 +158,8 @@ class TestToFormData:
         assert form["kind"] == KIND_CIRCADIAN
         assert form["theme_id"] == "cozy"
         assert form[SCENE_NAME] == "Bed"
-        assert SCENE_DUSK_MINIMUM_TIME_OF_DAY in form
+        assert SCENE_DUSK_MINIMUM_TIME_OF_DAY not in form
+        assert SCENE_DUSK_MINIMUM_TIME_OF_DAY not in item
 
     def test_simple(self):
         item = normalize_simple_scene(
@@ -265,3 +266,29 @@ def test_scene_memory_rolls_back_when_save_fails():
         assert store.scenes == {}
 
     asyncio.run(run())
+
+
+class TestStripSceneDuskMinimum:
+    def test_lifts_first_scene_value_and_strips(self):
+        from custom_components.circadian_scenes.store import strip_scene_dusk_minimum
+
+        scenes = {
+            "a": {
+                "kind": KIND_CIRCADIAN,
+                SCENE_DUSK_MINIMUM_TIME_OF_DAY: "21:30:00",
+            },
+            "b": {
+                "kind": KIND_CIRCADIAN,
+                SCENE_DUSK_MINIMUM_TIME_OF_DAY: "22:00:00",
+            },
+        }
+        found = strip_scene_dusk_minimum(scenes)
+        assert found == 21 * 3600 + 30 * 60
+        assert SCENE_DUSK_MINIMUM_TIME_OF_DAY not in scenes["a"]
+        assert SCENE_DUSK_MINIMUM_TIME_OF_DAY not in scenes["b"]
+
+    def test_returns_none_when_absent(self):
+        from custom_components.circadian_scenes.store import strip_scene_dusk_minimum
+
+        scenes = {"a": {"kind": KIND_CIRCADIAN}}
+        assert strip_scene_dusk_minimum(scenes) is None

@@ -16,6 +16,8 @@ SCENE_NOON = "scene_noon"
 SCENE_SUNSET = "scene_sunset"
 SCENE_DUSK = "scene_dusk"
 SCENE_DUSK_MINIMUM_TIME_OF_DAY = "scene_dusk_minimum_time_of_day"
+# House-wide earliest dusk (seconds since midnight). Legacy per-scene key above.
+SETTINGS_DUSK_MINIMUM_TIME_OF_DAY = "dusk_minimum_time_of_day"
 SCENE_DAWN_SUNRISE_SUNSET = "scene_dawn_sunrise_sunset"
 DISPLAY_SCENES_COMBINED = "display_scenes_combined"
 

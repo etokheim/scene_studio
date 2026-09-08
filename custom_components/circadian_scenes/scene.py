@@ -3,7 +3,6 @@ Create a scene entity which when activated calculates the appropriate lighting b
 """  # noqa: D200, D212
 
 import logging
-import numbers
 import time
 from datetime import datetime, timedelta
 from typing import Any
@@ -43,7 +42,6 @@ from .const import (
     DOMAIN,
     KIND_SIMPLE,
     LABELS,
-    SCENE_DUSK_MINIMUM_TIME_OF_DAY,
     SCENE_NAME,
     SOLAR_EVENTS,
 )
@@ -68,6 +66,7 @@ from .extrapolation_math import (
 )
 from .native_scene import scenes_in_area
 from .snapshots import circadian_anchor, simple_anchor
+from .store import dusk_minimum_seconds
 from .solar import EVENT_ORDER, dusk_start_seconds
 
 _LOGGER = logging.getLogger(__name__)
@@ -665,11 +664,7 @@ class CircadianScene(Scene):
             target=target_date_time,
         )
 
-        scene_dusk_minimum_time_of_day = self._cfg(SCENE_DUSK_MINIMUM_TIME_OF_DAY)
-
-        assert isinstance(
-            scene_dusk_minimum_time_of_day, numbers.Number
-        ), "scene_dusk_minimum_time_of_day is either not configured (or not a number)"
+        scene_dusk_minimum_time_of_day = dusk_minimum_seconds(self.hass)
 
         day_start = target_date_time.replace(hour=0, minute=0, second=0, microsecond=0)
         dusk_seconds, dusk_was_overridden, dusk_solar_seconds = dusk_start_seconds(
@@ -965,10 +960,7 @@ class CircadianScene(Scene):
             time_zone=self.time_zone,
             target=target,
         )
-        dusk_minimum = self._cfg(SCENE_DUSK_MINIMUM_TIME_OF_DAY)
-        assert isinstance(
-            dusk_minimum, numbers.Number
-        ), "scene_dusk_minimum_time_of_day is either not configured (or not a number)"
+        dusk_minimum = dusk_minimum_seconds(self.hass)
         day_start = target.replace(hour=0, minute=0, second=0, microsecond=0)
         starts = {
             key: self.datetime_to_seconds_since_midnight(solar_events[key])

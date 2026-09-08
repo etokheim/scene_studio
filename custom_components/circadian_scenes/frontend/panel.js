@@ -28,6 +28,7 @@ import {
   diffIsoDays,
   emptyFormData,
   timeToSeconds,
+  secondsToTime,
   nowSecondsSinceMidnight,
   formatClock,
 } from "./editor_session.js";
@@ -46,6 +47,7 @@ import { panelLoadIsCurrent } from "./load_guard.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor } from "./simple_editor.js";
 
 const DOMAIN = "circadian_scenes";
+const PANEL_URL_PATH = "circadian_scenes";
 const LEGACY_DOMAIN = "scene_extrapolation";
 const SECONDS_PER_DAY = 24 * 3600;
 const CHART_WIDTH = 1000;
@@ -241,6 +243,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._floors = [];
     this._settings = {
       automatically_update_lights_interval: 300,
+      dusk_minimum_time_of_day: 22 * 3600,
     };
     this._listTab = "extrapolation";
     this._translationsReady = false;
@@ -287,6 +290,8 @@ class CircadianScenesPanel extends HTMLElement {
     this._sidebarMotionTimer = undefined;
     this._sidebarLayoutInProgress = false;
     this._onHashChange = () => this._syncHash();
+    this._onLocationChanged = () => this._syncHash();
+    this._onPanelNavClick = (ev) => this._handlePanelHomeClick(ev);
     this._onEditorKeydown = (ev) => this._handleEditorShortcut(ev);
     this._onPageHide = (ev) => {
       if (ev?.type === "visibilitychange" && document.visibilityState === "visible") {
@@ -361,6 +366,9 @@ class CircadianScenesPanel extends HTMLElement {
 
   connectedCallback() {
     window.addEventListener("hashchange", this._onHashChange);
+    window.addEventListener("location-changed", this._onLocationChanged);
+    window.addEventListener("popstate", this._onLocationChanged);
+    window.addEventListener("click", this._onPanelNavClick, true);
     window.addEventListener("keydown", this._onEditorKeydown);
     window.addEventListener("pagehide", this._onPageHide);
     window.addEventListener("resize", this._onWindowResize);
@@ -407,6 +415,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._flushPersistedDraft();
     this._closeSceneSidebar();
     window.removeEventListener("hashchange", this._onHashChange);
+    window.removeEventListener("location-changed", this._onLocationChanged);
+    window.removeEventListener("popstate", this._onLocationChanged);
+    window.removeEventListener("click", this._onPanelNavClick, true);
     window.removeEventListener("keydown", this._onEditorKeydown);
     window.removeEventListener("pagehide", this._onPageHide);
     window.removeEventListener("resize", this._onWindowResize);
@@ -3972,6 +3983,37 @@ class CircadianScenesPanel extends HTMLElement {
     this._syncHash();
   }
 
+  _handlePanelHomeClick(ev) {
+    const nodes =
+      typeof ev.composedPath === "function" ? ev.composedPath() : [];
+    const link = nodes.find((node) => node instanceof HTMLAnchorElement);
+    if (!link?.href) {
+      return;
+    }
+    let url;
+    try {
+      url = new URL(link.href, window.location.origin);
+    } catch (_err) {
+      return;
+    }
+    if (url.origin !== window.location.origin) {
+      return;
+    }
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    if (pathname !== `/${PANEL_URL_PATH}`) {
+      return;
+    }
+    if (url.hash && url.hash !== "#") {
+      return;
+    }
+    if (this._currentHash() === "") {
+      return;
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    void this._go("");
+  }
+
   _currentHash() {
     if (this._view === "edit") {
       return this._editId ? `edit/${this._editId}` : "new";
@@ -4016,8 +4058,9 @@ class CircadianScenesPanel extends HTMLElement {
         return;
       }
       this._forceCloseSceneSidebar();
-      window.location.hash = hash;
-      return;
+      if ((window.location.hash || "#").replace(/^#/, "") !== hash) {
+        history.replaceState(null, "", this._hashHref(hash));
+      }
     }
     if (this._view === "edit" && hash !== current) {
       this._flushPersistedDraft();
@@ -4117,10 +4160,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
-      this._settings = {
-        automatically_update_lights_interval: 300,
-        ...(payload?.settings || {}),
-      };
+      this._adoptSettings(payload?.settings);
       this._error = null;
     } catch (err) {
       if (!this._panelLoadIsCurrent(token)) {
@@ -4154,10 +4194,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
-      this._settings = {
-        automatically_update_lights_interval: 300,
-        ...(payload?.settings || {}),
-      };
+      this._adoptSettings(payload?.settings);
       this._error = null;
     } catch (err) {
       if (!this._panelLoadIsCurrent(token)) {
@@ -4726,6 +4763,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
+      this._adoptSettings(payload?.settings);
       const theme = (this._themes || []).find((item) => item.id === themeId);
       if (!theme) {
         this._error = this._t("frontend.library.theme_missing", "Theme not found");
@@ -4888,11 +4926,12 @@ class CircadianScenesPanel extends HTMLElement {
       this._parkSunPath();
       return;
     }
-    const solarKey = `theme-sun:${this._previewDate}`;
+    const solarKey = `theme-sun:${this._previewDate}:${this._duskMinimumSeconds()}`;
     if (!this._themeSolar || this._themeSolarKey !== solarKey) {
       const msg = {
         type: `${DOMAIN}/sun_path`,
         date: this._previewDate,
+        dusk_minimum: this._duskMinimumSeconds(),
       };
       this._themeSolar = await this._hass.callWS(msg);
       this._themeSolarKey = solarKey;
@@ -5137,6 +5176,14 @@ class CircadianScenesPanel extends HTMLElement {
     return el;
   }
 
+  _adoptSettings(settings) {
+    this._settings = {
+      automatically_update_lights_interval: 300,
+      dusk_minimum_time_of_day: 22 * 3600,
+      ...(settings || {}),
+    };
+  }
+
   _automaticallyUpdateLightsIntervalSeconds() {
     return Number(this._settings?.automatically_update_lights_interval ?? 300);
   }
@@ -5207,11 +5254,7 @@ class CircadianScenesPanel extends HTMLElement {
           type: `${DOMAIN}/update_settings`,
           settings: { automatically_update_lights_interval: nextSeconds },
         });
-        this._settings = {
-          hide_managed_native_scenes: true,
-          automatically_update_lights_interval: 300,
-          ...(result?.settings || {}),
-        };
+        this._adoptSettings(result?.settings);
         if (this._view === "list") {
           this._renderList({ keepSidebar: true });
         }
@@ -5497,11 +5540,7 @@ class CircadianScenesPanel extends HTMLElement {
           type: `${DOMAIN}/update_settings`,
           settings: { hide_managed_native_scenes: next },
         });
-        this._settings = {
-          hide_managed_native_scenes: true,
-          automatically_update_lights_interval: 300,
-          ...(result?.settings || {}),
-        };
+        this._adoptSettings(result?.settings);
         this._managedScenes = await this._hass.callWS({
           type: `${DOMAIN}/list_managed_native_scenes`,
         });
@@ -5558,11 +5597,7 @@ class CircadianScenesPanel extends HTMLElement {
           type: `${DOMAIN}/update_settings`,
           settings: { automatically_update_lights_interval: seconds },
         });
-        this._settings = {
-          hide_managed_native_scenes: true,
-          automatically_update_lights_interval: 300,
-          ...(result?.settings || {}),
-        };
+        this._adoptSettings(result?.settings);
         const saved = Number(
           this._settings.automatically_update_lights_interval || 0
         );
@@ -5585,6 +5620,77 @@ class CircadianScenesPanel extends HTMLElement {
     });
     intervalRow.append(intervalLabelWrap, intervalField);
     body.appendChild(intervalRow);
+    this._appendDuskMinimumPicker(body);
+  }
+
+  _appendDuskMinimumPicker(parent) {
+    const row = document.createElement("div");
+    row.className = "setup-link-row dusk-minimum-row";
+    const labelWrap = document.createElement("div");
+    const label = document.createElement("div");
+    label.className = "name";
+    label.textContent = this._t(
+      "frontend.settings.dusk_minimum_time_of_day",
+      "Earliest time for dusk"
+    );
+    const helper = document.createElement("div");
+    helper.className = "sidebar-note";
+    helper.style.margin = "4px 0 0";
+    helper.textContent = this._t(
+      "frontend.settings.dusk_minimum_time_of_day_helper",
+      "To avoid lights dimming too much, too early. Applies to every circadian scene and theme."
+    );
+    labelWrap.append(label, helper);
+    const picker = document.createElement("ha-selector");
+    picker.classList.add("dusk-minimum-picker");
+    picker.hass = this._hass;
+    picker.label = this._t(
+      "frontend.settings.dusk_minimum_time_of_day",
+      "Earliest time for dusk"
+    );
+    picker.value = secondsToTime(this._duskMinimumSeconds());
+    picker.selector = { time: {} };
+    let saveTimer;
+    const save = async () => {
+      const next = timeToSeconds(picker.value);
+      const seconds = Number.isFinite(next) ? next : 22 * 3600;
+      try {
+        const result = await this._hass.callWS({
+          type: `${DOMAIN}/update_settings`,
+          settings: { dusk_minimum_time_of_day: seconds },
+        });
+        this._adoptSettings(result?.settings);
+        picker.value = secondsToTime(this._duskMinimumSeconds());
+        this._refreshDuskVisuals();
+        for (const el of this.shadowRoot?.querySelectorAll(
+          "ha-selector.dusk-minimum-picker"
+        ) || []) {
+          if (el !== picker) {
+            el.value = picker.value;
+          }
+        }
+      } catch (err) {
+        picker.value = secondsToTime(this._duskMinimumSeconds());
+        window.alert(err.message || String(err));
+      }
+    };
+    picker.addEventListener("value-changed", (ev) => {
+      ev.stopPropagation();
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(save, 400);
+    });
+    row.append(labelWrap, picker);
+    parent.appendChild(row);
+    return picker;
+  }
+
+  _refreshDuskVisuals() {
+    this._clearPreviewCache();
+    this._themeSolarKey = undefined;
+    this._sunPathKey = undefined;
+    if (this._view === "edit" || this._view === "theme") {
+      this._ensureSunPath();
+    }
   }
 
   _addButton() {
@@ -8430,25 +8536,54 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _toggleEventSceneDialog(event) {
-    if (this._view === "theme") {
-      await this._toggleThemeEventSidebar(event);
+    const existing = this.shadowRoot?.querySelector(
+      ".scene-sidebar.solar-event-dialog"
+    );
+    if (existing && !existing._closing) {
+      if (this._sidebarEventId === event.id) {
+        await this._requestCloseSceneSidebar(existing);
+        return;
+      }
+      if (existing._switchSolarEvent) {
+        existing._switchSolarEvent(event);
+        return;
+      }
+    }
+    await this._openSolarEventSidebar(event);
+  }
+
+  async _openSolarEventSidebar(event) {
+    const opened = await this._openSceneSidebar({
+      title: event.name,
+      className: "solar-event-dialog",
+      onDismiss: () => {
+        this._setSidebarEvent(null);
+      },
+    });
+    if (!opened) {
       return;
     }
-    const lights = this._clockRingLights(this._sunPath?.lights || []);
-    if (!lights.length) {
-      return;
-    }
-    const existing = this.shadowRoot?.querySelector(".scene-sidebar");
-    if (
-      existing &&
-      !existing._closing &&
-      this._sidebarEventId === event.id &&
-      this._sidebarLightId === lights[0].entity_id
-    ) {
-      await this._requestCloseSceneSidebar(existing);
-      return;
-    }
-    await this._openLightEditDialog(lights[0], event);
+    this._setSidebarEvent(event.id);
+    this._setSidebarLight(null);
+    const { host, header, body } = opened;
+    const titleEl = () =>
+      header.querySelector("[slot='title']") ||
+      header.querySelector("ha-dialog-header .title");
+    const paint = (next) => {
+      const heading = titleEl();
+      if (heading) {
+        heading.textContent = next.name;
+      }
+      body.replaceChildren();
+      if (next.id === "dusk") {
+        this._appendDuskMinimumPicker(body);
+      }
+    };
+    host._switchSolarEvent = (next) => {
+      this._setSidebarEvent(next.id);
+      paint(next);
+    };
+    paint(event);
   }
 
   async _openEventSceneDialog(event) {
@@ -8456,14 +8591,10 @@ class CircadianScenesPanel extends HTMLElement {
     const data = {
       scene: this._eventSceneId(event.id),
       linked: Boolean(canLink && this._formData.display_scenes_combined),
-      duskMinimum: this._formData.scene_dusk_minimum_time_of_day,
     };
     const applyDraft = ({ history = true } = {}) => {
       if (history) {
         this._commitUndo();
-      }
-      if (event.id === "dusk") {
-        this._formData.scene_dusk_minimum_time_of_day = data.duskMinimum;
       }
       this._setEventScene(event.id, data.scene, canLink ? data.linked : false);
     };
@@ -8663,21 +8794,6 @@ class CircadianScenesPanel extends HTMLElement {
     setHint("");
     setError("");
     syncActions();
-
-    if (event.id === "dusk") {
-      const timePicker = document.createElement("ha-selector");
-      timePicker.hass = this._hass;
-      timePicker.label = this._fieldLabel("scene_dusk_minimum_time_of_day");
-      timePicker.helper = this._fieldHelper("scene_dusk_minimum_time_of_day");
-      timePicker.value = data.duskMinimum;
-      timePicker.selector = { time: {} };
-      timePicker.addEventListener("value-changed", (ev) => {
-        ev.stopPropagation();
-        data.duskMinimum = ev.detail?.value;
-        applyDraft();
-      });
-      body.appendChild(timePicker);
-    }
 
     if (canLink) {
       const row = document.createElement("label");
@@ -10658,10 +10774,12 @@ class CircadianScenesPanel extends HTMLElement {
 
 
   _duskMinimumSeconds() {
-    if (this._view !== "edit") {
-      return undefined;
+    const raw = this._settings?.dusk_minimum_time_of_day;
+    if (raw == null || raw === "") {
+      return 22 * 3600;
     }
-    return timeToSeconds(this._formData.scene_dusk_minimum_time_of_day);
+    const seconds = timeToSeconds(raw);
+    return Number.isFinite(seconds) ? seconds : 22 * 3600;
   }
 
   _sceneIdsFromForm() {
@@ -10688,7 +10806,7 @@ class CircadianScenesPanel extends HTMLElement {
   _chartKey() {
     if (this._view !== "edit") {
       // List chart is solar-only and always “today” — not the editor date scrub.
-      return `list-sun:${todayIso()}`;
+      return `list-sun:${todayIso()}:${this._duskMinimumSeconds()}`;
     }
     return JSON.stringify({
       date: this._previewDate,
@@ -10879,6 +10997,7 @@ class CircadianScenesPanel extends HTMLElement {
             payload = await this._hass.callWS({
               type: `${DOMAIN}/sun_path`,
               date: todayIso(),
+              dusk_minimum: this._duskMinimumSeconds(),
             });
           } else {
             const msg = {
@@ -10896,14 +11015,9 @@ class CircadianScenesPanel extends HTMLElement {
                 },
                 overrides: this._formData.overrides || {},
                 lights: this._formData.lights || {},
-                scene_dusk_minimum_time_of_day:
-                  this._formData.scene_dusk_minimum_time_of_day,
               },
             };
-            const dusk = this._duskMinimumSeconds();
-            if (dusk != null) {
-              msg.dusk_minimum = dusk;
-            }
+            msg.dusk_minimum = this._duskMinimumSeconds();
             if (this._previewLocation) {
               msg.location = this._previewLocation;
             }
