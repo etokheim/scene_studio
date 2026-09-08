@@ -7529,11 +7529,19 @@ class CircadianScenesPanel extends HTMLElement {
       host.open = true;
       this._syncYearScrubLayout();
     } else {
-      host.focus({ preventScroll: true });
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           host.classList.add("open");
           this._setSidebarDocked(true);
+          // Focusing the translated-off-canvas host makes HA's outer
+          // scrollport pan toward it and then spring back during the slide.
+          window.setTimeout(() => {
+            if (host.isConnected && host.classList.contains("open")) {
+              header
+                .querySelector("ha-icon-button")
+                ?.focus({ preventScroll: true });
+            }
+          }, SIDEBAR_ANIMATION_MS);
         });
       });
     }
