@@ -3437,15 +3437,21 @@ class CircadianScenesPanel extends HTMLElement {
         :host([data-sidebar-docked]) .sun-light-clock {
           overflow: visible;
         }
-        /* Shared inset for draft + location banners (dial zeroes .page padding). */
+        /* Shared inset for draft + location banners (dial zeroes .page padding).
+           Mounted into .stage-col when a workspace exists so they push the
+           dial/list down without spanning the area rail. */
         .page-banners {
           position: relative;
           z-index: 5;
+          flex: 0 0 auto;
           display: flex;
           flex-direction: column;
           gap: 8px;
           margin-top: var(--ha-space-3);
           margin-inline: 16px;
+        }
+        .stage-col > .page-banners {
+          z-index: 2;
         }
         .page-banners[hidden] {
           display: none;
@@ -3953,6 +3959,8 @@ class CircadianScenesPanel extends HTMLElement {
     this._headerEl = this.shadowRoot.querySelector("[slot='title']");
     this._sunPathEl = this.shadowRoot.querySelector(".sun-path");
     this._sunPathHome = this._sunPathEl?.parentNode;
+    this._pageBannersEl = this.shadowRoot.querySelector(".page-banners");
+    this._pageBannersHome = this._pageBannersEl?.parentNode;
     this._sunPathStage = this.shadowRoot.querySelector(".sun-path-stage");
     this._sunPathBodyEl = this.shadowRoot.querySelector(".sun-path-body");
     this._clockScrubRail = this.shadowRoot.querySelector(".sun-year-scrub-rail");
@@ -4288,13 +4296,54 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _parkSunPath() {
+    this._parkPageBanners();
     if (!this._sunPathEl) {
       return;
     }
-    if (this._sunPathHome && this._sunPathEl.parentNode !== this._sunPathHome) {
-      this._sunPathHome.appendChild(this._sunPathEl);
+    const home = this._sunPathHome;
+    if (home && this._sunPathEl.parentNode !== home) {
+      const content = this._contentEl;
+      if (content?.parentNode === home) {
+        home.insertBefore(this._sunPathEl, content);
+      } else {
+        home.appendChild(this._sunPathEl);
+      }
     }
     this._sunPathEl.hidden = true;
+  }
+
+  _parkPageBanners() {
+    const el = this._pageBannersEl;
+    const home = this._pageBannersHome;
+    if (!el || !home || el.parentNode === home) {
+      return;
+    }
+    const sun = this._sunPathEl;
+    const content = this._contentEl;
+    if (sun?.parentNode === home) {
+      home.insertBefore(el, sun);
+    } else if (content?.parentNode === home) {
+      home.insertBefore(el, content);
+    } else {
+      home.insertBefore(el, home.firstChild);
+    }
+  }
+
+  _mountPageBanners(stage) {
+    const el = this._pageBannersEl;
+    if (!el || !stage) {
+      return;
+    }
+    const scroll = this._stageScrollEl(stage);
+    if (el.parentNode === stage) {
+      return;
+    }
+    // In-flow above the scrollport: rail stays full height; dial/list shift down.
+    if (scroll?.parentNode === stage) {
+      stage.insertBefore(el, scroll);
+    } else {
+      stage.appendChild(el);
+    }
   }
 
   _stageScrollEl(stage) {
@@ -4309,6 +4358,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._sunPathEl || !stage) {
       return;
     }
+    this._mountPageBanners(stage);
     const scroll = this._stageScrollEl(stage);
     if (this._sunPathEl.parentNode !== scroll) {
       scroll.appendChild(this._sunPathEl);
@@ -4381,8 +4431,9 @@ class CircadianScenesPanel extends HTMLElement {
     );
     const headerH = Number.isFinite(headerVar) && headerVar > 0 ? headerVar : 64;
     const hostTop = this.getBoundingClientRect().top;
-    const stageTop = stage.getBoundingClientRect().top;
-    const bannerH = Math.max(0, Math.round(stageTop - (hostTop + headerH)));
+    const scroll = this._stageScrollEl(stage);
+    const scrollTop = (scroll || stage).getBoundingClientRect().top;
+    const bannerH = Math.max(0, Math.round(scrollTop - (hostTop + headerH)));
     const overhead = 40 + 16;
     const maxPx = Math.max(
       160,
@@ -4430,6 +4481,10 @@ class CircadianScenesPanel extends HTMLElement {
 
     const page = renderLanding(this, { includeStage: true });
     this._contentEl.replaceChildren(page);
+    const stage = page.querySelector(".stage-col");
+    if (stage) {
+      this._mountPageBanners(stage);
+    }
     this._syncWorkspaceScrollport();
     this._setActionItems(this._listSettingsButton());
     if (this._narrow && this._view === "list") {
@@ -6565,10 +6620,13 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const anyVisible = [...stack.children].some((child) => !child.hidden);
     stack.hidden = !anyVisible;
-    // Banner show/hide changes the dial height budget and vignette reach.
-    if (this._sunPathEl?.classList.contains("dial-view")) {
-      requestAnimationFrame(() => this._syncDialHeightBudget());
-    }
+    // Banner show/hide changes stage-scroll size, dial budget, and vignette.
+    requestAnimationFrame(() => {
+      this._syncStageFaceMax();
+      if (this._sunPathEl?.classList.contains("dial-view")) {
+        this._syncDialHeightBudget();
+      }
+    });
   }
 
   async _discardRestoredDraft() {
@@ -8246,6 +8304,7 @@ class CircadianScenesPanel extends HTMLElement {
         const scroll = this._stageScrollEl(stage);
         scroll?.replaceChildren(host);
         this._contentEl.replaceChildren(page);
+        this._mountPageBanners(stage);
         this._simpleEditorHost = host;
       }
       const areaId = this._formData.area;
@@ -11937,9 +11996,9 @@ class CircadianScenesPanel extends HTMLElement {
     // Face fills available height under the app bar, minus overhead above the
     // face (event-label pad) and gap, leaving ~32px of the first light row
     // peeking so the list is discoverable without shrinking on mobile past
-    // the width/aspect lock. Draft/location banners sit above .sun-path —
-    // reserve their reach so the dial shrinks instead of pushing the list
-    // below the fold.
+    // the width/aspect lock. Draft/location banners live in .stage-col above
+    // the scrollport — reserve their reach so the dial shrinks instead of
+    // pushing the list below the fold.
     const hostRect = this.getBoundingClientRect();
     const hostH = this.clientHeight || window.innerHeight;
     const headerVar = parseFloat(
