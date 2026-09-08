@@ -83,6 +83,20 @@ def simple_anchor(
     }
 
 
+def swatch_rgb(entity: dict[str, Any]) -> list[int]:
+    """Display RGB for a card stop: chromatic color scaled by on-brightness.
+
+    Same rule as dial `darkenedRgb` (brightness 0–255 → 0–1). Off is black.
+    """
+    rgb = entity_rgb(entity) or (0, 0, 0)
+    if entity.get("state") != "on":
+        scale = 0.0
+    else:
+        brightness = entity.get("brightness")
+        scale = 1.0 if brightness is None else float(brightness) / 255.0
+    return [int(round(channel * scale)) for channel in rgb]
+
+
 def card_colors(
     hass: HomeAssistant,
     store: CircadianScenesStore,
@@ -96,9 +110,7 @@ def card_colors(
         )
         dots = []
         for eid in members:
-            rgb = entity_rgb(snap.get(eid) or {})
-            if rgb:
-                dots.append({"entity_id": eid, "rgb": list(rgb)})
+            dots.append({"entity_id": eid, "rgb": swatch_rgb(snap.get(eid) or {})})
         return {"kind": KIND_SIMPLE, "dots": dots}
     ramps = []
     if scene.get("kind") == KIND_CIRCADIAN:
@@ -114,11 +126,9 @@ def card_colors(
             for event in SOLAR_EVENTS
         }
         for eid in members:
-            stops = []
-            for event in SOLAR_EVENTS:
-                rgb = entity_rgb(per_event[event].get(eid) or {})
-                if rgb:
-                    stops.append(list(rgb))
-            if stops:
-                ramps.append({"entity_id": eid, "stops": stops})
+            stops = [
+                swatch_rgb(per_event[event].get(eid) or {})
+                for event in SOLAR_EVENTS
+            ]
+            ramps.append({"entity_id": eid, "stops": stops})
     return {"kind": scene.get("kind") or KIND_CIRCADIAN, "ramps": ramps}

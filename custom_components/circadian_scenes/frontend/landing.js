@@ -169,7 +169,6 @@ export const LANDING_CSS = `
     z-index: 0;
     border-radius: inherit;
     overflow: hidden;
-    background-size: 100% 100%;
   }
   .scene-card .card-body {
     position: relative;
@@ -304,21 +303,34 @@ function rgbCss(rgb) {
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
-function rampBackground(ramps) {
-  const stops = (ramps || []).flatMap((ramp) => ramp.stops || []);
-  if (!stops.length) {
-    return "linear-gradient(90deg, #2b2b2b, #1c1c1c)";
+/** One horizontal day-ramp per light (dawn→dusk), stacked as equal bands. */
+function applyRampBackground(el, ramps) {
+  const bands = (ramps || []).filter((ramp) => (ramp.stops || []).length);
+  if (!bands.length) {
+    el.style.backgroundImage = "linear-gradient(90deg, #2b2b2b, #1c1c1c)";
+    el.style.backgroundSize = "100% 100%";
+    el.style.backgroundPosition = "0 0";
+    el.style.backgroundRepeat = "no-repeat";
+    return;
   }
-  const unique = [];
-  for (const rgb of stops) {
-    const key = rgbCss(rgb);
-    if (!unique.includes(key)) {
-      unique.push(key);
-    }
-  }
-  const n = Math.max(unique.length - 1, 1);
-  const parts = unique.map((c, j) => `${c} ${(j / n) * 100}%`);
-  return `linear-gradient(90deg, ${parts.join(", ")})`;
+  const n = bands.length;
+  const images = [];
+  const sizes = [];
+  const positions = [];
+  bands.forEach((ramp, index) => {
+    const stops = ramp.stops;
+    const last = Math.max(stops.length - 1, 1);
+    const parts = stops.map(
+      (rgb, j) => `${rgbCss(rgb)} ${(j / last) * 100}%`
+    );
+    images.push(`linear-gradient(90deg, ${parts.join(", ")})`);
+    sizes.push(`100% ${100 / n}%`);
+    positions.push(`0 ${(index * 100) / n}%`);
+  });
+  el.style.backgroundImage = images.join(", ");
+  el.style.backgroundSize = sizes.join(", ");
+  el.style.backgroundPosition = positions.join(", ");
+  el.style.backgroundRepeat = "no-repeat";
 }
 
 function themeConic(theme, variables) {
@@ -499,7 +511,7 @@ function renderSceneCard(panel, scene) {
   } else {
     bg = document.createElement("div");
     bg.className = "card-bg";
-    bg.style.background = rampBackground(card.ramps);
+    applyRampBackground(bg, card.ramps);
   }
   const body = document.createElement("div");
   body.className = "card-body";
