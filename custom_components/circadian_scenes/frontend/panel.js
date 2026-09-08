@@ -4922,6 +4922,12 @@ class CircadianScenesPanel extends HTMLElement {
         { intermediatesPerSegment: 5 }
       ),
     };
+    // Patch ring fills in place so sidebar drags keep a live dial without
+    // rebuilding clock chrome (year rail / event dots) on every pointermove.
+    if (this._clockRingsHost?.isConnected && this._patchLightClock(this._sunPath)) {
+      this._displayedSunPath = this._sunPath;
+      return;
+    }
     this._drawSunPath();
   }
 
@@ -4973,7 +4979,7 @@ class CircadianScenesPanel extends HTMLElement {
     body.appendChild(hint);
 
     let undoCommitted = false;
-    const persist = ({ history = true, rebuildDial = true } = {}) => {
+    const persist = ({ history = true } = {}) => {
       if (history && !undoCommitted) {
         this._commitUndo({ type: "theme", eventId: currentId });
         undoCommitted = true;
@@ -4982,9 +4988,7 @@ class CircadianScenesPanel extends HTMLElement {
         this._writeThemeEventFromDraft(item.id, drafts.get(item.id));
       }
       this._syncSaveFab();
-      if (rebuildDial) {
-        this._rebuildThemeDial();
-      }
+      this._rebuildThemeDial();
     };
     brightnessGraphCtl = createLightBrightnessGraph({
       title: this._t("frontend.lights.brightness", "Brightness"),
@@ -5030,11 +5034,10 @@ class CircadianScenesPanel extends HTMLElement {
         if (brightness > 0) {
           draft.state = "on";
         }
-        persist({ rebuildDial: false });
+        persist();
         brightnessGraphCtl?.sync();
       },
       onDragEnd: () => {
-        this._rebuildThemeDial();
         wheelCtl?.sync();
       },
     });
