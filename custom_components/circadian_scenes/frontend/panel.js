@@ -7533,15 +7533,9 @@ class CircadianScenesPanel extends HTMLElement {
         requestAnimationFrame(() => {
           host.classList.add("open");
           this._setSidebarDocked(true);
-          // Focusing the translated-off-canvas host makes HA's outer
-          // scrollport pan toward it and then spring back during the slide.
-          window.setTimeout(() => {
-            if (host.isConnected && host.classList.contains("open")) {
-              header
-                .querySelector("ha-icon-button")
-                ?.focus({ preventScroll: true });
-            }
-          }, SIDEBAR_ANIMATION_MS);
+          // Keep focus on the invoking ring/event. Focusing drawer chrome
+          // programmatically pans HA's outer horizontal scrollport even with
+          // preventScroll, making the whole panel rebound during the slide.
         });
       });
     }
