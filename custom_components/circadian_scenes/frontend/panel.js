@@ -9470,7 +9470,7 @@ class CircadianScenesPanel extends HTMLElement {
 
     const opened = await this._openSceneSidebar({
       title: light.name,
-      subtitle: this._sceneName(sceneEntityId()),
+      subtitle: event.name,
       className: "light-dialog",
       actionItems: [infoBtn],
       onDismiss: () => {
@@ -9631,19 +9631,19 @@ class CircadianScenesPanel extends HTMLElement {
         this._openEventSceneDialog(next);
         return;
       }
-      const entry = drafts.get(nextId);
-      if (!entry?.member || !entry.draft) {
-        return;
-      }
       currentEvent = next;
       this._setSidebarEvent(next.id);
       if (subtitleEl) {
-        subtitleEl.textContent = this._sceneName(nextId);
+        subtitleEl.textContent = next.name;
       }
+      const entry = drafts.get(nextId);
       paintChips();
       brightnessGraphCtl?.sync();
       colorBriGraphCtl?.sync();
       whiteBriGraphCtl?.sync();
+      if (!entry?.member || !entry.draft) {
+        return;
+      }
       if (!fromWheel) {
         const mode = draftWheelMode(currentDraft(), hasColor, hasTemp);
         wheelCtl?.setMode(mode, { convertDraft: false });
@@ -9657,37 +9657,35 @@ class CircadianScenesPanel extends HTMLElement {
 
     const paintChips = () => {
       chipsHost.replaceChildren();
-      const memberScenes = uniqueScenes.filter(
-        (item) => drafts.get(item.sceneId)?.member
-      );
-      if (!memberScenes.length) {
+      if (!events.length) {
         return;
       }
       const list = document.createElement("div");
       list.className = "light-scene-list";
       list.setAttribute("role", "listbox");
-      list.setAttribute("aria-label", "Scene");
-      const currentId = sceneEntityId();
+      list.setAttribute(
+        "aria-label",
+        this._t("frontend.lights.solar_events", "Solar events")
+      );
       let selectedBtn = null;
-      for (const item of memberScenes) {
+      for (const item of events) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "sun-event clickable";
         btn.setAttribute("role", "option");
-        if (item.sceneId === currentId) {
+        if (item.id === currentEvent.id) {
           btn.setAttribute("aria-current", "true");
           selectedBtn = btn;
         }
         const icon = document.createElement("ha-icon");
-        const entity = this._hass?.states?.[item.sceneId];
-        icon.setAttribute("icon", entity?.attributes?.icon || "mdi:palette");
+        icon.setAttribute("icon", item.icon || "mdi:weather-sunset");
         const name = document.createElement("span");
         name.className = "name";
-        name.textContent = this._sceneName(item.sceneId);
+        name.textContent = item.name;
         btn.append(icon, name);
         btn.addEventListener("click", () => {
-          if (item.sceneId !== sceneEntityId()) {
-            host._switchLightEvent(item.event);
+          if (item.id !== currentEvent.id) {
+            host._switchLightEvent(item);
           }
         });
         list.appendChild(btn);
@@ -9724,7 +9722,6 @@ class CircadianScenesPanel extends HTMLElement {
       title: this._t("frontend.lights.brightness", "Brightness"),
       subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
       getPoints: () => {
-        const activeId = sceneEntityId();
         return events
           .map((item) => {
             const sceneId = this._eventSceneId(item.id);
@@ -9786,7 +9783,7 @@ class CircadianScenesPanel extends HTMLElement {
               brightness,
               rgb: member ? draftRgb(draft) : [128, 128, 128],
               draft: member ? draft : null,
-              active: member && sceneId === activeId,
+              active: member && item.id === currentEvent.id,
             };
           })
           .filter(Boolean);
@@ -9870,7 +9867,6 @@ class CircadianScenesPanel extends HTMLElement {
 
     if (whiteKind) {
       const extraPoints = (valueOf) => () => {
-        const activeId = sceneEntityId();
         return events
           .map((item) => {
             const sceneId = this._eventSceneId(item.id);
@@ -9890,7 +9886,7 @@ class CircadianScenesPanel extends HTMLElement {
               brightness: member ? valueOf(draft) : 0,
               rgb: member ? draftRgb(draft) : [128, 128, 128],
               draft: member ? draft : null,
-              active: member && sceneId === activeId,
+              active: member && item.id === currentEvent.id,
             };
           })
           .filter(Boolean);
