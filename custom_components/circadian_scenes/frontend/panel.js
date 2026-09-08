@@ -283,6 +283,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._sidebarMotionGeneration = 0;
     this._sidebarMotionRaf = undefined;
     this._sidebarMotionTimer = undefined;
+    this._sidebarLayoutInProgress = false;
     this._onHashChange = () => this._syncHash();
     this._onEditorKeydown = (ev) => this._handleEditorShortcut(ev);
     this._onPageHide = (ev) => {
@@ -7128,6 +7129,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const stage = this.shadowRoot?.querySelector(".workspace .stage-col");
     const before = stage?.getBoundingClientRect();
+    this._sidebarLayoutInProgress = true;
     const gutter = on
       ? "calc(var(--scene-sidebar-width, 375px) + 16px)"
       : "0px";
@@ -7161,13 +7163,17 @@ class CircadianScenesPanel extends HTMLElement {
       }
       this._sidebarMotionRaf = undefined;
       this._sidebarMotionTimer = undefined;
+      this._sidebarLayoutInProgress = false;
       if (stage) {
         stage.style.transition = "";
         stage.style.transform = "";
         stage.style.willChange = "";
       }
-      this._layoutClockHorizonBack();
-      this._layoutDialChromeFn?.();
+      if (this._layoutDialChromeFn) {
+        this._layoutDialChromeFn();
+      } else {
+        this._layoutClockHorizonBack();
+      }
     };
     if (!stage || Math.abs(delta) < 0.5) {
       finish();
@@ -13979,6 +13985,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockResizeObserver?.disconnect();
     if (typeof ResizeObserver === "function") {
       this._clockResizeObserver = new ResizeObserver(() => {
+        if (this._sidebarLayoutInProgress) {
+          return;
+        }
         layoutDialChrome();
       });
       this._clockResizeObserver.observe(face);
