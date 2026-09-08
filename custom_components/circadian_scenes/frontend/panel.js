@@ -4045,7 +4045,13 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     this._forceCloseSceneSidebar();
+    const previous = (window.location.hash || "#").replace(/^#/, "");
     window.location.hash = hash;
+    const next = (window.location.hash || "#").replace(/^#/, "");
+    // Setting the same hash (including "" → "") does not fire hashchange.
+    if (previous === next) {
+      void this._syncHash();
+    }
   }
 
   async _syncHash() {
@@ -4181,6 +4187,46 @@ class CircadianScenesPanel extends HTMLElement {
       this._floors = [];
     }
     this._render();
+  }
+
+  _upsertSceneInList(scene) {
+    if (!scene?.id) {
+      return;
+    }
+    const items = [...(this._items || [])];
+    const index = items.findIndex((item) => item.id === scene.id);
+    if (index >= 0) {
+      items[index] = { ...items[index], ...scene };
+    } else {
+      items.push(scene);
+    }
+    items.sort((a, b) =>
+      (a.scene_name || "").localeCompare(b.scene_name || "", undefined, {
+        sensitivity: "base",
+      })
+    );
+    this._items = items;
+  }
+
+  _dropSceneFromList(sceneId) {
+    if (!sceneId) {
+      return;
+    }
+    this._items = (this._items || []).filter((item) => item.id !== sceneId);
+  }
+
+  _refreshVisibleSceneList() {
+    if (this._view === "list" || this._view === "variables") {
+      this._renderList();
+      return;
+    }
+    if (this._view === "edit") {
+      this._renderEditor();
+      return;
+    }
+    if (this._view === "theme") {
+      this._renderThemeEditor();
+    }
   }
 
   async _loadItem(sceneId) {
@@ -4624,6 +4670,8 @@ class CircadianScenesPanel extends HTMLElement {
           data,
         });
         dialog.open = false;
+        this._upsertSceneInList(saved);
+        this._refreshVisibleSceneList();
         this._go(`edit/${saved.id}`);
       } catch (err) {
         this._error = err.message || String(err);
@@ -5452,6 +5500,8 @@ class CircadianScenesPanel extends HTMLElement {
           scene_id: item.id,
         });
         this._clearPersistedDraft(item.id);
+        this._dropSceneFromList(item.id);
+        this._refreshVisibleSceneList();
         await this._loadList();
       } catch (err) {
         this._error = err.message || String(err);
@@ -6877,7 +6927,18 @@ class CircadianScenesPanel extends HTMLElement {
       this._ensureNativeDraft(sceneId).entities[entityId] = null;
     }
     this._syncPreviewOverlay();
-    this._sunPathKey = undefined;
+    this._clearPreviewCache();
+    if (this._sunPath?.lights) {
+      this._sunPath = {
+        ...this._sunPath,
+        lights: this._sunPath.lights.map((light) =>
+          light.entity_id === entityId
+            ? { ...light, suggested: true }
+            : light
+        ),
+      };
+      this._drawSunPath();
+    }
     this._ensureSunPath();
   }
 
@@ -7643,6 +7704,15 @@ class CircadianScenesPanel extends HTMLElement {
           },
         });
         dialog.open = false;
+        this._upsertSceneInList({
+          ...scene,
+          scene_name: name,
+          area: data.area,
+          description: data.description,
+          labels: data.labels,
+          category: data.category || null,
+        });
+        this._refreshVisibleSceneList();
         await this._loadList();
       } catch (err) {
         this._error = err.message || String(err);
@@ -7669,9 +7739,12 @@ class CircadianScenesPanel extends HTMLElement {
         type: `${DOMAIN}/save`,
         data: form,
       });
-      await this._loadList();
+      this._upsertSceneInList(saved);
+      this._refreshVisibleSceneList();
       if (saved?.id) {
         this._go(`edit/${saved.id}`);
+      } else {
+        await this._loadList();
       }
     } catch (err) {
       this._error = err.message || String(err);
@@ -7721,10 +7794,12 @@ class CircadianScenesPanel extends HTMLElement {
           type: `${DOMAIN}/delete`,
           scene_id: scene.id,
         });
+        this._dropSceneFromList(scene.id);
         if (this._editId === scene.id) {
           this._go("");
           return;
         }
+        this._refreshVisibleSceneList();
         await this._loadList();
       } catch (err) {
         this._error = err.message || String(err);
@@ -10302,6 +10377,7 @@ class CircadianScenesPanel extends HTMLElement {
       // Saving creates the entity — do not treat #new → #edit/id as discard.
       this._leaveConfirmDone = true;
       this._editId = saved.id;
+      this._upsertSceneInList(saved);
       await this._refreshManagedScenes();
       this._go(`edit/${saved.id}`);
     } catch (err) {
@@ -10323,6 +10399,7 @@ class CircadianScenesPanel extends HTMLElement {
       });
       this._clearPersistedDraft();
       this._draftRestore = null;
+      this._dropSceneFromList(this._editId);
       this._go("");
     } catch (err) {
       this._error = err.message || String(err);
@@ -14097,6 +14174,25 @@ class CircadianScenesPanel extends HTMLElement {
     const rings = [...ringsHost.querySelectorAll(":scope > .clock-ring")];
     if (rings.length !== ringLights.length) {
       return false;
+    }
+    const legendLights = this._legendLights(payload.lights || []);
+    const legendRows = [
+      ...(this._clockLegendEl?.querySelectorAll(":scope > .clock-legend-row") ||
+        []),
+    ];
+    if (legendRows.length !== legendLights.length) {
+      return false;
+    }
+    for (let index = 0; index < legendRows.length; index += 1) {
+      if (legendRows[index].dataset.entityId !== legendLights[index].entity_id) {
+        return false;
+      }
+      if (
+        legendRows[index].classList.contains("suggested") !==
+        Boolean(legendLights[index].suggested)
+      ) {
+        return false;
+      }
     }
     for (let index = 0; index < rings.length; index += 1) {
       if (rings[index].dataset.entityId !== ringLights[index].entity_id) {
