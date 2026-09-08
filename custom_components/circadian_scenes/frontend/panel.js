@@ -4946,11 +4946,16 @@ class CircadianScenesPanel extends HTMLElement {
       drafts.set(item.id, this._themeEventDraft(item.id));
     }
     let currentId = event.id;
+    let wheelCtl = null;
+    let brightnessGraphCtl = null;
     const opened = await this._openSceneSidebar({
       title: event.name,
-      className: "theme-event-dialog",
+      className: "light-dialog theme-event-dialog",
       onDismiss: () => {
+        brightnessGraphCtl?.disconnect();
+        wheelCtl?.disconnect();
         this._setSidebarEvent(null);
+        this._setSidebarLight(null);
       },
     });
     if (!opened) {
@@ -4967,10 +4972,8 @@ class CircadianScenesPanel extends HTMLElement {
     );
     body.appendChild(hint);
 
-    let wheelCtl = null;
-    let brightnessGraphCtl = null;
     let undoCommitted = false;
-    const persist = ({ history = true } = {}) => {
+    const persist = ({ history = true, rebuildDial = true } = {}) => {
       if (history && !undoCommitted) {
         this._commitUndo({ type: "theme", eventId: currentId });
         undoCommitted = true;
@@ -4979,7 +4982,9 @@ class CircadianScenesPanel extends HTMLElement {
         this._writeThemeEventFromDraft(item.id, drafts.get(item.id));
       }
       this._syncSaveFab();
-      this._rebuildThemeDial();
+      if (rebuildDial) {
+        this._rebuildThemeDial();
+      }
     };
     brightnessGraphCtl = createLightBrightnessGraph({
       title: this._t("frontend.lights.brightness", "Brightness"),
@@ -5025,7 +5030,11 @@ class CircadianScenesPanel extends HTMLElement {
         if (brightness > 0) {
           draft.state = "on";
         }
-        persist();
+        persist({ rebuildDial: false });
+        brightnessGraphCtl?.sync();
+      },
+      onDragEnd: () => {
+        this._rebuildThemeDial();
         wheelCtl?.sync();
       },
     });
@@ -6241,12 +6250,17 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
-  _syncEditorChrome() {
-    const dial =
+  _isDialView() {
+    return (
       this._view === "theme" ||
       (this._view === "edit" &&
         this._lightView === "dial" &&
-        this._formData?.kind !== "simple");
+        this._formData?.kind !== "simple")
+    );
+  }
+
+  _syncEditorChrome() {
+    const dial = this._isDialView();
     this.shadowRoot?.querySelector(".page")?.classList.toggle("dial-wide", dial);
     this._sunPathEl?.classList.toggle("dial-view", dial);
     // Host-level vignette (not .sun-path) — must not track sidebar gutter.
@@ -10713,8 +10727,7 @@ class CircadianScenesPanel extends HTMLElement {
       !ms ||
       !from?.curve?.length ||
       !to?.curve?.length ||
-      this._view !== "edit" ||
-      this._lightView !== "dial" ||
+      !this._isDialView() ||
       !this._clockRingsHost
     ) {
       return 0;
@@ -10952,8 +10965,7 @@ class CircadianScenesPanel extends HTMLElement {
     // year does not crossfade in one fade (dusk clamp would also jump).
     const fromIso = this._displayedSunPath?.date || this._sunPath?.date;
     if (
-      this._view === "edit" &&
-      this._lightView === "dial" &&
+      this._isDialView() &&
       fromIso &&
       fromIso !== iso &&
       this._sunPath?.lights
@@ -11675,8 +11687,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const landscape = this._isLandscape();
     const clock =
-      this._view === "edit" &&
-      this._lightView === "dial" &&
+      this._isDialView() &&
       Boolean(this._clockScrubRail) &&
       Boolean(this.shadowRoot?.querySelector(".sun-light-clock-face"));
     const sidebarOpen = this._sceneSidebarIsOpen();
@@ -12317,7 +12328,7 @@ class CircadianScenesPanel extends HTMLElement {
     // Always reserve the reset slot so time/° do not shift when sticky.
     const resetSlot = document.createElement("span");
     resetSlot.className = "sun-hover-reset-slot";
-    if (sticky && this._view === "edit" && this._lightView === "dial") {
+    if (sticky && this._isDialView()) {
       const reset = document.createElement("button");
       reset.type = "button";
       reset.className = "sun-hover-reset";
