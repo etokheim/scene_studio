@@ -42,6 +42,7 @@ import {
   lerpSunPath,
 } from "./dial_clock.js";
 import { LANDING_CSS, renderLanding } from "./landing.js";
+import { panelLoadIsCurrent } from "./load_guard.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor } from "./simple_editor.js";
 
 const DOMAIN = "circadian_scenes";
@@ -278,6 +279,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._liveEditSidebarHandler = null;
     this._roomPreview = false;
     this._roomPreviewSnapshots = null;
+    this._loadGeneration = 0;
     this._sidebarMotionGeneration = 0;
     this._sidebarMotionRaf = undefined;
     this._sidebarMotionTimer = undefined;
@@ -3967,6 +3969,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._leaveConfirmDone = false;
     if (hash === "new") {
+      this._invalidatePanelLoads();
       const pending = this._pendingNewForm;
       this._pendingNewForm = null;
       this._view = "edit";
@@ -4008,9 +4011,34 @@ class CircadianScenesPanel extends HTMLElement {
     this._loadList();
   }
 
+  _invalidatePanelLoads() {
+    this._loadGeneration += 1;
+  }
+
+  _startPanelLoad() {
+    const token = {
+      generation: ++this._loadGeneration,
+      view: this._view,
+      sceneId: this._editId,
+    };
+    return token;
+  }
+
+  _panelLoadIsCurrent(token) {
+    return panelLoadIsCurrent(token, {
+      generation: this._loadGeneration,
+      view: this._view,
+      sceneId: this._editId,
+    });
+  }
+
   async _loadList() {
+    const token = this._startPanelLoad();
     try {
       const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
       const scenes = Array.isArray(payload) ? payload : payload?.scenes || [];
       this._items = scenes;
       this._variables = payload?.variables || [];
@@ -4022,6 +4050,9 @@ class CircadianScenesPanel extends HTMLElement {
       };
       this._error = null;
     } catch (err) {
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
       this._error = err.message || String(err);
       this._items = [];
       this._variables = [];
@@ -4032,6 +4063,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _loadItem(sceneId) {
+    const token = this._startPanelLoad();
     try {
       const [item, payload] = await Promise.all([
         this._hass.callWS({
@@ -4040,6 +4072,9 @@ class CircadianScenesPanel extends HTMLElement {
         }),
         this._hass.callWS({ type: `${DOMAIN}/list` }),
       ]);
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
       this._entityId = item.entity_id || null;
       this._formData = { ...emptyFormData(), ...(item.form || item) };
       this._items = payload?.scenes || [];
@@ -4052,9 +4087,15 @@ class CircadianScenesPanel extends HTMLElement {
       };
       this._error = null;
     } catch (err) {
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
       this._error = err.message || String(err);
       this._entityId = null;
       this._formData = emptyFormData();
+    }
+    if (!this._panelLoadIsCurrent(token)) {
+      return;
     }
     this._resetSession();
     this._draftRestore = this._restorePersistedDraft();
