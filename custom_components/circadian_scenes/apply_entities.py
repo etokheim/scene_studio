@@ -61,7 +61,13 @@ async def apply_entities_parallel(
         tasks.append(task)
 
     if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        failures = [result for result in results if isinstance(result, BaseException)]
+        if failures:
+            raise HomeAssistantError(
+                f"Failed to apply {len(failures)} of {len(tasks)} entities: "
+                f"{failures[0]}"
+            ) from failures[0]
         _LOGGER.debug("Completed parallel processing of %d entities", len(entities))
 
 
@@ -87,17 +93,15 @@ async def apply_single_entity(
 ):
     """Apply a single entity state."""
     domain = entity[ATTR_ENTITY_ID].split(".")[0]
-    state = entity["state"]
-
     if "state" not in entity:
-        _LOGGER.error(
-            "The entity provided is missing a state property. Can't apply entity state (skipping). Entity: %s",
-            entity,
+        raise HomeAssistantError(
+            f"Entity {entity.get(ATTR_ENTITY_ID)!r} is missing a state property"
         )
-        return None
+    state = entity["state"]
     if state in (STATE_UNAVAILABLE, STATE_UNKNOWN, STATE_PROBLEM, LockState.JAMMED):
-        _LOGGER.error("Entity state is %s", entity["state"])
-        return None
+        raise HomeAssistantError(
+            f"Entity {entity[ATTR_ENTITY_ID]!r} has non-applicable state {state!r}"
+        )
 
     if skip_noop and domain == LIGHT_DOMAIN and light_command_is_noop(hass, entity):
         _LOGGER.debug(
@@ -137,6 +141,10 @@ async def apply_single_entity(
             service_type = "close_valve"
         else:
             service_type = SERVICE_TURN_OFF
+    if service_type is None:
+        raise HomeAssistantError(
+            f"Entity {entity[ATTR_ENTITY_ID]!r} has unsupported state {state!r}"
+        )
 
     del entity_applied["state"]
 
@@ -159,8 +167,11 @@ async def apply_single_entity(
             service_data=entity_applied,
             context=context,
         )
-    except Exception as error:  # noqa: BLE001
-        _LOGGER.error("Service call to turn on light failed: %s", error)
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        raise HomeAssistantError(
+            f"Failed to apply {entity[ATTR_ENTITY_ID]} via {domain}.{service_type}: "
+            f"{error}"
+        ) from error
 
     return True
 

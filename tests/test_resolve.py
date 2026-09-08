@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.circadian_scenes.const import VARIABLE_REF
@@ -16,10 +15,10 @@ from custom_components.circadian_scenes.resolve import (
     resolve_variable,
 )
 
-
 # ---------------------------------------------------------------------------
 # resolve_variable
 # ---------------------------------------------------------------------------
+
 
 class TestResolveVariable:
     def test_fixed_color_passthrough(self):
@@ -28,7 +27,11 @@ class TestResolveVariable:
 
     def test_variable_ref(self):
         variables = {
-            "warm": {"id": "warm", "name": "Warm", "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700}},
+            "warm": {
+                "id": "warm",
+                "name": "Warm",
+                "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+            },
         }
         result = resolve_variable({VARIABLE_REF: "warm"}, variables)
         assert result == {"color_mode": "color_temp", "color_temp_kelvin": 2700}
@@ -41,6 +44,7 @@ class TestResolveVariable:
 # ---------------------------------------------------------------------------
 # resolve_theme_event
 # ---------------------------------------------------------------------------
+
 
 class TestResolveThemeEvent:
     def _theme(self):
@@ -61,7 +65,11 @@ class TestResolveThemeEvent:
 
     def _variables(self):
         return {
-            "warm": {"id": "warm", "name": "Warm", "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700}},
+            "warm": {
+                "id": "warm",
+                "name": "Warm",
+                "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+            },
         }
 
     def test_resolves_variable_ref(self):
@@ -83,6 +91,7 @@ class TestResolveThemeEvent:
 # ---------------------------------------------------------------------------
 # resolve_membership
 # ---------------------------------------------------------------------------
+
 
 class TestResolveMembership:
     def test_area_only(self):
@@ -125,13 +134,22 @@ class TestResolveMembership:
 # _adapt_color_for_modes
 # ---------------------------------------------------------------------------
 
+
 class TestAdaptColorForModes:
     def test_no_modes_passthrough(self):
-        color = {"color_mode": "color_temp", "color_temp_kelvin": 3000, "brightness": 200}
+        color = {
+            "color_mode": "color_temp",
+            "color_temp_kelvin": 3000,
+            "brightness": 200,
+        }
         assert _adapt_color_for_modes(color, None) == color
 
     def test_kelvin_to_hs(self):
-        color = {"color_mode": "color_temp", "color_temp_kelvin": 4000, "brightness": 200}
+        color = {
+            "color_mode": "color_temp",
+            "color_temp_kelvin": 4000,
+            "brightness": 200,
+        }
         result = _adapt_color_for_modes(color, {"hs"})
         assert result["color_mode"] == "hs"
         assert "hs_color" in result
@@ -153,10 +171,15 @@ class TestAdaptColorForModes:
 # build_circadian_event_snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestBuildCircadianEventSnapshot:
     def _setup(self):
         variables = {
-            "warm": {"id": "warm", "name": "Warm", "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700}},
+            "warm": {
+                "id": "warm",
+                "name": "Warm",
+                "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+            },
         }
         themes = {
             "default": {
@@ -165,7 +188,13 @@ class TestBuildCircadianEventSnapshot:
                 "events": {
                     "dawn": {"color": {VARIABLE_REF: "warm"}, "brightness": 100},
                     "sunrise": {"color": {VARIABLE_REF: "warm"}, "brightness": 200},
-                    "noon": {"color": {"color_mode": "color_temp", "color_temp_kelvin": 5000}, "brightness": 255},
+                    "noon": {
+                        "color": {
+                            "color_mode": "color_temp",
+                            "color_temp_kelvin": 5000,
+                        },
+                        "brightness": 255,
+                    },
                     "sunset": {"color": {VARIABLE_REF: "warm"}, "brightness": 180},
                     "dusk": {"color": {VARIABLE_REF: "warm"}, "brightness": 64},
                 },
@@ -183,7 +212,10 @@ class TestBuildCircadianEventSnapshot:
     def test_all_lights_get_theme_color(self):
         variables, themes, scene = self._setup()
         snap = build_circadian_event_snapshot(
-            scene, "dawn", variables, themes,
+            scene,
+            "dawn",
+            variables,
+            themes,
             member_ids=["light.a", "light.b"],
         )
         assert len(snap) == 2
@@ -204,7 +236,10 @@ class TestBuildCircadianEventSnapshot:
             }
         }
         snap = build_circadian_event_snapshot(
-            scene, "dawn", variables, themes,
+            scene,
+            "dawn",
+            variables,
+            themes,
             member_ids=["light.a", "light.b"],
         )
         assert snap["light.a"]["brightness"] == 50
@@ -223,7 +258,10 @@ class TestBuildCircadianEventSnapshot:
             }
         }
         snap = build_circadian_event_snapshot(
-            scene, "dawn", variables, themes,
+            scene,
+            "dawn",
+            variables,
+            themes,
             member_ids=["light.a"],
         )
         assert snap["light.a"]["color_temp_kelvin"] == 2700
@@ -234,13 +272,20 @@ class TestBuildCircadianEventSnapshot:
         scene["theme_id"] = "nonexistent"
         with pytest.raises(HomeAssistantError, match="does not exist"):
             build_circadian_event_snapshot(
-                scene, "dawn", variables, themes, member_ids=["light.a"],
+                scene,
+                "dawn",
+                variables,
+                themes,
+                member_ids=["light.a"],
             )
 
     def test_color_adapted_for_hs_only_lamp(self):
         variables, themes, scene = self._setup()
         snap = build_circadian_event_snapshot(
-            scene, "dawn", variables, themes,
+            scene,
+            "dawn",
+            variables,
+            themes,
             member_ids=["light.a"],
             supported_modes={"light.a": {"hs"}},
         )
@@ -253,16 +298,26 @@ class TestBuildCircadianEventSnapshot:
 # build_simple_snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestBuildSimpleSnapshot:
     def test_basic(self):
         variables = {
-            "cool": {"id": "cool", "name": "Cool", "color": {"color_mode": "color_temp", "color_temp_kelvin": 5000}},
+            "cool": {
+                "id": "cool",
+                "name": "Cool",
+                "color": {"color_mode": "color_temp", "color_temp_kelvin": 5000},
+            },
         }
         scene = {
             "id": "s2",
             "kind": "simple",
             "lights": {
-                "light.a": {"state": "on", "brightness": 200, "color_mode": "color_temp", "color_temp_kelvin": 3000},
+                "light.a": {
+                    "state": "on",
+                    "brightness": 200,
+                    "color_mode": "color_temp",
+                    "color_temp_kelvin": 3000,
+                },
                 "light.b": {"state": "on", "brightness": 128, VARIABLE_REF: "cool"},
             },
         }
@@ -281,12 +336,18 @@ class TestBuildSimpleSnapshot:
 
     def test_variable_ref_in_light(self):
         variables = {
-            "v1": {"id": "v1", "name": "V", "color": {"color_mode": "hs", "hs_color": [120, 50]}},
+            "v1": {
+                "id": "v1",
+                "name": "V",
+                "color": {"color_mode": "hs", "hs_color": [120, 50]},
+            },
         }
         scene = {
             "id": "x",
             "kind": "simple",
-            "lights": {"light.a": {"state": "on", "brightness": 100, VARIABLE_REF: "v1"}},
+            "lights": {
+                "light.a": {"state": "on", "brightness": 100, VARIABLE_REF: "v1"}
+            },
         }
         snap = build_simple_snapshot(scene, variables, ["light.a"])
         assert snap["light.a"]["hs_color"] == [120, 50]

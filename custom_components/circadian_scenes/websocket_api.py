@@ -20,7 +20,6 @@ from .const import (
     DATA_STORE,
     DOMAIN,
     KIND_CIRCADIAN,
-    KIND_SIMPLE,
     SCENE_NAME,
 )
 from .native_scene import lights_in_area
@@ -124,10 +123,7 @@ def _scene_payload(hass: HomeAssistant, item: dict[str, Any]) -> dict[str, Any]:
     entry = _registry_entry(hass, item["id"])
     form = _form_payload(item, entry)
     store = _store(hass)
-    try:
-        colors = card_colors(hass, store, item)
-    except HomeAssistantError:
-        colors = {"kind": item.get("kind"), "dots": [], "ramps": []}
+    colors = card_colors(hass, store, item)
     return {
         **item,
         "area_name": area_name,
@@ -212,28 +208,48 @@ async def ws_save(
     msg: dict[str, Any],
 ) -> None:
     """Create or update a scene."""
+    domain_data = hass.data[DOMAIN]
+    add_entities = domain_data.get(DATA_ADD_ENTITIES)
+    if add_entities is None:
+        connection.send_error(
+            msg["id"], "not_loaded", "Scene platform is not ready yet"
+        )
+        return
     raw = dict(msg["data"])
     if msg.get("scene_id"):
         raw["id"] = msg["scene_id"]
+    previous = _store(hass).get(raw.get("id")) if raw.get("id") else None
     try:
         item = await _store(hass).async_upsert(raw)
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
 
-    if hass.data[DOMAIN].get(DATA_ADD_ENTITIES) is None:
-        connection.send_error(
-            msg["id"], "not_loaded", "Scene platform is not ready yet"
+    try:
+        await async_create_or_update_entity(
+            hass,
+            domain_data[DATA_CONFIG_ENTRY],
+            item,
+            add_entities,
+            domain_data[DATA_ENTITIES],
         )
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        # Store and entity registry cannot share a transaction; compensate so
+        # a failed response never leaves a configuration the panel did not save.
+        if previous is None:
+            await _store(hass).async_delete(item["id"])
+            await async_remove_entity(domain_data[DATA_ENTITIES], item["id"])
+        else:
+            await _store(hass).async_upsert(previous)
+            await async_create_or_update_entity(
+                hass,
+                domain_data[DATA_CONFIG_ENTRY],
+                previous,
+                add_entities,
+                domain_data[DATA_ENTITIES],
+            )
+        connection.send_error(msg["id"], "save_failed", str(err))
         return
-
-    await async_create_or_update_entity(
-        hass,
-        hass.data[DOMAIN][DATA_CONFIG_ENTRY],
-        item,
-        hass.data[DOMAIN][DATA_ADD_ENTITIES],
-        hass.data[DOMAIN][DATA_ENTITIES],
-    )
     connection.send_result(msg["id"], _scene_payload(hass, item))
 
 
@@ -252,11 +268,28 @@ async def ws_delete(
 ) -> None:
     """Delete a scene."""
     scene_id = msg["scene_id"]
+    previous = _store(hass).get(scene_id)
+    if previous is None:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Scene not found")
+        return
     deleted = await _store(hass).async_delete(scene_id)
     if not deleted:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Scene not found")
         return
-    await async_remove_entity(hass.data[DOMAIN][DATA_ENTITIES], scene_id)
+    try:
+        await async_remove_entity(hass.data[DOMAIN][DATA_ENTITIES], scene_id)
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        # Recreate both sides if entity removal failed after the store write.
+        await _store(hass).async_upsert(previous)
+        await async_create_or_update_entity(
+            hass,
+            hass.data[DOMAIN][DATA_CONFIG_ENTRY],
+            previous,
+            hass.data[DOMAIN][DATA_ADD_ENTITIES],
+            hass.data[DOMAIN][DATA_ENTITIES],
+        )
+        connection.send_error(msg["id"], "delete_failed", str(err))
+        return
     connection.send_result(msg["id"], {"scene_id": scene_id})
 
 

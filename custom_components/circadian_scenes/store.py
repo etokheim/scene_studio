@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from copy import deepcopy
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -91,7 +92,9 @@ def seed_variables() -> dict[str, dict[str, Any]]:
     return result
 
 
-def seed_default_theme(variables: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def seed_default_theme(
+    variables: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
     """Create the default circadian theme that references the seed variables."""
     theme_id = "default"
     events: dict[str, Any] = {}
@@ -100,7 +103,9 @@ def seed_default_theme(variables: dict[str, dict[str, Any]]) -> dict[str, dict[s
         var = variables.get(var_id)
         events[event] = {
             "color": {VARIABLE_REF: var_id},
-            "brightness": var["brightness"] if var else DEFAULT_VARIABLE_COLORS[event][0],
+            "brightness": (
+                var["brightness"] if var else DEFAULT_VARIABLE_COLORS[event][0]
+            ),
         }
     return {
         theme_id: {
@@ -114,6 +119,7 @@ def seed_default_theme(variables: dict[str, dict[str, Any]]) -> dict[str, dict[s
 # ---------------------------------------------------------------------------
 # Time helpers (kept for dusk minimum, shared with the panel).
 # ---------------------------------------------------------------------------
+
 
 def time_to_seconds(value: Any) -> int:
     """Convert a time string or seconds value to seconds since midnight."""
@@ -147,6 +153,7 @@ def seconds_to_time(value: Any) -> str:
 # ---------------------------------------------------------------------------
 # Scene normalizers (v4).
 # ---------------------------------------------------------------------------
+
 
 def normalize_circadian_scene(
     raw: dict[str, Any],
@@ -449,6 +456,7 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
 # Store class
 # ---------------------------------------------------------------------------
 
+
 class _ScenesStore(Store):
     """HA Store that migrates circadian_scenes.scenes between major versions."""
 
@@ -517,7 +525,10 @@ class CircadianScenesStore:
                 continue
             if "kind" not in item:
                 item["kind"] = KIND_CIRCADIAN
-            if AUTOMATICALLY_UPDATE_LIGHTS not in item and item["kind"] == KIND_CIRCADIAN:
+            if (
+                AUTOMATICALLY_UPDATE_LIGHTS not in item
+                and item["kind"] == KIND_CIRCADIAN
+            ):
                 item[AUTOMATICALLY_UPDATE_LIGHTS] = True
             for alias in ("continuous", "follow_up"):
                 item.pop(alias, None)
@@ -575,8 +586,16 @@ class CircadianScenesStore:
             "color": color,
             "brightness": raw.get("brightness", 255),
         }
+        previous = deepcopy(self.variables.get(var_id))
         self.variables[var_id] = var
-        await self.async_save()
+        try:
+            await self.async_save()
+        except Exception:  # pylint: disable=broad-exception-caught
+            if previous is None:
+                self.variables.pop(var_id, None)
+            else:
+                self.variables[var_id] = previous
+            raise
         return var
 
     async def async_delete_variable(self, var_id: str) -> bool:
@@ -597,13 +616,47 @@ class CircadianScenesStore:
         for sc in self.scenes.values():
             if sc.get("kind") == KIND_SIMPLE:
                 for light in (sc.get("lights") or {}).values():
-                    if isinstance(light, dict) and light.get(VARIABLE_REF) == var_id:
+                    color = light.get("color") if isinstance(light, dict) else None
+                    if isinstance(light, dict) and (
+                        light.get(VARIABLE_REF) == var_id
+                        or (
+                            isinstance(color, dict)
+                            and color.get(VARIABLE_REF) == var_id
+                        )
+                    ):
                         raise HomeAssistantError(
                             f"Variable {var_id!r} is still referenced by "
                             f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
                         )
-        del self.variables[var_id]
-        await self.async_save()
+            elif sc.get("kind") == KIND_CIRCADIAN:
+                for light_overrides in (sc.get("overrides") or {}).values():
+                    for override in (
+                        light_overrides.values()
+                        if isinstance(light_overrides, dict)
+                        else ()
+                    ):
+                        color = (
+                            override.get("color")
+                            if isinstance(override, dict)
+                            else None
+                        )
+                        if isinstance(override, dict) and (
+                            override.get(VARIABLE_REF) == var_id
+                            or (
+                                isinstance(color, dict)
+                                and color.get(VARIABLE_REF) == var_id
+                            )
+                        ):
+                            raise HomeAssistantError(
+                                f"Variable {var_id!r} is still referenced by "
+                                f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
+                            )
+        previous = self.variables.pop(var_id)
+        try:
+            await self.async_save()
+        except Exception:  # pylint: disable=broad-exception-caught
+            self.variables[var_id] = previous
+            raise
         return True
 
     # --- Theme CRUD ---
@@ -628,13 +681,34 @@ class CircadianScenesStore:
         missing = [e for e in SOLAR_EVENTS if e not in events]
         if missing:
             raise ValueError(f"Theme is missing events: {', '.join(missing)}")
+        for event in SOLAR_EVENTS:
+            value = events[event]
+            if not isinstance(value, dict) or not isinstance(value.get("color"), dict):
+                raise ValueError(f"Theme event {event!r} must have a color dict")
+            brightness = value.get("brightness")
+            if (
+                not isinstance(brightness, (int, float))
+                or isinstance(brightness, bool)
+                or not 0 <= brightness <= 255
+            ):
+                raise ValueError(
+                    f"Theme event {event!r} brightness must be a number from 0 to 255"
+                )
         theme = {
             "id": theme_id,
             "name": name,
             "events": events,
         }
+        previous = deepcopy(self.themes.get(theme_id))
         self.themes[theme_id] = theme
-        await self.async_save()
+        try:
+            await self.async_save()
+        except Exception:  # pylint: disable=broad-exception-caught
+            if previous is None:
+                self.themes.pop(theme_id, None)
+            else:
+                self.themes[theme_id] = previous
+            raise
         return theme
 
     async def async_delete_theme(self, theme_id: str) -> bool:
@@ -647,8 +721,12 @@ class CircadianScenesStore:
                     f"Theme {theme_id!r} is still referenced by "
                     f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
                 )
-        del self.themes[theme_id]
-        await self.async_save()
+        previous = self.themes.pop(theme_id)
+        try:
+            await self.async_save()
+        except Exception:  # pylint: disable=broad-exception-caught
+            self.themes[theme_id] = previous
+            raise
         return True
 
     # --- Scene CRUD ---
@@ -678,8 +756,16 @@ class CircadianScenesStore:
                 ),
             }
         item = normalize_scene(raw, scene_id=scene_id)
+        previous = deepcopy(self.scenes.get(item["id"]))
         self.scenes[item["id"]] = item
-        await self.async_save()
+        try:
+            await self.async_save()
+        except Exception:  # pylint: disable=broad-exception-caught
+            if previous is None:
+                self.scenes.pop(item["id"], None)
+            else:
+                self.scenes[item["id"]] = previous
+            raise
         return item
 
     async def async_set_automatically_update_lights(
@@ -697,8 +783,12 @@ class CircadianScenesStore:
         """Delete a scene config."""
         if scene_id not in self.scenes:
             return False
-        self.scenes.pop(scene_id)
-        await self.async_save()
+        previous = self.scenes.pop(scene_id)
+        try:
+            await self.async_save()
+        except Exception:  # pylint: disable=broad-exception-caught
+            self.scenes[scene_id] = previous
+            raise
         return True
 
     async def async_update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:

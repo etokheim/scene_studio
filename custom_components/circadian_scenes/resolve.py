@@ -12,12 +12,12 @@ from typing import Any
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util.color import color_temperature_to_hs
 
-from .const import SOLAR_EVENTS, VARIABLE_REF
-
+from .const import VARIABLE_REF
 
 # ---------------------------------------------------------------------------
 # Variable resolution
 # ---------------------------------------------------------------------------
+
 
 def resolve_variable(
     color_or_ref: dict[str, Any],
@@ -63,6 +63,7 @@ def resolve_theme_event(
 # Membership
 # ---------------------------------------------------------------------------
 
+
 def resolve_membership(
     area_light_ids: list[str],
     membership: dict[str, Any],
@@ -88,6 +89,7 @@ def resolve_membership(
 # Snapshot building
 # ---------------------------------------------------------------------------
 
+
 def _adapt_color_for_modes(
     color: dict[str, Any],
     supported_color_modes: set[str] | None,
@@ -101,24 +103,23 @@ def _adapt_color_for_modes(
     if not supported_color_modes:
         return dict(color)
     mode = color.get("color_mode")
-    has_temp = bool(
-        {"color_temp"} & supported_color_modes
-    )
-    has_chromatic = bool(
-        {"hs", "xy", "rgb", "rgbw", "rgbww"} & supported_color_modes
-    )
+    has_temp = bool({"color_temp"} & supported_color_modes)
+    has_chromatic = bool({"hs", "xy", "rgb", "rgbw", "rgbww"} & supported_color_modes)
     if mode == "color_temp" and not has_temp and has_chromatic:
         kelvin = color.get("color_temp_kelvin", 4000)
         hs = color_temperature_to_hs(kelvin)
-        out = {k: v for k, v in color.items() if k not in ("color_mode", "color_temp_kelvin")}
+        out = {
+            k: v
+            for k, v in color.items()
+            if k not in ("color_mode", "color_temp_kelvin")
+        }
         out["color_mode"] = "hs"
         out["hs_color"] = list(hs)
         return out
     if mode in ("hs", "rgb", "rgbw", "rgbww") and not has_chromatic and has_temp:
         # Cannot represent chromatic on a temp-only light; drop the color,
         # keep brightness. The lamp will use its last-known temp.
-        return {k: v for k, v in color.items()
-                if k in ("brightness",)}
+        return {k: v for k, v in color.items() if k in ("brightness",)}
     return dict(color)
 
 
@@ -157,13 +158,18 @@ def build_circadian_event_snapshot(
         if event_override is not None:
             # Override may itself contain a variable ref for color.
             color_part = resolve_variable(
-                {k: v for k, v in event_override.items()
-                 if k not in ("brightness", "state")},
+                {
+                    k: v
+                    for k, v in event_override.items()
+                    if k not in ("brightness", "state")
+                },
                 variables,
             )
             state_dict = {
                 "state": event_override.get("state", "on"),
-                "brightness": event_override.get("brightness", theme_state["brightness"]),
+                "brightness": event_override.get(
+                    "brightness", theme_state["brightness"]
+                ),
                 **color_part,
             }
         else:

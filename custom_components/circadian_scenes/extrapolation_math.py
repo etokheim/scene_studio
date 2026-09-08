@@ -329,21 +329,29 @@ async def extrapolate_entities(
     extrapolation_start_time = time.time()
     skip = skip_entity_ids or set()
     tasks = []
+    task_entity_ids = []
     for from_entity_id in from_scene["entities"]:
         if from_entity_id in skip:
             continue
         task = asyncio.create_task(process_entity_extrapolation(from_entity_id))
         tasks.append(task)
+        task_entity_ids.append(from_entity_id)
 
     entity_changes = []
     # Wait for all extrapolation tasks to complete
     if tasks:
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        entity_changes = [
-            result
-            for result in results
-            if result is not None and not isinstance(result, BaseException)
+        failures = [
+            (entity_id, result)
+            for entity_id, result in zip(task_entity_ids, results, strict=True)
+            if isinstance(result, BaseException)
         ]
+        if failures:
+            entity_id, error = failures[0]
+            raise HomeAssistantError(
+                f"Failed to extrapolate {entity_id}: {error}"
+            ) from error
+        entity_changes = [result for result in results if result is not None]
 
     _LOGGER.debug(
         "Time extrapolating %d entities in parallel: %.3fs",
@@ -365,18 +373,16 @@ def extrapolate_number(
     from_number, to_number, scene_transition_progress_percent
 ) -> int:
     """Takes the current transition percent plus a from and to number and returns what the new value should be."""
-    # Make sure the input is as it should be
-    # TODO: This should only be temporary - figure out why values sometimes are bad
-    if not isinstance(from_number, numbers.Number):
-        _LOGGER.error(
-            "Trying to extrapolate a value that's not a number! %s", from_number
+    if (
+        not isinstance(from_number, numbers.Number)
+        or isinstance(from_number, bool)
+        or not isinstance(to_number, numbers.Number)
+        or isinstance(to_number, bool)
+    ):
+        raise HomeAssistantError(
+            "Extrapolation endpoints must be numbers, got "
+            f"{from_number!r} and {to_number!r}"
         )
-        from_number = to_number
-    elif not isinstance(to_number, numbers.Number):
-        _LOGGER.error(
-            "Trying to extrapolate a value that's not a number! %s", to_number
-        )
-        to_number = from_number
 
     difference = to_number - from_number
     current_transition_difference = difference * scene_transition_progress_percent / 100

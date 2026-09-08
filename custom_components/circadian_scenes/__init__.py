@@ -8,6 +8,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import Event, HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
@@ -38,6 +39,27 @@ ATTR_TARGET_DATE_TIME = "target_date_time"
 ATTR_LOCATION = "location"
 
 
+def _validate_turn_on_parameters(
+    brightness_modifier: float,
+    transition: float,
+    transition_percent: float | None,
+) -> None:
+    """Raise a service error for invalid Circadian Scenes activation input."""
+    if not -100 <= brightness_modifier <= 100:
+        raise ServiceValidationError(
+            "Brightness modifier must be between -100 and 100, "
+            f"got {brightness_modifier}"
+        )
+    if not 0 <= transition <= 6553:
+        raise ServiceValidationError(
+            f"Transition must be between 0 and 6553 seconds, got {transition}"
+        )
+    if transition_percent is not None and not 0 <= transition_percent <= 100:
+        raise ServiceValidationError(
+            "Transition percent must be between 0 and 100, " f"got {transition_percent}"
+        )
+
+
 async def async_setup(hass, config):
     """Set up is called when Home Assistant is loading our component."""
 
@@ -50,38 +72,23 @@ async def async_setup(hass, config):
         target_date_time = call.data.get(ATTR_TARGET_DATE_TIME)
         location = call.data.get(ATTR_LOCATION)
 
-        if not -100 <= brightness_modifier <= 100:
-            _LOGGER.error(
-                "Brightness modifier must be between -100 and 100, got %s",
-                brightness_modifier,
-            )
-            return
-
-        if not 0 <= transition <= 6553:
-            _LOGGER.error(
-                "Transition must be between 0 and 6553 seconds, got %s",
-                transition,
-            )
-            return
-
-        if transition_percent is not None and not 0 <= transition_percent <= 100:
-            _LOGGER.error(
-                "Transition percent must be between 0 and 100, got %s",
-                transition_percent,
-            )
-            return
+        _validate_turn_on_parameters(
+            brightness_modifier, transition, transition_percent
+        )
 
         for entity_id in entity_ids:
             if not entity_id.startswith("scene."):
-                continue
+                raise ServiceValidationError(
+                    f"Entity {entity_id!r} is not a scene entity"
+                )
             scene_entity = hass.states.get(entity_id)
             if not scene_entity:
-                _LOGGER.error("Scene entity %s not found in states", entity_id)
-                continue
+                raise ServiceValidationError(
+                    f"Scene entity {entity_id!r} was not found"
+                )
             scene_platform = hass.data.get("scene")
             if not scene_platform:
-                _LOGGER.error("Scene platform not found")
-                continue
+                raise ServiceValidationError("Scene platform is not loaded")
             for scene in scene_platform.entities:
                 if scene.entity_id == entity_id:
                     await scene.async_activate(
@@ -93,7 +100,9 @@ async def async_setup(hass, config):
                     )
                     break
             else:
-                _LOGGER.error("Scene entity %s not found", entity_id)
+                raise ServiceValidationError(
+                    f"Scene entity {entity_id!r} is not owned by Circadian Scenes"
+                )
 
     hass.services.async_register(
         DOMAIN,

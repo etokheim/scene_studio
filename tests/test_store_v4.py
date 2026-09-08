@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import AsyncMock
+
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.circadian_scenes.const import (
     AUTOMATICALLY_UPDATE_LIGHTS,
@@ -14,19 +18,20 @@ from custom_components.circadian_scenes.const import (
     VARIABLE_REF,
 )
 from custom_components.circadian_scenes.store import (
+    CircadianScenesStore,
+    _migrate_v3_to_v4,
     normalize_circadian_scene,
-    normalize_simple_scene,
     normalize_scene,
+    normalize_simple_scene,
     seed_default_theme,
     seed_variables,
-    _migrate_v3_to_v4,
     to_form_data,
 )
-
 
 # ---------------------------------------------------------------------------
 # Seed helpers
 # ---------------------------------------------------------------------------
+
 
 class TestSeedVariables:
     def test_creates_five_variables(self):
@@ -64,6 +69,7 @@ class TestSeedDefaultTheme:
 # Scene normalizers
 # ---------------------------------------------------------------------------
 
+
 class TestNormalizeCircadianScene:
     def test_minimal(self):
         item = normalize_circadian_scene({SCENE_NAME: "Living Room"})
@@ -76,10 +82,12 @@ class TestNormalizeCircadianScene:
         assert "id" in item
 
     def test_preserves_membership(self):
-        item = normalize_circadian_scene({
-            SCENE_NAME: "Office",
-            "membership": {"exclude": ["light.a"], "include": ["light.b"]},
-        })
+        item = normalize_circadian_scene(
+            {
+                SCENE_NAME: "Office",
+                "membership": {"exclude": ["light.a"], "include": ["light.b"]},
+            }
+        )
         assert item["membership"]["exclude"] == ["light.a"]
         assert item["membership"]["include"] == ["light.b"]
 
@@ -88,10 +96,12 @@ class TestNormalizeCircadianScene:
             normalize_circadian_scene({SCENE_NAME: "  "})
 
     def test_custom_theme_id(self):
-        item = normalize_circadian_scene({
-            SCENE_NAME: "X",
-            "theme_id": "warm_evening",
-        })
+        item = normalize_circadian_scene(
+            {
+                SCENE_NAME: "X",
+                "theme_id": "warm_evening",
+            }
+        )
         assert item["theme_id"] == "warm_evening"
 
 
@@ -105,7 +115,12 @@ class TestNormalizeSimpleScene:
 
     def test_lights_preserved(self):
         lights = {
-            "light.a": {"state": "on", "brightness": 128, "color_mode": "hs", "hs_color": [30, 80]},
+            "light.a": {
+                "state": "on",
+                "brightness": 128,
+                "color_mode": "hs",
+                "hs_color": [30, 80],
+            },
         }
         item = normalize_simple_scene({SCENE_NAME: "Warm", "lights": lights})
         assert item["lights"] == lights
@@ -129,13 +144,16 @@ class TestNormalizeSceneRouter:
 # to_form_data
 # ---------------------------------------------------------------------------
 
+
 class TestToFormData:
     def test_circadian(self):
-        item = normalize_circadian_scene({
-            SCENE_NAME: "Bed",
-            "theme_id": "cozy",
-            "area": "bedroom",
-        })
+        item = normalize_circadian_scene(
+            {
+                SCENE_NAME: "Bed",
+                "theme_id": "cozy",
+                "area": "bedroom",
+            }
+        )
         form = to_form_data(item)
         assert form["kind"] == KIND_CIRCADIAN
         assert form["theme_id"] == "cozy"
@@ -143,7 +161,9 @@ class TestToFormData:
         assert SCENE_DUSK_MINIMUM_TIME_OF_DAY in form
 
     def test_simple(self):
-        item = normalize_simple_scene({SCENE_NAME: "Party", "lights": {"light.a": {"state": "on"}}})
+        item = normalize_simple_scene(
+            {SCENE_NAME: "Party", "lights": {"light.a": {"state": "on"}}}
+        )
         form = to_form_data(item)
         assert form["kind"] == KIND_SIMPLE
         assert form["lights"] == {"light.a": {"state": "on"}}
@@ -153,6 +173,7 @@ class TestToFormData:
 # ---------------------------------------------------------------------------
 # v3 → v4 migration
 # ---------------------------------------------------------------------------
+
 
 class TestMigrateV3ToV4:
     def test_seeds_variables_and_themes(self):
@@ -188,3 +209,59 @@ class TestMigrateV3ToV4:
         assert len(result["variables"]) == 5
         assert "default" in result["themes"]
         assert result["scenes"] == []
+
+
+def _bare_store() -> CircadianScenesStore:
+    store = CircadianScenesStore.__new__(CircadianScenesStore)
+    store.variables = {}
+    store.themes = {}
+    store.scenes = {}
+    store.settings = {}
+    store.async_save = AsyncMock()
+    return store
+
+
+def test_delete_variable_rejects_circadian_override_reference():
+    async def run():
+        store = _bare_store()
+        store.variables = {"warm": {"id": "warm", "color": {"hs_color": [10, 20]}}}
+        store.scenes = {
+            "scene": {
+                "id": "scene",
+                "kind": KIND_CIRCADIAN,
+                SCENE_NAME: "Room",
+                "overrides": {
+                    "light.one": {"dawn": {VARIABLE_REF: "warm", "brightness": 100}}
+                },
+            }
+        }
+        with pytest.raises(HomeAssistantError, match="still referenced"):
+            await store.async_delete_variable("warm")
+        assert "warm" in store.variables
+
+    asyncio.run(run())
+
+
+def test_theme_event_shape_is_validated():
+    async def run():
+        store = _bare_store()
+        bad_events = {
+            event: {"color": {"hs_color": [0, 0]}, "brightness": 100}
+            for event in SOLAR_EVENTS
+        }
+        bad_events["dusk"] = {"color": {"hs_color": [0, 0]}, "brightness": "dim"}
+        with pytest.raises(ValueError, match="brightness must be a number"):
+            await store.async_upsert_theme({"name": "Bad", "events": bad_events})
+
+    asyncio.run(run())
+
+
+def test_scene_memory_rolls_back_when_save_fails():
+    async def run():
+        store = _bare_store()
+        store.async_save.side_effect = OSError("disk full")
+        with pytest.raises(OSError, match="disk full"):
+            await store.async_upsert({SCENE_NAME: "New"})
+        assert store.scenes == {}
+
+    asyncio.run(run())

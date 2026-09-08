@@ -19,7 +19,6 @@ from .const import (
     SCENE_NOON,
     SCENE_SUNRISE,
     SCENE_SUNSET,
-    SOLAR_EVENTS,
 )
 from .native_scene import (
     _WRITE_LOCK,
@@ -103,9 +102,7 @@ def freeze_scene_overrides(
     return updated
 
 
-async def async_delete_managed_yaml(
-    hass: HomeAssistant, config_ids: list[str]
-) -> int:
+async def async_delete_managed_yaml(hass: HomeAssistant, config_ids: list[str]) -> int:
     """Remove YAML scenes this integration created. User-authored scenes stay."""
     if not config_ids:
         return 0
@@ -116,9 +113,7 @@ async def async_delete_managed_yaml(
             current = await hass.async_add_executor_job(_read_scenes, path)
         except (FileNotFoundError, HomeAssistantError):
             return 0
-        updated = [
-            item for item in current if str(item.get(CONF_ID)) not in wanted
-        ]
+        updated = [item for item in current if str(item.get(CONF_ID)) not in wanted]
         removed = len(current) - len(updated)
         if removed:
             await hass.async_add_executor_job(_write_scenes, path, updated)
@@ -126,9 +121,7 @@ async def async_delete_managed_yaml(
         return removed
 
 
-async def async_freeze_migrate(
-    hass: HomeAssistant, store: CircadianScenesStore
-) -> int:
+async def async_freeze_migrate(hass: HomeAssistant, store: CircadianScenesStore) -> int:
     """Inline native scenes into the store and delete managed YAML.
 
     Returns the number of circadian configs that were rewritten.

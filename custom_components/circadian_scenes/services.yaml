@@ -19,7 +19,7 @@ turn_on:
       selector:
         number:
           min: 0
-          max: 1000
+          max: 6553
           step: 1
           unit_of_measurement: "s"
           mode: slider

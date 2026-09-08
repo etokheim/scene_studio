@@ -21,7 +21,7 @@ from homeassistant.util.file import write_utf8_file_atomic
 from homeassistant.util.yaml import dump, load_yaml
 
 # Avoid circular import of DOMAIN store at module load — resolve via hass.data.
-from .const import DATA_STORE, DOMAIN
+from .const import DATA_STORE, DEFAULT_VARIABLE_COLORS, DOMAIN
 from .solar import EVENT_META, EVENT_ORDER
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,13 +77,7 @@ _EVENT_ICON = {event_id: icon for event_id, _label, icon in EVENT_META}
 # Circadian starting points: cool/bright by day, warm/dim in the evening.
 # Brightness is HA scene scale 0–255. Kelvin is the intent; HS-only lamps
 # get the same temperature converted.
-EVENT_LIGHT_DEFAULTS = {
-    "dawn": (102, 2700),
-    "sunrise": (191, 3500),
-    "noon": (255, 4500),
-    "sunset": (179, 3000),
-    "dusk": (64, 2200),
-}
+EVENT_LIGHT_DEFAULTS = DEFAULT_VARIABLE_COLORS
 _HS_MODES = frozenset({"hs", "xy", "rgb", "rgbw", "rgbww"})
 
 
