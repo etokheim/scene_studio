@@ -23,7 +23,9 @@ const HUE_PATH_STEPS = 72;
 const HUE_PATH_HS_DEG_PER_STEP = 2.5;
 const HUE_PATH_HS_SAT_EPS = 0.03;
 const WHEEL_PEEK_FRAC = 0.1;
-const WHEEL_MIXED_INNER_FRAC = 0.62;
+/* Mixed stack: kelvin ring is 25% of the old 38% band (62% inner); that
+   75% of ring width is given to the color disk. */
+const WHEEL_MIXED_INNER_FRAC = 0.62 + (1 - 0.62) * 0.75;
 const WHEEL_MIXED_GAP_FRAC = 0;
 const _hueWheelImageCache = new Map();
 
@@ -2225,7 +2227,13 @@ function createSceneColorWheel({
     const { scenes, activeId } = getState();
     const geom = radius
       ? currentGeom()
-      : wheelStackGeom(1, pinStackKind(scenes, hasColor, hasTemp, capsOf), 0.1, 0.62, 0);
+      : wheelStackGeom(
+          1,
+          pinStackKind(scenes, hasColor, hasTemp, capsOf),
+          WHEEL_PEEK_FRAC,
+          WHEEL_MIXED_INNER_FRAC,
+          WHEEL_MIXED_GAP_FRAC
+        );
     layoutLayers(geom);
     const seen = new Set();
     for (const scene of scenes) {

@@ -2485,7 +2485,7 @@ class CircadianScenesPanel extends HTMLElement {
           align-items: stretch;
           gap: 16px;
           --wheel-peek: 10%;
-          --wheel-mixed-inner: 62%;
+          --wheel-mixed-inner: 90.5%;
           --wheel-mixed-gap: 0%;
         }
         .hue-wheel-canvas {
