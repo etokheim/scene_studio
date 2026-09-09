@@ -1076,18 +1076,16 @@ function placeColorInAnnulus(hue, saturation, inner, outer) {
 
 function placeTempInAnnulus(kelvin, inner, outer, tempMin, tempMax) {
   const coords = coordinatesForTemp(kelvin, outer, tempMin, tempMax);
-  let x = coords.x;
-  let y = coords.y;
-  const r = Math.hypot(x, y);
-  if (inner > 0 && r < inner) {
-    const maxY = Math.max(0, inner - 0.5);
-    y = Math.max(-maxY, Math.min(maxY, y));
-    x = Math.sqrt(Math.max(0, inner * inner - y * y));
-  } else if (r > outer && r > 0) {
-    const scale = outer / r;
-    x *= scale;
-    y *= scale;
+  if (!(inner > 0)) {
+    return { x: coords.x, y: coords.y };
   }
+  // Resting pins sit on the band centerline (not the inner rim). Drag still
+  // samples the full annulus via limitToAnnulus.
+  const mid = (inner + outer) / 2;
+  let y = coords.y;
+  const maxY = Math.max(0, mid - 0.5);
+  y = Math.max(-maxY, Math.min(maxY, y));
+  const x = Math.sqrt(Math.max(0, mid * mid - y * y));
   return { x, y };
 }
 

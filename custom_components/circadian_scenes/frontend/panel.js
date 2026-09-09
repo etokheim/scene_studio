@@ -1503,13 +1503,13 @@ class CircadianScenesPanel extends HTMLElement {
           fill: transparent;
         }
         .clock-horizon-sky .clock-sky-night {
-          /* Sunset→sunrise shadow (outer night). ~15% so day/night wash stays
-             quiet; sunrise/sunset conic on .clock-horizon-glow is unchanged. */
-          fill: color-mix(in srgb, var(--clock-night-outer) 15%, transparent);
+          /* Sunset→sunrise shadow (outer night). Half prior mix so day/night
+             fill stays readable; day/night *glow* is the conic opacity, not this. */
+          fill: color-mix(in srgb, var(--clock-night-outer) 36%, transparent);
         }
         .clock-horizon-sky .clock-sky-deep {
           /* Dusk→dawn wrap (deeper band). */
-          fill: color-mix(in srgb, var(--clock-night-deep) 15%, transparent);
+          fill: color-mix(in srgb, var(--clock-night-deep) 39%, transparent);
         }
         .sun-light-clock-overlay .clock-sun-day {
           fill: none;
@@ -13619,6 +13619,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (sunrise == null && sunset == null) {
       this._horizonGlowCacheKey = null;
       el.style.background = "transparent";
+      el.style.opacity = "";
       if (this._clockSkyDayEl) {
         this._clockSkyDayEl.setAttribute("fill", "transparent");
       }
@@ -13658,6 +13659,10 @@ class CircadianScenesPanel extends HTMLElement {
       );
     }
     el.style.background = `conic-gradient(from 180deg, ${stops.join(", ")})`;
+    // Quiet day/night blue rim wash; keep civil-twilight gold→pink at full
+    // strength (do not blanket-dim the conic — that washed out sunrise/sunset).
+    const fancy = Math.max(0, 1 - Math.abs(elev) / 6);
+    el.style.opacity = String(0.15 + 0.85 * fancy);
 
     // Day wedge (sunrise→sunset): crispy sky blue in light; elevation sky in dark.
     const dayEl = this._clockSkyDayEl;
@@ -13665,9 +13670,9 @@ class CircadianScenesPanel extends HTMLElement {
       // Bridge civil twilight so fill alpha does not jump at elev=0.
       const twilight =
         elev >= 0 ? 1 : Math.min(1, Math.max(0, (elev + 6) / 6));
-      // Peak ~15% at noon; quieter toward the horizon. Sunrise/sunset color
-      // lives on .clock-horizon-glow, not this wedge.
-      const dayAlpha = (0.16 + 0.26 * twilight + 0.38 * climb) * (0.15 / 0.8);
+      // Half of the prior peak (~80%) so the sky fill stays visible; glow
+      // opacity above is what quiets noon/midnight blue.
+      const dayAlpha = (0.16 + 0.26 * twilight + 0.38 * climb) * 0.5;
       dayEl.setAttribute(
         "fill",
         `color-mix(in srgb, ${daySky} ${Math.round(dayAlpha * 100)}%, transparent)`
