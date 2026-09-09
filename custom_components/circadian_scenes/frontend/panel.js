@@ -1603,7 +1603,8 @@ class CircadianScenesPanel extends HTMLElement {
           vector-effect: non-scaling-stroke;
           stroke-linecap: round;
           stroke-linejoin: round;
-          opacity: 0.88;
+          /* Hint, not a second rim — quieter than time-override chrome. */
+          opacity: 0.32;
         }
         .clock-brightness-overlay .clock-brightness-fill {
           pointer-events: none;
@@ -14664,8 +14665,8 @@ class CircadianScenesPanel extends HTMLElement {
     const innerPct = (r0 / r1) * 100;
     mk("0%", 0);
     mk(`${innerPct.toFixed(2)}%`, 0);
-    mk(`${Math.min(100, innerPct + (100 - innerPct) * 0.55).toFixed(2)}%`, 0.1);
-    mk("100%", 0.24);
+    mk(`${Math.min(100, innerPct + (100 - innerPct) * 0.55).toFixed(2)}%`, 0.035);
+    mk("100%", 0.08);
     const polar = (seconds, radius) => {
       const deg = this._clockAngleDeg(seconds);
       const rad = ((deg - 90) * Math.PI) / 180;
