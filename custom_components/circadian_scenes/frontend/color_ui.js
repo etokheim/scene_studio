@@ -849,6 +849,154 @@ function polylinePathD(pts) {
     .join(" ");
 }
 
+const GRAPH_DAY_SECONDS = 24 * 3600;
+
+function easeInOutCubic(t) {
+  const x = Math.max(0, Math.min(1, Number(t) || 0));
+  return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
+}
+
+function wrapDaySeconds(seconds) {
+  return (
+    ((Number(seconds) % GRAPH_DAY_SECONDS) + GRAPH_DAY_SECONDS) %
+    GRAPH_DAY_SECONDS
+  );
+}
+
+function unwrapSegmentSeconds(fromSec, toSec) {
+  const from = wrapDaySeconds(fromSec);
+  let to = wrapDaySeconds(toSec);
+  if (to <= from) {
+    to += GRAPH_DAY_SECONDS;
+  }
+  return { from, to, span: to - from };
+}
+
+function stepsForClockSpan(span) {
+  return Math.max(8, Math.min(36, Math.round(span / 600) || 8));
+}
+
+/**
+ * Closed brightness loop in clock space: seconds (angle) stay linear around
+ * the wrap; brightness eases in/out between knots. Do not spline Cartesian
+ * button positions — that chords through the dial at dusk→dawn.
+ */
+function polarEaseClosedPathD(knots, pointAt) {
+  if (!knots?.length) {
+    return "";
+  }
+  if (knots.length === 1) {
+    const pt = pointAt(knots[0].seconds, knots[0].bri);
+    return `M${pt.x.toFixed(2)} ${pt.y.toFixed(2)}`;
+  }
+  const pts = [];
+  const n = knots.length;
+  for (let i = 0; i < n; i += 1) {
+    const from = knots[i];
+    const to = knots[(i + 1) % n];
+    const { from: a, span } = unwrapSegmentSeconds(from.seconds, to.seconds);
+    const steps = stepsForClockSpan(span);
+    for (let step = 0; step < steps; step += 1) {
+      const t = step / steps;
+      const bri = from.bri + (to.bri - from.bri) * easeInOutCubic(t);
+      pts.push(pointAt(wrapDaySeconds(a + span * t), bri));
+    }
+  }
+  if (pts.length < 2) {
+    return "";
+  }
+  return `${pts
+    .map(
+      (pt, index) =>
+        `${index ? "L" : "M"}${pt.x.toFixed(2)} ${pt.y.toFixed(2)}`
+    )
+    .join(" ")} Z`;
+}
+
+function easeGraphRuns(knots, { closed = true } = {}) {
+  const n = knots.length;
+  if (n === 1) {
+    return [[{ sec: wrapDaySeconds(knots[0].seconds), bri: knots[0].bri }]];
+  }
+  if (n < 2) {
+    return [];
+  }
+  const runs = [];
+  let run = [];
+  const flush = () => {
+    if (run.length) {
+      runs.push(run);
+      run = [];
+    }
+  };
+  const segCount = closed ? n : n - 1;
+  for (let i = 0; i < segCount; i += 1) {
+    const from = knots[i];
+    const to = knots[(i + 1) % n];
+    const { from: a, span } = unwrapSegmentSeconds(from.seconds, to.seconds);
+    const steps = stepsForClockSpan(span);
+    const start = i === 0 ? 0 : 1;
+    for (let step = start; step <= steps; step += 1) {
+      const t = step / steps;
+      const unwrapped = a + span * t;
+      const bri = from.bri + (to.bri - from.bri) * easeInOutCubic(t);
+      const sec =
+        unwrapped >= GRAPH_DAY_SECONDS
+          ? unwrapped - GRAPH_DAY_SECONDS
+          : unwrapped;
+      if (run.length && sec + 1 < run[run.length - 1].sec) {
+        const tMid = (GRAPH_DAY_SECONDS - a) / span;
+        const briMid = from.bri + (to.bri - from.bri) * easeInOutCubic(tMid);
+        run.push({ sec: GRAPH_DAY_SECONDS, bri: briMid });
+        flush();
+        run.push({ sec: 0, bri: briMid });
+      }
+      if (!(run.length && sec === 0 && run[run.length - 1].sec === 0)) {
+        run.push({ sec, bri });
+      }
+    }
+  }
+  flush();
+  return runs;
+}
+
+function easeDayGraphPathD(knots, xOfSec, yOfBri, plotBottom) {
+  const runs = easeGraphRuns(knots, { closed: knots.length > 1 });
+  if (!runs.length) {
+    return { stroke: "", fill: "" };
+  }
+  const stroke = runs
+    .map((pts) =>
+      pts
+        .map((pt, index) => {
+          const x = xOfSec(pt.sec).toFixed(1);
+          const y = yOfBri(pt.bri).toFixed(1);
+          return `${index ? "L" : "M"}${x} ${y}`;
+        })
+        .join(" ")
+    )
+    .join(" ");
+  const fill = runs
+    .map((pts) => {
+      if (pts.length < 2) {
+        return "";
+      }
+      const firstX = xOfSec(pts[0].sec).toFixed(1);
+      const lastX = xOfSec(pts[pts.length - 1].sec).toFixed(1);
+      const top = pts
+        .map((pt, index) => {
+          const x = xOfSec(pt.sec).toFixed(1);
+          const y = yOfBri(pt.bri).toFixed(1);
+          return `${index ? "L" : "M"}${x} ${y}`;
+        })
+        .join(" ");
+      return `${top} L${lastX} ${plotBottom.toFixed(1)} L${firstX} ${plotBottom.toFixed(1)} Z`;
+    })
+    .filter(Boolean)
+    .join(" ");
+  return { stroke, fill };
+}
+
 /** Uniform Catmull-Rom → cubic Bezier path (cosmetic stroke only). */
 function catmullRomPathD(pts) {
   if (pts.length < 2) {
@@ -1301,10 +1449,8 @@ function createLightBrightnessGraph({
     gradient.setAttribute("x2", String(PAD_L + plotW));
   };
 
-  const xOf = (seconds, minS, maxS) => {
-    const span = maxS - minS || 1;
-    return PAD_L + ((seconds - minS) / span) * plotW;
-  };
+  const xOf = (seconds) =>
+    PAD_L + (wrapDaySeconds(seconds) / GRAPH_DAY_SECONDS) * plotW;
   const yOf = (brightness) =>
     PAD_T + PLOT_H * (1 - Math.max(0, Math.min(255, brightness)) / 255);
   const brightnessFromY = (clientY) => {
@@ -1319,12 +1465,14 @@ function createLightBrightnessGraph({
 
   /** Keep dots on true time; stagger / nudge labels when names would collide. */
   const layoutHandleLabels = (coords) => {
-    const laid = coords.map((c) => ({
+    const laid = coords.map((c, index) => ({
+      index,
       x: c.x,
       y: LABEL_Y0,
       w: estimateLabelWidth(c.point.name),
       name: c.point.name,
     }));
+    laid.sort((a, b) => a.x - b.x);
     const overlaps = (a, b) =>
       a.y === b.y && Math.abs(a.x - b.x) < (a.w + b.w) / 2 + LABEL_GAP;
     for (let i = 1; i < laid.length; i++) {
@@ -1352,7 +1500,11 @@ function createLightBrightnessGraph({
       const half = item.w / 2;
       item.x = Math.max(PAD_L + half, Math.min(PAD_L + plotW - half, item.x));
     }
-    return laid;
+    const out = new Array(coords.length);
+    for (const item of laid) {
+      out[item.index] = item;
+    }
+    return out;
   };
 
   const unbindWindowDrag = () => {
@@ -1404,19 +1556,17 @@ function createLightBrightnessGraph({
       curve.setAttribute("d", "");
       return [];
     }
-    const minS = points[0].seconds;
-    const maxS = points[points.length - 1].seconds;
-    const span = Math.max(maxS - minS, 1);
+    const plotBottom = PAD_T + PLOT_H;
     if (members.length === 1) {
       appendGradientStop(0, members[0].rgb);
       appendGradientStop(100, members[0].rgb);
     } else if (members.length > 1) {
-      // Sample mid-segment colors like the wheel path (cheap: ~8 × segments).
-      for (let index = 0; index < members.length - 1; index += 1) {
+      const stops = [];
+      const n = members.length;
+      for (let index = 0; index < n; index += 1) {
         const from = members[index];
-        const to = members[index + 1];
-        const fromOff = ((from.seconds - minS) / span) * 100;
-        const toOff = ((to.seconds - minS) / span) * 100;
+        const to = members[(index + 1) % n];
+        const { from: a, span } = unwrapSegmentSeconds(from.seconds, to.seconds);
         for (let step = 0; step <= GRADIENT_STEPS_PER_SEGMENT; step += 1) {
           if (index > 0 && step === 0) {
             continue;
@@ -1432,44 +1582,44 @@ function createLightBrightnessGraph({
                     Math.round(from.rgb[2] + (to.rgb[2] - from.rgb[2]) * t),
                   ],
                 };
-          appendGradientStop(fromOff + (toOff - fromOff) * t, sample.rgb);
+          const sec = wrapDaySeconds(a + span * t);
+          stops.push({
+            offset: (sec / GRAPH_DAY_SECONDS) * 100,
+            rgb: sample.rgb,
+          });
         }
+      }
+      stops.sort((left, right) => left.offset - right.offset);
+      for (const stop of stops) {
+        appendGradientStop(stop.offset, stop.rgb);
       }
     }
     if (members.length) {
-      const memberCoords = members.map((point) => ({
-        x: xOf(point.seconds, minS, maxS),
-        y: yOf(point.brightness),
+      const knots = members.map((point) => ({
+        seconds: point.seconds,
+        bri: point.brightness,
       }));
-      const top =
-        memberCoords.length >= 3
-          ? catmullRomPathD(memberCoords)
-          : memberCoords
-              .map(
-                (c, i) =>
-                  `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`
-              )
-              .join(" ");
-      const area = `${top} L${memberCoords[memberCoords.length - 1].x.toFixed(
-        1
-      )},${(PAD_T + PLOT_H).toFixed(1)} L${memberCoords[0].x.toFixed(1)},${(
-        PAD_T + PLOT_H
-      ).toFixed(1)} Z`;
-      fillArea.setAttribute("d", area);
-      curve.setAttribute("d", top);
+      const { stroke, fill } = easeDayGraphPathD(
+        knots,
+        xOf,
+        yOf,
+        plotBottom
+      );
+      fillArea.setAttribute("d", fill);
+      curve.setAttribute("d", stroke);
     } else {
       fillArea.setAttribute("d", "");
       curve.setAttribute("d", "");
     }
     return points.map((point) => ({
-      x: xOf(point.seconds, minS, maxS),
-      y: point.member ? yOf(point.brightness) : PAD_T + PLOT_H,
+      x: xOf(point.seconds),
+      y: point.member ? yOf(point.brightness) : plotBottom,
       point,
     }));
   };
 
   const syncDragVisual = () => {
-    const points = [...getPoints()].sort((a, b) => a.seconds - b.seconds);
+    const points = [...getPoints()];
     const coords = paintGeometry(points);
     for (const node of handlesLayer.querySelectorAll(".handle")) {
       const match = coords.find((c) => c.point.eventId === node.dataset.eventId);
@@ -1526,7 +1676,7 @@ function createLightBrightnessGraph({
       syncDragVisual();
       return;
     }
-    const points = [...getPoints()].sort((a, b) => a.seconds - b.seconds);
+    const points = [...getPoints()];
     handlesLayer.replaceChildren();
     const coords = paintGeometry(points);
     if (!points.length) {
@@ -2561,6 +2711,7 @@ export {
   polylinePathD,
   catmullRomPathD,
   closedCatmullRomPathD,
+  polarEaseClosedPathD,
   huePathStrokeD,
   hueColorAt,
   hueTempAt,

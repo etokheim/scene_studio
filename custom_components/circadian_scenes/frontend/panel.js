@@ -13,7 +13,7 @@ import {
   setWhiteBrightnessOnDraft,
   createLightBrightnessGraph,
   createSceneColorWheel,
-  closedCatmullRomPathD,
+  polarEaseClosedPathD,
   medianNumber,
   circularMeanHue,
   lightDraftFingerprint,
@@ -14675,10 +14675,9 @@ class CircadianScenesPanel extends HTMLElement {
       };
     };
     const radiusOf = (bri) => r0 + (bri / 255) * (r1 - r0);
-    const outerPts = knots.map((knot) =>
-      polar(knot.seconds, radiusOf(knot.bri))
+    const strokeD = polarEaseClosedPathD(knots, (seconds, bri) =>
+      polar(seconds, radiusOf(bri))
     );
-    const strokeD = closedCatmullRomPathD(outerPts);
     const innerCircle = `M ${(50 + r0).toFixed(2)} 50 A ${r0.toFixed(2)} ${r0.toFixed(
       2
     )} 0 1 0 ${(50 - r0).toFixed(2)} 50 A ${r0.toFixed(2)} ${r0.toFixed(
