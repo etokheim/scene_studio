@@ -148,8 +148,9 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Editor and list titles use HA friendly_name
 
 - **Date:** 2026-09-01
-- **Decision:** Extrapolation list rows and the editor app-bar title (plus delete confirm) prefer `hass.states[entity_id].attributes.friendly_name`, falling back to stored `scene_name`. Do not show the raw store name when the entity already has a friendly name.
-- **Why:** Rename / registry edits update the entity name; the store copy can lag and looked wrong in the header the same way the list used to.
+- **Decision:** Extrapolation list rows and delete confirm prefer `hass.states[entity_id].attributes.friendly_name`, falling back to stored `scene_name`. The app-bar title is the integration name except on narrow layouts with a back button (scene or theme editor), where it is that scene/theme name.
+- **Why:** Rename / registry edits update the entity name; the store copy can lag. Desktop already has the scene in the rail; repeating it in the header hid the integration name.
+- **Superseded in part:** 2026-09-09 — wide layouts always show “Circadian Scenes”; mobile editors keep the selected name beside Back.
 - **Do not reverse without user ask.**
 - **Superseded in part:** 2026-08-26 — event and light editors use the automation-style sidebar, not a centered `ha-dialog`.
 - **Superseded in part:** 2026-08-26 — picker / dusk / link changes apply to the graphs immediately. Close keeps them; there is no Done. YAML is still only written on Save of the extrapolation scene.
@@ -283,7 +284,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-08-26
 - **Superseded in part:** 2026-08-30 — editor Save FAB appears only while the session is dirty; fades/scales with `.is-hidden` (not UA `[hidden]` display:none) so show/hide matches HA fab motion. New scenes open the save dialog; existing scenes save immediately. Name / area / metadata edits go through overflow → Rename/settings.
 - **Superseded in part:** 2026-08-30 — Save FAB is always shown on `#new` (create is unsaved until the first successful save, even when the post-wizard form matches the session baseline). Existing scenes still show Save only while dirty.
-- **Decision:** List and editor use a corner overlay (`position: absolute` sibling of `ha-top-app-bar-fixed`, same offsets as hass-subpage `#fab`) with `ha-button size="l" variant="brand" appearance="accent"`. List label is “New extrapolation scene”; editor Save shows only when dirty. Do not use `ha-fab` — it is not registered in this frontend.
+- **Superseded in part:** 2026-09-09 — no Save FAB and no Variables & themes FAB (library is a rail section). List/editor FAB is unused; edits autosave.
+- **Decision:** List and editor use a corner overlay (`position: absolute` sibling of `ha-top-app-bar-fixed`, same offsets as hass-subpage `#fab`) with `ha-button size="l" variant="brand" appearance="accent"` when a FAB is shown. Do not use `ha-fab` — it is not registered in this frontend.
 - **Why:** Automations create with that button in the `#fab` slot. `ha-top-app-bar-fixed` has no fab slot, so the overlay has to sit beside the app bar. Hiding a clean Save matches HA’s dirty-only create/save pattern.
 - **Do not reverse without user ask.**
 
@@ -344,8 +346,9 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-29
 - **Superseded in part:** 2026-08-29 — leaving with a dirty session writes `localStorage` and does not prompt. See “Buffer unsaved edits in local storage”.
-- **Decision:** Create/edit keeps an in-memory undo stack of full session snapshots (`form` + native drafts), limit 75, same as HA’s `UndoRedoController`. Commit the previous snapshot immediately before each discrete change (scene pick, create/rename/delete native, first light-edit in a sidebar open, remove-light, form fields). No debounce. Toolbar `mdi:undo` / `mdi:redo` on wide layouts; overflow items when `narrow`. Shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y. Skip when the focused node is an input / textarea / select / contenteditable. Undo closes the sidebar. Creating a native scene writes YAML immediately (undo only unassigns it). Other native drafts and the store write on the extrapolation Save.
-- **Why:** Users already know this from Settings → Automations. Buffering rename / delete / light edits until Save is what makes those undoable. Create cannot stay a draft because the native picker needs a real entity.
+- **Decision:** Edits write immediately (debounced ~250ms): native YAML via `apply_native_drafts`, the store scene via `save`, themes via `save_theme`. There is no Save FAB. Undo/redo is one global stack (limit 75) across all scenes and themes, available on the list with no scene selected. Each entry stores before/after session snapshots plus the view target and sidebar focus; undo/redo navigates there and reopens that sidebar. Commit the previous snapshot before each discrete change. Shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y (skip input / textarea / select / contenteditable). Creating a native scene still writes YAML immediately (undo only unassigns it).
+- **Why:** Immediate save keeps cards and other scenes in sync while you edit. Global undo is the replacement for a Save/Discard buffer.
+- **Superseded in part:** 2026-09-09 — no extrapolation Save button; stacks are not cleared when leaving a scene; list/theme/narrow editor show undo in the app bar.
 - **Do not reverse without user ask.**
 
 ## Buffer unsaved edits in local storage
@@ -353,7 +356,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-08-29
 - **Superseded in part:** 2026-08-30 — leaving the editor with an unsaved new scene or a dirty existing session prompts Keep editing / Discard (same dialog as draft discard). Discard clears the local draft; Keep cancels navigation. `localStorage` buffering remains for refresh / remount.
 - **Superseded in part:** 2026-09-01 — `#new` restore must not compare the stored baseline to the post-refresh empty form (there is no server entity). Reapply `session` and reinstall `baseline` from the buffer so Discard / dirty match the pre-refresh session; only drop when session ≡ baseline. Existing scenes still drop when the stored baseline no longer matches the loaded server form.
-- **Decision:** Persist the dirty session (`form` + native drafts, plus the server baseline) in `localStorage` under `circadian_scenes.draft.v1.<user>.<sceneId|new>`. Write on a short debounce and on hide/leave. Loading that scene reapplies the draft and shows a top-of-page banner; Discard restores the baseline and deletes the key. An X on the banner hides it for this visit only (in-memory; comes back after a full refresh / remount). Save and delete clear it. If the stored baseline no longer matches the server form, drop the draft (do not overlay it). Do not persist undo/redo stacks. Light-edit sidebar edits are session native drafts (same store), not a nested buffer. Isolate by `hass.user.id`.
+- **Decision:** Persist the dirty session (`form` + native drafts, plus the server baseline) in `localStorage` under `circadian_scenes.draft.v1.<user>.<sceneId|new>` as a refresh safety net. Immediate save is the primary path; the banner remains if a tab dies mid-debounce. Do not persist undo/redo stacks. Isolate by `hass.user.id`.
+- **Superseded in part:** 2026-09-09 — leaving the editor flushes `_saveNow` instead of prompting; undo is global and survives navigation.
 - **Why:** Refresh, a closed tab, or going back to the list was dropping work that had not reached YAML yet. The banner makes the restore obvious and gives a way back to the saved scene. A stale baseline means someone already saved a newer copy.
 - **Do not reverse without user ask.**
 
@@ -381,7 +385,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Superseded in part:** 2026-08-29 — view toggle is a single app-bar button labeled `Table view` / `Dial view` (destination); location pin shares the header.
 - **Superseded in part:** 2026-08-30 — on narrow, location preview and Table/Dial view move into the overflow menu (with undo/redo); Live edit stays in the app bar. Wide layouts keep the header buttons.
 - **Superseded in part:** 2026-08-29 — dial orientation: midnight at the bottom, noon at the top (`_clockAngleDeg` +180°; light rings `conic-gradient(from 180deg)`).
-- **Superseded in part:** 2026-08-29 — horizon polish on the planet dial: elev=0 path sits **outside** the light rings (planet no longer occludes the sun); “below horizon” is the sunrise→sunset day wedge (SVG fill clip + dark-blue night disc); glow ramp along that sundown→sunrise shadow; face ~`min(100%, 100vh)` full-width; events at the container edge; **drag** the sun to scrub with sticky preview (no face hover scrub).
+- **Superseded in part:** 2026-09-09 — day/night sky wedges (`.clock-sky-day` fill alpha, `.clock-sky-night` / `.clock-sky-deep` mixes) are half as opaque as before; the sunrise/sunset conic on `.clock-horizon-glow` keeps the same spectrum RGB.
 - **Superseded in part:** 2026-08-29 — horizon glow + solar-event shadow (wedges/rays/spokes) paint in a back layer that bleeds past the face (not clipped to the planet); night sun disc is **black**; sun is ~⅓ prior size with a center→tip hour handle gapping through it; dial hour labels 10px / 14px (≥871px); 15-minute ticks (2px majors at 6h, 1px otherwise); canvas allows touch pan — only sun/handle use `touch-action: none`.
 - **Superseded in part:** 2026-08-30 — hour labels are HTML (fixed 10/14px, not SVG text); tick strokes stay CSS-px via `vector-effect: non-scaling-stroke`; labels every 2h; ticks every 7.5 minutes (still 2px only at 6h).
 - **Superseded in part:** 2026-08-30 — sun rides the drawn path radius (no inset marker track); scale is 2× from sunset→sunrise then eases to 1× at zenith (grows again toward sunset); sunset→sunrise night wedges are darker.

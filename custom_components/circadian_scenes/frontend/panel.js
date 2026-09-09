@@ -42,7 +42,7 @@ import {
   easeOutCubic,
   lerpSunPath,
 } from "./dial_clock.js";
-import { LANDING_CSS, renderLanding } from "./landing.js";
+import { LANDING_CSS, renderLanding, applyRampBackground } from "./landing.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor } from "./simple_editor.js";
 
@@ -239,6 +239,8 @@ class CircadianScenesPanel extends HTMLElement {
     this._themeId = null;
     this._themeDraft = null;
     this._themeSaveTimer = null;
+    this._saveSoonTimer = null;
+    this._historyRestoring = false;
     this._items = [];
     this._managedScenes = [];
     this._variables = [];
@@ -334,8 +336,8 @@ class CircadianScenesPanel extends HTMLElement {
     });
     // Registry/friendly_name can change while the editor is open — keep the
     // app-bar title in sync (same source as the list rows).
-    if (this._built && this._view === "edit" && this._editId && this._headerEl) {
-      this._headerEl.textContent = this._editorSceneTitle();
+    if (this._built && this._headerEl) {
+      this._syncAppBarTitle();
     }
     if (!this._built && this.isConnected) {
       this._build();
@@ -350,8 +352,17 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._menuButtonEl) {
       this._menuButtonEl.narrow = Boolean(value);
     }
-    if (this._built && this._view === "edit") {
-      this._setEditorActions();
+    if (this._built) {
+      this._syncAppBarTitle();
+      if (this._view === "edit" || this._view === "theme" || this._view === "list") {
+        if (this._view === "edit") {
+          this._setEditorActions();
+        } else if (this._view === "theme") {
+          this._setEditorActions();
+        } else {
+          this._setListActions();
+        }
+      }
     }
   }
 
@@ -1488,12 +1499,14 @@ class CircadianScenesPanel extends HTMLElement {
           fill: transparent;
         }
         .clock-horizon-sky .clock-sky-night {
-          /* Sunset→sunrise shadow (outer night). */
-          fill: color-mix(in srgb, var(--clock-night-outer) 72%, transparent);
+          /* Sunset→sunrise shadow (outer night). Half prior mix so day/night
+             wash is quieter; sunrise/sunset conic on .clock-horizon-glow is
+             unchanged. */
+          fill: color-mix(in srgb, var(--clock-night-outer) 36%, transparent);
         }
         .clock-horizon-sky .clock-sky-deep {
           /* Dusk→dawn wrap (deeper band). */
-          fill: color-mix(in srgb, var(--clock-night-deep) 78%, transparent);
+          fill: color-mix(in srgb, var(--clock-night-deep) 39%, transparent);
         }
         .sun-light-clock-overlay .clock-sun-day {
           fill: none;
@@ -4527,10 +4540,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._parkSunPath();
     this._sunPath = null;
     this._sunPathKey = undefined;
-    this._headerEl.textContent = this._t(
-      "frontend.title",
-      "Circadian Scenes"
-    );
+    this._syncAppBarTitle();
     this._setNavigationIcon(
       this._view === "variables" ? this._backButton() : this._menuButton()
     );
@@ -4543,7 +4553,7 @@ class CircadianScenesPanel extends HTMLElement {
       error.className = "error";
       error.textContent = this._error;
       this._contentEl.replaceChildren(error);
-      this._setActionItems(this._listSettingsButton());
+      this._setListActions();
       this._setFab(null);
       return;
     }
@@ -4555,25 +4565,13 @@ class CircadianScenesPanel extends HTMLElement {
       this._mountPageBanners(stage);
     }
     this._syncWorkspaceScrollport();
-    this._setActionItems(this._listSettingsButton());
-    if (this._narrow && this._view === "list") {
-      this._setFab(this._variablesButton());
-    } else {
-      this._setFab(null);
-    }
-  }
-
-  _variablesButton() {
-    return this._fabButton(
-      this._t("frontend.library.title", "Variables & themes"),
-      "mdi:palette",
-      () => this._go("variables")
-    );
+    this._setListActions();
+    this._setFab(null);
   }
 
   _noteSimpleDirty() {
     this._sessionDirty = true;
-    this._syncSaveFab();
+    this._saveSoon();
   }
 
   async _autoConfigure() {
@@ -4918,9 +4916,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._headerEl) {
       return;
     }
-    this._headerEl.textContent =
-      this._themeDraft?.name ||
-      this._t("frontend.library.themes", "Circadian themes");
+    this._syncAppBarTitle();
     this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
     this._lightView = "dial";
     this._setEditorActions();
@@ -4971,8 +4967,6 @@ class CircadianScenesPanel extends HTMLElement {
       if (this._view === "theme") {
         this._themeId = saved.id;
         this._sessionBaseline = this._snapshotSession();
-        this._undoStack = [];
-        this._redoStack = [];
         this._syncUndoButtons();
         this._syncSaveFab();
         if (this._headerEl) {
@@ -5010,11 +5004,8 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _queueThemeSave() {
-    window.clearTimeout(this._themeSaveTimer);
-    this._themeSaveTimer = window.setTimeout(() => {
-      this._themeSaveTimer = null;
-      void this._saveThemeFromScene();
-    }, 400);
+    this._patchDialFromSession({ applyTheme: true });
+    this._saveSoon();
   }
 
   async _saveThemeFromScene() {
@@ -5173,6 +5164,51 @@ class CircadianScenesPanel extends HTMLElement {
     this._drawSunPath();
   }
 
+  _patchDialFromSession({ applyTheme = false } = {}) {
+    if (this._view === "theme") {
+      this._rebuildThemeDial();
+      return;
+    }
+    if (this._view !== "edit" || !this._sunPath?.lights || !this._sunPath?.events) {
+      return;
+    }
+    const events = this._sunPath.events;
+    const lights = this._sunPath.lights.map((light) => {
+      if (light.suggested || light.theme_ring) {
+        return light;
+      }
+      const event_states = (light.event_states || []).map((row) => {
+        const sceneId = row.scene_entity_id;
+        const drafted = this._nativeDrafts[sceneId]?.entities?.[light.entity_id];
+        if (drafted) {
+          return { ...row, present: true, state: drafted };
+        }
+        if (this._nativeDrafts[sceneId]?.entities?.[light.entity_id] === null) {
+          return { ...row, present: false, state: null };
+        }
+        const overridden = this._formData?.overrides?.[light.entity_id]?.[row.event];
+        if (applyTheme && !overridden && this._themeDraft && row.event) {
+          return {
+            ...row,
+            present: true,
+            state: this._themeEventDraft(row.event),
+          };
+        }
+        return row;
+      });
+      return { ...light, event_states };
+    });
+    this._sunPath = {
+      ...this._sunPath,
+      lights: resampleLightsForEvents(lights, events, draftRgb, {
+        intermediatesPerSegment: 5,
+      }),
+    };
+    if (!this._patchLightClock(this._sunPath)) {
+      this._drawSunPath();
+    }
+  }
+
   async _toggleThemeEventSidebar(event) {
     if (!(await this._ensureThemeDraft())) {
       this._error = this._t("frontend.library.theme_missing", "Theme not found");
@@ -5211,11 +5247,7 @@ class CircadianScenesPanel extends HTMLElement {
         wheelCtl?.disconnect();
         this._setSidebarEvent(null);
         this._setSidebarLight(null);
-        if (this._view === "edit" && this._themeSaveTimer) {
-          window.clearTimeout(this._themeSaveTimer);
-          this._themeSaveTimer = null;
-          void this._saveThemeFromScene();
-        }
+        void this._saveNow();
       },
     });
     if (!opened) {
@@ -5236,22 +5268,15 @@ class CircadianScenesPanel extends HTMLElement {
 
     let undoCommitted = false;
     const persist = ({ history = true } = {}) => {
-      if (this._view === "theme") {
-        if (history && !undoCommitted) {
-          this._commitUndo({ type: "theme", eventId: currentId });
-          undoCommitted = true;
-        }
-        for (const item of events) {
-          this._writeThemeEventFromDraft(item.id, drafts.get(item.id));
-        }
-        this._syncSaveFab();
-        this._rebuildThemeDial();
-        return;
+      if (history && !undoCommitted) {
+        this._commitUndo({ type: "theme-event", eventId: currentId });
+        undoCommitted = true;
       }
       for (const item of events) {
         this._writeThemeEventFromDraft(item.id, drafts.get(item.id));
       }
-      this._queueThemeSave();
+      this._patchDialFromSession({ applyTheme: true });
+      this._saveSoon();
     };
     brightnessGraphCtl = createLightBrightnessGraph({
       title: this._t("frontend.lights.brightness", "Brightness"),
@@ -5971,70 +5996,10 @@ class CircadianScenesPanel extends HTMLElement {
     });
   }
 
-  /** Editor Save FAB: always on #new; only while dirty for existing scenes. */
+  /** Save FAB removed — edits write immediately. */
   _syncSaveFab() {
-    if (this._view === "theme") {
-      const show = this._sessionIsDirty();
-      if (!show) {
-        if (this._saveFabVisible || this._fabEl?.childElementCount) {
-          this._setFab(null);
-        }
-        this._saveFabVisible = false;
-        return;
-      }
-      if (
-        this._saveFabVisible &&
-        this._fabEl &&
-        !this._fabEl.classList.contains("is-hidden") &&
-        this._fabEl.childElementCount
-      ) {
-        return;
-      }
-      this._saveFabVisible = true;
-      this._setFab(
-        this._fabButton(
-          this._t("frontend.common.save", "Save"),
-          "mdi:content-save",
-          () => this._saveTheme()
-        )
-      );
-      return;
-    }
-    if (this._view !== "edit") {
-      return;
-    }
-    // New scenes are unsaved until the first successful save — keep Save visible
-    // even when the post-wizard form still matches the session baseline.
-    const show = !this._editId || this._sessionIsDirty();
-    if (!show) {
-      if (this._saveFabVisible || this._fabEl?.childElementCount) {
-        this._setFab(null);
-      }
-      this._saveFabVisible = false;
-      return;
-    }
-    if (
-      this._saveFabVisible &&
-      this._fabEl &&
-      !this._fabEl.classList.contains("is-hidden") &&
-      this._fabEl.childElementCount
-    ) {
-      return;
-    }
-    this._saveFabVisible = true;
-    this._setFab(
-      this._fabButton(
-        this._t("frontend.common.save", "Save"),
-        "mdi:content-save",
-        () => {
-          if (!this._editId) {
-            this._openSaveDialog();
-            return;
-          }
-          this._save();
-        }
-      )
-    );
+    this._saveFabVisible = false;
+    this._setFab(null);
   }
 
   _fabButton(label, icon, onClick) {
@@ -6065,6 +6030,15 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
+  _setListActions() {
+    const undo = this._undoRedoButton("undo");
+    const redo = this._undoRedoButton("redo");
+    this._undoBtn = undo;
+    this._redoBtn = redo;
+    this._setActionItems(undo, redo, this._listSettingsButton());
+    this._syncUndoButtons();
+  }
+
   _setEditorActions() {
     if (this._view === "theme") {
       this._liveEditSwitch = null;
@@ -6072,7 +6046,12 @@ class CircadianScenesPanel extends HTMLElement {
       this._locationBtn = null;
       this._lightViewToggleBtn = null;
       if (this._narrow) {
-        this._setActionItems();
+        const undo = this._undoRedoButton("undo");
+        const redo = this._undoRedoButton("redo");
+        this._undoBtn = undo;
+        this._redoBtn = redo;
+        this._setActionItems(undo, redo);
+        this._syncUndoButtons();
         return;
       }
       const undo = this._undoRedoButton("undo");
@@ -6108,7 +6087,12 @@ class CircadianScenesPanel extends HTMLElement {
     this._lightViewToggleBtn = null;
 
     if (this._narrow) {
-      this._setActionItems(previewToggle, this._overflowMenu());
+      const undo = this._undoRedoButton("undo");
+      const redo = this._undoRedoButton("redo");
+      this._undoBtn = undo;
+      this._redoBtn = redo;
+      this._setActionItems(undo, redo, previewToggle, this._overflowMenu());
+      this._syncUndoButtons();
       this._syncLocationToolbar();
       this._maybeResumeRoomPreview();
       return;
@@ -6229,12 +6213,154 @@ class CircadianScenesPanel extends HTMLElement {
 
   _resetSession() {
     this._nativeDrafts = {};
-    this._undoStack = [];
-    this._redoStack = [];
     this._previewOverlay = null;
     this._sessionBaseline = this._snapshotSession();
     this._syncUndoButtons();
     this._syncSaveFab();
+  }
+
+  _historyTarget() {
+    return {
+      view: this._view,
+      editId: this._editId,
+      themeId: this._themeId,
+    };
+  }
+
+  _sameHistoryTarget(target) {
+    return (
+      target &&
+      target.view === this._view &&
+      target.editId === this._editId &&
+      target.themeId === this._themeId
+    );
+  }
+
+  _stampHistoryAfter() {
+    const last = this._undoStack[this._undoStack.length - 1];
+    if (!last || !this._sameHistoryTarget(last.target)) {
+      return;
+    }
+    last.after = this._snapshotSession();
+  }
+
+  _saveSoon() {
+    this._stampHistoryAfter();
+    this._syncSaveFab();
+    if (this._historyRestoring) {
+      return;
+    }
+    window.clearTimeout(this._saveSoonTimer);
+    this._saveSoonTimer = window.setTimeout(() => {
+      this._saveSoonTimer = null;
+      void this._saveNow();
+    }, 250);
+  }
+
+  async _saveNow({ fromHistory = false } = {}) {
+    window.clearTimeout(this._saveSoonTimer);
+    this._saveSoonTimer = null;
+    this._stampHistoryAfter();
+    if (this._view === "theme" && this._themeDraft) {
+      await this._saveThemeQuiet();
+      return;
+    }
+    if (this._view !== "edit") {
+      return;
+    }
+    if (!this._formData?.area) {
+      return;
+    }
+    if (this._saving) {
+      this._saveSoon();
+      return;
+    }
+    this._saving = true;
+    this._error = null;
+    try {
+      await this._flushNativeDrafts();
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save`,
+        scene_id: this._editId || undefined,
+        data: this._formData,
+      });
+      const wasNew = !this._editId;
+      this._editId = saved.id;
+      this._upsertSceneInList(saved);
+      this._sessionBaseline = this._snapshotSession();
+      this._draftRestore = null;
+      this._clearPersistedDraft();
+      this._clearPersistedDraft("new");
+      if (wasNew) {
+        for (const entry of [...this._undoStack, ...this._redoStack]) {
+          if (entry.target?.view === "edit" && !entry.target.editId) {
+            entry.target.editId = saved.id;
+          }
+        }
+        if (!fromHistory) {
+          this._leaveConfirmDone = true;
+          history.replaceState(null, "", this._hashHref(`edit/${saved.id}`));
+        }
+      }
+      if (this._themeDraft) {
+        await this._saveThemeQuiet();
+      }
+      this._stampHistoryAfter();
+    } catch (err) {
+      this._error = err.message || String(err);
+    } finally {
+      this._saving = false;
+    }
+  }
+
+  async _saveThemeQuiet() {
+    if (!this._themeDraft) {
+      return;
+    }
+    try {
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save_theme`,
+        data: this._themeDraft,
+      });
+      this._adoptSavedTheme(saved);
+      if (this._view === "theme") {
+        this._sessionBaseline = this._snapshotSession();
+      }
+      await this._refreshListItemsSilent();
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
+  }
+
+  async _refreshListItemsSilent() {
+    try {
+      const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      this._items = payload?.scenes || this._items;
+      this._themes = payload?.themes || this._themes;
+      this._syncRailCardBackgrounds();
+    } catch (_err) {
+      /* keep the current rail */
+    }
+  }
+
+  _syncRailCardBackgrounds() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+    for (const scene of this._items || []) {
+      const card = root.querySelector(
+        `.scene-card[data-scene-id="${CSS.escape(scene.id)}"]`
+      );
+      if (!card) {
+        continue;
+      }
+      const bg = card.querySelector(".card-bg");
+      if (!bg || scene.kind === "simple") {
+        continue;
+      }
+      applyRampBackground(bg, scene.card?.ramps);
+    }
   }
 
   _snapshotSession() {
@@ -6261,49 +6387,16 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _needsLeaveConfirm() {
-    // _go and hashchange both call confirm — skip the second pass.
-    if (this._leaveConfirmDone) {
-      return false;
-    }
-    if (this._view !== "edit" && this._view !== "theme") {
-      return false;
-    }
-    if (this._view === "theme") {
-      return this._sessionIsDirty();
-    }
-    // Never persisted to HA yet.
-    if (!this._editId) {
-      return true;
-    }
-    return this._sessionIsDirty();
+    return false;
   }
 
   async _confirmLeaveEditor() {
     if (this._lightEditIsDirty() && !(await this._confirmLeaveLightEdit())) {
       return false;
     }
-    if (this._needsLeaveConfirm()) {
-      const discard = await this._confirmDiscard({
-        title: this._t(
-          "frontend.dialogs.unsaved_title",
-          "Unsaved changes"
-        ),
-        text: this._t(
-          "frontend.dialogs.unsaved_text",
-          "You have unsaved changes. Discard them?"
-        ),
-      });
-      if (!discard) {
-        return false;
-      }
-      this._clearPersistedDraft();
-      if (!this._editId) {
-        this._clearPersistedDraft("new");
-      }
-      this._leaveConfirmDone = true;
-      return true;
-    }
-    this._flushPersistedDraft();
+    window.clearTimeout(this._saveSoonTimer);
+    this._saveSoonTimer = null;
+    await this._saveNow();
     return true;
   }
 
@@ -6823,12 +6916,10 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     this._applySession(this._sessionBaseline);
-    this._undoStack = [];
-    this._redoStack = [];
     this._syncUndoButtons();
     this._clearPersistedDraft();
     this._draftRestore = null;
-    this._render();
+    void this._saveNow();
     if (!this._editId && !this._formData.area) {
       this._openAreaDialog({ context: "new" });
     }
@@ -6837,7 +6928,9 @@ class CircadianScenesPanel extends HTMLElement {
   _commitUndo(focus = null) {
     this._undoStack.push({
       session: this._snapshotSession(),
-      focus: focus || null,
+      after: null,
+      target: this._historyTarget(),
+      focus: focus || this._currentUndoFocus(),
     });
     if (this._undoStack.length > UNDO_STACK_LIMIT) {
       this._undoStack.shift();
@@ -6845,65 +6938,149 @@ class CircadianScenesPanel extends HTMLElement {
     this._redoStack = [];
     this._syncUndoButtons();
     queueMicrotask(() => {
-      this._persistDraftSoon();
-      this._syncSaveFab();
+      this._saveSoon();
     });
   }
 
-  _applySession(snapshot, { focus = null } = {}) {
+  _currentUndoFocus() {
+    const lightId = this._sidebarLightId;
+    const themeLight =
+      typeof lightId === "string" && lightId.startsWith("theme:");
+    if (lightId && !themeLight) {
+      return {
+        type: "light",
+        lightId,
+        eventId: this._sidebarEventId,
+      };
+    }
+    if (this._sidebarEventId) {
+      return {
+        type: "theme-event",
+        eventId: this._sidebarEventId,
+      };
+    }
+    return null;
+  }
+
+  _applySession(snapshot, { remount = true } = {}) {
     this._forceCloseSceneSidebar();
     this._formData = structuredClone(snapshot.form);
     this._nativeDrafts = structuredClone(snapshot.nativeDrafts);
     if (snapshot.theme) {
       this._themeDraft = structuredClone(snapshot.theme);
+    } else {
+      this._themeDraft = null;
     }
-    this._syncEditorSceneTitle();
-    if (this._view === "theme" && this._themeDraft && this._headerEl) {
-      this._headerEl.textContent = this._themeDraft.name;
-    }
+    this._syncAppBarTitle();
     this._syncPreviewOverlay();
     this._sunPath = null;
     this._clearPreviewCache();
     this._syncUndoButtons();
-    this._persistDraftSoon();
     this._syncSaveFab();
-    this._ensureSunPath().then(() => {
-      if (focus?.type === "light" && focus.lightId) {
-        const light = (this._sunPath?.lights || []).find(
-          (row) => row.entity_id === focus.lightId
-        );
-        const event =
-          (this._sunPath?.events || []).find((row) => row.id === focus.eventId) ||
-          (this._sunPath?.events || [])[0];
-        if (light && event) {
-          this._openLightEditDialog(light, event);
-        }
+    if (remount && (this._view === "edit" || this._view === "theme")) {
+      this._render();
+    }
+  }
+
+  _revealHistoryFocus(focus) {
+    const event =
+      (this._sunPath?.events || []).find((row) => row.id === focus?.eventId) ||
+      (this._sunPath?.events || [])[0];
+    if (focus?.type === "light" && focus.lightId) {
+      const light = (this._sunPath?.lights || []).find(
+        (row) => row.entity_id === focus.lightId
+      );
+      if (light && event) {
+        this._openLightEditDialog(light, event);
       }
-    });
+      return;
+    }
+    if (focus?.type === "theme-event" && event) {
+      void this._openThemeEventSidebar(event);
+    }
+  }
+
+  async _openHistoryTarget(target) {
+    if (!target || this._sameHistoryTarget(target)) {
+      return;
+    }
+    this._leaveConfirmDone = true;
+    if (target.view === "theme" && target.themeId) {
+      this._view = "theme";
+      this._themeId = target.themeId;
+      this._editId = null;
+      history.replaceState(null, "", this._hashHref(`theme/${target.themeId}`));
+      await this._loadTheme(target.themeId);
+      return;
+    }
+    if (target.view === "edit") {
+      this._view = "edit";
+      this._themeId = null;
+      if (target.editId) {
+        this._editId = target.editId;
+        history.replaceState(null, "", this._hashHref(`edit/${target.editId}`));
+        await this._loadItem(target.editId);
+        return;
+      }
+      this._editId = null;
+      history.replaceState(null, "", this._hashHref("new"));
+      this._render();
+      return;
+    }
+    this._view = "list";
+    this._editId = null;
+    this._themeId = null;
+    history.replaceState(null, "", this._hashHref(""));
+    await this._loadList();
+  }
+
+  async _restoreHistory(entry, which) {
+    const snap = which === "after" ? entry.after || entry.session : entry.session;
+    if (!snap) {
+      return;
+    }
+    this._historyRestoring = true;
+    try {
+      await this._openHistoryTarget(entry.target);
+      this._applySession(snap, { remount: false });
+      await this._saveNow({ fromHistory: true });
+      if (this._view === "edit" || this._view === "theme") {
+        this._render();
+      }
+      this._clearPreviewCache();
+      await this._ensureSunPath();
+      this._revealHistoryFocus(entry.focus || null);
+    } finally {
+      this._historyRestoring = false;
+    }
   }
 
   _undo() {
-    if (!this._undoStack.length) {
+    if (!this._undoStack.length || this._historyRestoring) {
       return;
     }
     const entry = this._undoStack.pop();
+    if (entry && this._sameHistoryTarget(entry.target)) {
+      entry.after = this._snapshotSession();
+    }
     this._redoStack.push({
-      session: this._snapshotSession(),
+      session: entry.session,
+      after: entry.after || this._snapshotSession(),
+      target: entry.target || this._historyTarget(),
       focus: entry.focus || null,
     });
-    this._applySession(entry.session, { focus: entry.focus || null });
+    void this._restoreHistory(entry, "before");
+    this._syncUndoButtons();
   }
 
   _redo() {
-    if (!this._redoStack.length) {
+    if (!this._redoStack.length || this._historyRestoring) {
       return;
     }
     const entry = this._redoStack.pop();
-    this._undoStack.push({
-      session: this._snapshotSession(),
-      focus: entry.focus || null,
-    });
-    this._applySession(entry.session, { focus: entry.focus || null });
+    this._undoStack.push(entry);
+    void this._restoreHistory(entry, "after");
+    this._syncUndoButtons();
   }
 
   _syncUndoButtons() {
@@ -6922,7 +7099,10 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _handleEditorShortcut(ev) {
-    if (this._view !== "edit" || !this.isConnected) {
+    if (!this.isConnected) {
+      return;
+    }
+    if (this._view !== "edit" && this._view !== "theme" && this._view !== "list" && this._view !== "variables") {
       return;
     }
     if (!ev.ctrlKey && !ev.metaKey) {
@@ -7260,7 +7440,8 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._syncPreviewOverlay();
     this._clearPreviewCache();
-    this._schedulePreview();
+    this._patchDialFromSession();
+    this._saveSoon();
   }
 
   _optimisticIncludeLight(entityId) {
@@ -7434,7 +7615,6 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _flushNativeDrafts() {
-    return;
     const creates = [];
     const renames = [];
     const deletes = [];
@@ -8483,7 +8663,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _renderEditor() {
-    this._syncEditorSceneTitle();
+    this._syncAppBarTitle();
     this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
     this._setEditorActions();
     this._syncEditorChrome();
@@ -8568,10 +8748,25 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _syncEditorSceneTitle() {
-    if (!this._headerEl || this._view !== "edit") {
+    this._syncAppBarTitle();
+  }
+
+  _syncAppBarTitle() {
+    if (!this._headerEl) {
       return;
     }
-    this._headerEl.textContent = this._editorSceneTitle();
+    const integration = this._t("frontend.title", "Circadian Scenes");
+    if (this._narrow && this._view === "edit") {
+      this._headerEl.textContent = this._editorSceneTitle();
+      return;
+    }
+    if (this._narrow && this._view === "theme") {
+      this._headerEl.textContent =
+        this._themeDraft?.name ||
+        this._t("frontend.library.themes", "Circadian themes");
+      return;
+    }
+    this._headerEl.textContent = integration;
   }
 
   _setNavigationIcon(node) {
@@ -9575,7 +9770,8 @@ class CircadianScenesPanel extends HTMLElement {
         entry.saved = lightDraftFingerprint(entry.draft);
       }
       this._syncPreviewOverlay();
-      this._schedulePreview();
+      this._patchDialFromSession();
+      this._saveSoon();
     };
     const restoreLive = async () => {
       if (liveApplied) {
@@ -10060,7 +10256,8 @@ class CircadianScenesPanel extends HTMLElement {
           uniqueScenes.push({ sceneId, event: next, events: [next] });
         }
         this._syncPreviewOverlay();
-        this._schedulePreview();
+        this._patchDialFromSession();
+        this._saveSoon();
         await selectScene(next);
         brightnessGraphCtl?.sync();
         colorBriGraphCtl?.sync();
@@ -10451,32 +10648,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _save() {
-    this._saving = true;
-    this._error = null;
-    try {
-      await this._flushNativeDrafts();
-      const saved = await this._hass.callWS({
-        type: `${DOMAIN}/save`,
-        scene_id: this._editId || undefined,
-        data: this._formData,
-      });
-      this._resetSession();
-      this._draftRestore = null;
-      this._clearPersistedDraft();
-      this._clearPersistedDraft("new");
-      this._clearPreviewCache();
-      // Saving creates the entity — do not treat #new → #edit/id as discard.
-      this._leaveConfirmDone = true;
-      this._editId = saved.id;
-      this._upsertSceneInList(saved);
-      await this._refreshManagedScenes();
-      this._go(`edit/${saved.id}`);
-    } catch (err) {
-      this._error = err.message || String(err);
-      this._renderEditor();
-    } finally {
-      this._saving = false;
-    }
+    await this._saveNow();
   }
 
   async _delete() {
@@ -13533,7 +13705,7 @@ class CircadianScenesPanel extends HTMLElement {
       // Bridge civil twilight so fill alpha does not jump at elev=0.
       const twilight =
         elev >= 0 ? 1 : Math.min(1, Math.max(0, (elev + 6) / 6));
-      const dayAlpha = 0.16 + 0.26 * twilight + 0.38 * climb;
+      const dayAlpha = (0.16 + 0.26 * twilight + 0.38 * climb) * 0.5;
       dayEl.setAttribute(
         "fill",
         `color-mix(in srgb, ${daySky} ${Math.round(dayAlpha * 100)}%, transparent)`

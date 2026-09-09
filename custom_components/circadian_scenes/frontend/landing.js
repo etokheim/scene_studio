@@ -313,7 +313,7 @@ function rgbCss(rgb) {
 
 /** One horizontal day-ramp per light (dawn→dusk). Stack like table rows:
     later bands overlap the previous and fade in over the top third. */
-function applyRampBackground(el, ramps) {
+export function applyRampBackground(el, ramps) {
   el.replaceChildren();
   el.style.backgroundImage = "";
   el.style.backgroundSize = "";
@@ -518,6 +518,7 @@ function renderAreaBlock(panel, area, scenes) {
 function renderSceneCard(panel, scene) {
   const cardEl = document.createElement("div");
   cardEl.className = "scene-card";
+  cardEl.dataset.sceneId = scene.id;
   const selected = panel._view === "edit" && panel._editId === scene.id;
   if (selected) {
     cardEl.classList.add("selected");
