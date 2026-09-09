@@ -9963,6 +9963,9 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _applyLightState(entityId, stored, { transition } = {}) {
+    if (!this._isPhysicalLightEntityId(entityId)) {
+      return;
+    }
     const payload = this._lightServicePayload(entityId, stored);
     if (transition != null && Number(transition) > 0) {
       payload.data.transition = Number(transition);
@@ -9983,6 +9986,21 @@ class CircadianScenesPanel extends HTMLElement {
       ),
       rgb_color: sample.rgb,
     };
+  }
+
+  _isPhysicalLightEntityId(entityId) {
+    return String(entityId || "").startsWith("light.");
+  }
+
+  /** Theme rings (`theme:…`) and suggested/removed rows are not HA lights. */
+  _isScenePreviewLight(light) {
+    return Boolean(
+      light &&
+        !light.suggested &&
+        !light.removed &&
+        !light.theme_ring &&
+        this._isPhysicalLightEntityId(light.entity_id)
+    );
   }
 
   _lightSidebarBlocksScenePreview() {
@@ -10007,7 +10025,7 @@ class CircadianScenesPanel extends HTMLElement {
     return (
       this._view === "edit" &&
       this._formData?.kind !== "simple" &&
-      Boolean(this._sunPath?.lights?.some((light) => light.entity_id && !light.suggested))
+      Boolean(this._sunPath?.lights?.some((light) => this._isScenePreviewLight(light)))
     );
   }
 
@@ -10017,7 +10035,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const snaps = {};
     for (const light of this._sunPath?.lights || []) {
-      if (light.suggested || !light.entity_id) {
+      if (!this._isScenePreviewLight(light)) {
         continue;
       }
       snaps[light.entity_id] = this._snapshotLight(light.entity_id);
@@ -10158,7 +10176,7 @@ class CircadianScenesPanel extends HTMLElement {
     const opts =
       transition > 0 ? { transition } : {};
     for (const light of this._sunPath.lights) {
-      if (light.suggested || !light.entity_id) {
+      if (!this._isScenePreviewLight(light)) {
         continue;
       }
       const sample = interpolateLightSample(light.samples || [], seconds);
@@ -10319,7 +10337,7 @@ class CircadianScenesPanel extends HTMLElement {
     const draftScene = this._nativeDrafts[sceneEntityId];
     const toApply = new Map();
     for (const light of this._sunPath?.lights || []) {
-      if (!light.entity_id || light.suggested) {
+      if (!this._isScenePreviewLight(light)) {
         continue;
       }
       const row = (light.event_states || []).find(
