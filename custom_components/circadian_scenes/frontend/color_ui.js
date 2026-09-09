@@ -566,10 +566,19 @@ function applyVariableToDraft(draft, variable) {
   draft.state = Number(draft.brightness) > 0 ? "on" : "off";
 }
 
+function swatchRgb(color, brightness) {
+  const rgb = draftRgb(color || {});
+  const f = Math.max(0, Math.min(1, (Number(brightness) || 0) / 255));
+  return [
+    Math.round(rgb[0] * f),
+    Math.round(rgb[1] * f),
+    Math.round(rgb[2] * f),
+  ];
+}
+
 function variableSwatchCss(variable) {
-  const rgb = draftRgb(variable?.color || {});
-  const f = Math.max(0, Math.min(1, (Number(variable?.brightness) || 0) / 255));
-  return `rgb(${Math.round(rgb[0] * f)}, ${Math.round(rgb[1] * f)}, ${Math.round(rgb[2] * f)})`;
+  const rgb = swatchRgb(variable?.color, variable?.brightness);
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
 /** Nearest Helland kelvin in [min,max] to an RGB (for RGB→temp mode convert). */
@@ -2132,6 +2141,7 @@ export {
   applyTempToDraft,
   applyVariableToDraft,
   colorPayloadFromDraft,
+  swatchRgb,
   variableSwatchCss,
   approxKelvinFromRgb,
   formatWheelReadout,

@@ -43,7 +43,13 @@ import {
   easeOutCubic,
   lerpSunPath,
 } from "./dial_clock.js";
-import { LANDING_CSS, renderLanding, applyRampBackground } from "./landing.js";
+import {
+  LANDING_CSS,
+  renderLanding,
+  applyRampBackground,
+  previewRampsForTheme,
+  themeConic,
+} from "./landing.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor } from "./simple_editor.js";
 
@@ -1497,14 +1503,13 @@ class CircadianScenesPanel extends HTMLElement {
           fill: transparent;
         }
         .clock-horizon-sky .clock-sky-night {
-          /* Sunset→sunrise shadow (outer night). Half prior mix so day/night
-             wash is quieter; sunrise/sunset conic on .clock-horizon-glow is
-             unchanged. */
-          fill: color-mix(in srgb, var(--clock-night-outer) 36%, transparent);
+          /* Sunset→sunrise shadow (outer night). ~15% so day/night wash stays
+             quiet; sunrise/sunset conic on .clock-horizon-glow is unchanged. */
+          fill: color-mix(in srgb, var(--clock-night-outer) 15%, transparent);
         }
         .clock-horizon-sky .clock-sky-deep {
           /* Dusk→dawn wrap (deeper band). */
-          fill: color-mix(in srgb, var(--clock-night-deep) 39%, transparent);
+          fill: color-mix(in srgb, var(--clock-night-deep) 15%, transparent);
         }
         .sun-light-clock-overlay .clock-sun-day {
           fill: none;
@@ -5131,6 +5136,9 @@ class CircadianScenesPanel extends HTMLElement {
       return false;
     }
     this._themeDraft = structuredClone(theme);
+    if (!this._themeDraft.id) {
+      this._themeDraft.id = themeId;
+    }
     if (this._sessionBaseline) {
       this._sessionBaseline = {
         ...this._sessionBaseline,
@@ -5194,7 +5202,7 @@ class CircadianScenesPanel extends HTMLElement {
       drafts[event.id] = this._themeEventDraft(event.id);
     }
     return {
-      entity_id: `theme:${this._themeId || "draft"}`,
+      entity_id: `theme:${this._themeLookId() || "draft"}`,
       name: this._themeDraft?.name || "Theme",
       theme_ring: true,
       suggested: false,
@@ -5235,8 +5243,24 @@ class CircadianScenesPanel extends HTMLElement {
     this._drawSunPath();
   }
 
+  _themeLookId() {
+    return (
+      this._themeDraft?.id ||
+      this._themeId ||
+      this._formData?.theme_id ||
+      "default"
+    );
+  }
+
+  _editingThemeLook() {
+    return (
+      this._view === "theme" ||
+      String(this._sidebarLightId || "").startsWith("theme:")
+    );
+  }
+
   _rebuildThemeDial() {
-    if (this._view !== "theme" || !this._sunPath?.events) {
+    if (!this._editingThemeLook() || !this._sunPath?.events) {
       return;
     }
     this._sunPath = {
@@ -5250,6 +5274,8 @@ class CircadianScenesPanel extends HTMLElement {
     };
     // Patch ring fills in place so sidebar drags keep a live dial without
     // rebuilding clock chrome (year rail / event dots) on every pointermove.
+    // Theme-event sidebar from a circadian scene uses the same single theme
+    // ring as `#theme/<id>` so brightness/color ticks match that editor.
     if (this._clockRingsHost?.isConnected && this._patchLightClock(this._sunPath)) {
       this._displayedSunPath = this._sunPath;
       return;
@@ -5258,6 +5284,11 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _patchDialFromSession({ applyTheme = false } = {}) {
+    if (applyTheme && this._editingThemeLook()) {
+      this._rebuildThemeDial();
+      this._syncThemePreviewSurfaces();
+      return;
+    }
     if (this._view === "theme") {
       this._rebuildThemeDial();
       return;
@@ -5297,7 +5328,9 @@ class CircadianScenesPanel extends HTMLElement {
         intermediatesPerSegment: 5,
       }),
     };
-    if (!this._patchLightClock(this._sunPath)) {
+    if (this._clockRingsHost?.isConnected && this._patchLightClock(this._sunPath)) {
+      this._displayedSunPath = this._sunPath;
+    } else {
       this._drawSunPath();
     }
   }
@@ -5340,6 +5373,10 @@ class CircadianScenesPanel extends HTMLElement {
         wheelCtl?.disconnect();
         this._setSidebarEvent(null);
         this._setSidebarLight(null);
+        if (this._view === "edit") {
+          this._sunPathKey = undefined;
+          void this._ensureSunPath();
+        }
         void this._saveNow();
       },
     });
@@ -5347,7 +5384,9 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     this._setSidebarEvent(event.id);
-    this._setSidebarLight(`theme:${this._themeDraft?.id || this._themeId || "draft"}`);
+    this._setSidebarLight(`theme:${this._themeLookId()}`);
+    this._rebuildThemeDial();
+    this._syncThemePreviewSurfaces();
     const { body } = opened;
     const duskSlot = document.createElement("div");
     const hint = document.createElement("p");
@@ -6387,6 +6426,9 @@ class CircadianScenesPanel extends HTMLElement {
         this._sessionBaseline = this._snapshotSession();
       }
       await this._refreshListItemsSilent();
+      if (this._themeDraft) {
+        this._syncThemePreviewSurfaces();
+      }
     } catch (err) {
       this._error = err.message || String(err);
     }
@@ -6420,6 +6462,48 @@ class CircadianScenesPanel extends HTMLElement {
         continue;
       }
       applyRampBackground(bg, scene.card?.ramps);
+    }
+  }
+
+  _syncThemePreviewSurfaces() {
+    const theme = this._themeDraft;
+    if (!theme) {
+      return;
+    }
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+    const variables = this._variables || [];
+    const themeId = this._themeLookId();
+    for (const scene of this._items || []) {
+      if (scene.kind === "simple") {
+        continue;
+      }
+      if ((scene.theme_id || "default") !== themeId) {
+        continue;
+      }
+      const overrides =
+        this._view === "edit" && scene.id === this._editId
+          ? this._formData?.overrides || scene.overrides
+          : scene.overrides;
+      const ramps = previewRampsForTheme(scene, theme, variables, overrides);
+      if (scene.card) {
+        scene.card = { ...scene.card, ramps };
+      }
+      const card = root.querySelector(
+        `.scene-card[data-scene-id="${CSS.escape(scene.id)}"]`
+      );
+      const bg = card?.querySelector(".card-bg");
+      if (bg) {
+        applyRampBackground(bg, ramps);
+      }
+    }
+    const chipDial = root.querySelector(
+      `.theme-chip[data-theme-id="${CSS.escape(themeId)}"] .theme-dial`
+    );
+    if (chipDial) {
+      chipDial.style.background = themeConic(theme, variables);
     }
   }
 
@@ -8830,7 +8914,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _legendLights(lights) {
-    if (this._view === "theme") {
+    if (this._editingThemeLook()) {
       return [];
     }
     const rows = [...(lights || [])];
@@ -13606,7 +13690,9 @@ class CircadianScenesPanel extends HTMLElement {
       // Bridge civil twilight so fill alpha does not jump at elev=0.
       const twilight =
         elev >= 0 ? 1 : Math.min(1, Math.max(0, (elev + 6) / 6));
-      const dayAlpha = (0.16 + 0.26 * twilight + 0.38 * climb) * 0.5;
+      // Peak ~15% at noon; quieter toward the horizon. Sunrise/sunset color
+      // lives on .clock-horizon-glow, not this wedge.
+      const dayAlpha = (0.16 + 0.26 * twilight + 0.38 * climb) * (0.15 / 0.8);
       dayEl.setAttribute(
         "fill",
         `color-mix(in srgb, ${daySky} ${Math.round(dayAlpha * 100)}%, transparent)`

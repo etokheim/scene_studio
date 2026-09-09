@@ -1,7 +1,7 @@
 /** Area rail, scene cards, and variable/theme library for the list view. */
 
 import { createSimpleCardMesh } from "./card_mesh.js";
-import { variableSwatchCss } from "./color_ui.js";
+import { swatchRgb, variableSwatchCss } from "./color_ui.js";
 
 const AREA_RAIL_PX = 340;
 
@@ -355,21 +355,56 @@ export function applyRampBackground(el, ramps) {
   });
 }
 
-function themeConic(theme, variables) {
-  const events = ["dawn", "sunrise", "noon", "sunset", "dusk"];
+const THEME_CARD_EVENTS = ["dawn", "sunrise", "noon", "sunset", "dusk"];
+
+function themeEventResolved(ev, variables) {
+  const ref = ev?.color?.variable_ref;
+  const variable = ref
+    ? (variables || []).find((item) => item.id === ref)
+    : null;
+  return {
+    color: variable ? variable.color : ev?.color,
+    brightness: variable?.brightness ?? ev?.brightness ?? 255,
+  };
+}
+
+function themeEventSwatchRgb(ev, variables) {
+  const { color, brightness } = themeEventResolved(ev, variables);
+  if (!color) {
+    return [43, 43, 43];
+  }
+  return swatchRgb(color, brightness);
+}
+
+/** Client ramps for a circadian card while a theme draft is being dragged. */
+export function previewRampsForTheme(scene, theme, variables, overrides) {
+  const ovRoot = overrides || scene.overrides || {};
+  return (scene.card?.ramps || []).map((ramp) => {
+    const lightOv = ovRoot[ramp.entity_id] || {};
+    const prev = ramp.stops || [];
+    return {
+      entity_id: ramp.entity_id,
+      stops: THEME_CARD_EVENTS.map((event, index) => {
+        if (lightOv[event]) {
+          return prev[index] || themeEventSwatchRgb(theme?.events?.[event], variables);
+        }
+        return themeEventSwatchRgb(theme?.events?.[event], variables);
+      }),
+    };
+  });
+}
+
+export function themeConic(theme, variables) {
+  const events = THEME_CARD_EVENTS;
   const colors = events.map((event) => {
-    const ev = theme.events?.[event];
-    const ref = ev?.color?.variable_ref;
-    const color = ref
-      ? variables.find((v) => v.id === ref)?.color
-      : ev?.color;
-    const brightness = ref
-      ? variables.find((v) => v.id === ref)?.brightness ?? ev?.brightness
-      : ev?.brightness;
+    const { color, brightness } = themeEventResolved(
+      theme.events?.[event],
+      variables
+    );
     if (!color) {
       return "#444";
     }
-    return variableSwatchCss({ color, brightness: brightness ?? 255 });
+    return variableSwatchCss({ color, brightness });
   });
   const slice = 100 / colors.length;
   const stops = colors
@@ -678,6 +713,7 @@ function renderLibrary(panel, { compact } = {}) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "theme-chip";
+    chip.dataset.themeId = theme.id;
     const dial = document.createElement("div");
     dial.className = "theme-dial";
     dial.style.background = themeConic(theme, panel._variables || []);
