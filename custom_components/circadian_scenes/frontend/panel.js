@@ -13,6 +13,7 @@ import {
   setWhiteBrightnessOnDraft,
   createLightBrightnessGraph,
   createSceneColorWheel,
+  closedCatmullRomPathD,
   medianNumber,
   circularMeanHue,
   lightDraftFingerprint,
@@ -5246,16 +5247,16 @@ class CircadianScenesPanel extends HTMLElement {
   _dialEventBrightness(eventId) {
     const lightId = this._dialBrightnessLightId();
     if (lightId) {
+      const overridden = this._formData?.overrides?.[lightId]?.[eventId];
+      if (overridden && overridden.brightness != null) {
+        return Number(overridden.brightness);
+      }
       const sceneId = this._eventSceneId(eventId);
       const drafted = sceneId
         ? this._nativeDrafts[sceneId]?.entities?.[lightId]
         : null;
       if (drafted && drafted.brightness != null) {
         return Number(drafted.brightness);
-      }
-      const overridden = this._formData?.overrides?.[lightId]?.[eventId];
-      if (overridden && overridden.brightness != null) {
-        return Number(overridden.brightness);
       }
       const light = (this._sunPath?.lights || []).find(
         (item) => item.entity_id === lightId
@@ -5355,20 +5356,9 @@ class CircadianScenesPanel extends HTMLElement {
       ...this._formData.overrides,
       [lightId]: byLight,
     };
-    const sceneId = this._eventSceneId(eventId);
-    if (sceneId) {
-      const existing = this._nativeDrafts[sceneId]?.entities?.[lightId];
-      if (existing) {
-        existing.brightness = value;
-        if (value > 0) {
-          existing.state = "on";
-        }
-        delete existing.variable_ref;
-      }
-    }
     const hook = this._dialBrightnessHook;
     if (hook?.kind === "light" && hook.lightId === lightId) {
-      const entry = sceneId ? hook.drafts.get(sceneId) : null;
+      const entry = hook.drafts.get(eventId);
       if (entry?.draft) {
         entry.draft.brightness = value;
         if (value > 0) {
@@ -5379,7 +5369,35 @@ class CircadianScenesPanel extends HTMLElement {
       hook.sync?.();
     }
     this._patchDialFromSession();
+    this._syncThemePreviewSurfaces();
     this._saveSoon();
+  }
+
+  _lightEventStoredState(light, eventId) {
+    const ov = this._formData?.overrides?.[light.entity_id]?.[eventId];
+    if (ov) {
+      return { state: ov.state || "on", ...ov };
+    }
+    const row = (light.event_states || []).find((item) => item.event === eventId);
+    if (row?.present && row.state) {
+      return { ...row.state };
+    }
+    if (this._themeDraft) {
+      return this._themeEventDraft(eventId);
+    }
+    return this._eventDefaultLightState(light.entity_id, eventId);
+  }
+
+  _writeLightEventOverride(lightId, eventId, payload) {
+    if (!this._formData.overrides) {
+      this._formData.overrides = {};
+    }
+    const byLight = { ...(this._formData.overrides[lightId] || {}) };
+    byLight[eventId] = payload;
+    this._formData.overrides = {
+      ...this._formData.overrides,
+      [lightId]: byLight,
+    };
   }
 
   _themeRingLight(events) {
@@ -5489,14 +5507,8 @@ class CircadianScenesPanel extends HTMLElement {
       }
       const event_states = (light.event_states || []).map((row) => {
         const sceneId = row.scene_entity_id;
-        const drafted = this._nativeDrafts[sceneId]?.entities?.[light.entity_id];
-        if (drafted) {
-          return { ...row, present: true, state: drafted };
-        }
-        if (this._nativeDrafts[sceneId]?.entities?.[light.entity_id] === null) {
-          return { ...row, present: false, state: null };
-        }
-        const overridden = this._formData?.overrides?.[light.entity_id]?.[row.event];
+        const overridden =
+          this._formData?.overrides?.[light.entity_id]?.[row.event];
         if (overridden) {
           return {
             ...row,
@@ -5506,6 +5518,13 @@ class CircadianScenesPanel extends HTMLElement {
               ...overridden,
             },
           };
+        }
+        const drafted = this._nativeDrafts[sceneId]?.entities?.[light.entity_id];
+        if (drafted) {
+          return { ...row, present: true, state: drafted };
+        }
+        if (this._nativeDrafts[sceneId]?.entities?.[light.entity_id] === null) {
+          return { ...row, present: false, state: null };
         }
         if (applyTheme && this._themeDraft && row.event) {
           return {
@@ -5529,9 +5548,8 @@ class CircadianScenesPanel extends HTMLElement {
     } else {
       this._drawSunPath();
     }
+    this._syncThemePreviewSurfaces();
   }
-
-  async _toggleThemeEventSidebar(event) {
     if (!(await this._ensureThemeDraft())) {
       this._error = this._t("frontend.library.theme_missing", "Theme not found");
       return;
@@ -7989,6 +8007,9 @@ class CircadianScenesPanel extends HTMLElement {
     const updates = [];
     const removes = [];
     for (const [sceneId, draft] of Object.entries(this._nativeDrafts)) {
+      if (this._entityId && sceneId === this._entityId) {
+        continue;
+      }
       if (draft.created) {
         if (draft.deleted) {
           continue;
@@ -10050,48 +10071,16 @@ class CircadianScenesPanel extends HTMLElement {
       supported.includes("rgbww") ||
       attrs.min_color_temp_kelvin != null;
     const events = this._sunPath?.events || [];
-    const uniqueScenes = this._uniqueAssignedScenes(events);
     const drafts = new Map();
-    for (const item of uniqueScenes) {
-      const draftEntity =
-        this._nativeDrafts[item.sceneId]?.entities?.[light.entity_id];
-      let present;
-      let stored;
-      if (draftEntity === null) {
-        // Session removed this lamp from the scene.
-        present = false;
-        stored = null;
-      } else if (draftEntity) {
-        present = true;
-        stored = { ...draftEntity };
-      } else {
-        // Prefer the assigned scene id; fall back to this solar event's row so a
-        // reassigned/shared scene still resolves membership.
-        const byScene = (light.event_states || []).find(
-          (row) => row.scene_entity_id === item.sceneId && row.present
-        );
-        const byEvent =
-          byScene ||
-          (light.event_states || []).find(
-            (row) =>
-              item.events.some((ev) => ev.id === row.event) && row.present
-          );
-        present = Boolean(byEvent);
-        stored = byEvent
-          ? byEvent.state ||
-            (light.event_states || []).find(
-              (row) => row.event === item.event.id
-            )?.state ||
-            { state: "off" }
-          : null;
-      }
-      drafts.set(item.sceneId, {
-        draft: present ? { ...stored } : null,
-        // "absent" until the user adds this lamp via the brightness graph +.
-        saved: present ? lightDraftFingerprint(stored) : "absent",
-        member: present,
-        event: item.event,
-        index: drafts.size + 1,
+    const member = !light.suggested && !light.removed;
+    for (const [index, item] of events.entries()) {
+      const stored = this._lightEventStoredState(light, item.id);
+      drafts.set(item.id, {
+        draft: member ? { ...stored } : null,
+        saved: member ? lightDraftFingerprint(stored) : "absent",
+        member,
+        event: item,
+        index: index + 1,
       });
     }
     let currentEvent = event;
@@ -10106,8 +10095,7 @@ class CircadianScenesPanel extends HTMLElement {
         ? "rgbw"
         : null;
 
-    const sceneEntityId = () => this._eventSceneId(currentEvent.id);
-    const currentEntry = () => drafts.get(sceneEntityId());
+    const currentEntry = () => drafts.get(currentEvent.id);
     const currentDraft = () => currentEntry()?.draft;
     const dirtyEntries = () =>
       [...drafts.entries()].filter(([, entry]) => {
@@ -10135,7 +10123,7 @@ class CircadianScenesPanel extends HTMLElement {
         });
         undoCommitted = true;
       }
-      for (const [sceneId, entry] of dirty) {
+      for (const [eventId, entry] of dirty) {
         // Drop undefined keys so kelvin converts do not reintroduce rgb/hs
         // as nullish fields in the session draft / WS payload.
         const cleaned = {};
@@ -10144,11 +10132,12 @@ class CircadianScenesPanel extends HTMLElement {
             cleaned[key] = value;
           }
         }
-        this._ensureNativeDraft(sceneId).entities[light.entity_id] = cleaned;
+        this._writeLightEventOverride(light.entity_id, eventId, cleaned);
         entry.saved = lightDraftFingerprint(entry.draft);
       }
       this._syncPreviewOverlay();
       this._patchDialFromSession();
+      this._syncThemePreviewSurfaces();
       this._saveSoon();
     };
     const restoreLive = async () => {
@@ -10215,7 +10204,7 @@ class CircadianScenesPanel extends HTMLElement {
     activateBtn.addEventListener("click", async () => {
       activateBtn.disabled = true;
       try {
-        await this._activateNativeSceneWithDrafts(sceneEntityId());
+        await this._activateNativeSceneWithDrafts(this._entityId);
       } finally {
         activateBtn.disabled = false;
       }
@@ -10437,18 +10426,13 @@ class CircadianScenesPanel extends HTMLElement {
     }
 
     const selectScene = async (next, { fromWheel = false } = {}) => {
-      const nextId = this._eventSceneId(next.id);
-      if (!nextId) {
-        this._openEventSceneDialog(next);
-        return;
-      }
       currentEvent = next;
       this._setSidebarEvent(next.id);
       if (subtitleEl) {
         subtitleEl.textContent = next.name;
       }
       this._syncDuskMinimumSlot(duskSlot, next.id);
-      const entry = drafts.get(nextId);
+      const entry = drafts.get(next.id);
       paintChips();
       brightnessGraphCtl?.sync();
       colorBriGraphCtl?.sync();
@@ -10540,71 +10524,28 @@ class CircadianScenesPanel extends HTMLElement {
       title: this._t("frontend.lights.brightness", "Brightness"),
       subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
       getPoints: () => {
-        return events
-          .map((item) => {
-            const sceneId = this._eventSceneId(item.id);
-            if (!sceneId) {
-              return null;
-            }
-            let entry = drafts.get(sceneId);
-            if (!entry) {
-              // Scene assigned after sidebar open — resolve membership from
-              // preview rows / session drafts (do not stub as non-member).
-              const draftEntity =
-                this._nativeDrafts[sceneId]?.entities?.[light.entity_id];
-              let present;
-              let stored;
-              if (draftEntity === null) {
-                present = false;
-                stored = null;
-              } else if (draftEntity) {
-                present = true;
-                stored = { ...draftEntity };
-              } else {
-                const row = (light.event_states || []).find(
-                  (itemRow) =>
-                    itemRow.scene_entity_id === sceneId && itemRow.present
-                );
-                present = Boolean(row);
-                stored = row?.state || { state: "off" };
-              }
-              entry = {
-                draft: present ? { ...stored } : null,
-                saved: present ? lightDraftFingerprint(stored) : "absent",
-                member: present,
-                event: item,
-                index: drafts.size + 1,
-              };
-              drafts.set(sceneId, entry);
-              if (!uniqueScenes.some((row) => row.sceneId === sceneId)) {
-                uniqueScenes.push({
-                  sceneId,
-                  event: item,
-                  events: [item],
-                });
-              }
-            }
-            const member = Boolean(entry.member && entry.draft);
-            const draft = entry.draft;
-            const brightness = member
-              ? draft.state === "off"
-                ? 0
-                : Number(draft.brightness) || 0
-              : 0;
-            return {
-              eventId: item.id,
-              sceneId,
-              seconds: item.seconds,
-              name: item.name,
-              icon: item.icon,
-              member,
-              brightness,
-              rgb: member ? draftRgb(draft) : [128, 128, 128],
-              draft: member ? draft : null,
-              active: member && item.id === currentEvent.id,
-            };
-          })
-          .filter(Boolean);
+        return events.map((item) => {
+          const entry = drafts.get(item.id);
+          const member = Boolean(entry?.member && entry.draft);
+          const draft = entry?.draft;
+          const brightness = member
+            ? draft.state === "off"
+              ? 0
+              : Number(draft.brightness) || 0
+            : 0;
+          return {
+            eventId: item.id,
+            sceneId: item.id,
+            seconds: item.seconds,
+            name: item.name,
+            icon: item.icon,
+            member,
+            brightness,
+            rgb: member ? draftRgb(draft) : [128, 128, 128],
+            draft: member ? draft : null,
+            active: member && item.id === currentEvent.id,
+          };
+        });
       },
       onSelect: (eventId) => {
         const next = events.find((item) => item.id === eventId);
@@ -10617,7 +10558,7 @@ class CircadianScenesPanel extends HTMLElement {
         if (!next) {
           return;
         }
-        let entry = drafts.get(sceneId);
+        let entry = drafts.get(eventId);
         if (!entry) {
           entry = {
             draft: null,
@@ -10626,7 +10567,7 @@ class CircadianScenesPanel extends HTMLElement {
             event: next,
             index: drafts.size + 1,
           };
-          drafts.set(sceneId, entry);
+          drafts.set(eventId, entry);
         }
         if (entry.member && entry.draft) {
           await selectScene(next);
@@ -10638,7 +10579,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         const typical =
           this._typicalStateFromPeers(sceneId, light.entity_id) ||
-          this._eventDefaultLightState(light.entity_id, eventId);
+          this._lightEventStoredState(light, eventId);
         entry.draft = this._adaptStateToLight(
           light.entity_id,
           typical,
@@ -10646,15 +10587,13 @@ class CircadianScenesPanel extends HTMLElement {
         );
         entry.member = true;
         entry.event = next;
-        this._ensureNativeDraft(sceneId).entities[light.entity_id] = {
+        this._writeLightEventOverride(light.entity_id, eventId, {
           ...entry.draft,
-        };
+        });
         entry.saved = lightDraftFingerprint(entry.draft);
-        if (!uniqueScenes.some((row) => row.sceneId === sceneId)) {
-          uniqueScenes.push({ sceneId, event: next, events: [next] });
-        }
         this._syncPreviewOverlay();
         this._patchDialFromSession();
+        this._syncThemePreviewSurfaces();
         this._saveSoon();
         await selectScene(next);
         brightnessGraphCtl?.sync();
@@ -10687,29 +10626,23 @@ class CircadianScenesPanel extends HTMLElement {
 
     if (whiteKind) {
       const extraPoints = (valueOf) => () => {
-        return events
-          .map((item) => {
-            const sceneId = this._eventSceneId(item.id);
-            if (!sceneId) {
-              return null;
-            }
-            const entry = drafts.get(sceneId);
-            const member = Boolean(entry?.member && entry.draft);
-            const draft = entry?.draft;
-            return {
-              eventId: item.id,
-              sceneId,
-              seconds: item.seconds,
-              name: item.name,
-              icon: item.icon,
-              member,
-              brightness: member ? valueOf(draft) : 0,
-              rgb: member ? draftRgb(draft) : [128, 128, 128],
-              draft: member ? draft : null,
-              active: member && item.id === currentEvent.id,
-            };
-          })
-          .filter(Boolean);
+        return events.map((item) => {
+          const entry = drafts.get(item.id);
+          const member = Boolean(entry?.member && entry.draft);
+          const draft = entry?.draft;
+          return {
+            eventId: item.id,
+            sceneId: item.id,
+            seconds: item.seconds,
+            name: item.name,
+            icon: item.icon,
+            member,
+            brightness: member ? valueOf(draft) : 0,
+            rgb: member ? draftRgb(draft) : [128, 128, 128],
+            draft: member ? draft : null,
+            active: member && item.id === currentEvent.id,
+          };
+        });
       };
       colorBriGraphCtl = createLightBrightnessGraph({
         title: this._t("frontend.lights.color_brightness", "Color brightness"),
@@ -10789,24 +10722,24 @@ class CircadianScenesPanel extends HTMLElement {
         tempMax: attrs.max_color_temp_kelvin || 6500,
         ...this._wheelPalette(),
         getState: () => ({
-          scenes: uniqueScenes
-            .filter((item) => drafts.get(item.sceneId)?.member)
+          scenes: events
+            .filter((item) => drafts.get(item.id)?.member)
             .map((item) => {
-              const entry = drafts.get(item.sceneId);
+              const entry = drafts.get(item.id);
               return {
-                id: item.sceneId,
+                id: item.id,
                 index: entry.index,
                 draft: entry.draft,
-                event: item.event,
+                event: item,
               };
             }),
           sequence: events
-            .map((item) => this._eventSceneId(item.id))
-            .filter((id) => id && drafts.get(id)?.member),
-          activeId: sceneEntityId(),
+            .map((item) => item.id)
+            .filter((id) => drafts.get(id)?.member),
+          activeId: currentEvent.id,
         }),
-        onSelect: (sceneId) => {
-          const entry = drafts.get(sceneId);
+        onSelect: (eventId) => {
+          const entry = drafts.get(eventId);
           if (entry) {
             selectScene(entry.event, { fromWheel: true });
           }
@@ -14735,38 +14668,18 @@ class CircadianScenesPanel extends HTMLElement {
       };
     };
     const radiusOf = (bri) => r0 + (bri / 255) * (r1 - r0);
-    const outer = [];
-    for (let i = 0; i < knots.length; i += 1) {
-      const a = knots[i];
-      const b = knots[(i + 1) % knots.length];
-      let span = b.seconds - a.seconds;
-      if (span <= 0) {
-        span += SECONDS_PER_DAY;
-      }
-      const steps = Math.max(8, Math.round(span / 900));
-      for (let s = 0; s < steps; s += 1) {
-        const t = s / steps;
-        const seconds = (a.seconds + span * t) % SECONDS_PER_DAY;
-        const bri = a.bri + (b.bri - a.bri) * t;
-        const pt = polar(seconds, radiusOf(bri));
-        outer.push({ ...pt, seconds });
-      }
-    }
-    outer.push({
-      ...polar(knots[0].seconds, radiusOf(knots[0].bri)),
-      seconds: knots[0].seconds,
-    });
-    const loop = outer.slice(0, -1);
-    const inner = loop.map((pt) => polar(pt.seconds, r0)).reverse();
-    const fmt = (pt) => `${pt.x.toFixed(2)} ${pt.y.toFixed(2)}`;
-    const strokeD = outer
-      .map((pt, index) => `${index === 0 ? "M" : "L"} ${fmt(pt)}`)
-      .join(" ");
-    const fillD = `${strokeD} ${inner
-      .map((pt) => `L ${fmt(pt)}`)
-      .join(" ")} Z`;
+    const outerPts = knots.map((knot) =>
+      polar(knot.seconds, radiusOf(knot.bri))
+    );
+    const strokeD = closedCatmullRomPathD(outerPts);
+    const innerCircle = `M ${(50 + r0).toFixed(2)} 50 A ${r0.toFixed(2)} ${r0.toFixed(
+      2
+    )} 0 1 0 ${(50 - r0).toFixed(2)} 50 A ${r0.toFixed(2)} ${r0.toFixed(
+      2
+    )} 0 1 0 ${(50 + r0).toFixed(2)} 50`;
     stroke.setAttribute("d", strokeD);
-    fill.setAttribute("d", fillD);
+    fill.setAttribute("fill-rule", "evenodd");
+    fill.setAttribute("d", `${strokeD} ${innerCircle}`);
   }
 
   _bindClockEventBrightnessDrag(btn, event, anchor) {

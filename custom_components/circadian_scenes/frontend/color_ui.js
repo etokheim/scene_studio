@@ -872,6 +872,27 @@ function catmullRomPathD(pts) {
   return d;
 }
 
+/** Closed uniform Catmull-Rom → cubic Bezier (wraps last→first). */
+function closedCatmullRomPathD(pts) {
+  if (pts.length < 3) {
+    return catmullRomPathD(pts);
+  }
+  const n = pts.length;
+  let d = `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  for (let i = 0; i < n; i += 1) {
+    const p0 = pts[(i - 1 + n) % n];
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % n];
+    const p3 = pts[(i + 2) % n];
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
 function huePathStrokeD(pts, smooth) {
   return smooth && pts.length >= 3 ? catmullRomPathD(pts) : polylinePathD(pts);
 }
@@ -1420,11 +1441,15 @@ function createLightBrightnessGraph({
         x: xOf(point.seconds, minS, maxS),
         y: yOf(point.brightness),
       }));
-      const top = memberCoords
-        .map(
-          (c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`
-        )
-        .join(" ");
+      const top =
+        memberCoords.length >= 3
+          ? catmullRomPathD(memberCoords)
+          : memberCoords
+              .map(
+                (c, i) =>
+                  `${i === 0 ? "M" : "L"}${c.x.toFixed(1)},${c.y.toFixed(1)}`
+              )
+              .join(" ");
       const area = `${top} L${memberCoords[memberCoords.length - 1].x.toFixed(
         1
       )},${(PAD_T + PLOT_H).toFixed(1)} L${memberCoords[0].x.toFixed(1)},${(
@@ -2535,6 +2560,7 @@ export {
   sampleHuePathEdge,
   polylinePathD,
   catmullRomPathD,
+  closedCatmullRomPathD,
   huePathStrokeD,
   hueColorAt,
   hueTempAt,

@@ -381,12 +381,12 @@ export function previewRampsForTheme(scene, theme, variables, overrides) {
   const ovRoot = overrides || scene.overrides || {};
   return (scene.card?.ramps || []).map((ramp) => {
     const lightOv = ovRoot[ramp.entity_id] || {};
-    const prev = ramp.stops || [];
     return {
       entity_id: ramp.entity_id,
-      stops: THEME_CARD_EVENTS.map((event, index) => {
-        if (lightOv[event]) {
-          return prev[index] || themeEventSwatchRgb(theme?.events?.[event], variables);
+      stops: THEME_CARD_EVENTS.map((event) => {
+        const ov = lightOv[event];
+        if (ov) {
+          return swatchRgb(ov, ov.brightness);
         }
         return themeEventSwatchRgb(theme?.events?.[event], variables);
       }),
