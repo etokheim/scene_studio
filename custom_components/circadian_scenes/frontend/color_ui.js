@@ -962,9 +962,9 @@ function easeGraphRuns(knots, { closed = true } = {}) {
 }
 
 function easeDayGraphPathD(knots, xOfSec, yOfBri, plotBottom) {
-  // Open 24h plot: do not close dusk→dawn. That wrap is a polar-dial concern;
-  // closing here sent 24:00 to x=0 and filled above the curve.
-  const runs = easeGraphRuns(knots, { closed: false });
+  // Close dusk→dawn so fill covers 00:00 and 24:00. xOf must map 86400 to
+  // the right edge (not 0), or this chord fills above the curve.
+  const runs = easeGraphRuns(knots, { closed: knots.length > 1 });
   if (!runs.length) {
     return { stroke: "", fill: "" };
   }
