@@ -194,7 +194,8 @@
       }
     },
     "clock": {
-      "event_brightness": "{label}, brightness {percent}%"
+      "event_brightness": "{label}, brightness {percent}%",
+      "event_bright_pct": "{percent}%"
     },
     "lights": {
       "unavailable": "Unavailable",

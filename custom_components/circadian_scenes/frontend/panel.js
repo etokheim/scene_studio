@@ -121,6 +121,7 @@ const CLOCK_TICK_MINOR_LEN = 3;
    viewport does not eat the margin. Seasonal path radius still moves the 0% ring. */
 const CLOCK_EVENT_GAP_FROM_PATH_PX = 56;
 const CLOCK_EVENT_BRIGHT_DRAG_PX = 10;
+const CLOCK_BRIGHT_MOVE_MS = 400;
 /* Fallback override radius until layout maps face tick tips into core space. */
 const CLOCK_OVERRIDE_R = CLOCK_TICK_OUTER;
 const CLOCK_SUN_STROKE_MIN_PX = 0.2;
@@ -283,6 +284,12 @@ class CircadianScenesPanel extends HTMLElement {
     this._sidebarEventId = null;
     this._sidebarLightId = null;
     this._dialBrightnessHook = null;
+    this._clockBrightShown = {};
+    this._clockBrightTarget = {};
+    this._clockBrightFrom = {};
+    this._clockBrightAnimT0 = 0;
+    this._clockBrightAnimRaf = undefined;
+    this._clockBrightDragging = false;
     this._clockStickySeconds = undefined;
     this._layoutDialChromeFn = undefined;
     this._clockResizeObserver = undefined;
@@ -1768,18 +1775,11 @@ class CircadianScenesPanel extends HTMLElement {
           line-height: 1.15;
           color: var(--primary-text-color);
         }
-        .clock-event-meta .clock-event-scene {
+        .clock-event-meta .clock-event-bright {
           font-size: 9px;
+          font-variant-numeric: tabular-nums;
           line-height: 1.15;
-          /* Same hue as the heading at 70% — blends better than secondary gray. */
           color: color-mix(in srgb, var(--primary-text-color) 70%, transparent);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: min(7.5rem, calc(var(--clock-chrome) * 2 - 8px));
-        }
-        .clock-event-meta .clock-event-scene.empty {
-          color: var(--warning-color, var(--error-color));
-          font-weight: 600;
         }
         .clock-event {
           position: absolute;
@@ -1860,7 +1860,7 @@ class CircadianScenesPanel extends HTMLElement {
         .clock-event.ghost ha-icon {
           --mdc-icon-size: 13px;
         }
-        /* Missing — icon only; scene cue lives in the meta above. */
+        /* Missing native assignment used to warn here; v4 has no per-event scene pick. */
         .clock-event.missing {
           color: var(--warning-color, var(--error-color));
           border: 2px solid var(--warning-color, var(--error-color));
@@ -3237,18 +3237,6 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .sun-event .time .clamp-time {
           color: var(--primary-text-color);
-          font-weight: 600;
-        }
-        .sun-event .scene {
-          font-size: 11px;
-          color: var(--primary-color);
-          max-width: 100%;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .sun-event .scene.empty {
-          color: var(--warning-color, var(--accent-color, var(--primary-color)));
           font-weight: 600;
         }
         .sun-chart {
@@ -12992,20 +12980,6 @@ class CircadianScenesPanel extends HTMLElement {
         time.textContent = event.fallback ? `${event.time}*` : event.time;
       }
       item.append(name, time);
-      if (editable) {
-        const scene = document.createElement("span");
-        scene.className = "scene";
-        const sceneId = this._eventSceneId(event.id);
-        const sceneName = this._sceneName(sceneId);
-        scene.textContent =
-          sceneName ||
-          this._t("frontend.chart.choose_scene", "Choose scene");
-        if (!sceneName) {
-          scene.classList.add("empty");
-          item.classList.add("missing");
-        }
-        item.appendChild(scene);
-      }
       eventsRow.appendChild(item);
     }
 
@@ -13022,8 +12996,6 @@ class CircadianScenesPanel extends HTMLElement {
       const placeElev = interpolateElevation(curve, placeSeconds);
       const left = `${(xOf(placeSeconds) / CHART_WIDTH) * 100}%`;
       const top = `${yOf(placeElev)}px`;
-      const sceneId = editable ? this._eventSceneId(event.id) : null;
-      const sceneName = editable ? this._sceneName(sceneId) : null;
       const btn = document.createElement(editable ? "button" : "div");
       btn.className = "clock-event";
       if (!editable) {
@@ -13031,9 +13003,6 @@ class CircadianScenesPanel extends HTMLElement {
       } else {
         btn.type = "button";
         btn.dataset.eventId = event.id;
-        if (!sceneName) {
-          btn.classList.add("missing");
-        }
         if (this._sidebarEventId === event.id) {
           btn.classList.add("selected");
           btn.setAttribute("aria-current", "true");
@@ -14567,6 +14536,151 @@ class CircadianScenesPanel extends HTMLElement {
     return this._clockEventIconR;
   }
 
+  _shownEventBrightness(eventId) {
+    const shown = this._clockBrightShown?.[eventId];
+    if (shown != null && Number.isFinite(shown)) {
+      return shown;
+    }
+    return this._dialEventBrightness(eventId);
+  }
+
+  _clockBrightPct(bri) {
+    return Math.round((Number(bri) / 255) * 100);
+  }
+
+  _clockBrightValuesEqual(a, b) {
+    const ids = new Set([
+      ...Object.keys(a || {}),
+      ...Object.keys(b || {}),
+    ]);
+    for (const id of ids) {
+      if (Math.abs((a?.[id] ?? 0) - (b?.[id] ?? 0)) > 0.5) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  _cancelClockBrightMotion() {
+    if (this._clockBrightAnimRaf) {
+      window.cancelAnimationFrame(this._clockBrightAnimRaf);
+      this._clockBrightAnimRaf = undefined;
+    }
+  }
+
+  _syncClockBrightMotion(targets) {
+    const next = { ...targets };
+    if (
+      this._clockBrightDragging ||
+      !Object.keys(this._clockBrightShown || {}).length
+    ) {
+      this._cancelClockBrightMotion();
+      this._clockBrightShown = next;
+      this._clockBrightTarget = next;
+      this._clockBrightFrom = next;
+      return;
+    }
+    if (this._clockBrightValuesEqual(this._clockBrightTarget, next)) {
+      return;
+    }
+    this._clockBrightFrom = { ...this._clockBrightShown };
+    this._clockBrightTarget = next;
+    this._clockBrightAnimT0 = performance.now();
+    this._cancelClockBrightMotion();
+    const tick = (now) => {
+      const u = Math.min(1, (now - this._clockBrightAnimT0) / CLOCK_BRIGHT_MOVE_MS);
+      const eased = easeOutCubic(u);
+      const shown = {};
+      const ids = new Set([
+        ...Object.keys(this._clockBrightFrom),
+        ...Object.keys(this._clockBrightTarget),
+      ]);
+      for (const id of ids) {
+        const a = this._clockBrightFrom[id] ?? this._clockBrightTarget[id] ?? 0;
+        const b = this._clockBrightTarget[id] ?? a;
+        shown[id] = a + (b - a) * eased;
+      }
+      this._clockBrightShown = shown;
+      this._placeClockBrightnessHandles();
+      this._layoutClockEventSpokes();
+      this._layoutClockBrightnessCurve();
+      if (u < 1) {
+        this._clockBrightAnimRaf = window.requestAnimationFrame(tick);
+        return;
+      }
+      this._clockBrightAnimRaf = undefined;
+      this._clockBrightShown = { ...this._clockBrightTarget };
+      this._placeClockBrightnessHandles();
+      this._layoutClockEventSpokes();
+      this._layoutClockBrightnessCurve();
+    };
+    this._clockBrightAnimRaf = window.requestAnimationFrame(tick);
+  }
+
+  _paintClockEventAnchorCopy(anchor, event, bri) {
+    const timeText = event.fallback ? `${event.time}*` : event.time;
+    const pct = this._clockBrightPct(bri);
+    const heading = anchor.querySelector(".clock-event-heading");
+    if (heading) {
+      heading.textContent = `${event.name} · ${timeText}`;
+    }
+    const brightEl = anchor.querySelector(".clock-event-bright");
+    if (brightEl) {
+      brightEl.textContent = this._t(
+        "frontend.clock.event_bright_pct",
+        "{percent}%",
+        { percent: pct }
+      );
+    }
+    const btn = anchor.querySelector(".clock-event");
+    if (!btn) {
+      return;
+    }
+    const solarHint =
+      event.overridden && event.solar_time
+        ? ` (solar ${event.solar_time})`
+        : "";
+    btn.title = `${event.name} · ${timeText}${solarHint} · ${pct}%`;
+    const nameTime = heading?.textContent || `${event.name} ${timeText}`;
+    btn.setAttribute(
+      "aria-label",
+      this._t(
+        "frontend.clock.event_brightness",
+        "{label}, brightness {percent}%",
+        { label: nameTime, percent: pct }
+      )
+    );
+  }
+
+  _placeClockBrightnessHandles() {
+    const anchors = this._clockEventAnchors || [];
+    const r0 = this._clockBrightR0;
+    const r1 = this._clockBrightR1;
+    if (!anchors.length || r0 == null || r1 == null) {
+      return;
+    }
+    for (const anchor of anchors) {
+      const { cos, sin } = anchor._clockPolar || {};
+      if (cos == null || sin == null) {
+        continue;
+      }
+      const bri = this._shownEventBrightness(anchor.dataset.eventId);
+      const iconR = r1 > r0 ? r0 + (bri / 255) * (r1 - r0) : r0;
+      anchor._clockIconR = iconR;
+      anchor.style.left = `${50 + cos * iconR}%`;
+      anchor.style.top = `${50 + sin * iconR}%`;
+      if (anchor.classList.contains("ghost")) {
+        continue;
+      }
+      const event = (this._sunPath?.events || []).find(
+        (item) => item.id === anchor.dataset.eventId
+      );
+      if (event) {
+        this._paintClockEventAnchorCopy(anchor, event, bri);
+      }
+    }
+  }
+
   _layoutClockBrightnessCurve() {
     const fill = this._clockBrightnessFillEl;
     const stroke = this._clockBrightnessArcEl;
@@ -14585,7 +14699,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       knots.push({
         seconds,
-        bri: this._dialEventBrightness(event.id),
+        bri: this._shownEventBrightness(event.id),
       });
     }
     if (knots.length < 2 || !(r1 > r0)) {
@@ -14685,6 +14799,8 @@ class CircadianScenesPanel extends HTMLElement {
       }
       if (!this._clockEventDragMoved) {
         this._clockEventDragMoved = true;
+        this._clockBrightDragging = true;
+        this._cancelClockBrightMotion();
         btn.classList.add("bright-dragging");
       }
       ev.preventDefault();
@@ -14720,6 +14836,7 @@ class CircadianScenesPanel extends HTMLElement {
       btn.classList.remove("bright-dragging");
       this._clockEventDragEventId = null;
       this._clockEventDragOrigin = null;
+      this._clockBrightDragging = false;
     };
     btn.addEventListener("pointerdown", onDown);
     btn.addEventListener("pointermove", onMove);
@@ -15059,6 +15176,10 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockBrightnessGradEl = undefined;
     this._clockBrightnessFillEl = undefined;
     this._clockBrightnessArcEl = undefined;
+    this._cancelClockBrightMotion();
+    this._clockBrightShown = {};
+    this._clockBrightTarget = {};
+    this._clockBrightFrom = {};
   }
 
   _patchLightClock(payload, { morphing = false } = {}) {
@@ -15248,14 +15369,11 @@ class CircadianScenesPanel extends HTMLElement {
       }
       const btn = anchor.querySelector(".clock-event");
       if (btn) {
-        const sceneName = this._sceneName(this._eventSceneId(event.id));
         const solarHint =
           event.overridden && event.solar_time
             ? ` (solar ${event.solar_time})`
             : "";
-        btn.title = sceneName
-          ? `${event.name} · ${timeText}${solarHint} · ${sceneName}`
-          : `${event.name} · ${timeText}${solarHint}`;
+        btn.title = `${event.name} · ${timeText}${solarHint}`;
       }
     }
   }
@@ -15663,7 +15781,9 @@ class CircadianScenesPanel extends HTMLElement {
       const heading = document.createElement("span");
       heading.className = "clock-event-heading";
       heading.textContent = `${event.name} · ${timeText}`;
-      meta.append(heading);
+      const brightEl = document.createElement("span");
+      brightEl.className = "clock-event-bright";
+      meta.append(heading, brightEl);
 
       const btn = document.createElement(editable ? "button" : "div");
       btn.className = "clock-event";
@@ -15794,30 +15914,15 @@ class CircadianScenesPanel extends HTMLElement {
       this._clockBrightR0 = r0;
       this._clockBrightR1 = r1;
       this._clockEventIconR = r1;
-      for (const anchor of eventAnchors) {
-        const { cos, sin } = anchor._clockPolar;
-        const bri = this._dialEventBrightness(anchor.dataset.eventId);
-        const iconR = r1 > r0 ? r0 + (bri / 255) * (r1 - r0) : r0;
-        anchor._clockIconR = iconR;
-        anchor.style.left = `${50 + cos * iconR}%`;
-        anchor.style.top = `${50 + sin * iconR}%`;
-        if (!anchor.classList.contains("ghost")) {
-          const btn = anchor.querySelector(".clock-event");
-          const pct = Math.round((bri / 255) * 100);
-          if (btn) {
-            const heading = anchor.querySelector(".clock-event-heading");
-            const nameTime = heading?.textContent || "";
-            btn.setAttribute(
-              "aria-label",
-              this._t(
-                "frontend.clock.event_brightness",
-                "{label}, brightness {percent}%",
-                { label: nameTime, percent: pct }
-              )
-            );
-          }
+      const targets = {};
+      for (const event of this._sunPath?.events || []) {
+        if (this._eventButtonSeconds(event) == null) {
+          continue;
         }
+        targets[event.id] = this._dialEventBrightness(event.id);
       }
+      this._syncClockBrightMotion(targets);
+      this._placeClockBrightnessHandles();
       // Override arc/glow on the outer tip of the face hour ticks, in core space.
       const tickOuterPx = (tickOuterR / 100) * (w / 2);
       const overrideR = (tickOuterPx / (coreW / 2)) * 100;
