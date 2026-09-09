@@ -115,11 +115,12 @@ const CLOCK_SUN_SCALE_MAX = 2;
 const CLOCK_TICK_OUTER = 94;
 const CLOCK_TICK_MAJOR_LEN = 5;
 const CLOCK_TICK_MINOR_LEN = 3;
-/* Desktop px from sun-path radius to event-button center. Screen pixels so a
-   narrower viewport does not eat the margin (core-viewBox units shrank with
-   the fixed chrome inset). Seasonal path radius still moves the buttons.
-   ≈ twice the old 10-unit core gap on a ~570px core. Mobile sits on the path. */
+/* Desktop px from sun-path radius to event-button center at 100% brightness.
+   0% sits on the sun path; the same pixel span is the drag range on mobile
+   (buttons leave the path when brightness > 0). Screen pixels so a narrower
+   viewport does not eat the margin. Seasonal path radius still moves the 0% ring. */
 const CLOCK_EVENT_GAP_FROM_PATH_PX = 56;
+const CLOCK_EVENT_BRIGHT_DRAG_PX = 10;
 /* Fallback override radius until layout maps face tick tips into core space. */
 const CLOCK_OVERRIDE_R = CLOCK_TICK_OUTER;
 const CLOCK_SUN_STROKE_MIN_PX = 0.2;
@@ -281,6 +282,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._yearScrubbing = false;
     this._sidebarEventId = null;
     this._sidebarLightId = null;
+    this._dialBrightnessHook = null;
     this._clockStickySeconds = undefined;
     this._layoutDialChromeFn = undefined;
     this._clockResizeObserver = undefined;
@@ -1577,6 +1579,27 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-light-clock-overlay .clock-override-glow {
           pointer-events: none;
         }
+        .clock-brightness-overlay {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 0;
+          overflow: visible;
+        }
+        .clock-brightness-overlay .clock-brightness-arc {
+          fill: none;
+          stroke: #fff;
+          stroke-width: 1px;
+          vector-effect: non-scaling-stroke;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          opacity: 0.88;
+        }
+        .clock-brightness-overlay .clock-brightness-fill {
+          pointer-events: none;
+        }
         .clock-handle-hit {
           position: absolute;
           left: 50%;
@@ -1775,11 +1798,18 @@ class CircadianScenesPanel extends HTMLElement {
           padding: 0;
           font: inherit;
           transform-origin: center center;
+          /* Radial brightness drag is along the spoke; do not let the face
+             pan-y steal the gesture. */
+          touch-action: none;
           transition:
             transform 160ms cubic-bezier(0.2, 0, 0, 1),
             box-shadow 160ms cubic-bezier(0.2, 0, 0, 1),
             border-color 160ms cubic-bezier(0.2, 0, 0, 1),
             background 160ms cubic-bezier(0.2, 0, 0, 1);
+        }
+        .clock-event.bright-dragging {
+          cursor: grabbing;
+          transition: none;
         }
         .clock-event:hover,
         .clock-event:focus-visible,
@@ -5216,6 +5246,154 @@ class CircadianScenesPanel extends HTMLElement {
     this._themeDraft.events[eventId] = { color, brightness: value };
   }
 
+  /** Selected lamp for dial brightness, else theme (including `theme:` ids). */
+  _dialBrightnessLightId() {
+    const id = this._sidebarLightId;
+    if (id && String(id).startsWith("light.")) {
+      return id;
+    }
+    return null;
+  }
+
+  _dialEventBrightness(eventId) {
+    const lightId = this._dialBrightnessLightId();
+    if (lightId) {
+      const sceneId = this._eventSceneId(eventId);
+      const drafted = sceneId
+        ? this._nativeDrafts[sceneId]?.entities?.[lightId]
+        : null;
+      if (drafted && drafted.brightness != null) {
+        return Number(drafted.brightness);
+      }
+      const overridden = this._formData?.overrides?.[lightId]?.[eventId];
+      if (overridden && overridden.brightness != null) {
+        return Number(overridden.brightness);
+      }
+      const light = (this._sunPath?.lights || []).find(
+        (item) => item.entity_id === lightId
+      );
+      const row = (light?.event_states || []).find(
+        (item) => item.event === eventId
+      );
+      if (row?.state?.brightness != null) {
+        return Number(row.state.brightness);
+      }
+    }
+    if (this._themeDraft) {
+      return Number(this._themeEventDraft(eventId).brightness) || 0;
+    }
+    const seed = EVENT_LIGHT_DEFAULTS[eventId];
+    return seed ? seed[0] : 0;
+  }
+
+  _brightnessPayloadFromTheme(eventId, brightness) {
+    const draft = this._themeEventDraft(eventId);
+    const payload = {
+      state: brightness > 0 ? "on" : draft.state || "on",
+      brightness,
+    };
+    if (draft.color_mode) {
+      payload.color_mode = draft.color_mode;
+    }
+    if (draft.color_temp_kelvin != null) {
+      payload.color_temp_kelvin = draft.color_temp_kelvin;
+    }
+    if (draft.hs_color) {
+      payload.hs_color = [...draft.hs_color];
+    }
+    if (draft.rgb_color) {
+      payload.rgb_color = [...draft.rgb_color];
+    }
+    return payload;
+  }
+
+  _writeDialEventBrightness(eventId, brightness, { history = false } = {}) {
+    const value = Number(brightness);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    const lightId = this._dialBrightnessLightId();
+    if (!lightId) {
+      if (!this._themeDraft) {
+        void this._ensureThemeDraft();
+      }
+      if (!this._themeDraft) {
+        return;
+      }
+      if (history) {
+        this._commitUndo({ type: "theme-event", eventId });
+      }
+      const draft = {
+        ...this._themeEventDraft(eventId),
+        brightness: value,
+      };
+      delete draft.variable_ref;
+      this._writeThemeEventFromDraft(eventId, draft);
+      const hook = this._dialBrightnessHook;
+      if (hook?.kind === "theme") {
+        const item = hook.drafts.get(eventId);
+        if (item) {
+          item.brightness = value;
+          if (value > 0) {
+            item.state = "on";
+          }
+          delete item.variable_ref;
+        }
+        hook.sync?.();
+      }
+      this._patchDialFromSession({ applyTheme: true });
+      this._syncThemePreviewSurfaces();
+      this._saveSoon();
+      return;
+    }
+    if (history) {
+      this._commitUndo({ type: "light", lightId, eventId });
+    }
+    if (!this._formData.overrides) {
+      this._formData.overrides = {};
+    }
+    const byLight = { ...(this._formData.overrides[lightId] || {}) };
+    const prev = byLight[eventId];
+    const next = prev
+      ? { ...prev, brightness: value }
+      : this._brightnessPayloadFromTheme(eventId, value);
+    next.brightness = value;
+    if (value > 0) {
+      next.state = "on";
+    }
+    delete next.variable_ref;
+    byLight[eventId] = next;
+    this._formData.overrides = {
+      ...this._formData.overrides,
+      [lightId]: byLight,
+    };
+    const sceneId = this._eventSceneId(eventId);
+    if (sceneId) {
+      const existing = this._nativeDrafts[sceneId]?.entities?.[lightId];
+      if (existing) {
+        existing.brightness = value;
+        if (value > 0) {
+          existing.state = "on";
+        }
+        delete existing.variable_ref;
+      }
+    }
+    const hook = this._dialBrightnessHook;
+    if (hook?.kind === "light" && hook.lightId === lightId) {
+      const entry = sceneId ? hook.drafts.get(sceneId) : null;
+      if (entry?.draft) {
+        entry.draft.brightness = value;
+        if (value > 0) {
+          entry.draft.state = "on";
+        }
+        delete entry.draft.variable_ref;
+      }
+      hook.sync?.();
+    }
+    this._patchDialFromSession();
+    this._saveSoon();
+  }
+
   _themeRingLight(events) {
     const drafts = {};
     for (const event of events || []) {
@@ -5331,7 +5509,17 @@ class CircadianScenesPanel extends HTMLElement {
           return { ...row, present: false, state: null };
         }
         const overridden = this._formData?.overrides?.[light.entity_id]?.[row.event];
-        if (applyTheme && !overridden && this._themeDraft && row.event) {
+        if (overridden) {
+          return {
+            ...row,
+            present: true,
+            state: {
+              state: overridden.state || "on",
+              ...overridden,
+            },
+          };
+        }
+        if (applyTheme && this._themeDraft && row.event) {
           return {
             ...row,
             present: true,
@@ -5389,6 +5577,9 @@ class CircadianScenesPanel extends HTMLElement {
       }),
       className: "light-dialog theme-event-dialog",
       onDismiss: () => {
+        if (this._dialBrightnessHook?.kind === "theme") {
+          this._dialBrightnessHook = null;
+        }
         brightnessGraphCtl?.disconnect();
         wheelCtl?.disconnect();
         this._setSidebarEvent(null);
@@ -5405,6 +5596,14 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._setSidebarEvent(event.id);
     this._setSidebarLight(`theme:${this._themeLookId()}`);
+    this._dialBrightnessHook = {
+      kind: "theme",
+      drafts,
+      sync: () => {
+        brightnessGraphCtl?.sync();
+        wheelCtl?.sync();
+      },
+    };
     this._rebuildThemeDial();
     this._syncThemePreviewSurfaces();
     const { body } = opened;
@@ -8568,6 +8767,7 @@ class CircadianScenesPanel extends HTMLElement {
   _setSidebarLight(entityId) {
     this._sidebarLightId = entityId || null;
     this._syncClockLightSelection();
+    this._layoutDialChromeFn?.();
   }
 
   /** Drop ring hover highlight (touch scrub / mouse leave). */
@@ -10106,6 +10306,9 @@ class CircadianScenesPanel extends HTMLElement {
         colorBriGraphCtl?.disconnect();
         whiteBriGraphCtl?.disconnect();
         wheelCtl?.disconnect();
+        if (this._dialBrightnessHook?.kind === "light") {
+          this._dialBrightnessHook = null;
+        }
       },
     });
     if (!opened) {
@@ -10120,6 +10323,17 @@ class CircadianScenesPanel extends HTMLElement {
     // handler clears a matching _sidebarLightId.
     this._setSidebarLight(light.entity_id);
     this._setSidebarEvent(event.id);
+    this._dialBrightnessHook = {
+      kind: "light",
+      lightId: light.entity_id,
+      drafts,
+      sync: () => {
+        brightnessGraphCtl?.sync();
+        colorBriGraphCtl?.sync();
+        whiteBriGraphCtl?.sync();
+        wheelCtl?.sync();
+      },
+    };
     const { host, header, body, footer } = opened;
     host._lightEntityId = light.entity_id;
     const subtitleEl = header.querySelector("[slot='subtitle']");
@@ -13302,7 +13516,8 @@ class CircadianScenesPanel extends HTMLElement {
   _clockSunPathRadius() {
     const sunClear = CLOCK_SUN_R_VIEW * CLOCK_SUN_SCALE_MAX;
     const rMin = CLOCK_RINGS_OUTER + CLOCK_SUN_PATH_PAD + sunClear;
-    // Mobile events sit on the path — use more of the core toward the ticks.
+    // Mobile uses more of the core toward the ticks; brightness 100% sits
+    // outside the path in face chrome, not on this radius.
     const narrow =
       typeof window !== "undefined" &&
       window.matchMedia("(max-width: 870px)").matches;
@@ -14331,6 +14546,187 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
+  _clockFacePctToCore(faceXPct, faceYPct, faceW, coreW, chrome) {
+    const faceX = (faceXPct / 100) * faceW;
+    const faceY = (faceYPct / 100) * faceW;
+    return {
+      x: ((faceX - chrome) / coreW) * CLOCK_VIEW,
+      y: ((faceY - chrome) / coreW) * CLOCK_VIEW,
+    };
+  }
+
+  _clockEventAnchorRadius(eventId, { ghost = false } = {}) {
+    const hit = (this._clockEventAnchors || []).find(
+      (anchor) =>
+        anchor.dataset.eventId === eventId &&
+        anchor.classList.contains("ghost") === ghost
+    );
+    if (hit?._clockIconR != null) {
+      return hit._clockIconR;
+    }
+    return this._clockEventIconR;
+  }
+
+  _layoutClockBrightnessCurve() {
+    const fill = this._clockBrightnessFillEl;
+    const stroke = this._clockBrightnessArcEl;
+    const grad = this._clockBrightnessGradEl;
+    const r0 = this._clockBrightR0;
+    const r1 = this._clockBrightR1;
+    if (!fill || !stroke || !grad || r0 == null || r1 == null) {
+      return;
+    }
+    const events = this._sunPath?.events || [];
+    const knots = [];
+    for (const event of events) {
+      const seconds = this._eventButtonSeconds(event);
+      if (seconds == null) {
+        continue;
+      }
+      knots.push({
+        seconds,
+        bri: this._dialEventBrightness(event.id),
+      });
+    }
+    if (knots.length < 2 || !(r1 > r0)) {
+      fill.setAttribute("d", "");
+      stroke.setAttribute("d", "");
+      return;
+    }
+    grad.setAttribute("r", String(r1));
+    while (grad.firstChild) {
+      grad.removeChild(grad.firstChild);
+    }
+    const mk = (offset, opacity) => {
+      const stop = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "stop"
+      );
+      stop.setAttribute("offset", offset);
+      stop.setAttribute("stop-color", "#fff");
+      stop.setAttribute("stop-opacity", String(opacity));
+      grad.appendChild(stop);
+    };
+    const innerPct = (r0 / r1) * 100;
+    mk("0%", 0);
+    mk(`${innerPct.toFixed(2)}%`, 0);
+    mk(`${Math.min(100, innerPct + (100 - innerPct) * 0.55).toFixed(2)}%`, 0.1);
+    mk("100%", 0.24);
+    const polar = (seconds, radius) => {
+      const deg = this._clockAngleDeg(seconds);
+      const rad = ((deg - 90) * Math.PI) / 180;
+      return {
+        x: 50 + Math.cos(rad) * radius,
+        y: 50 + Math.sin(rad) * radius,
+      };
+    };
+    const radiusOf = (bri) => r0 + (bri / 255) * (r1 - r0);
+    const outer = [];
+    for (let i = 0; i < knots.length; i += 1) {
+      const a = knots[i];
+      const b = knots[(i + 1) % knots.length];
+      let span = b.seconds - a.seconds;
+      if (span <= 0) {
+        span += SECONDS_PER_DAY;
+      }
+      const steps = Math.max(8, Math.round(span / 900));
+      for (let s = 0; s < steps; s += 1) {
+        const t = s / steps;
+        const seconds = (a.seconds + span * t) % SECONDS_PER_DAY;
+        const bri = a.bri + (b.bri - a.bri) * t;
+        const pt = polar(seconds, radiusOf(bri));
+        outer.push({ ...pt, seconds });
+      }
+    }
+    outer.push({
+      ...polar(knots[0].seconds, radiusOf(knots[0].bri)),
+      seconds: knots[0].seconds,
+    });
+    const loop = outer.slice(0, -1);
+    const inner = loop.map((pt) => polar(pt.seconds, r0)).reverse();
+    const fmt = (pt) => `${pt.x.toFixed(2)} ${pt.y.toFixed(2)}`;
+    const strokeD = outer
+      .map((pt, index) => `${index === 0 ? "M" : "L"} ${fmt(pt)}`)
+      .join(" ");
+    const fillD = `${strokeD} ${inner
+      .map((pt) => `L ${fmt(pt)}`)
+      .join(" ")} Z`;
+    stroke.setAttribute("d", strokeD);
+    fill.setAttribute("d", fillD);
+  }
+
+  _bindClockEventBrightnessDrag(btn, event, anchor) {
+    const onDown = (ev) => {
+      if (ev.button != null && ev.button !== 0) {
+        return;
+      }
+      this._clockEventDragMoved = false;
+      this._clockEventDragOrigin = { x: ev.clientX, y: ev.clientY };
+      this._clockEventDragEventId = event.id;
+      this._clockEventDragUndo = false;
+      btn.setPointerCapture?.(ev.pointerId);
+    };
+    const onMove = (ev) => {
+      if (this._clockEventDragEventId !== event.id) {
+        return;
+      }
+      const origin = this._clockEventDragOrigin;
+      if (!origin) {
+        return;
+      }
+      const dx = ev.clientX - origin.x;
+      const dy = ev.clientY - origin.y;
+      if (
+        !this._clockEventDragMoved &&
+        dx * dx + dy * dy <
+          CLOCK_EVENT_BRIGHT_DRAG_PX * CLOCK_EVENT_BRIGHT_DRAG_PX
+      ) {
+        return;
+      }
+      if (!this._clockEventDragMoved) {
+        this._clockEventDragMoved = true;
+        btn.classList.add("bright-dragging");
+      }
+      ev.preventDefault();
+      const face = this._clockFaceEl;
+      const r0 = this._clockBrightR0;
+      const r1 = this._clockBrightR1;
+      const polar = anchor._clockPolar;
+      if (!face || r0 == null || r1 == null || !polar || !(r1 > r0)) {
+        return;
+      }
+      const rect = face.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const along = (ev.clientX - cx) * polar.cos + (ev.clientY - cy) * polar.sin;
+      const r0Px = (r0 / 100) * rect.width;
+      const r1Px = (r1 / 100) * rect.width;
+      const t = (along - r0Px) / (r1Px - r0Px);
+      const bounded = t < 0 ? 0 : t > 1 ? 1 : t;
+      const brightness = Math.round(bounded * 255);
+      this._writeDialEventBrightness(event.id, brightness, {
+        history: !this._clockEventDragUndo,
+      });
+      this._clockEventDragUndo = true;
+    };
+    const onUp = (ev) => {
+      if (this._clockEventDragEventId !== event.id) {
+        return;
+      }
+      if (this._clockEventDragMoved) {
+        this._clockEventSuppressClick = true;
+        ev.preventDefault();
+      }
+      btn.classList.remove("bright-dragging");
+      this._clockEventDragEventId = null;
+      this._clockEventDragOrigin = null;
+    };
+    btn.addEventListener("pointerdown", onDown);
+    btn.addEventListener("pointermove", onMove);
+    btn.addEventListener("pointerup", onUp);
+    btn.addEventListener("pointercancel", onUp);
+  }
+
   /**
    * Place event labels to avoid collisions around the dial.
    * Top → above; bottom → below; left/right → first (topmost) above, rest below.
@@ -14398,31 +14794,37 @@ class CircadianScenesPanel extends HTMLElement {
     if (!(faceW > 8) || !(coreW > 8) || !Number.isFinite(chrome)) {
       return;
     }
-    const iconR = this._clockEventIconR;
-    if (iconR == null) {
-      return;
-    }
-    const chromePoint = (seconds) => {
+    const chromePoint = (seconds, iconR) => {
       const deg = this._clockAngleDeg(seconds);
       const rad = ((deg - 90) * Math.PI) / 180;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
-      const faceX = (0.5 + (cos * iconR) / 100) * faceW;
-      const faceY = (0.5 + (sin * iconR) / 100) * faceW;
-      return {
-        x: ((faceX - chrome) / coreW) * CLOCK_VIEW,
-        y: ((faceY - chrome) / coreW) * CLOCK_VIEW,
-      };
+      const faceXPct = 50 + cos * iconR;
+      const faceYPct = 50 + sin * iconR;
+      return this._clockFacePctToCore(faceXPct, faceYPct, faceW, coreW, chrome);
+    };
+    const tipRadius = (eventId) => {
+      const ghost = (this._clockEventAnchors || []).find(
+        (anchor) =>
+          anchor.dataset.eventId === eventId &&
+          anchor.classList.contains("ghost") &&
+          !anchor.hidden
+      );
+      if (ghost?._clockIconR != null) {
+        return ghost._clockIconR;
+      }
+      return this._clockEventAnchorRadius(eventId);
     };
     for (const spoke of spokes || []) {
       const id = spoke.dataset.eventId;
       const event = (this._sunPath?.events || []).find((item) => item.id === id);
       const markSeconds = this._eventMarkSeconds(event);
-      if (markSeconds == null) {
+      const iconR = tipRadius(id);
+      if (markSeconds == null || iconR == null) {
         continue;
       }
       // Spoke aims at true-solar chrome (ghost when overridden, else button).
-      const tip = chromePoint(markSeconds);
+      const tip = chromePoint(markSeconds, iconR);
       spoke.setAttribute("x1", tip.x.toFixed(2));
       spoke.setAttribute("y1", tip.y.toFixed(2));
     }
@@ -14431,24 +14833,31 @@ class CircadianScenesPanel extends HTMLElement {
       const event = (this._sunPath?.events || []).find((item) => item.id === id);
       const markSeconds = this._eventMarkSeconds(event);
       const buttonSeconds = this._eventButtonSeconds(event);
-      if (markSeconds == null || buttonSeconds == null) {
+      const fromR = this._clockEventAnchorRadius(id, { ghost: true });
+      const toR = this._clockEventAnchorRadius(id);
+      if (markSeconds == null || buttonSeconds == null || fromR == null || toR == null) {
         continue;
       }
-      const from = chromePoint(markSeconds);
-      const to = chromePoint(buttonSeconds);
-      // Arc along the event-button circle (same radius), shortest way.
-      const r = Math.hypot(from.x - CLOCK_CX, from.y - CLOCK_CY);
-      if (!(r > 1)) {
-        continue;
-      }
+      const from = chromePoint(markSeconds, fromR);
+      const to = chromePoint(buttonSeconds, toR);
       const delta = this._shortestSecondsDelta(markSeconds, buttonSeconds);
       const absSpan = Math.abs(delta);
       if (absSpan < 30) {
         link.setAttribute("d", "");
         continue;
       }
+      if (Math.abs(fromR - toR) >= 0.2) {
+        link.setAttribute(
+          "d",
+          `M ${from.x.toFixed(2)} ${from.y.toFixed(2)} L ${to.x.toFixed(2)} ${to.y.toFixed(2)}`
+        );
+        continue;
+      }
+      const r = Math.hypot(from.x - CLOCK_CX, from.y - CLOCK_CY);
+      if (!(r > 1)) {
+        continue;
+      }
       const large = absSpan / SECONDS_PER_DAY > 0.5 ? 1 : 0;
-      // Positive delta = clockwise on this dial (matches override arc).
       const sweep = delta >= 0 ? 1 : 0;
       link.setAttribute(
         "d",
@@ -14647,6 +15056,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockHorizonBackEl?.remove();
     this._clockHorizonBackEl = undefined;
     this._clockFaceEl = undefined;
+    this._clockBrightnessGradEl = undefined;
+    this._clockBrightnessFillEl = undefined;
+    this._clockBrightnessArcEl = undefined;
   }
 
   _patchLightClock(payload, { morphing = false } = {}) {
@@ -15187,8 +15599,44 @@ class CircadianScenesPanel extends HTMLElement {
     face.append(horizonBack, glowLayer, core, faceTicks);
 
     const editable = this._view === "edit" || this._view === "theme";
+    void this._ensureThemeDraft();
     const eventLayer = document.createElement("div");
     eventLayer.className = "clock-event-layer";
+    const briSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    briSvg.setAttribute("class", "clock-brightness-overlay");
+    briSvg.setAttribute("viewBox", "0 0 100 100");
+    briSvg.setAttribute("aria-hidden", "true");
+    const briDefs = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "defs"
+    );
+    const briGrad = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "radialGradient"
+    );
+    briGrad.setAttribute("id", "clock-brightness-glow-grad");
+    briGrad.setAttribute("gradientUnits", "userSpaceOnUse");
+    briGrad.setAttribute("cx", "50");
+    briGrad.setAttribute("cy", "50");
+    briGrad.setAttribute("r", "50");
+    briDefs.appendChild(briGrad);
+    const briFill = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "path"
+    );
+    briFill.setAttribute("class", "clock-brightness-fill");
+    briFill.setAttribute("fill", "url(#clock-brightness-glow-grad)");
+    const briArc = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "path"
+    );
+    briArc.setAttribute("class", "clock-brightness-arc");
+    briArc.setAttribute("vector-effect", "non-scaling-stroke");
+    briSvg.append(briDefs, briFill, briArc);
+    eventLayer.appendChild(briSvg);
+    this._clockBrightnessGradEl = briGrad;
+    this._clockBrightnessFillEl = briFill;
+    this._clockBrightnessArcEl = briArc;
     const eventAnchors = [];
     const polarForSeconds = (seconds) => {
       const deg = this._clockAngleDeg(seconds);
@@ -15239,8 +15687,13 @@ class CircadianScenesPanel extends HTMLElement {
         btn.setAttribute("aria-label", `${event.name} ${timeText}`);
         btn.addEventListener("click", (ev) => {
           ev.stopPropagation();
+          if (this._clockEventSuppressClick) {
+            this._clockEventSuppressClick = false;
+            return;
+          }
           this._toggleEventSceneDialog(event);
         });
+        this._bindClockEventBrightnessDrag(btn, event, anchor);
       }
       anchor.append(meta, btn);
       eventLayer.appendChild(anchor);
@@ -15280,25 +15733,32 @@ class CircadianScenesPanel extends HTMLElement {
         return;
       }
       // Face chrome: tick tips near the edge, hour numbers just inside the
-      // ticks (clear of the stroke). Event buttons track the sun path at a
-      // fixed screen-px gap (desktop) or on the path (mobile ≤870px).
+      // ticks. Brightness 0% is the sun path; 100% is path + CLOCK_EVENT_GAP.
       const tickOuterPad = w >= 871 ? 10 : 6;
       const labelFontPx = w >= 871 ? 32 : 16;
       // Past major tick length + ~half glyph + air so digits do not sit on ticks.
       const labelInsetPx =
         (CLOCK_TICK_MAJOR_LEN / 100) * (w / 2) + labelFontPx * 0.55 + 4 + 18;
       const labelPad = tickOuterPad + labelInsetPx;
-      // Mobile: events on the path — chrome is tick clearance only. Desktop:
-      // fixed chrome (no face-size lerp); gap from path stays constant.
       const narrowFace = window.matchMedia("(max-width: 870px)").matches;
       const chromeFloor = narrowFace
         ? Math.ceil(
             tickOuterPad + (CLOCK_TICK_MAJOR_LEN / 100) * (w / 2) + 2
           )
         : Math.ceil(labelPad + 4);
-      const chromePx = narrowFace
+      let chromePx = narrowFace
         ? chromeFloor
         : Math.max(CLOCK_CHROME_PX, chromeFloor);
+      const pathR = this._clockSunPathRadius();
+      const pathFrac = pathR / 100;
+      const half = w / 2;
+      const btnClear = CLOCK_EVENT_BTN_PX / 2 + 2;
+      const outerNeed = CLOCK_EVENT_GAP_FROM_PATH_PX + btnClear;
+      if (pathFrac > 0 && half > outerNeed) {
+        const chromeForBri = Math.ceil(half - (half - outerNeed) / pathFrac);
+        const maxChrome = Math.max(0, Math.floor((w - 80) / 2));
+        chromePx = Math.min(Math.max(chromePx, chromeForBri), maxChrome);
+      }
       face.style.setProperty("--clock-chrome", `${chromePx}px`);
       // Derive core size from chrome (do not wait for a second layout pass).
       const coreW = w - 2 * chromePx;
@@ -15321,16 +15781,42 @@ class CircadianScenesPanel extends HTMLElement {
         label.style.left = `${50 + cos * labelR}%`;
         label.style.top = `${50 + sin * labelR}%`;
       }
-      const pathR = this._clockSunPathRadius();
-      // Mobile: event buttons sit on the path so the dial can grow larger.
-      const pathPx = (pathR / 100) * (coreW / 2);
-      const eventGapPx = narrowFace ? 0 : CLOCK_EVENT_GAP_FROM_PATH_PX;
-      const eventRFacePx = pathPx + eventGapPx;
-      const iconR = (eventRFacePx / w) * 100;
+      const pathPx = pathFrac * (coreW / 2);
+      let r1Px = pathPx + CLOCK_EVENT_GAP_FROM_PATH_PX;
+      if (r1Px + btnClear > half) {
+        r1Px = half - btnClear;
+      }
+      if (r1Px < pathPx) {
+        r1Px = pathPx;
+      }
+      const r0 = (pathPx / w) * 100;
+      const r1 = (r1Px / w) * 100;
+      this._clockBrightR0 = r0;
+      this._clockBrightR1 = r1;
+      this._clockEventIconR = r1;
       for (const anchor of eventAnchors) {
         const { cos, sin } = anchor._clockPolar;
+        const bri = this._dialEventBrightness(anchor.dataset.eventId);
+        const iconR = r1 > r0 ? r0 + (bri / 255) * (r1 - r0) : r0;
+        anchor._clockIconR = iconR;
         anchor.style.left = `${50 + cos * iconR}%`;
         anchor.style.top = `${50 + sin * iconR}%`;
+        if (!anchor.classList.contains("ghost")) {
+          const btn = anchor.querySelector(".clock-event");
+          const pct = Math.round((bri / 255) * 100);
+          if (btn) {
+            const heading = anchor.querySelector(".clock-event-heading");
+            const nameTime = heading?.textContent || "";
+            btn.setAttribute(
+              "aria-label",
+              this._t(
+                "frontend.clock.event_brightness",
+                "{label}, brightness {percent}%",
+                { label: nameTime, percent: pct }
+              )
+            );
+          }
+        }
       }
       // Override arc/glow on the outer tip of the face hour ticks, in core space.
       const tickOuterPx = (tickOuterR / 100) * (w / 2);
@@ -15341,8 +15827,8 @@ class CircadianScenesPanel extends HTMLElement {
       }
       this._updateOverrideArc(this._clockStickySeconds);
       this._layoutClockEventMetas(eventAnchors);
-      this._clockEventIconR = iconR;
       this._layoutClockEventSpokes();
+      this._layoutClockBrightnessCurve();
     };
     this._clockEventAnchors = eventAnchors;
     this._layoutDialChromeFn = () => {

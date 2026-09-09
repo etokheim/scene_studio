@@ -193,6 +193,9 @@
         "helper": "Leave empty to create a native scene automatically for this event"
       }
     },
+    "clock": {
+      "event_brightness": "{label}, brightness {percent}%"
+    },
     "lights": {
       "unavailable": "Unavailable",
       "removed": "Removed",
