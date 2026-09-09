@@ -5458,10 +5458,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _editingThemeLook() {
-    return (
-      this._view === "theme" ||
-      String(this._sidebarLightId || "").startsWith("theme:")
-    );
+    return this._view === "theme";
   }
 
   _rebuildThemeDial() {
@@ -5479,8 +5476,8 @@ class CircadianScenesPanel extends HTMLElement {
     };
     // Patch ring fills in place so sidebar drags keep a live dial without
     // rebuilding clock chrome (year rail / event dots) on every pointermove.
-    // Theme-event sidebar from a circadian scene uses the same single theme
-    // ring as `#theme/<id>` so brightness/color ticks match that editor.
+    // Direct `#theme/<id>` editing uses this single theme ring. A theme
+    // sidebar on a circadian scene keeps that scene's light rings.
     if (this._clockRingsHost?.isConnected && this._patchLightClock(this._sunPath)) {
       this._displayedSunPath = this._sunPath;
       return;
@@ -5613,7 +5610,11 @@ class CircadianScenesPanel extends HTMLElement {
         wheelCtl?.sync();
       },
     };
-    this._rebuildThemeDial();
+    if (this._view === "theme") {
+      this._rebuildThemeDial();
+    } else {
+      this._patchDialFromSession({ applyTheme: true });
+    }
     this._syncThemePreviewSurfaces();
     const { body } = opened;
     const duskSlot = document.createElement("div");
