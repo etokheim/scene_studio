@@ -2454,7 +2454,7 @@ class CircadianScenesPanel extends HTMLElement {
           gap: 16px;
           --wheel-peek: 10%;
           --wheel-mixed-inner: 62%;
-          --wheel-mixed-gap: 6%;
+          --wheel-mixed-gap: 0%;
         }
         .hue-wheel-canvas {
           position: relative;
@@ -2494,12 +2494,20 @@ class CircadianScenesPanel extends HTMLElement {
           transform-origin: center center;
           transition:
             transform 280ms cubic-bezier(0.2, 0, 0, 1),
+            box-shadow 280ms cubic-bezier(0.2, 0, 0, 1),
+            filter 280ms cubic-bezier(0.2, 0, 0, 1),
             mask-image 280ms cubic-bezier(0.2, 0, 0, 1),
             -webkit-mask-image 280ms cubic-bezier(0.2, 0, 0, 1);
         }
         .hue-wheel-layer.is-front {
           z-index: 2;
-          box-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+        }
+        .hue-wheel-canvas.is-stacked .hue-wheel-layer.is-front {
+          /* Screen-space size scales with the disk; keep values large so the
+             inner mixed disk still casts a heavy shade onto the outer ring. */
+          box-shadow:
+            0 18px 48px rgba(0, 0, 0, 0.55),
+            0 6px 16px rgba(0, 0, 0, 0.4);
         }
         .hue-wheel-layer.is-back {
           z-index: 1;

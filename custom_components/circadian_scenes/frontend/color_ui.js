@@ -24,7 +24,7 @@ const HUE_PATH_HS_DEG_PER_STEP = 2.5;
 const HUE_PATH_HS_SAT_EPS = 0.03;
 const WHEEL_PEEK_FRAC = 0.1;
 const WHEEL_MIXED_INNER_FRAC = 0.62;
-const WHEEL_MIXED_GAP_FRAC = 0.06;
+const WHEEL_MIXED_GAP_FRAC = 0;
 const _hueWheelImageCache = new Map();
 
 function hueLinearScale(t, min, max) {
@@ -1003,7 +1003,7 @@ function pinStackKind(scenes, hasColor, hasTemp, capsOf) {
 
 function wheelStackGeom(radius, kind, peekFrac, mixedInnerFrac, gapFrac) {
   const peek = Math.max(4, radius * peekFrac);
-  const gap = Math.max(3, radius * gapFrac);
+  const gap = Math.max(0, radius * (gapFrac || 0));
   if (kind === "color-only") {
     return {
       kind,
@@ -1830,6 +1830,8 @@ function createSceneColorWheel({
       return;
     }
     const key = `${geom.kind}|${geom.color.inner}|${geom.color.outer}|${geom.temp.inner}|${geom.temp.outer}`;
+    const stacked = bandLive(geom.color) && bandLive(geom.temp);
+    canvasWrap.classList.toggle("is-stacked", stacked);
     applyLayer(bgColor, geom.color, radius, geom.front === "color");
     applyLayer(bgTemp, geom.temp, radius, geom.front === "temp");
     bgColor.hidden = !hasColor || !bandLive(geom.color);
@@ -2048,7 +2050,7 @@ function createSceneColorWheel({
     const { scenes, activeId } = getState();
     const geom = radius
       ? currentGeom()
-      : wheelStackGeom(1, pinStackKind(scenes, hasColor, hasTemp, capsOf), 0.1, 0.62, 0.06);
+      : wheelStackGeom(1, pinStackKind(scenes, hasColor, hasTemp, capsOf), 0.1, 0.62, 0);
     layoutLayers(geom);
     const seen = new Set();
     for (const scene of scenes) {
