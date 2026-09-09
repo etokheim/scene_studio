@@ -145,6 +145,12 @@ const UNDO_STACK_LIMIT = 75;
 const LIGHT_VIEW_STORAGE_VERSION = 1;
 const LIVE_EDIT_STORAGE_VERSION = 1;
 const ROOM_PREVIEW_STORAGE_VERSION = 1;
+const SCENE_PLAY_STORAGE_VERSION = 1;
+const SCENE_PLAY_TICK_MS = 1000;
+const SCENE_PLAY_TRANSITION_SEC = 1;
+const SCENE_PLAY_DURATION_DEFAULT_SEC = 30;
+const SCENE_PLAY_DURATION_MIN_SEC = 5;
+const SCENE_PLAY_DURATION_MAX_SEC = 180;
 const EXTERNAL_SCENE_WARN_STORAGE_VERSION = 1;
 const CLOCK_FEATHER_PCT = 5.5;
 const LINKED_EVENTS = ["dawn", "sunrise", "sunset"];
@@ -299,8 +305,17 @@ class CircadianScenesPanel extends HTMLElement {
     this._lightView = "dial";
     this._liveEdit = true;
     this._liveEditSidebarHandler = null;
+    // App-bar Live edit: preview the open circadian scene at the selected clock.
     this._roomPreview = false;
     this._roomPreviewSnapshots = null;
+    this._scenePreviewOwnerId = null;
+    this._scenePreviewEpoch = 0;
+    this._scenePreviewLastApplyAt = undefined;
+    this._scenePreviewApplyTimer = undefined;
+    this._scenePreviewApplyPending = null;
+    this._scenePlay = null;
+    this._scenePlayRaf = undefined;
+    this._scenePlayBtn = null;
     this._loadGeneration = 0;
     this._previewGeneration = 0;
     this._hashSyncing = false;
@@ -492,6 +507,11 @@ class CircadianScenesPanel extends HTMLElement {
       this._sidebarMotionTimer = undefined;
     }
     this._cancelSunPathMorph();
+    this._stopScenePlay({ restore: false });
+    this._clearScenePreviewApplyTimer();
+    if (this._roomPreviewSnapshots) {
+      void this._abandonScenePreview();
+    }
   }
 
   async _build() {
@@ -3379,6 +3399,7 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-hover-time {
           font-weight: 500;
         }
+        .sun-hover-play,
         .sun-hover-reset {
           pointer-events: auto;
           display: inline-grid;
@@ -3398,6 +3419,7 @@ class CircadianScenesPanel extends HTMLElement {
           cursor: pointer;
           font: inherit;
         }
+        .sun-hover-play:hover,
         .sun-hover-reset:hover {
           background: color-mix(
             in srgb,
@@ -3405,6 +3427,7 @@ class CircadianScenesPanel extends HTMLElement {
             var(--card-background-color)
           );
         }
+        .sun-hover-play ha-icon,
         .sun-hover-reset ha-icon {
           --mdc-icon-size: 18px;
         }
@@ -4179,6 +4202,7 @@ class CircadianScenesPanel extends HTMLElement {
         ? { ...emptyFormData(), ...pending }
         : emptyFormData();
       this._error = null;
+      void this._abandonScenePreview();
       this._resetSession();
       this._render();
       if (!this._formData.area) {
@@ -4203,6 +4227,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._editId = null;
       this._entityId = null;
       this._error = null;
+      void this._abandonScenePreview();
       this._loadTheme(this._themeId);
       return;
     }
@@ -4212,7 +4237,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._themeId = null;
       this._themeDraft = null;
       this._entityId = null;
-      void this._stopRoomPreview({ restore: true });
+      void this._abandonScenePreview();
       this._loadList();
       return;
     }
@@ -4221,7 +4246,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._themeId = null;
     this._themeDraft = null;
     this._entityId = null;
-    void this._stopRoomPreview({ restore: true });
+    void this._abandonScenePreview();
     this._loadList();
   }
 
@@ -4320,6 +4345,9 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _loadItem(sceneId) {
+    if (this._scenePreviewOwnerId && this._scenePreviewOwnerId !== sceneId) {
+      await this._abandonScenePreview();
+    }
     const token = this._startPanelLoad();
     try {
       const [item, payload] = await Promise.all([
@@ -4580,7 +4608,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockEnterPlayed = false;
     this._clockStickySeconds = undefined;
     this._liveEditSidebarHandler = null;
-    this._stopRoomPreview({ restore: true });
+    this._abandonScenePreview();
     this._abortPreview();
     this._cancelClockSunArc();
     this._cancelSunPathMorph();
@@ -6207,6 +6235,48 @@ class CircadianScenesPanel extends HTMLElement {
     });
     intervalRow.append(intervalLabelWrap, intervalField);
     body.appendChild(intervalRow);
+
+    const playRow = document.createElement("div");
+    playRow.className = "setup-link-row scene-play-duration-row";
+    const playLabelWrap = document.createElement("div");
+    const playLabel = document.createElement("div");
+    playLabel.className = "name";
+    playLabel.textContent = this._t(
+      "frontend.settings.play_preview_duration",
+      "24-hour play duration"
+    );
+    const playHelper = document.createElement("div");
+    playHelper.className = "sidebar-note";
+    playHelper.style.margin = "4px 0 0";
+    playHelper.textContent = this._t(
+      "frontend.settings.play_preview_duration_helper",
+      "How long a full day takes when you press play on the sun readout. Lights update once per second."
+    );
+    playLabelWrap.append(playLabel, playHelper);
+    const playField = document.createElement("ha-selector");
+    playField.hass = this._hass;
+    playField.label = this._t(
+      "frontend.settings.play_preview_duration_seconds",
+      "Seconds"
+    );
+    playField.value = this._readScenePlayDurationSec();
+    playField.selector = {
+      number: {
+        min: SCENE_PLAY_DURATION_MIN_SEC,
+        max: SCENE_PLAY_DURATION_MAX_SEC,
+        step: 1,
+        mode: "box",
+        unit_of_measurement: "s",
+      },
+    };
+    playField.addEventListener("value-changed", (ev) => {
+      this._writeScenePlayDurationSec(Number(playField.value));
+      playField.value = this._readScenePlayDurationSec();
+      ev.stopPropagation();
+    });
+    playRow.append(playLabelWrap, playField);
+    body.appendChild(playRow);
+
     this._appendDuskMinimumPicker(body);
   }
 
@@ -6400,8 +6470,8 @@ class CircadianScenesPanel extends HTMLElement {
     previewToggle.className = "live-edit-toggle room-preview-toggle";
     const previewLabel = document.createElement("span");
     previewLabel.textContent = this._t(
-      "frontend.actions.scene_preview",
-      "Preview scene"
+      "frontend.actions.live_edit",
+      "Live edit"
     );
     const previewSwitch = document.createElement("ha-switch");
     previewSwitch.checked = Boolean(this._roomPreview);
@@ -6447,10 +6517,9 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._roomPreviewSwitch) {
       return;
     }
-    const sidebarOpen = Boolean(this._sidebarLightId || this._sidebarEventId);
-    this._roomPreviewSwitch.disabled = sidebarOpen;
-    // While a sidebar pauses preview, keep the switch reflecting the saved pref.
-    this._roomPreviewSwitch.checked = sidebarOpen
+    const lightSidebar = this._lightSidebarBlocksScenePreview();
+    this._roomPreviewSwitch.disabled = lightSidebar;
+    this._roomPreviewSwitch.checked = lightSidebar
       ? this._readRoomPreviewPref()
       : Boolean(this._roomPreview);
   }
@@ -6458,8 +6527,7 @@ class CircadianScenesPanel extends HTMLElement {
   _maybeResumeRoomPreview() {
     if (
       this._view !== "edit" ||
-      this._sidebarLightId ||
-      this._sidebarEventId ||
+      this._lightSidebarBlocksScenePreview() ||
       !this._readRoomPreviewPref()
     ) {
       this._syncRoomPreviewControl();
@@ -6471,8 +6539,7 @@ class CircadianScenesPanel extends HTMLElement {
   async _resumeRoomPreviewIfPreferred() {
     if (
       this._view !== "edit" ||
-      this._sidebarLightId ||
-      this._sidebarEventId ||
+      this._lightSidebarBlocksScenePreview() ||
       !this._readRoomPreviewPref()
     ) {
       return;
@@ -6482,7 +6549,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._syncRoomPreviewControl();
       return;
     }
-    await this._applyRoomPreviewAtClock();
+    this._scheduleScenePreviewApply({ force: true, transition: SCENE_PLAY_TRANSITION_SEC });
   }
 
   async _setLiveEdit(on) {
@@ -6863,6 +6930,41 @@ class CircadianScenesPanel extends HTMLElement {
   _writeRoomPreviewPref(on) {
     try {
       window.localStorage.setItem(this._roomPreviewStorageKey(), on ? "1" : "0");
+    } catch (_err) {
+      /* ignore */
+    }
+  }
+
+  _scenePlayDurationStorageKey() {
+    const user = this._hass?.user?.id || "anon";
+    return `${DOMAIN}.scenePlayDuration.v${SCENE_PLAY_STORAGE_VERSION}.${user}`;
+  }
+
+  _readScenePlayDurationSec() {
+    const raw = this._readLocalStorage(this._scenePlayDurationStorageKey());
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      return SCENE_PLAY_DURATION_DEFAULT_SEC;
+    }
+    return Math.max(
+      SCENE_PLAY_DURATION_MIN_SEC,
+      Math.min(SCENE_PLAY_DURATION_MAX_SEC, Math.round(n))
+    );
+  }
+
+  _writeScenePlayDurationSec(seconds) {
+    const n = Number(seconds);
+    const value = Number.isFinite(n)
+      ? Math.max(
+          SCENE_PLAY_DURATION_MIN_SEC,
+          Math.min(SCENE_PLAY_DURATION_MAX_SEC, Math.round(n))
+        )
+      : SCENE_PLAY_DURATION_DEFAULT_SEC;
+    try {
+      window.localStorage.setItem(
+        this._scenePlayDurationStorageKey(),
+        String(value)
+      );
     } catch (_err) {
       /* ignore */
     }
@@ -8760,6 +8862,9 @@ class CircadianScenesPanel extends HTMLElement {
   _setSidebarEvent(eventId) {
     this._sidebarEventId = eventId || null;
     if (eventId) {
+      if (this._scenePlayActive()) {
+        this._stopScenePlay({ restore: !this._roomPreview });
+      }
       this._clockStickySeconds = undefined;
     }
     const host = this.shadowRoot?.querySelector(".scene-sidebar");
@@ -8775,6 +8880,10 @@ class CircadianScenesPanel extends HTMLElement {
         this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
       }
     }
+    this._scheduleScenePreviewApply({
+      force: true,
+      transition: SCENE_PLAY_TRANSITION_SEC,
+    });
   }
 
   _setSidebarLight(entityId) {
@@ -9876,9 +9985,116 @@ class CircadianScenesPanel extends HTMLElement {
     };
   }
 
+  _lightSidebarBlocksScenePreview() {
+    const id = this._sidebarLightId;
+    return Boolean(id && String(id).startsWith("light."));
+  }
+
+  _scenePlayActive() {
+    return Boolean(this._scenePlay);
+  }
+
+  _scenePreviewWantsApply() {
+    return (
+      this._view === "edit" &&
+      !this._lightSidebarBlocksScenePreview() &&
+      Boolean(this._sunPath?.lights?.length) &&
+      (this._roomPreview || this._scenePlayActive())
+    );
+  }
+
+  _canPlayScenePreview() {
+    return (
+      this._view === "edit" &&
+      this._formData?.kind !== "simple" &&
+      Boolean(this._sunPath?.lights?.some((light) => light.entity_id && !light.suggested))
+    );
+  }
+
+  _captureScenePreviewSnapshots() {
+    if (this._roomPreviewSnapshots) {
+      return;
+    }
+    const snaps = {};
+    for (const light of this._sunPath?.lights || []) {
+      if (light.suggested || !light.entity_id) {
+        continue;
+      }
+      snaps[light.entity_id] = this._snapshotLight(light.entity_id);
+    }
+    this._roomPreviewSnapshots = snaps;
+    this._scenePreviewOwnerId = this._editId;
+  }
+
+  _clearScenePreviewApplyTimer() {
+    if (this._scenePreviewApplyTimer) {
+      window.clearTimeout(this._scenePreviewApplyTimer);
+      this._scenePreviewApplyTimer = undefined;
+    }
+    this._scenePreviewApplyPending = null;
+  }
+
+  _scheduleScenePreviewApply({
+    transition = SCENE_PLAY_TRANSITION_SEC,
+    force = false,
+  } = {}) {
+    if (!this._scenePreviewWantsApply()) {
+      return;
+    }
+    if (force) {
+      this._clearScenePreviewApplyTimer();
+      this._scenePreviewLastApplyAt = performance.now();
+      void this._applyRoomPreviewAtClock({ transition });
+      return;
+    }
+    const now = performance.now();
+    const last = this._scenePreviewLastApplyAt;
+    if (last != null && now - last < SCENE_PLAY_TICK_MS) {
+      this._scenePreviewApplyPending = { transition };
+      if (!this._scenePreviewApplyTimer) {
+        this._scenePreviewApplyTimer = window.setTimeout(() => {
+          this._scenePreviewApplyTimer = undefined;
+          const pending = this._scenePreviewApplyPending;
+          this._scenePreviewApplyPending = null;
+          if (pending) {
+            this._scenePreviewLastApplyAt = performance.now();
+            void this._applyRoomPreviewAtClock(pending);
+          }
+        }, SCENE_PLAY_TICK_MS - (now - last));
+      }
+      return;
+    }
+    this._scenePreviewLastApplyAt = now;
+    void this._applyRoomPreviewAtClock({ transition });
+  }
+
+  async _restoreScenePreviewSnapshots() {
+    const snaps = this._roomPreviewSnapshots;
+    this._roomPreviewSnapshots = null;
+    this._scenePreviewOwnerId = null;
+    if (!snaps) {
+      return;
+    }
+    await Promise.all(
+      Object.entries(snaps).map(([entityId, stored]) =>
+        this._applyLightState(entityId, stored)
+      )
+    );
+  }
+
+  async _abandonScenePreview() {
+    this._scenePreviewEpoch += 1;
+    this._stopScenePlay({ restore: false });
+    this._clearScenePreviewApplyTimer();
+    this._roomPreview = false;
+    await this._restoreScenePreviewSnapshots();
+    this._syncRoomPreviewControl();
+    this._syncScenePlayButton();
+  }
+
   async _setRoomPreview(on) {
     const next = Boolean(on);
-    if (next && (this._sidebarLightId || this._sidebarEventId)) {
+    if (next && this._lightSidebarBlocksScenePreview()) {
       this._syncRoomPreviewControl();
       return;
     }
@@ -9886,75 +10102,214 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._roomPreview === next) {
       this._syncRoomPreviewControl();
       if (next) {
-        await this._applyRoomPreviewAtClock();
+        this._scheduleScenePreviewApply({
+          force: true,
+          transition: SCENE_PLAY_TRANSITION_SEC,
+        });
       }
       return;
     }
     if (next) {
       await this._startRoomPreview();
     } else {
-      await this._stopRoomPreview({ restore: true });
+      this._stopScenePlay({ restore: false });
+      this._roomPreview = false;
+      this._scenePreviewEpoch += 1;
+      this._clearScenePreviewApplyTimer();
+      await this._restoreScenePreviewSnapshots();
     }
     this._syncRoomPreviewControl();
+    this._syncScenePlayButton();
   }
 
   async _startRoomPreview() {
     if (this._view !== "edit" || !this._sunPath?.lights?.length) {
       return;
     }
-    if (!this._roomPreviewSnapshots) {
-      const snaps = {};
-      for (const light of this._sunPath.lights) {
-        if (light.suggested || !light.entity_id) {
-          continue;
-        }
-        snaps[light.entity_id] = this._snapshotLight(light.entity_id);
-      }
-      this._roomPreviewSnapshots = snaps;
-    }
+    this._captureScenePreviewSnapshots();
     this._roomPreview = true;
-    await this._applyRoomPreviewAtClock();
+    this._scheduleScenePreviewApply({
+      force: true,
+      transition: SCENE_PLAY_TRANSITION_SEC,
+    });
   }
 
   async _stopRoomPreview({ restore = false } = {}) {
-    const wasOn = this._roomPreview;
+    this._stopScenePlay({ restore: false });
+    this._clearScenePreviewApplyTimer();
     this._roomPreview = false;
-    if (restore && wasOn && this._roomPreviewSnapshots) {
-      const snaps = this._roomPreviewSnapshots;
+    if (restore) {
+      this._scenePreviewEpoch += 1;
+      await this._restoreScenePreviewSnapshots();
+    } else {
       this._roomPreviewSnapshots = null;
-      await Promise.all(
-        Object.entries(snaps).map(([entityId, stored]) =>
-          this._applyLightState(entityId, stored)
-        )
-      );
-      return;
+      this._scenePreviewOwnerId = null;
     }
-    if (!this._roomPreview) {
-      this._roomPreviewSnapshots = null;
-    }
+    this._syncRoomPreviewControl();
   }
 
-  async _applyRoomPreviewAtClock() {
-    if (
-      !this._roomPreview ||
-      this._sidebarLightId ||
-      this._sidebarEventId ||
-      !this._sunPath?.lights?.length
-    ) {
+  async _applyRoomPreviewAtClock({ transition = 0 } = {}) {
+    if (!this._scenePreviewWantsApply()) {
       return;
     }
+    const epoch = this._scenePreviewEpoch;
     const seconds = this._clockSunIdleSeconds();
     const jobs = [];
+    const opts =
+      transition > 0 ? { transition } : {};
     for (const light of this._sunPath.lights) {
       if (light.suggested || !light.entity_id) {
         continue;
       }
       const sample = interpolateLightSample(light.samples || [], seconds);
       jobs.push(
-        this._applyLightState(light.entity_id, this._sampleToStoredState(sample))
+        (async () => {
+          if (epoch !== this._scenePreviewEpoch) {
+            return;
+          }
+          await this._applyLightState(
+            light.entity_id,
+            this._sampleToStoredState(sample),
+            opts
+          );
+        })()
       );
     }
     await Promise.all(jobs);
+  }
+
+  _stopScenePlay({ restore = false } = {}) {
+    if (this._scenePlayRaf) {
+      window.cancelAnimationFrame(this._scenePlayRaf);
+      this._scenePlayRaf = undefined;
+    }
+    const wasPlaying = Boolean(this._scenePlay);
+    this._scenePlay = null;
+    if (wasPlaying) {
+      this._syncScenePlayButton();
+    }
+    if (restore) {
+      this._scenePreviewEpoch += 1;
+      this._clearScenePreviewApplyTimer();
+      void this._restoreScenePreviewSnapshots();
+    }
+  }
+
+  _stopScenePlayBecauseTimeChanged() {
+    if (!this._scenePlayActive()) {
+      return;
+    }
+    const restore = !this._roomPreview;
+    this._stopScenePlay({ restore });
+    if (this._roomPreview) {
+      this._scheduleScenePreviewApply({
+        force: true,
+        transition: SCENE_PLAY_TRANSITION_SEC,
+      });
+    }
+  }
+
+  _toggleScenePlay() {
+    if (this._scenePlayActive()) {
+      this._stopScenePlay({ restore: !this._roomPreview });
+      this._fillHoverReadout(this._clockSunIdleSeconds(), { hovering: false });
+      return;
+    }
+    this._startScenePlay();
+  }
+
+  _startScenePlay() {
+    if (!this._canPlayScenePreview() || this._lightSidebarBlocksScenePreview()) {
+      return;
+    }
+    this._cancelClockSunArc();
+    this._captureScenePreviewSnapshots();
+    const startSeconds = this._clockSunIdleSeconds();
+    this._clockStickySeconds = startSeconds;
+    this._scenePlay = {
+      startSeconds,
+      durationMs: this._readScenePlayDurationSec() * 1000,
+      t0: performance.now(),
+      lastApply: 0,
+    };
+    this._syncScenePlayButton();
+    this._applyClockSunAppearance(startSeconds);
+    this._fillHoverReadout(startSeconds, { hovering: false });
+    this._scenePreviewLastApplyAt = performance.now();
+    void this._applyRoomPreviewAtClock({
+      transition: SCENE_PLAY_TRANSITION_SEC,
+    });
+    const tick = (now) => {
+      const play = this._scenePlay;
+      if (!play) {
+        return;
+      }
+      const elapsed = now - play.t0;
+      if (elapsed >= play.durationMs) {
+        this._clockStickySeconds = play.startSeconds;
+        this._applyClockSunAppearance(play.startSeconds);
+        this._fillHoverReadout(play.startSeconds, { hovering: false });
+        this._stopScenePlay({ restore: !this._roomPreview });
+        if (this._roomPreview) {
+          void this._applyRoomPreviewAtClock({
+            transition: SCENE_PLAY_TRANSITION_SEC,
+          });
+        }
+        return;
+      }
+      const seconds =
+        (play.startSeconds + (elapsed / play.durationMs) * SECONDS_PER_DAY) %
+        SECONDS_PER_DAY;
+      this._clockStickySeconds = seconds;
+      this._applyClockSunAppearance(seconds);
+      this._patchHoverReadoutClock(seconds);
+      if (now - play.lastApply >= SCENE_PLAY_TICK_MS) {
+        play.lastApply = now;
+        void this._applyRoomPreviewAtClock({
+          transition: SCENE_PLAY_TRANSITION_SEC,
+        });
+      }
+      this._scenePlayRaf = window.requestAnimationFrame(tick);
+    };
+    this._scenePlay.lastApply = performance.now();
+    this._scenePlayRaf = window.requestAnimationFrame(tick);
+  }
+
+  _ensureScenePlayButton() {
+    if (this._scenePlayBtn) {
+      this._syncScenePlayButton();
+      return this._scenePlayBtn;
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sun-hover-play";
+    const icon = document.createElement("ha-icon");
+    btn.appendChild(icon);
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      this._toggleScenePlay();
+    });
+    this._scenePlayBtn = btn;
+    this._syncScenePlayButton();
+    return btn;
+  }
+
+  _syncScenePlayButton() {
+    const btn = this._scenePlayBtn;
+    if (!btn) {
+      return;
+    }
+    const playing = this._scenePlayActive();
+    const label = playing
+      ? this._t("frontend.actions.stop_preview", "Stop preview")
+      : this._t("frontend.actions.play_scene", "Play 24-hour preview");
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("aria-pressed", playing ? "true" : "false");
+    const icon = btn.querySelector("ha-icon");
+    if (icon) {
+      icon.setAttribute("icon", playing ? "mdi:stop" : "mdi:play");
+    }
   }
 
   async _activateNativeSceneWithDrafts(sceneEntityId) {
@@ -12330,6 +12685,7 @@ class CircadianScenesPanel extends HTMLElement {
       // after programmatic focus from click. Tab / arrows keep working via tabindex.
       scrub.setPointerCapture(ev.pointerId);
       this._yearScrubbing = true;
+      this._stopScenePlayBecauseTimeChanged();
       applyPointer(ev);
     });
     scrub.addEventListener("pointermove", (ev) => {
@@ -13146,13 +13502,29 @@ class CircadianScenesPanel extends HTMLElement {
     });
   }
 
+  _patchHoverReadoutClock(seconds) {
+    this._updateLightNameBrightness(seconds);
+    const readout = this._hoverReadout;
+    if (!readout) {
+      return;
+    }
+    const time = readout.querySelector(".sun-hover-time");
+    const sun = readout.querySelector(".sun-hover-elev");
+    if (time) {
+      time.textContent = formatClock(seconds);
+    }
+    if (sun && this._sunPath?.curve) {
+      const elev = interpolateElevation(this._sunPath.curve, seconds);
+      sun.textContent = `Sun ${elev.toFixed(1)}°`;
+    }
+  }
+
   _fillHoverReadout(seconds, { hovering }) {
     this._updateLightNameBrightness(seconds);
     const readout = this._hoverReadout;
     if (!readout) {
       return;
     }
-    readout.replaceChildren();
     if (seconds == null) {
       seconds = nowSecondsSinceMidnight();
     }
@@ -13161,20 +13533,24 @@ class CircadianScenesPanel extends HTMLElement {
     } else {
       readout.removeAttribute("data-active");
     }
-    const time = document.createElement("span");
-    time.className = "sun-hover-time";
     const eventIdle =
       !hovering &&
       this._sidebarEventId &&
       (this._sunPath?.events || []).some((e) => e.id === this._sidebarEventId);
     const sticky = this._clockStickySeconds != null;
-    time.textContent =
+    const timeLabel =
       hovering || eventIdle || sticky
         ? formatClock(seconds)
         : `Now ${formatClock(seconds)}`;
-    const sun = document.createElement("span");
     const elev = interpolateElevation(this._sunPath.curve, seconds);
-    sun.textContent = `Sun ${elev.toFixed(1)}°`;
+    const sunLabel = `Sun ${elev.toFixed(1)}°`;
+    readout.replaceChildren();
+    const time = document.createElement("span");
+    time.className = "sun-hover-time";
+    time.textContent = timeLabel;
+    const sun = document.createElement("span");
+    sun.className = "sun-hover-elev";
+    sun.textContent = sunLabel;
     // Always reserve the reset slot so time/° do not shift when sticky.
     const resetSlot = document.createElement("span");
     resetSlot.className = "sun-hover-reset-slot";
@@ -13193,10 +13569,17 @@ class CircadianScenesPanel extends HTMLElement {
       });
       resetSlot.appendChild(reset);
     }
-    readout.append(time, sun, resetSlot);
+    if (this._canPlayScenePreview()) {
+      readout.append(this._ensureScenePlayButton(), time, sun, resetSlot);
+    } else {
+      readout.append(time, sun, resetSlot);
+    }
   }
 
   _resetClockSunToNow() {
+    if (this._scenePlayActive()) {
+      this._stopScenePlay({ restore: !this._roomPreview });
+    }
     this._clockStickySeconds = undefined;
     this._clockSunDragging = false;
     this._hoverSeconds = undefined;
@@ -13204,7 +13587,10 @@ class CircadianScenesPanel extends HTMLElement {
     const now = nowSecondsSinceMidnight();
     this._moveClockSunTo(now, { durationMs: CLOCK_SUN_MOVE_MS });
     this._fillHoverReadout(now, { hovering: false });
-    void this._applyRoomPreviewAtClock();
+    this._scheduleScenePreviewApply({
+      force: true,
+      transition: SCENE_PLAY_TRANSITION_SEC,
+    });
   }
 
   /** Ease the sun along the path when it relocates (event pin, reset, etc.). */
@@ -14959,6 +15345,9 @@ class CircadianScenesPanel extends HTMLElement {
       this._clockStickySeconds = seconds;
       this._applyClockSunAppearance(seconds);
       this._fillHoverReadout(seconds, { hovering: true });
+      this._scheduleScenePreviewApply({
+        transition: SCENE_PLAY_TRANSITION_SEC,
+      });
     };
     const onMove = (ev) => {
       if (!this._clockPointerArmed) {
@@ -14968,6 +15357,9 @@ class CircadianScenesPanel extends HTMLElement {
       if (origin) {
         const dist = Math.hypot(ev.clientX - origin.x, ev.clientY - origin.y);
         if (dist >= CLOCK_DRAG_CLICK_PX) {
+          if (!this._clockSunDragging) {
+            this._stopScenePlayBecauseTimeChanged();
+          }
           this._clockSunDragging = true;
           // Keep the event sidebar open while dragging; close on release.
           if (this._sidebarEventId) {
@@ -15036,7 +15428,10 @@ class CircadianScenesPanel extends HTMLElement {
         this._applyClockSunAppearance(finalSeconds);
       }
       this._fillHoverReadout(finalSeconds, { hovering: false });
-      void this._applyRoomPreviewAtClock();
+      this._scheduleScenePreviewApply({
+        force: true,
+        transition: SCENE_PLAY_TRANSITION_SEC,
+      });
       if (this._clockCloseSidebarAfterDrag) {
         this._clockCloseSidebarAfterDrag = false;
         this._closeSceneSidebar({ animate: true });

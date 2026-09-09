@@ -73,7 +73,10 @@
       "scene_settings": "Scene settings",
       "hidden_in_ha": "Hidden in Home Assistant",
       "dusk_minimum_time_of_day": "Earliest time for dusk",
-      "dusk_minimum_time_of_day_helper": "To avoid lights dimming too much, too early. Applies to every circadian scene and theme."
+      "dusk_minimum_time_of_day_helper": "To avoid lights dimming too much, too early. Applies to every circadian scene and theme.",
+      "play_preview_duration": "24-hour play duration",
+      "play_preview_duration_helper": "How long a full day takes when you press play on the sun readout. Lights update once per second.",
+      "play_preview_duration_seconds": "Seconds"
     },
     "common": {
       "untitled": "Untitled",
@@ -107,7 +110,9 @@
       "live_edit": "Live edit",
       "live_preview": "Live preview",
       "room_preview": "Preview room",
-      "scene_preview": "Preview scene",
+      "scene_preview": "Live edit",
+      "play_scene": "Play 24-hour preview",
+      "stop_preview": "Stop preview",
       "activate_scene": "Activate scene",
       "table_view": "Table view",
       "dial_view": "Dial view",
