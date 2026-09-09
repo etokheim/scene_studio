@@ -962,7 +962,9 @@ function easeGraphRuns(knots, { closed = true } = {}) {
 }
 
 function easeDayGraphPathD(knots, xOfSec, yOfBri, plotBottom) {
-  const runs = easeGraphRuns(knots, { closed: knots.length > 1 });
+  // Open 24h plot: do not close dusk→dawn. That wrap is a polar-dial concern;
+  // closing here sent 24:00 to x=0 and filled above the curve.
+  const runs = easeGraphRuns(knots, { closed: false });
   if (!runs.length) {
     return { stroke: "", fill: "" };
   }
@@ -1450,8 +1452,13 @@ function createLightBrightnessGraph({
     gradient.setAttribute("x2", String(PAD_L + plotW));
   };
 
-  const xOf = (seconds) =>
-    PAD_L + (wrapDaySeconds(seconds) / GRAPH_DAY_SECONDS) * plotW;
+  const xOf = (seconds) => {
+    const s = Number(seconds);
+    if (s >= GRAPH_DAY_SECONDS) {
+      return PAD_L + plotW;
+    }
+    return PAD_L + (wrapDaySeconds(s) / GRAPH_DAY_SECONDS) * plotW;
+  };
   const yOf = (brightness) =>
     PAD_T + PLOT_H * (1 - Math.max(0, Math.min(255, brightness)) / 255);
   const brightnessFromY = (clientY) => {
