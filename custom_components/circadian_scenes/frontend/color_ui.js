@@ -23,9 +23,8 @@ const HUE_PATH_STEPS = 72;
 const HUE_PATH_HS_DEG_PER_STEP = 2.5;
 const HUE_PATH_HS_SAT_EPS = 0.03;
 const WHEEL_PEEK_FRAC = 0.1;
-/* Mixed stack: kelvin ring is 25% of the old 38% band (62% inner); that
-   75% of ring width is given to the color disk. */
-const WHEEL_MIXED_INNER_FRAC = 0.62 + (1 - 0.62) * 0.75;
+/* Mixed stack: kelvin ring is 2× the post-75%-shrink band (~9.5% → ~19%). */
+const WHEEL_MIXED_INNER_FRAC = 1 - (1 - 0.62) * 0.25 * 2;
 const WHEEL_MIXED_GAP_FRAC = 0;
 const _hueWheelImageCache = new Map();
 
