@@ -62,12 +62,6 @@ function diffIsoDays(fromIso, toIso) {
 function formatClockHm(seconds) {
   const sec = ((Math.round(Number(seconds) || 0) % SECONDS_PER_DAY) + SECONDS_PER_DAY) %
     SECONDS_PER_DAY;
-  if (sec === 0) {
-    return "00:00";
-  }
-  if (sec >= SECONDS_PER_DAY) {
-    return "24:00";
-  }
   const hours = Math.floor(sec / 3600);
   const minutes = Math.floor((sec % 3600) / 60);
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;

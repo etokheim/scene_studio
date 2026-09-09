@@ -57,12 +57,30 @@ class SunEvent:
 def current_sun_event_index(start_times: list[float], seconds: float) -> int:
     """Index of the last solar event that has started at `seconds`.
 
-    The next event is the first whose start is *strictly after* now, so standing
-    exactly on an event belongs to that event (0% into the following transition).
-    Before the first event of the day, that is the last event (wrap from yesterday).
+    ``start_times`` must be in solar order (dawn → … → dusk), not sorted by
+    clock time. Dusk after midnight is a smaller clock second than sunset;
+    unwrap those times so sunset→dusk still crosses midnight.
+
+    The next event is the first whose (unwrapped) start is *strictly after*
+    now, so standing exactly on an event belongs to that event (0% into the
+    following transition). Before dawn, now is on the post-midnight wrap.
     """
-    for index, start in enumerate(start_times):
-        if start > seconds:
+    if not start_times:
+        raise HomeAssistantError("current_sun_event_index requires solar start times")
+
+    unwrapped = [float(start_times[0])]
+    for start in start_times[1:]:
+        value = float(start)
+        while value < unwrapped[-1]:
+            value += 86400
+        unwrapped.append(value)
+
+    now = seconds % 86400
+    if now < start_times[0]:
+        now += 86400
+
+    for index, start in enumerate(unwrapped):
+        if start > now:
             return index - 1 if index else len(start_times) - 1
     return len(start_times) - 1
 

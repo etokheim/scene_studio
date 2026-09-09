@@ -353,18 +353,21 @@ export function maxSolarElevation(latitude) {
 }
 
 function formatTime(seconds) {
-  seconds = Math.max(0, Math.min(Math.round(seconds), SECONDS_PER_DAY));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours === 24) {
-    return "24:00";
+  let s = Math.round(Number(seconds) || 0) % SECONDS_PER_DAY;
+  if (s < 0) {
+    s += SECONDS_PER_DAY;
   }
+  const hours = Math.floor(s / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 function duskStartSeconds(solarSeconds, duskMinimum) {
+  solarSeconds = Math.round(Number(solarSeconds) || 0);
   if (solarSeconds >= SECONDS_PER_DAY) {
-    return { seconds: SECONDS_PER_DAY, overridden: false, solarSeconds: null };
+    const clock =
+      ((solarSeconds % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY;
+    return { seconds: clock, overridden: false, solarSeconds: null };
   }
   solarSeconds = Math.max(0, solarSeconds);
   if (duskMinimum != null && Number(duskMinimum) > solarSeconds) {
@@ -572,8 +575,24 @@ export function buildClientSunDay({
 }
 
 function currentEventIndex(starts, seconds) {
-  for (let index = 0; index < starts.length; index += 1) {
-    if (starts[index] > seconds) {
+  if (!starts.length) {
+    return 0;
+  }
+  const unwrapped = [starts[0]];
+  for (let index = 1; index < starts.length; index += 1) {
+    let value = starts[index];
+    while (value < unwrapped[unwrapped.length - 1]) {
+      value += SECONDS_PER_DAY;
+    }
+    unwrapped.push(value);
+  }
+  let now =
+    ((seconds % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY;
+  if (now < starts[0]) {
+    now += SECONDS_PER_DAY;
+  }
+  for (let index = 0; index < unwrapped.length; index += 1) {
+    if (unwrapped[index] > now) {
       return index ? index - 1 : starts.length - 1;
     }
   }

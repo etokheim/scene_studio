@@ -12809,8 +12809,11 @@ class CircadianScenesPanel extends HTMLElement {
     const minElev = Math.min(-peakElev, ...elevations);
     const maxElev = Math.max(peakElev, ...elevations);
     const span = maxElev - minElev;
-    const xOf = (seconds) =>
-      PLOT_LEFT + (seconds / SECONDS_PER_DAY) * (PLOT_RIGHT - PLOT_LEFT);
+    const xOf = (seconds) => {
+      const s =
+        ((Number(seconds) % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY;
+      return PLOT_LEFT + (s / SECONDS_PER_DAY) * (PLOT_RIGHT - PLOT_LEFT);
+    };
     const yOf = (elevation) =>
       PLOT_TOP + ((maxElev - elevation) / span) * (PLOT_BOTTOM - PLOT_TOP);
 
@@ -13264,7 +13267,9 @@ class CircadianScenesPanel extends HTMLElement {
 
   _clockAngleDeg(seconds) {
     // Noon at top, midnight at bottom (180° offset from CSS 12-o'clock).
-    return (seconds / SECONDS_PER_DAY) * 360 + 180;
+    const s =
+      ((Number(seconds) % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY;
+    return (s / SECONDS_PER_DAY) * 360 + 180;
   }
 
   _lightAtClockPointer(ev, ringsHost, ringLights) {

@@ -936,13 +936,14 @@ class CircadianScene(Scene):
 
     def get_sun_event(self, sun_events, seconds_since_midnight, offset=0) -> SunEvent:
         """Returns the current sun event, according to the current time of day. Can be offset by ie. 1 to get the next sun event instead."""
-        sorted_sun_events = sorted(sun_events.values(), key=lambda x: x.start_time)
-        starts = [event.start_time for event in sorted_sun_events]
+        # Solar order, not clock-sorted: wrapped dusk (01:00) is still after sunset.
+        ordered = [sun_events[key] for key in EVENT_ORDER]
+        starts = [event.start_time for event in ordered]
         closest_match_index = current_sun_event_index(
             starts, seconds_since_midnight % 86400
         )
         offset_index = closest_match_index + offset
-        return sorted_sun_events[offset_index % len(sorted_sun_events)]
+        return ordered[offset_index % len(ordered)]
 
     def _current_day_transition_percent(self) -> float:
         """Day position for the state attribute: stored if manual, else from the clock."""
@@ -973,11 +974,10 @@ class CircadianScene(Scene):
             dusk_minimum,
         )
         seconds = self.seconds_since_midnight(0)
-        ordered = sorted(EVENT_ORDER, key=lambda key: starts[key])
-        times = [starts[key] for key in ordered]
+        times = [starts[key] for key in EVENT_ORDER]
         index = current_sun_event_index(times, seconds % 86400)
-        current_key = ordered[index]
-        next_key = ordered[(index + 1) % len(ordered)]
+        current_key = EVENT_ORDER[index]
+        next_key = EVENT_ORDER[(index + 1) % len(EVENT_ORDER)]
         intra = transition_progress_percent(
             starts[current_key], starts[next_key], seconds
         )

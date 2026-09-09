@@ -73,3 +73,23 @@ def test_transition_boundaries_and_midnight_wrap():
     assert transition_progress_percent(20 * 3600, 6 * 3600, 20 * 3600) == 0
     assert transition_progress_percent(20 * 3600, 6 * 3600, 6 * 3600) == 100
     assert scene_keys_from_day_percent(100) == ("dusk", "dawn", 0.0)
+
+
+def test_wrapped_dusk_stays_after_sunset_on_the_clock():
+    dawn, sunrise, noon, sunset, dusk = (
+        3 * 3600,
+        5 * 3600,
+        12 * 3600,
+        23 * 3600,
+        1 * 3600,
+    )
+    starts = [dawn, sunrise, noon, sunset, dusk]
+    assert current_sun_event_index(starts, 23.5 * 3600) == 3
+    assert current_sun_event_index(starts, 0) == 3
+    assert current_sun_event_index(starts, 0.5 * 3600) == 3
+    assert current_sun_event_index(starts, 1 * 3600) == 4
+    assert current_sun_event_index(starts, 2 * 3600) == 4
+    assert current_sun_event_index(starts, 3 * 3600) == 0
+    assert transition_progress_percent(sunset, dusk, 0) == 50
+    assert transition_progress_percent(sunset, dusk, 1 * 3600) == 100
+    assert transition_progress_percent(dusk, dawn, 2 * 3600) == 50

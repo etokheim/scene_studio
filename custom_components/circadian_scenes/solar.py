@@ -62,14 +62,15 @@ def dusk_start_seconds(
     day_start: datetime,
     dusk_minimum: int | None,
 ) -> tuple[int, bool, int | None]:
-    """Return dusk seconds since ``day_start``, applying earliest-dusk only that day.
+    """Return dusk seconds on the 24h clock, applying earliest-dusk only that day.
 
     Earliest dusk delays a same-day solar dusk that falls before the floor.
-    If solar dusk is already on the next calendar day (>= 24:00), keep end of
-    day — do not pull back to the floor (that looked like “clamp to 22:00”).
+    If solar dusk is already on the next calendar day (>= 24:00), place it at
+    that morning time (``solar % 86400``) — do not clamp to 24:00 and do not
+    pull back to the floor.
 
     Returns ``(seconds, overridden, solar_seconds_if_overridden)``.
-    ``seconds`` is in ``[0, SECONDS_PER_DAY]``.
+    ``seconds`` is in ``[0, SECONDS_PER_DAY)``.
     """
     dusk_aware = dusk_time
     if day_start.tzinfo is not None:
@@ -81,7 +82,7 @@ def dusk_start_seconds(
     solar_seconds = int((dusk_aware - day_start).total_seconds())
 
     if solar_seconds >= SECONDS_PER_DAY:
-        return SECONDS_PER_DAY, False, None
+        return solar_seconds % SECONDS_PER_DAY, False, None
 
     solar_seconds = max(0, solar_seconds)
     if dusk_minimum is not None and int(dusk_minimum) > solar_seconds:
@@ -90,11 +91,9 @@ def dusk_start_seconds(
 
 
 def _format_time(seconds: int) -> str:
-    seconds = max(0, min(int(seconds), SECONDS_PER_DAY))
+    seconds = int(seconds) % SECONDS_PER_DAY
     hours, remainder = divmod(seconds, 3600)
     minutes = remainder // 60
-    if hours == 24:
-        return "24:00"
     return f"{hours:02d}:{minutes:02d}"
 
 

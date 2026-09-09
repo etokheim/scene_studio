@@ -3,6 +3,14 @@
 Durable product and architecture choices for Circadian Scenes.
 Agents: do not reverse these without an explicit user request. Supersede entries in the same change set when intentionally changing course.
 
+## Next-day solar dusk sits after midnight on the 24h clock
+
+- **Date:** 2026-09-09
+- **Supersedes:** 2026-08-29 clamp of next-calendar-day dusk to 24:00 (noted under “Earliest dusk time lives on the dusk event dialog”).
+- **Decision:** When astral dusk is already on the next calendar day, store it as wall-clock seconds (`solar % 86400`) so the dial/chart marker is in the morning after midnight (e.g. 01:00), not pinned at 24:00. Earliest-dusk still only *delays* a same-day solar dusk before the floor; it does not pull a next-morning dusk back to 22:00. Keep events in solar order (dawn→dusk); do not sort by clock seconds. `current_sun_event_index` unwraps a backward dusk time so sunset→dusk and dusk→dawn use the existing midnight-wrap progress math.
+- **Why:** Late-summer dusk after midnight is a real solar time. Clamping to 24:00 made dusk look like end-of-day and skipped the sunset→dusk hour that actually falls after 00:00.
+- **Do not reverse without user ask.**
+
 ## Light sidebar edits write per-event overrides
 
 - **Date:** 2026-09-09
@@ -344,6 +352,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-26
 - **Superseded in part:** 2026-08-29 — earliest dusk only delays a same-day solar dusk; if solar dusk is already past midnight of that calendar day, keep end-of-day (24:00) and do not pull back to the floor (shared `dusk_start_seconds` in preview and activation).
+- **Superseded:** 2026-09-09 — next-calendar-day solar dusk is placed after midnight on the 24h clock (`solar % 86400`), not clamped to 24:00. Earliest-dusk still does not pull that dusk back to the floor. See “Next-day solar dusk sits after midnight on the 24h clock”.
 - **Superseded:** 2026-09-08 — earliest dusk is a house-wide setting (`dusk_minimum_time_of_day`), not a per-scene field. See “Earliest dusk is a house-wide setting”.
 - **Decision:** `scene_dusk_minimum_time_of_day` is edited in the dusk solar-event dialog, next to that event’s scene picker. It is not on `ha-form`.
 - **Why:** The override only applies to dusk. Putting it on the main form made it look like a global setting.
