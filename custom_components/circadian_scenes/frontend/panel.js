@@ -145,12 +145,11 @@ const UNDO_STACK_LIMIT = 75;
 const LIGHT_VIEW_STORAGE_VERSION = 1;
 const LIVE_EDIT_STORAGE_VERSION = 1;
 const ROOM_PREVIEW_STORAGE_VERSION = 1;
-const SCENE_PLAY_STORAGE_VERSION = 1;
+const SCENE_PLAY_STORAGE_VERSION = 2;
 const SCENE_PLAY_TICK_MS = 1000;
 const SCENE_PLAY_TRANSITION_SEC = 1;
 const SCENE_PLAY_DURATION_DEFAULT_SEC = 30;
-const SCENE_PLAY_DURATION_MIN_SEC = 5;
-const SCENE_PLAY_DURATION_MAX_SEC = 180;
+const SCENE_PLAY_DURATION_OPTIONS_SEC = [10, 15, 30, 60, 90, 120];
 const EXTERNAL_SCENE_WARN_STORAGE_VERSION = 1;
 const CLOCK_FEATHER_PCT = 5.5;
 const LINKED_EVENTS = ["dawn", "sunrise", "sunset"];
@@ -316,6 +315,8 @@ class CircadianScenesPanel extends HTMLElement {
     this._scenePlay = null;
     this._scenePlayRaf = undefined;
     this._scenePlayBtn = null;
+    this._scenePlayMain = null;
+    this._scenePlayMenu = null;
     this._loadGeneration = 0;
     this._previewGeneration = 0;
     this._hashSyncing = false;
@@ -3399,9 +3400,75 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-hover-time {
           font-weight: 500;
         }
-        .sun-hover-play,
+        .sun-hover-play-split,
         .sun-hover-reset {
           pointer-events: auto;
+          color: var(--primary-text-color);
+          font: inherit;
+        }
+        .sun-hover-play-split {
+          display: inline-flex;
+          align-items: stretch;
+          height: 32px;
+          border-radius: 16px;
+          background: color-mix(
+            in srgb,
+            var(--primary-color) 14%,
+            var(--card-background-color)
+          );
+        }
+        .sun-hover-play-main,
+        .sun-hover-play-more {
+          margin: 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          cursor: pointer;
+          font: inherit;
+        }
+        .sun-hover-play-main {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 0 8px 0 10px;
+          border-radius: 16px 0 0 16px;
+        }
+        .sun-hover-play-label {
+          font-size: 13px;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+        .sun-hover-play-more {
+          display: inline-grid;
+          place-items: center;
+          width: 28px;
+          border-inline-start: 1px solid color-mix(
+            in srgb,
+            var(--primary-text-color) 18%,
+            transparent
+          );
+          border-radius: 0 16px 16px 0;
+        }
+        .sun-hover-play-main:hover,
+        .sun-hover-play-more:hover,
+        .sun-hover-reset:hover {
+          background: color-mix(
+            in srgb,
+            var(--primary-color) 24%,
+            var(--card-background-color)
+          );
+        }
+        .sun-hover-play-split ha-icon,
+        .sun-hover-reset ha-icon {
+          --mdc-icon-size: 18px;
+        }
+        /* Keep the menu host as one flex child so items do not join the pill. */
+        .sun-hover-play-split .sun-hover-play-menu {
+          display: flex;
+          align-items: stretch;
+        }
+        .sun-hover-reset {
           display: inline-grid;
           place-items: center;
           width: 32px;
@@ -3415,21 +3482,6 @@ class CircadianScenesPanel extends HTMLElement {
             var(--primary-color) 14%,
             var(--card-background-color)
           );
-          color: var(--primary-text-color);
-          cursor: pointer;
-          font: inherit;
-        }
-        .sun-hover-play:hover,
-        .sun-hover-reset:hover {
-          background: color-mix(
-            in srgb,
-            var(--primary-color) 24%,
-            var(--card-background-color)
-          );
-        }
-        .sun-hover-play ha-icon,
-        .sun-hover-reset ha-icon {
-          --mdc-icon-size: 18px;
         }
         .sun-plots {
           position: relative;
@@ -6236,47 +6288,6 @@ class CircadianScenesPanel extends HTMLElement {
     intervalRow.append(intervalLabelWrap, intervalField);
     body.appendChild(intervalRow);
 
-    const playRow = document.createElement("div");
-    playRow.className = "setup-link-row scene-play-duration-row";
-    const playLabelWrap = document.createElement("div");
-    const playLabel = document.createElement("div");
-    playLabel.className = "name";
-    playLabel.textContent = this._t(
-      "frontend.settings.play_preview_duration",
-      "24-hour play duration"
-    );
-    const playHelper = document.createElement("div");
-    playHelper.className = "sidebar-note";
-    playHelper.style.margin = "4px 0 0";
-    playHelper.textContent = this._t(
-      "frontend.settings.play_preview_duration_helper",
-      "How long a full day takes when you press play on the sun readout. Lights update once per second."
-    );
-    playLabelWrap.append(playLabel, playHelper);
-    const playField = document.createElement("ha-selector");
-    playField.hass = this._hass;
-    playField.label = this._t(
-      "frontend.settings.play_preview_duration_seconds",
-      "Seconds"
-    );
-    playField.value = this._readScenePlayDurationSec();
-    playField.selector = {
-      number: {
-        min: SCENE_PLAY_DURATION_MIN_SEC,
-        max: SCENE_PLAY_DURATION_MAX_SEC,
-        step: 1,
-        mode: "box",
-        unit_of_measurement: "s",
-      },
-    };
-    playField.addEventListener("value-changed", (ev) => {
-      this._writeScenePlayDurationSec(Number(playField.value));
-      playField.value = this._readScenePlayDurationSec();
-      ev.stopPropagation();
-    });
-    playRow.append(playLabelWrap, playField);
-    body.appendChild(playRow);
-
     this._appendDuskMinimumPicker(body);
   }
 
@@ -6942,23 +6953,25 @@ class CircadianScenesPanel extends HTMLElement {
 
   _readScenePlayDurationSec() {
     const raw = this._readLocalStorage(this._scenePlayDurationStorageKey());
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
+    if (raw == null || raw === "") {
       return SCENE_PLAY_DURATION_DEFAULT_SEC;
     }
-    return Math.max(
-      SCENE_PLAY_DURATION_MIN_SEC,
-      Math.min(SCENE_PLAY_DURATION_MAX_SEC, Math.round(n))
+    const n = Number(raw);
+    if (SCENE_PLAY_DURATION_OPTIONS_SEC.includes(n)) {
+      return n;
+    }
+    if (!Number.isFinite(n) || n <= 0) {
+      return SCENE_PLAY_DURATION_DEFAULT_SEC;
+    }
+    return SCENE_PLAY_DURATION_OPTIONS_SEC.reduce((best, option) =>
+      Math.abs(option - n) < Math.abs(best - n) ? option : best
     );
   }
 
   _writeScenePlayDurationSec(seconds) {
     const n = Number(seconds);
-    const value = Number.isFinite(n)
-      ? Math.max(
-          SCENE_PLAY_DURATION_MIN_SEC,
-          Math.min(SCENE_PLAY_DURATION_MAX_SEC, Math.round(n))
-        )
+    const value = SCENE_PLAY_DURATION_OPTIONS_SEC.includes(n)
+      ? n
       : SCENE_PLAY_DURATION_DEFAULT_SEC;
     try {
       window.localStorage.setItem(
@@ -10298,35 +10311,108 @@ class CircadianScenesPanel extends HTMLElement {
       this._syncScenePlayButton();
       return this._scenePlayBtn;
     }
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "sun-hover-play";
+    const host = document.createElement("div");
+    host.className = "sun-hover-play-split";
+
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "sun-hover-play-main";
     const icon = document.createElement("ha-icon");
-    btn.appendChild(icon);
-    btn.addEventListener("click", (ev) => {
+    const text = document.createElement("span");
+    text.className = "sun-hover-play-label";
+    main.append(icon, text);
+    main.addEventListener("click", (ev) => {
       ev.stopPropagation();
       this._toggleScenePlay();
     });
-    this._scenePlayBtn = btn;
+
+    const menu = document.createElement("ha-dropdown");
+    menu.className = "sun-hover-play-menu";
+    menu.activatable = true;
+    if ("placement" in menu) {
+      menu.placement = "bottom-end";
+    }
+    const more = document.createElement("button");
+    more.type = "button";
+    more.slot = "trigger";
+    more.className = "sun-hover-play-more";
+    more.addEventListener("click", (ev) => ev.stopPropagation());
+    const chevron = document.createElement("ha-icon");
+    chevron.setAttribute("icon", "mdi:menu-down");
+    more.appendChild(chevron);
+    menu.appendChild(more);
+    for (const seconds of SCENE_PLAY_DURATION_OPTIONS_SEC) {
+      const item = document.createElement("ha-dropdown-item");
+      item.value = String(seconds);
+      const itemIcon = document.createElement("ha-icon");
+      itemIcon.setAttribute("icon", "mdi:check");
+      itemIcon.slot = "icon";
+      item.append(
+        itemIcon,
+        document.createTextNode(
+          this._t("frontend.actions.play_duration_seconds", "{seconds}s", {
+            seconds,
+          })
+        )
+      );
+      menu.appendChild(item);
+    }
+    menu.addEventListener("wa-select", (ev) => {
+      ev.stopPropagation();
+      const seconds = Number(ev.detail?.item?.value);
+      this._writeScenePlayDurationSec(seconds);
+      this._syncScenePlayButton();
+    });
+
+    host.append(main, menu);
+    this._scenePlayBtn = host;
+    this._scenePlayMain = main;
+    this._scenePlayMenu = menu;
     this._syncScenePlayButton();
-    return btn;
+    return host;
   }
 
   _syncScenePlayButton() {
-    const btn = this._scenePlayBtn;
-    if (!btn) {
+    const host = this._scenePlayBtn;
+    const main = this._scenePlayMain;
+    if (!host || !main) {
       return;
     }
     const playing = this._scenePlayActive();
     const label = playing
-      ? this._t("frontend.actions.stop_preview", "Stop preview")
-      : this._t("frontend.actions.play_scene", "Play 24-hour preview");
-    btn.title = label;
-    btn.setAttribute("aria-label", label);
-    btn.setAttribute("aria-pressed", playing ? "true" : "false");
-    const icon = btn.querySelector("ha-icon");
+      ? this._t("frontend.actions.stop_preview", "Stop")
+      : this._t("frontend.actions.play_scene", "Play scene");
+    const duration = this._readScenePlayDurationSec();
+    main.title = label;
+    main.setAttribute("aria-label", label);
+    main.setAttribute("aria-pressed", playing ? "true" : "false");
+    const icon = main.querySelector("ha-icon");
     if (icon) {
       icon.setAttribute("icon", playing ? "mdi:stop" : "mdi:play");
+    }
+    const text = main.querySelector(".sun-hover-play-label");
+    if (text) {
+      text.textContent = label;
+    }
+    const more = this._scenePlayMenu?.querySelector(".sun-hover-play-more");
+    if (more) {
+      more.title = this._t(
+        "frontend.actions.play_duration",
+        "Play duration"
+      );
+      more.setAttribute(
+        "aria-label",
+        this._t("frontend.actions.play_duration", "Play duration")
+      );
+    }
+    for (const item of this._scenePlayMenu?.querySelectorAll("ha-dropdown-item") ||
+      []) {
+      const selected = Number(item.value) === duration;
+      item.toggleAttribute("data-selected", selected);
+      const check = item.querySelector("ha-icon");
+      if (check) {
+        check.style.opacity = selected ? "1" : "0";
+      }
     }
   }
 
