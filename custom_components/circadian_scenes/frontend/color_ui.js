@@ -914,7 +914,7 @@ function polarEaseClosedPathD(knots, pointAt) {
     .join(" ")} Z`;
 }
 
-function easeGraphRuns(knots, { closed = true } = {}) {
+function linearGraphRuns(knots, { closed = true } = {}) {
   const n = knots.length;
   if (n === 1) {
     return [[{ sec: wrapDaySeconds(knots[0].seconds), bri: knots[0].bri }]];
@@ -930,41 +930,45 @@ function easeGraphRuns(knots, { closed = true } = {}) {
       run = [];
     }
   };
+  const push = (sec, bri) => {
+    const last = run[run.length - 1];
+    if (last && last.sec === sec && last.bri === bri) {
+      return;
+    }
+    run.push({ sec, bri });
+  };
   const segCount = closed ? n : n - 1;
   for (let i = 0; i < segCount; i += 1) {
     const from = knots[i];
     const to = knots[(i + 1) % n];
     const { from: a, span } = unwrapSegmentSeconds(from.seconds, to.seconds);
-    const steps = stepsForClockSpan(span);
-    const start = i === 0 ? 0 : 1;
-    for (let step = start; step <= steps; step += 1) {
-      const t = step / steps;
-      const unwrapped = a + span * t;
-      const bri = from.bri + (to.bri - from.bri) * easeInOutCubic(t);
-      const sec =
-        unwrapped >= GRAPH_DAY_SECONDS
-          ? unwrapped - GRAPH_DAY_SECONDS
-          : unwrapped;
-      if (run.length && sec + 1 < run[run.length - 1].sec) {
-        const tMid = (GRAPH_DAY_SECONDS - a) / span;
-        const briMid = from.bri + (to.bri - from.bri) * easeInOutCubic(tMid);
-        run.push({ sec: GRAPH_DAY_SECONDS, bri: briMid });
-        flush();
-        run.push({ sec: 0, bri: briMid });
-      }
-      if (!(run.length && sec === 0 && run[run.length - 1].sec === 0)) {
-        run.push({ sec, bri });
-      }
+    if (!run.length) {
+      push(wrapDaySeconds(from.seconds), from.bri);
+    }
+    const toUnwrapped = a + span;
+    if (toUnwrapped > GRAPH_DAY_SECONDS) {
+      const tMid = (GRAPH_DAY_SECONDS - a) / span;
+      const briMid = from.bri + (to.bri - from.bri) * tMid;
+      push(GRAPH_DAY_SECONDS, briMid);
+      flush();
+      push(0, briMid);
+    }
+    if (toUnwrapped === GRAPH_DAY_SECONDS) {
+      push(GRAPH_DAY_SECONDS, to.bri);
+      flush();
+      push(0, to.bri);
+    } else {
+      push(wrapDaySeconds(to.seconds), to.bri);
     }
   }
   flush();
   return runs;
 }
 
-function easeDayGraphPathD(knots, xOfSec, yOfBri, plotBottom) {
+function dayGraphPathD(knots, xOfSec, yOfBri, plotBottom) {
   // Close dusk→dawn so fill covers 00:00 and 24:00. xOf must map 86400 to
   // the right edge (not 0), or this chord fills above the curve.
-  const runs = easeGraphRuns(knots, { closed: knots.length > 1 });
+  const runs = linearGraphRuns(knots, { closed: knots.length > 1 });
   if (!runs.length) {
     return { stroke: "", fill: "" };
   }
@@ -1607,7 +1611,7 @@ function createLightBrightnessGraph({
         seconds: point.seconds,
         bri: point.brightness,
       }));
-      const { stroke, fill } = easeDayGraphPathD(
+      const { stroke, fill } = dayGraphPathD(
         knots,
         xOf,
         yOf,
