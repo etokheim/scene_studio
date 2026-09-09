@@ -5550,6 +5550,8 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._syncThemePreviewSurfaces();
   }
+
+  async _toggleThemeEventSidebar(event) {
     if (!(await this._ensureThemeDraft())) {
       this._error = this._t("frontend.library.theme_missing", "Theme not found");
       return;
