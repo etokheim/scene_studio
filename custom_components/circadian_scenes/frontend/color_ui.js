@@ -22,6 +22,9 @@ const HUE_PATH_STEPS = 72;
 /* Same-mode HS: near-constant sat → denser polar samples (~deg per step). */
 const HUE_PATH_HS_DEG_PER_STEP = 2.5;
 const HUE_PATH_HS_SAT_EPS = 0.03;
+const WHEEL_PEEK_FRAC = 0.1;
+const WHEEL_MIXED_INNER_FRAC = 0.62;
+const WHEEL_MIXED_GAP_FRAC = 0.06;
 const _hueWheelImageCache = new Map();
 
 function hueLinearScale(t, min, max) {
@@ -289,6 +292,21 @@ function draftWheelMode(draft, hasColor, hasTemp) {
     return hasTemp ? "temp" : "color";
   }
   return hasColor ? "color" : "temp";
+}
+
+function lightWheelCaps(attrs) {
+  const supported = attrs?.supported_color_modes || [];
+  const hasColor = supported.some((mode) =>
+    ["hs", "rgb", "rgbw", "rgbww", "xy"].includes(mode)
+  );
+  const hasTemp =
+    supported.includes("color_temp") ||
+    supported.includes("rgbww") ||
+    attrs?.min_color_temp_kelvin != null;
+  if (!supported.length) {
+    return { hasColor: true, hasTemp: true };
+  }
+  return { hasColor, hasTemp };
 }
 
 function rgbwToRgb(rgbw) {
@@ -799,18 +817,22 @@ function huePathEdgeIsVaryingHs(fromDraft, toDraft, wheelMode) {
 }
 
 /** Sample the same lerp as runtime onto wheel coordinates. */
-function sampleHuePathEdge(fromDraft, toDraft, wheelMode, radius, tempMin, tempMax) {
+function sampleHuePathEdge(
+  fromDraft,
+  toDraft,
+  wheelMode,
+  radius,
+  tempMin,
+  tempMax,
+  geom
+) {
   const steps = huePathStepCount(fromDraft, toDraft, wheelMode);
   const pts = [];
   for (let step = 0; step <= steps; step += 1) {
     const sample = interpolateDraftSample(fromDraft, toDraft, step / steps);
-    const point = wheelPointForSample(
-      sample,
-      wheelMode,
-      radius,
-      tempMin,
-      tempMax
-    );
+    const point = geom
+      ? wheelPointForGeom(sample, geom, tempMin, tempMax, radius)
+      : wheelPointForSample(sample, wheelMode, radius, tempMin, tempMax);
     if (point) {
       pts.push(point);
     }
@@ -934,6 +956,180 @@ function limitToWheel(x, y, radius) {
   }
   const scale = radius / dist;
   return { x: radius + dx * scale, y: radius + dy * scale };
+}
+
+function cssFrac(el, name, fallback) {
+  const raw = getComputedStyle(el).getPropertyValue(name).trim();
+  if (!raw) {
+    return fallback;
+  }
+  if (raw.endsWith("%")) {
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n / 100 : fallback;
+  }
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function pinStackKind(scenes, hasColor, hasTemp, capsOf) {
+  if (!hasColor) {
+    return "temp-only";
+  }
+  if (!hasTemp) {
+    return "color-only";
+  }
+  let color = 0;
+  let temp = 0;
+  for (const scene of scenes || []) {
+    if (!scene?.draft) {
+      continue;
+    }
+    const caps = capsOf(scene);
+    const mode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
+    if (mode === "temp") {
+      temp += 1;
+    } else {
+      color += 1;
+    }
+  }
+  if (color && temp) {
+    return "mixed";
+  }
+  if (temp && !color) {
+    return "temp";
+  }
+  return "color";
+}
+
+function wheelStackGeom(radius, kind, peekFrac, mixedInnerFrac, gapFrac) {
+  const peek = Math.max(4, radius * peekFrac);
+  const gap = Math.max(3, radius * gapFrac);
+  if (kind === "color-only") {
+    return {
+      kind,
+      color: { inner: 0, outer: radius },
+      temp: { inner: radius, outer: radius },
+      front: "color",
+    };
+  }
+  if (kind === "temp-only") {
+    return {
+      kind,
+      color: { inner: radius, outer: radius },
+      temp: { inner: 0, outer: radius },
+      front: "temp",
+    };
+  }
+  if (kind === "color") {
+    const outer = radius - peek;
+    return {
+      kind,
+      color: { inner: 0, outer },
+      temp: { inner: outer, outer: radius },
+      front: "color",
+    };
+  }
+  if (kind === "temp") {
+    const outer = radius - peek;
+    return {
+      kind,
+      color: { inner: outer, outer: radius },
+      temp: { inner: 0, outer },
+      front: "temp",
+    };
+  }
+  const colorOuter = radius * mixedInnerFrac;
+  return {
+    kind,
+    color: { inner: 0, outer: colorOuter },
+    temp: { inner: colorOuter + gap, outer: radius },
+    front: "color",
+  };
+}
+
+function bandLive(band) {
+  return band && band.outer > band.inner + 1;
+}
+
+function clampRelToAnnulus(x, y, inner, outer) {
+  const r = Math.hypot(x, y);
+  if (outer <= inner) {
+    return { x: 0, y: 0 };
+  }
+  if (r < 1e-6) {
+    return inner > 0 ? { x: inner, y: 0 } : { x: 0, y: 0 };
+  }
+  let nr = r;
+  if (r > outer) {
+    nr = outer;
+  } else if (r < inner) {
+    nr = inner;
+  }
+  const scale = nr / r;
+  return { x: x * scale, y: y * scale };
+}
+
+function placeColorInAnnulus(hue, saturation, inner, outer) {
+  const coords = coordinatesForColor(hue, saturation, outer);
+  return clampRelToAnnulus(coords.x, coords.y, inner, outer);
+}
+
+function placeTempInAnnulus(kelvin, inner, outer, tempMin, tempMax) {
+  const coords = coordinatesForTemp(kelvin, outer, tempMin, tempMax);
+  let x = coords.x;
+  let y = coords.y;
+  const r = Math.hypot(x, y);
+  if (inner > 0 && r < inner) {
+    const maxY = Math.max(0, inner - 0.5);
+    y = Math.max(-maxY, Math.min(maxY, y));
+    x = Math.sqrt(Math.max(0, inner * inner - y * y));
+  } else if (r > outer && r > 0) {
+    const scale = outer / r;
+    x *= scale;
+    y *= scale;
+  }
+  return { x, y };
+}
+
+function limitToAnnulus(x, y, cx, inner, outer) {
+  const rel = clampRelToAnnulus(x - cx, y - cx, inner, outer);
+  return { x: cx + rel.x, y: cx + rel.y };
+}
+
+function wheelPointForGeom(sample, geom, tempMin, tempMax, radius) {
+  const cx = radius;
+  const isTemp = sample.kelvin != null && sample.hs == null;
+  if (isTemp && bandLive(geom.temp)) {
+    const rel = placeTempInAnnulus(
+      sample.kelvin,
+      geom.temp.inner,
+      geom.temp.outer,
+      tempMin,
+      tempMax
+    );
+    return { x: cx + rel.x, y: cx + rel.y, rgb: sample.rgb };
+  }
+  if (!bandLive(geom.color) || !sample.rgb) {
+    return null;
+  }
+  let hue;
+  let saturation;
+  if (sample.hs) {
+    hue = sample.hs[0];
+    saturation = sample.hs[1] / 100;
+  } else {
+    const hsv = rgb2hsv(sample.rgb[0], sample.rgb[1], sample.rgb[2]);
+    hue = hsv[0];
+    saturation = hsv[1];
+  }
+  const rel = placeColorInAnnulus(hue, saturation, geom.color.inner, geom.color.outer);
+  return { x: cx + rel.x, y: cx + rel.y, rgb: sample.rgb };
+}
+
+function annulusMask(innerFrac, outerFrac) {
+  const inner = Math.max(0, Math.min(100, innerFrac * 100));
+  const outer = Math.max(0, Math.min(100, outerFrac * 100));
+  return `radial-gradient(farthest-side, transparent ${inner}%, #000 ${inner}%, #000 ${outer}%, transparent ${outer}%)`;
 }
 
 function drawHueWheelImage(mode, tempMin, tempMax) {
@@ -1462,9 +1658,9 @@ function createSceneColorWheel({
   onChange,
   getPalette,
   onAddPalette,
+  getCapabilities,
 }) {
-  // Polar HSV + kelvin disk, pin/dot markers, and presets match etokheim/huemane-light-card.
-  let mode = hasColor ? "color" : "temp";
+  // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
   const stage = document.createElement("div");
   stage.className = "hue-wheel-stage";
   const canvasWrap = document.createElement("div");
@@ -1474,10 +1670,14 @@ function createSceneColorWheel({
   glow.setAttribute("aria-hidden", "true");
   glow.width = HUE_WHEEL_RENDER;
   glow.height = HUE_WHEEL_RENDER;
-  const bg = document.createElement("canvas");
-  bg.className = "hue-wheel-bg";
-  bg.width = HUE_WHEEL_RENDER;
-  bg.height = HUE_WHEEL_RENDER;
+  const bgTemp = document.createElement("canvas");
+  bgTemp.className = "hue-wheel-layer hue-wheel-temp";
+  bgTemp.width = HUE_WHEEL_RENDER;
+  bgTemp.height = HUE_WHEEL_RENDER;
+  const bgColor = document.createElement("canvas");
+  bgColor.className = "hue-wheel-layer hue-wheel-color";
+  bgColor.width = HUE_WHEEL_RENDER;
+  bgColor.height = HUE_WHEEL_RENDER;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "hue-wheel-svg");
   svg.innerHTML = `
@@ -1499,7 +1699,7 @@ function createSceneColorWheel({
   const pathLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   pathLayer.setAttribute("class", "hue-wheel-paths");
   svg.appendChild(pathLayer);
-  canvasWrap.append(glow, svg, bg);
+  canvasWrap.append(glow, bgTemp, bgColor, svg);
   const floatReadout = document.createElement("div");
   floatReadout.className = "hue-wheel-float-readout";
   floatReadout.hidden = true;
@@ -1507,22 +1707,29 @@ function createSceneColorWheel({
   canvasWrap.appendChild(floatReadout);
   const chrome = document.createElement("div");
   chrome.className = "hue-wheel-chrome";
-  const pill = document.createElement("div");
-  pill.className = "hue-mode-pill";
   const presets = document.createElement("div");
   presets.className = "hue-presets";
   const presetTrack = document.createElement("div");
   presetTrack.className = "hue-presets-track";
   presetTrack.setAttribute("role", "list");
   presets.appendChild(presetTrack);
-  // Readout lives on the drag handle — not between mode pill and presets
-  // (that middle cell overlapped the swatches on narrow sidebars).
-  chrome.append(pill, presets);
+  chrome.append(presets);
   stage.append(canvasWrap, chrome);
 
   const markers = new Map();
   let drag = null;
   let glideTimer;
+  let painted = { color: false, temp: false };
+  let lastGeomKey = "";
+
+  const capsOf = (scene) => {
+    const extra =
+      typeof getCapabilities === "function" ? getCapabilities(scene) : null;
+    return {
+      hasColor: extra?.hasColor ?? hasColor,
+      hasTemp: extra?.hasTemp ?? hasTemp,
+    };
+  };
 
   const emitChange = (meta = {}) => {
     onChange?.({
@@ -1531,9 +1738,9 @@ function createSceneColorWheel({
     });
   };
 
-  const showFloatReadout = (draft, x, y) => {
+  const showFloatReadout = (draft, x, y, wheelMode) => {
     floatReadout.hidden = false;
-    floatReadout.textContent = formatWheelReadout(draft, mode);
+    floatReadout.textContent = formatWheelReadout(draft, wheelMode);
     floatReadout.style.left = `${x}px`;
     floatReadout.style.top = `${y}px`;
   };
@@ -1544,18 +1751,95 @@ function createSceneColorWheel({
 
   const radiusPx = () => canvasWrap.clientWidth / 2;
 
-  const paintWheel = () => {
-    const url = drawHueWheelImage(mode, tempMin, tempMax);
+  const currentGeom = () => {
+    const radius = radiusPx();
+    const { scenes } = getState();
+    const kind = pinStackKind(scenes, hasColor, hasTemp, capsOf);
+    return wheelStackGeom(
+      radius,
+      kind,
+      cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC),
+      cssFrac(stage, "--wheel-mixed-inner", WHEEL_MIXED_INNER_FRAC),
+      cssFrac(stage, "--wheel-mixed-gap", WHEEL_MIXED_GAP_FRAC)
+    );
+  };
+
+  const drawImageTo = (canvas, url) => {
     const img = new Image();
     img.onload = () => {
-      const bgCtx = bg.getContext("2d");
-      bgCtx.clearRect(0, 0, HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
-      bgCtx.drawImage(img, 0, 0);
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
+      ctx.drawImage(img, 0, 0);
+    };
+    img.src = url;
+  };
+
+  const paintWheels = () => {
+    if (hasColor && !painted.color) {
+      drawImageTo(bgColor, drawHueWheelImage("color", tempMin, tempMax));
+      painted.color = true;
+    }
+    if (hasTemp && !painted.temp) {
+      drawImageTo(bgTemp, drawHueWheelImage("temp", tempMin, tempMax));
+      painted.temp = true;
+    }
+  };
+
+  const paintGlow = (front) => {
+    const url = drawHueWheelImage(
+      front === "color" && hasTemp ? "temp" : hasColor ? "color" : "temp",
+      tempMin,
+      tempMax
+    );
+    const img = new Image();
+    img.onload = () => {
       const glowCtx = glow.getContext("2d");
       glowCtx.clearRect(0, 0, HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
       glowCtx.drawImage(img, 0, 0);
     };
     img.src = url;
+  };
+
+  const applyLayer = (el, band, radius, isFront) => {
+    const live = bandLive(band);
+    el.classList.toggle("is-front", Boolean(isFront && live));
+    el.classList.toggle("is-back", Boolean(!isFront && live));
+    el.hidden = !live;
+    if (!live || !radius) {
+      el.style.webkitMaskImage = "";
+      el.style.maskImage = "";
+      el.style.transform = "";
+      return;
+    }
+    const innerFrac = band.inner / radius;
+    const outerFrac = band.outer / radius;
+    if (band.inner <= 1 && band.outer < radius - 1) {
+      // Scale the full disk so the rim matches the inner overlay (do not also
+      // mask — mask is pre-transform and would shrink twice).
+      el.style.webkitMaskImage = "none";
+      el.style.maskImage = "none";
+      el.style.transform = `scale(${band.outer / radius})`;
+    } else {
+      el.style.transform = "";
+      el.style.webkitMaskImage = annulusMask(innerFrac, outerFrac);
+      el.style.maskImage = annulusMask(innerFrac, outerFrac);
+    }
+  };
+
+  const layoutLayers = (geom) => {
+    const radius = radiusPx();
+    if (!radius) {
+      return;
+    }
+    const key = `${geom.kind}|${geom.color.inner}|${geom.color.outer}|${geom.temp.inner}|${geom.temp.outer}`;
+    applyLayer(bgColor, geom.color, radius, geom.front === "color");
+    applyLayer(bgTemp, geom.temp, radius, geom.front === "temp");
+    bgColor.hidden = !hasColor || !bandLive(geom.color);
+    bgTemp.hidden = !hasTemp || !bandLive(geom.temp);
+    if (key !== lastGeomKey) {
+      lastGeomKey = key;
+      paintGlow(geom.front);
+    }
   };
 
   const markerOffset = (active) =>
@@ -1569,38 +1853,114 @@ function createSceneColorWheel({
     marker.y = y;
   };
 
-  const positionForDraft = (draft, markerMode, radius) => {
+  const positionForDraft = (draft, markerMode, geom, radius) => {
+    const cx = radius;
     if (markerMode === "color") {
       const mixed = draftRgb(draft);
       const chromatic = chromaticRgbFromDraft(draft) || mixed;
       const hsv = rgb2hsv(chromatic[0], chromatic[1], chromatic[2]);
-      const coords = coordinatesForColor(hsv[0], hsv[1], radius);
-      return { x: coords.x + radius, y: coords.y + radius, rgb: mixed };
+      const rel = placeColorInAnnulus(
+        hsv[0],
+        hsv[1],
+        geom.color.inner,
+        geom.color.outer
+      );
+      return { x: cx + rel.x, y: cx + rel.y, rgb: mixed };
     }
     const kelvin = draft.color_temp_kelvin ?? 2700;
-    const coords = coordinatesForTemp(kelvin, radius, tempMin, tempMax);
-    const rgb = hueTempToRgb(kelvin);
-    return { x: coords.x + radius, y: coords.y + radius, rgb };
+    const rel = placeTempInAnnulus(
+      kelvin,
+      geom.temp.inner,
+      geom.temp.outer,
+      tempMin,
+      tempMax
+    );
+    return { x: cx + rel.x, y: cx + rel.y, rgb: hueTempToRgb(kelvin) };
   };
 
-  const applyAtPoint = (draft, x, y, radius) => {
-    const limited = limitToWheel(x, y, radius);
+  const applyAtBand = (draft, x, y, radius, mode, band) => {
+    const limited = limitToAnnulus(x, y, radius, band.inner, band.outer);
     const cx = limited.x - radius;
     const cy = limited.y - radius;
     if (mode === "color") {
-      const sample = hueColorAt(cx, cy, radius);
-      if (!sample) {
-        return limited;
+      const sample = hueColorAt(cx, cy, band.outer);
+      if (sample) {
+        applyColorToDraft(draft, sample.rgb, sample.hsv);
       }
-      applyColorToDraft(draft, sample.rgb, sample.hsv);
     } else {
-      const sample = hueTempAt(cx, cy, radius, tempMin, tempMax);
-      if (!sample) {
-        return limited;
+      const sample = hueTempAt(cx, cy, band.outer, tempMin, tempMax);
+      if (sample) {
+        applyTempToDraft(draft, sample.kelvin);
       }
-      applyTempToDraft(draft, sample.kelvin);
     }
     return limited;
+  };
+
+  const regionAt = (x, y, geom, radius) => {
+    const r = Math.hypot(x - radius, y - radius);
+    const inColor =
+      bandLive(geom.color) && r <= geom.color.outer + 2 && r >= geom.color.inner - 2;
+    const inTemp =
+      bandLive(geom.temp) && r <= geom.temp.outer + 2 && r >= geom.temp.inner - 2;
+    if (inColor && inTemp) {
+      return geom.front;
+    }
+    if (inColor) {
+      return "color";
+    }
+    if (inTemp) {
+      return "temp";
+    }
+    if (r <= radius + 2) {
+      return geom.front;
+    }
+    return null;
+  };
+
+  const maybeConvertDrag = (item, x, y, geom, radius, pinMode) => {
+    const caps = capsOf(item);
+    const r = Math.hypot(x - radius, y - radius);
+    const hyst = Math.max(6, radius * cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC) * 0.45);
+    if (pinMode === "color" && caps.hasTemp && bandLive(geom.temp)) {
+      const intoTemp =
+        r > geom.color.outer + hyst &&
+        r >= geom.temp.inner - hyst &&
+        r <= geom.temp.outer + 2;
+      if (intoTemp) {
+        return "temp";
+      }
+    }
+    if (pinMode === "temp" && caps.hasColor && bandLive(geom.color)) {
+      const intoColorDisk =
+        r < geom.temp.inner - hyst &&
+        r <= geom.color.outer + hyst &&
+        r >= geom.color.inner;
+      const intoColorPeek =
+        r > geom.temp.outer + hyst &&
+        r <= geom.color.outer + 2 &&
+        r >= geom.color.inner - 2;
+      if (intoColorDisk || intoColorPeek) {
+        return "color";
+      }
+    }
+    return pinMode;
+  };
+
+  const convertDraftTo = (draft, next, caps) => {
+    if (next === "color") {
+      if (!caps.hasColor) {
+        return false;
+      }
+      const rgb = draftRgb(draft);
+      const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
+      applyColorToDraft(draft, rgb, hsv);
+      return true;
+    }
+    if (!caps.hasTemp) {
+      return false;
+    }
+    applyTempToDraft(draft, kelvinForTempConvert(draft, tempMin, tempMax));
+    return true;
   };
 
   const updatePresetOverflow = () => {
@@ -1669,35 +2029,13 @@ function createSceneColorWheel({
     requestAnimationFrame(updatePresetOverflow);
   };
 
-  const paintPill = () => {
-    pill.replaceChildren();
-    if (!(hasColor && hasTemp)) {
-      pill.hidden = true;
-      return;
-    }
-    pill.hidden = false;
-    for (const option of ["color", "temp"]) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "hue-mode-btn";
-      if (option === mode) {
-        btn.classList.add("active");
-      }
-      btn.setAttribute(
-        "aria-label",
-        option === "color" ? "Color" : "Color temperature"
-      );
-      const swatch = document.createElement("span");
-      swatch.className = `hue-mode-swatch ${option}`;
-      btn.appendChild(swatch);
-      btn.addEventListener("click", () => setMode(option, { convertDraft: true }));
-      pill.appendChild(btn);
-    }
-  };
-
   const sync = () => {
     const radius = radiusPx();
     const { scenes, activeId } = getState();
+    const geom = radius
+      ? currentGeom()
+      : wheelStackGeom(1, pinStackKind(scenes, hasColor, hasTemp, capsOf), 0.1, 0.62, 0.06);
+    layoutLayers(geom);
     const seen = new Set();
     for (const scene of scenes) {
       seen.add(scene.id);
@@ -1735,44 +2073,31 @@ function createSceneColorWheel({
           if (scene.id !== current) {
             onSelect(scene.id);
           }
-          // Stay on the visible wheel: convert off-mode drafts to this mode
-          // instead of flipping chrome back to RGB when placing on kelvin.
-          const markerMode = draftWheelMode(item.draft, hasColor, hasTemp);
-          if (markerMode !== mode) {
-            if (mode === "color") {
-              const rgb = draftRgb(item.draft);
-              const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
-              applyColorToDraft(item.draft, rgb, hsv);
-            } else {
-              applyTempToDraft(
-                item.draft,
-                kelvinForTempConvert(item.draft, tempMin, tempMax)
-              );
-            }
-            emitChange({ dragging: false });
-          }
+          const caps = capsOf(item);
+          const markerMode = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
           const pt = pointFromEvent(ev);
           startDrag(
             ev,
             scene.id,
             pt.x - (marker.x ?? radiusPx()),
-            pt.y - (marker.y ?? radiusPx())
+            pt.y - (marker.y ?? radiusPx()),
+            markerMode
           );
           g.classList.add("drag");
         });
         svg.appendChild(g);
       }
       const active = scene.id === activeId;
-      const markerMode = draftWheelMode(scene.draft, hasColor, hasTemp);
+      const caps = capsOf(scene);
+      const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.path.setAttribute("d", active ? HUE_PIN_PATH : HUE_DOT_PATH);
       marker.g.classList.toggle("active", active);
-      marker.g.classList.toggle("off-mode", markerMode !== mode);
       marker.icon.textContent = String(scene.index);
       marker.hit.style.display = active ? "none" : "";
       if (!radius) {
         continue;
       }
-      const pos = positionForDraft(scene.draft, markerMode, radius);
+      const pos = positionForDraft(scene.draft, markerMode, geom, radius);
       marker.g.style.color = rgbCss(pos.rgb);
       marker.icon.style.fill = pinForeground(pos.rgb);
       placeMarker(marker, pos.x, pos.y, active);
@@ -1786,16 +2111,15 @@ function createSceneColorWheel({
         markers.delete(id);
       }
     }
-    syncPath();
+    syncPath(geom, radius);
     syncPresets();
     if (!drag) {
       hideFloatReadout();
     }
   };
 
-  const syncPath = () => {
+  const syncPath = (geom, radius) => {
     pathLayer.replaceChildren();
-    const radius = radiusPx();
     if (!radius) {
       return;
     }
@@ -1813,18 +2137,23 @@ function createSceneColorWheel({
       if (!from || !to) {
         continue;
       }
+      const fromKind = inferDraftColorKind(from.draft);
+      const toKind = inferDraftColorKind(to.draft);
+      const pathMode =
+        fromKind === "temp" && toKind === "temp" ? "temp" : "color";
       const pts = sampleHuePathEdge(
         from.draft,
         to.draft,
-        mode,
+        pathMode,
         radius,
         tempMin,
-        tempMax
+        tempMax,
+        geom
       );
       if (pts.length >= 2) {
         edges.push({
           pts,
-          smooth: huePathEdgeIsVaryingHs(from.draft, to.draft, mode),
+          smooth: huePathEdgeIsVaryingHs(from.draft, to.draft, pathMode),
         });
       }
     }
@@ -1841,7 +2170,6 @@ function createSceneColorWheel({
       mid.setAttribute("d", huePathStrokeD(edge.pts, edge.smooth));
       pathLayer.appendChild(mid);
     }
-    // Colored rim stays dense straight chords (matches lerp samples / rgb).
     for (const edge of edges) {
       const { pts } = edge;
       for (let index = 1; index < pts.length; index += 1) {
@@ -1884,21 +2212,46 @@ function createSceneColorWheel({
     if (!item) {
       return;
     }
+    const geom = currentGeom();
     const pt = pointFromEvent(ev);
-    const limited = applyAtPoint(
-      item.draft,
-      pt.x - drag.grabX,
-      pt.y - drag.grabY,
-      radius
-    );
+    const x = pt.x - drag.grabX;
+    const y = pt.y - drag.grabY;
+    let pinMode = drag.mode;
+    const nextMode = maybeConvertDrag(item, x, y, geom, radius, pinMode);
+    if (nextMode !== pinMode) {
+      pinMode = nextMode;
+      drag.mode = nextMode;
+    }
+    const band = pinMode === "color" ? geom.color : geom.temp;
+    if (!bandLive(band)) {
+      return;
+    }
+    const limited = applyAtBand(item.draft, x, y, radius, pinMode, band);
     const marker = markers.get(item.id);
     if (marker) {
       marker.g.style.color = rgbCss(draftRgb(item.draft));
       marker.icon.style.fill = pinForeground(draftRgb(item.draft));
       placeMarker(marker, limited.x, limited.y, true);
     }
-    showFloatReadout(item.draft, limited.x, limited.y);
-    syncPath();
+    showFloatReadout(item.draft, limited.x, limited.y, pinMode);
+    const nextGeom = currentGeom();
+    layoutLayers(nextGeom);
+    for (const scene of scenes) {
+      if (scene.id === item.id) {
+        continue;
+      }
+      const other = markers.get(scene.id);
+      if (!other) {
+        continue;
+      }
+      const caps = capsOf(scene);
+      const otherMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
+      const pos = positionForDraft(scene.draft, otherMode, nextGeom, radius);
+      other.g.style.color = rgbCss(pos.rgb);
+      other.icon.style.fill = pinForeground(pos.rgb);
+      placeMarker(other, pos.x, pos.y, false);
+    }
+    syncPath(nextGeom, radius);
     emitChange({ dragging: true });
   };
 
@@ -1921,13 +2274,12 @@ function createSceneColorWheel({
         composed: true,
       })
     );
-    // Flush any throttled live preview with the final sample.
     emitChange({ dragging: false, final: true });
     sync();
   };
 
-  const startDrag = (ev, sceneId, grabX = 0, grabY = 0) => {
-    drag = { sceneId, pointerId: ev.pointerId, grabX, grabY };
+  const startDrag = (ev, sceneId, grabX = 0, grabY = 0, mode = "color") => {
+    drag = { sceneId, pointerId: ev.pointerId, grabX, grabY, mode };
     stage.dispatchEvent(
       new CustomEvent("slider-interaction-start", {
         bubbles: true,
@@ -1955,15 +2307,29 @@ function createSceneColorWheel({
       return;
     }
     ev.preventDefault();
-    startDrag(ev, item.id);
-    const limited = applyAtPoint(item.draft, pt.x, pt.y, radius);
+    const geom = currentGeom();
+    const caps = capsOf(item);
+    let pinMode = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
+    const hit = regionAt(pt.x, pt.y, geom, radius);
+    if (hit && hit !== pinMode) {
+      if (convertDraftTo(item.draft, hit, caps)) {
+        pinMode = hit;
+      }
+    }
+    startDrag(ev, item.id, 0, 0, pinMode);
+    const band = pinMode === "color" ? geom.color : geom.temp;
+    if (!bandLive(band)) {
+      return;
+    }
+    const limited = applyAtBand(item.draft, pt.x, pt.y, radius, pinMode, band);
     const marker = markers.get(item.id);
     marker?.g.classList.add("drag", "active");
     if (marker) {
       placeMarker(marker, limited.x, limited.y, true);
     }
-    showFloatReadout(item.draft, limited.x, limited.y);
-    syncPath();
+    showFloatReadout(item.draft, limited.x, limited.y, pinMode);
+    layoutLayers(currentGeom());
+    syncPath(currentGeom(), radius);
     emitChange({ dragging: true });
   });
 
@@ -1974,34 +2340,17 @@ function createSceneColorWheel({
     if (next === "temp" && !hasTemp) {
       return;
     }
-    const { scenes } = getState();
     if (convertDraft) {
-      let changed = false;
-      for (const scene of scenes) {
-        if (draftWheelMode(scene.draft, hasColor, hasTemp) === next) {
-          continue;
+      const { scenes, activeId } = getState();
+      const item = scenes.find((row) => row.id === activeId);
+      if (item?.draft) {
+        const caps = capsOf(item);
+        const current = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
+        if (current !== next && convertDraftTo(item.draft, next, caps)) {
+          emitChange({ dragging: false });
         }
-        if (next === "color") {
-          const rgb = draftRgb(scene.draft);
-          const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
-          applyColorToDraft(scene.draft, rgb, hsv);
-        } else {
-          applyTempToDraft(
-            scene.draft,
-            kelvinForTempConvert(scene.draft, tempMin, tempMax)
-          );
-        }
-        changed = true;
-      }
-      if (changed) {
-        emitChange({ dragging: false });
       }
     }
-    if (mode !== next) {
-      mode = next;
-      paintWheel();
-    }
-    paintPill();
     sync();
   };
 
@@ -2045,8 +2394,7 @@ function createSceneColorWheel({
   ro?.observe(canvasWrap);
   ro?.observe(presets);
   presetTrack.addEventListener("scroll", updatePresetOverflow, { passive: true });
-  paintWheel();
-  paintPill();
+  paintWheels();
 
   const disconnect = () => {
     ro?.disconnect();
@@ -2128,6 +2476,7 @@ export {
   rgbCss,
   pinForeground,
   draftWheelMode,
+  lightWheelCaps,
   rgbwToRgb,
   rgbwwToRgb,
   scaleRgbChannels,

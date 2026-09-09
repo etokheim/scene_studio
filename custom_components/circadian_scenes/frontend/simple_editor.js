@@ -3,6 +3,7 @@
 import {
   createSceneColorWheel,
   draftRgb,
+  lightWheelCaps,
 } from "./color_ui.js";
 
 export const SIMPLE_EDITOR_CSS = `
@@ -236,6 +237,12 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     panel._noteSimpleDirty();
   };
 
+  const memberCaps = members.map((id) =>
+    lightWheelCaps(panel._hass?.states?.[id]?.attributes || {})
+  );
+  const hasColor = memberCaps.some((caps) => caps.hasColor);
+  const hasTemp = memberCaps.some((caps) => caps.hasTemp);
+
   const getState = () => ({
     scenes: members.map((id) => ({
       id,
@@ -263,10 +270,12 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         syncTiles();
       }
     },
-    hasColor: true,
-    hasTemp: true,
+    hasColor,
+    hasTemp,
     tempMin: 2000,
     tempMax: 6500,
+    getCapabilities: (scene) =>
+      lightWheelCaps(panel._hass?.states?.[scene.id]?.attributes || {}),
     ...panel._wheelPalette(),
   });
   wheels.appendChild(wheel.el);
@@ -311,11 +320,13 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     add("m-temp", "mdi:thermometer", () => {
       selectedId = eid;
       wheel.setMode("temp", { convertDraft: true });
+      persistLight(eid);
       syncTiles();
     });
     add("m-color", "mdi:palette", () => {
       selectedId = eid;
       wheel.setMode("color", { convertDraft: true });
+      persistLight(eid);
       syncTiles();
     });
     add("m-var", "mdi:variable", () => {

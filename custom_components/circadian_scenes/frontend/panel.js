@@ -2417,24 +2417,27 @@ class CircadianScenesPanel extends HTMLElement {
           display: flex;
           flex-direction: column;
           align-items: stretch;
-          /* Clear air between the disk and mode/preset chrome. */
           gap: 16px;
+          --wheel-peek: 10%;
+          --wheel-mixed-inner: 62%;
+          --wheel-mixed-gap: 6%;
         }
         .hue-wheel-canvas {
           position: relative;
           width: 100%;
           max-width: 320px;
           margin: 0 auto;
+          aspect-ratio: 1;
           overflow: visible;
           user-select: none;
           -webkit-user-select: none;
           touch-action: none;
         }
         .hue-wheel-glow,
-        .hue-wheel-bg {
+        .hue-wheel-layer {
           display: block;
           width: 100%;
-          height: auto;
+          height: 100%;
           border-radius: 50%;
         }
         .hue-wheel-glow {
@@ -2448,10 +2451,24 @@ class CircadianScenesPanel extends HTMLElement {
           filter: blur(54px) saturate(1.45);
           opacity: 0.55;
         }
-        .hue-wheel-bg {
-          position: relative;
+        .hue-wheel-layer {
+          position: absolute;
+          left: 0;
+          top: 0;
           z-index: 1;
+          pointer-events: none;
+          transform-origin: center center;
+          transition:
+            transform 280ms cubic-bezier(0.2, 0, 0, 1),
+            mask-image 280ms cubic-bezier(0.2, 0, 0, 1),
+            -webkit-mask-image 280ms cubic-bezier(0.2, 0, 0, 1);
+        }
+        .hue-wheel-layer.is-front {
+          z-index: 2;
           box-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+        }
+        .hue-wheel-layer.is-back {
+          z-index: 1;
         }
         .hue-wheel-svg {
           position: absolute;
@@ -2460,7 +2477,7 @@ class CircadianScenesPanel extends HTMLElement {
           width: 100%;
           height: 100%;
           overflow: visible;
-          z-index: 2;
+          z-index: 3;
           color: white;
         }
         .hue-wheel-paths {
@@ -2502,15 +2519,6 @@ class CircadianScenesPanel extends HTMLElement {
           font-weight: bold;
           paint-order: stroke fill;
         }
-        .hue-wheel-svg .gm.off-mode {
-          opacity: 0.7;
-        }
-        .hue-wheel-svg .gm.off-mode .marker-outline {
-          display: none;
-        }
-        .hue-wheel-svg .gm.off-mode .marker {
-          filter: url(#se-dot-shadow);
-        }
         .hue-wheel-svg .gm.active .marker-outline,
         .hue-wheel-svg .gm.preview .marker-outline {
           display: none;
@@ -2546,9 +2554,6 @@ class CircadianScenesPanel extends HTMLElement {
           pointer-events: none;
           z-index: 3;
         }
-        .hue-mode-pill[hidden] {
-          display: none !important;
-        }
         .hue-wheel-chrome > * {
           pointer-events: auto;
         }
@@ -2574,7 +2579,6 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-float-readout[hidden] {
           display: none !important;
         }
-        .hue-mode-pill,
         .hue-presets {
           box-sizing: border-box;
           display: flex;
@@ -2587,12 +2591,6 @@ class CircadianScenesPanel extends HTMLElement {
           border-radius: 20px;
           box-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
           background: var(--secondary-background-color, #242022);
-        }
-        .hue-mode-pill {
-          justify-content: flex-start;
-          flex: 0 0 auto;
-        }
-        .hue-presets {
           position: relative;
           flex: 1 1 auto;
           justify-content: flex-start;
@@ -2629,7 +2627,6 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-presets.can-scroll-end::after {
           opacity: 1;
         }
-        .hue-mode-btn,
         .hue-preset {
           box-sizing: border-box;
           flex-shrink: 0;
@@ -2644,33 +2641,11 @@ class CircadianScenesPanel extends HTMLElement {
           appearance: none;
           -webkit-appearance: none;
         }
-        .hue-mode-btn:hover,
         .hue-preset:hover {
           border-color: rgba(255, 255, 255, 0.45);
         }
-        .hue-mode-btn.active,
         .hue-preset.active {
           border-color: #fff;
-        }
-        .hue-mode-swatch {
-          display: block;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-        }
-        .hue-mode-swatch.color {
-          background: conic-gradient(
-            #ff3b30,
-            #ffcc00,
-            #34c759,
-            #5ac8fa,
-            #007aff,
-            #af52de,
-            #ff3b30
-          );
-        }
-        .hue-mode-swatch.temp {
-          background: linear-gradient(#ffda95, #ffffff, #cbe4f3);
         }
         .hue-preset {
           background-clip: content-box;
