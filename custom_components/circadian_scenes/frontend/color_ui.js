@@ -1944,6 +1944,22 @@ function createSceneColorWheel({
     return pinMode;
   };
 
+  // After a peek swap the pointer still sits on the new outer rim, which is
+  // the other wheel — require an interior visit before converting again.
+  const pointerInModeInterior = (r, geom, pinMode) => {
+    const band = pinMode === "color" ? geom.color : geom.temp;
+    if (!bandLive(band)) {
+      return false;
+    }
+    const width = band.outer - band.inner;
+    const peek = Math.max(
+      4,
+      radiusPx() * cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC)
+    );
+    const pad = Math.min(width * 0.35, Math.max(8, peek * 0.5));
+    return r >= band.inner + pad && r <= band.outer - pad;
+  };
+
   const convertDraftTo = (draft, next, caps) => {
     if (next === "color") {
       if (!caps.hasColor) {
@@ -2214,11 +2230,18 @@ function createSceneColorWheel({
     const pt = pointFromEvent(ev);
     const x = pt.x - drag.grabX;
     const y = pt.y - drag.grabY;
+    const r = Math.hypot(x - radius, y - radius);
     let pinMode = drag.mode;
-    const nextMode = maybeConvertDrag(item, x, y, geom, radius, pinMode);
-    if (nextMode !== pinMode) {
-      pinMode = nextMode;
-      drag.mode = nextMode;
+    if (drag.mustEnterHome && pointerInModeInterior(r, geom, pinMode)) {
+      drag.mustEnterHome = false;
+    }
+    if (!drag.mustEnterHome) {
+      const nextMode = maybeConvertDrag(item, x, y, geom, radius, pinMode);
+      if (nextMode !== pinMode) {
+        pinMode = nextMode;
+        drag.mode = nextMode;
+        drag.mustEnterHome = true;
+      }
     }
     const band = pinMode === "color" ? geom.color : geom.temp;
     if (!bandLive(band)) {
@@ -2277,7 +2300,14 @@ function createSceneColorWheel({
   };
 
   const startDrag = (ev, sceneId, grabX = 0, grabY = 0, mode = "color") => {
-    drag = { sceneId, pointerId: ev.pointerId, grabX, grabY, mode };
+    drag = {
+      sceneId,
+      pointerId: ev.pointerId,
+      grabX,
+      grabY,
+      mode,
+      mustEnterHome: false,
+    };
     stage.dispatchEvent(
       new CustomEvent("slider-interaction-start", {
         bubbles: true,
