@@ -530,6 +530,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Unavailable lights stay in the list, not on the dial
 
 - **Date:** 2026-09-01
+- **Superseded in part:** 2026-09-09 — clicking X excludes the lamp from store membership (`exclude`, and drop from `include`). The card FLIP-animates to the bottom, the X becomes +, and the row uses a muted **Removed** style (not grayscale). Sort is members, then unavailable members, then removed. Plus restores membership. Native YAML scene ids are not required.
 - **Decision:** Clock rings omit unavailable (or missing) lights. The legend and table list still show them, sorted last, marked unavailable. Live `hass.states` is the source of truth.
 - **Why:** An unavailable lamp cannot preview on the wheel; hiding it from the list would make membership edits impossible.
 - **Do not reverse without user ask.**

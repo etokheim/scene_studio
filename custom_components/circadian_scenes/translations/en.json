@@ -195,6 +195,7 @@
     },
     "lights": {
       "unavailable": "Unavailable",
+      "removed": "Removed",
       "brightness": "Brightness",
       "color_brightness": "Color brightness",
       "white_brightness": "White brightness",

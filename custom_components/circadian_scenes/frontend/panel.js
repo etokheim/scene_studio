@@ -271,6 +271,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._previewLocation = null;
     this._previewCache = new Map();
     this._previewOverlay = null;
+    this._removedLights = [];
     this._nativeDrafts = {};
     this._undoStack = [];
     this._redoStack = [];
@@ -1912,6 +1913,25 @@ class CircadianScenesPanel extends HTMLElement {
         .clock-legend-row.suggested {
           opacity: 0.92;
         }
+        .clock-legend-row.removed {
+          /* Toned down like unavailable, but not grayscale — still actionable. */
+          opacity: 0.68;
+          filter: none;
+          pointer-events: auto;
+        }
+        .clock-legend-row.removed .clock-legend-icon-wrap {
+          background: color-mix(
+            in srgb,
+            var(--secondary-text-color) 16%,
+            transparent
+          );
+          color: var(--secondary-text-color);
+        }
+        .clock-legend-row.removed .clock-legend-title,
+        .clock-legend-row.removed .clock-legend-sub,
+        .light-row.removed .light-name {
+          color: var(--secondary-text-color);
+        }
         .clock-legend-row.unavailable {
           opacity: 0.55;
           filter: grayscale(1);
@@ -1937,6 +1957,19 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .light-row.unavailable .light-bar {
           filter: grayscale(1);
+        }
+        .light-row.removed {
+          opacity: 0.68;
+          filter: none;
+          pointer-events: auto;
+        }
+        .light-row.removed .light-bar {
+          filter: none;
+          background: color-mix(
+            in srgb,
+            var(--secondary-text-color) 12%,
+            var(--card-background-color)
+          );
         }
         .clock-legend-icon-wrap {
           flex-shrink: 0;
@@ -1994,7 +2027,8 @@ class CircadianScenesPanel extends HTMLElement {
           flex-shrink: 0;
           text-shadow: none;
         }
-        .clock-legend-row .light-remove {
+        .clock-legend-row .light-remove,
+        .clock-legend-row .light-add {
           position: static;
           transform: none;
           flex-shrink: 0;
@@ -3045,7 +3079,8 @@ class CircadianScenesPanel extends HTMLElement {
         .light-row:only-child .light-warn {
           top: 50%;
         }
-        .light-remove {
+        .light-remove,
+        .light-add {
           position: absolute;
           right: 4px;
           top: calc(${LIGHT_FEATHER_PX}px + (100% - ${LIGHT_FEATHER_PX}px) / 2);
@@ -3056,7 +3091,9 @@ class CircadianScenesPanel extends HTMLElement {
           color: var(--primary-text-color);
         }
         .light-row:first-child .light-remove,
-        .light-row:only-child .light-remove {
+        .light-row:only-child .light-remove,
+        .light-row:first-child .light-add,
+        .light-row:only-child .light-add {
           top: 50%;
         }
         .light-warn ha-icon {
@@ -6906,6 +6943,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._forceCloseSceneSidebar();
     this._formData = structuredClone(snapshot.form);
     this._nativeDrafts = structuredClone(snapshot.nativeDrafts);
+    this._removedLights = [];
     if (snapshot.theme) {
       this._themeDraft = structuredClone(snapshot.theme);
     } else {
@@ -7171,28 +7209,214 @@ class CircadianScenesPanel extends HTMLElement {
     return [...ids].filter((id) => !this._nativeDrafts[id]?.deleted);
   }
 
+  _ensureMembership() {
+    if (!this._formData.membership) {
+      this._formData.membership = { exclude: [], include: [] };
+    }
+    if (!Array.isArray(this._formData.membership.exclude)) {
+      this._formData.membership.exclude = [];
+    }
+    if (!Array.isArray(this._formData.membership.include)) {
+      this._formData.membership.include = [];
+    }
+    return this._formData.membership;
+  }
+
+  _areaLightIds() {
+    const areaId = this._formData?.area;
+    if (!areaId) {
+      return [];
+    }
+    const floorAreas = (this._floors || []).flatMap((floor) => floor.areas || []);
+    const area = floorAreas.find((item) => item.id === areaId);
+    return area?.lights || [];
+  }
+
+  _entityInSelectedArea(entityId) {
+    if (this._areaLightIds().includes(entityId)) {
+      return true;
+    }
+    const areaId = this._formData?.area;
+    const meta = this._hass?.entities?.[entityId];
+    if (!areaId || !meta) {
+      return false;
+    }
+    return (
+      meta.area_id === areaId ||
+      (meta.area_id == null &&
+        this._hass?.devices?.[meta.device_id]?.area_id === areaId)
+    );
+  }
+
+  _excludeLightMembership(entityId) {
+    const membership = this._ensureMembership();
+    membership.include = membership.include.filter((id) => id !== entityId);
+    if (!membership.exclude.includes(entityId)) {
+      membership.exclude.push(entityId);
+    }
+  }
+
+  _restoreLightMembership(entityId) {
+    const membership = this._ensureMembership();
+    membership.exclude = membership.exclude.filter((id) => id !== entityId);
+    this._forgetRemovedLight(entityId);
+    if (
+      !this._entityInSelectedArea(entityId) &&
+      !membership.include.includes(entityId)
+    ) {
+      membership.include.push(entityId);
+    }
+  }
+
+  _rememberRemovedLight(light) {
+    if (!light?.entity_id) {
+      return;
+    }
+    this._removedLights = this._removedLights || [];
+    if (this._removedLights.some((row) => row.entity_id === light.entity_id)) {
+      return;
+    }
+    this._removedLights.push({
+      entity_id: light.entity_id,
+      name: light.name,
+      samples: [],
+      gaps: [],
+      event_states: light.event_states || [],
+      suggested: true,
+      removed: true,
+      in_area: light.in_area,
+    });
+  }
+
+  _forgetRemovedLight(entityId) {
+    this._removedLights = (this._removedLights || []).filter(
+      (row) => row.entity_id !== entityId
+    );
+  }
+
+  _decorateMembershipLights(lights) {
+    const exclude = new Set(this._formData?.membership?.exclude || []);
+    const seen = new Set();
+    const decorated = [];
+    for (const light of lights || []) {
+      if (!light?.entity_id || seen.has(light.entity_id)) {
+        continue;
+      }
+      seen.add(light.entity_id);
+      if (exclude.has(light.entity_id) || light.removed) {
+        decorated.push({ ...light, suggested: true, removed: true });
+      } else {
+        decorated.push(light);
+      }
+    }
+    for (const extra of this._removedLights || []) {
+      if (!seen.has(extra.entity_id)) {
+        seen.add(extra.entity_id);
+        decorated.push({ ...extra, suggested: true, removed: true });
+      }
+    }
+    return decorated;
+  }
+
+  _captureLightRowRects() {
+    const map = new Map();
+    const root = this._clockLegendEl || this._sunPathBodyEl?.querySelector(".sun-lights");
+    if (!root) {
+      return map;
+    }
+    for (const el of root.querySelectorAll(
+      ":scope > .clock-legend-row, :scope > .light-row"
+    )) {
+      const id = el.dataset.entityId;
+      if (id) {
+        map.set(id, el.getBoundingClientRect());
+      }
+    }
+    return map;
+  }
+
+  _playLightRowFlip(before) {
+    if (!before?.size) {
+      return;
+    }
+    if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      return;
+    }
+    const root = this._clockLegendEl || this._sunPathBodyEl?.querySelector(".sun-lights");
+    if (!root) {
+      return;
+    }
+    for (const el of root.querySelectorAll(
+      ":scope > .clock-legend-row, :scope > .light-row"
+    )) {
+      const prev = before.get(el.dataset.entityId);
+      if (!prev) {
+        continue;
+      }
+      const next = el.getBoundingClientRect();
+      const dx = prev.left - next.left;
+      const dy = prev.top - next.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+        continue;
+      }
+      el.style.zIndex = "2";
+      el.style.transition = "none";
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      el.getBoundingClientRect();
+      el.style.transition = "transform 360ms cubic-bezier(0.2, 0, 0, 1)";
+      el.style.transform = "";
+      const clear = (ev) => {
+        if (ev && ev.propertyName && ev.propertyName !== "transform") {
+          return;
+        }
+        el.style.transition = "";
+        el.style.transform = "";
+        el.style.zIndex = "";
+        el.removeEventListener("transitionend", clear);
+      };
+      el.addEventListener("transitionend", clear);
+    }
+  }
+
   _removeLightFromAssignedScenes(entityId) {
-    const scenes = this._assignedSceneIds();
-    if (!scenes.length) {
+    if (!entityId || this._editingThemeLook()) {
+      return;
+    }
+    const current = (this._sunPath?.lights || []).find(
+      (light) => light.entity_id === entityId
+    );
+    if (!current || current.suggested || current.removed) {
       return;
     }
     this._commitUndo();
-    for (const sceneId of scenes) {
+    this._excludeLightMembership(entityId);
+    if (this._sidebarLightId === entityId) {
+      this._forceCloseSceneSidebar();
+      this._setSidebarLight(null);
+    }
+    for (const sceneId of this._assignedSceneIds()) {
       this._ensureNativeDraft(sceneId).entities[entityId] = null;
     }
     this._syncPreviewOverlay();
-    this._clearPreviewCache();
+    if (!this._entityInSelectedArea(entityId)) {
+      this._rememberRemovedLight(current);
+    }
+    const before = this._captureLightRowRects();
     if (this._sunPath?.lights) {
       this._sunPath = {
         ...this._sunPath,
-        lights: this._sunPath.lights.map((light) =>
-          light.entity_id === entityId
-            ? { ...light, suggested: true }
-            : light
+        lights: this._decorateMembershipLights(
+          this._sunPath.lights.map((light) =>
+            light.entity_id === entityId
+              ? { ...light, suggested: true, removed: true, samples: [] }
+              : light
+          )
         ),
       };
-      this._drawSunPath();
     }
+    this._clearPreviewCache();
+    this._drawSunPath();
+    this._playLightRowFlip(before);
     this._ensureSunPath();
   }
 
@@ -7388,6 +7612,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._sunPath || !entityId?.startsWith("light.")) {
       return;
     }
+    this._forgetRemovedLight(entityId);
     const state = this._hass?.states?.[entityId];
     const areaId = this._formData.area || null;
     const entityMeta = this._hass?.entities?.[entityId];
@@ -7404,6 +7629,7 @@ class CircadianScenesPanel extends HTMLElement {
       lights[index] = {
         ...lights[index],
         suggested: false,
+        removed: false,
         in_area: inArea ?? lights[index].in_area,
       };
     } else {
@@ -7414,48 +7640,55 @@ class CircadianScenesPanel extends HTMLElement {
         gaps: [],
         event_states: [],
         suggested: false,
+        removed: false,
         in_area: inArea === true,
       });
     }
-    this._sunPath = { ...this._sunPath, lights };
+    this._sunPath = {
+      ...this._sunPath,
+      lights: this._decorateMembershipLights(lights),
+    };
     // Keep key cleared so the WS preview with overlay still replaces this stub.
     this._sunPathKey = undefined;
     this._drawSunPath();
   }
 
   async _addLightToAssignedScenes(entityId) {
-    const scenes = this._assignedSceneIds();
-    if (!entityId?.startsWith("light.") || !scenes.length) {
+    if (!entityId?.startsWith("light.")) {
       return;
     }
     const listed = (this._sunPath?.lights || []).some(
-      (light) => light.entity_id === entityId && !light.suggested
+      (light) =>
+        light.entity_id === entityId && !light.suggested && !light.removed
     );
     if (listed) {
       return;
     }
     this._commitUndo();
-    const snapshot = this._snapshotLight(entityId);
-    for (const sceneId of scenes) {
-      const eventId =
-        Object.entries(EVENT_SCENE_KEYS).find(
-          ([, key]) => this._formData[key] === sceneId
-        )?.[0] || "noon";
-      this._ensureNativeDraft(sceneId).entities[entityId] = this._adaptStateToLight(
-        entityId,
-        snapshot,
-        eventId
-      );
+    this._restoreLightMembership(entityId);
+    const scenes = this._assignedSceneIds();
+    if (scenes.length) {
+      const snapshot = this._snapshotLight(entityId);
+      for (const sceneId of scenes) {
+        const eventId =
+          Object.entries(EVENT_SCENE_KEYS).find(
+            ([, key]) => this._formData[key] === sceneId
+          )?.[0] || "noon";
+        this._ensureNativeDraft(sceneId).entities[entityId] =
+          this._adaptStateToLight(entityId, snapshot, eventId);
+      }
     }
     this._syncPreviewOverlay();
-    // Show the row immediately; then refetch with overlay for real samples.
+    const before = this._captureLightRowRects();
     this._optimisticIncludeLight(entityId);
     this._clearPreviewCache();
+    this._drawSunPath();
+    this._playLightRowFlip(before);
     await this._ensureSunPath();
   }
 
   _lightListAddControl() {
-    if (this._view !== "edit" || !this._assignedSceneIds().length) {
+    if (this._view !== "edit") {
       return null;
     }
     const wrap = document.createElement("div");
@@ -8884,7 +9117,9 @@ class CircadianScenesPanel extends HTMLElement {
     return (lights || []).filter(
       (light) =>
         light.theme_ring ||
-        (!light.suggested && !this._lightIsUnavailable(light.entity_id))
+        (!light.suggested &&
+          !light.removed &&
+          !this._lightIsUnavailable(light.entity_id))
     );
   }
 
@@ -8893,8 +9128,15 @@ class CircadianScenesPanel extends HTMLElement {
       return [];
     }
     const rows = [...(lights || [])];
-    const rank = (light) =>
-      this._lightIsUnavailable(light.entity_id) ? 2 : light.suggested ? 1 : 0;
+    const rank = (light) => {
+      if (light.removed || light.suggested) {
+        return 2;
+      }
+      if (this._lightIsUnavailable(light.entity_id)) {
+        return 1;
+      }
+      return 0;
+    };
     rows.sort((a, b) => rank(a) - rank(b));
     return rows;
   }
@@ -11157,6 +11399,7 @@ class CircadianScenesPanel extends HTMLElement {
       overlay: this._previewOverlay,
       location: this._previewLocation,
       area: this._formData.area || null,
+      membership: this._formData.membership || { exclude: [], include: [] },
     });
   }
 
@@ -11200,12 +11443,16 @@ class CircadianScenesPanel extends HTMLElement {
 
   _commitSunPath(payload, key) {
     const prepared = this._withClientLightSamples(payload);
+    const decorated = {
+      ...prepared,
+      lights: this._decorateMembershipLights(prepared?.lights),
+    };
     const from = this._displayedSunPath || this._sunPath;
-    const morphMs = this._takePathMorphMs(from, prepared);
-    this._sunPath = prepared;
+    const morphMs = this._takePathMorphMs(from, decorated);
+    this._sunPath = decorated;
     this._sunPathKey = key;
-    if (morphMs && from && from !== prepared) {
-      this._morphSunPath(from, prepared, morphMs);
+    if (morphMs && from && from !== decorated) {
+      this._morphSunPath(from, decorated, morphMs);
       return;
     }
     this._drawSunPath();
@@ -14427,6 +14674,12 @@ class CircadianScenesPanel extends HTMLElement {
       ) {
         return false;
       }
+      if (
+        legendRows[index].classList.contains("removed") !==
+        Boolean(legendLights[index].removed || legendLights[index].suggested)
+      ) {
+        return false;
+      }
     }
     for (let index = 0; index < rings.length; index += 1) {
       if (rings[index].dataset.entityId !== ringLights[index].entity_id) {
@@ -15150,21 +15403,47 @@ class CircadianScenesPanel extends HTMLElement {
     return wrap;
   }
 
+  _lightMembershipButton(light, { removed }) {
+    const btn = document.createElement("ha-icon-button");
+    btn.className = removed ? "light-add" : "light-remove";
+    btn.label = removed
+      ? `Add ${light.name} to the scene`
+      : `Remove ${light.name} from the scene`;
+    const icon = document.createElement("ha-icon");
+    icon.setAttribute("icon", removed ? "mdi:plus" : "mdi:close");
+    btn.appendChild(icon);
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (removed) {
+        void this._addLightToAssignedScenes(light.entity_id);
+      } else {
+        this._removeLightFromAssignedScenes(light.entity_id);
+      }
+    });
+    return btn;
+  }
+
   _clockLegendRow(light, events) {
     const suggested = Boolean(light.suggested);
+    const removed = Boolean(light.removed || suggested);
     const row = document.createElement("div");
     row.className = "clock-legend-row";
     row.dataset.entityId = light.entity_id;
     if (suggested) {
       row.classList.add("suggested");
     }
+    if (removed) {
+      row.classList.add("removed");
+    }
     if (light.in_area === false) {
       row.classList.add("out-of-area");
     }
-    if (this._lightIsUnavailable(light.entity_id)) {
+    const unavailable =
+      this._lightIsUnavailable(light.entity_id) && !removed;
+    if (unavailable) {
       row.classList.add("unavailable");
     }
-    if (light.entity_id === this._sidebarLightId) {
+    if (!removed && light.entity_id === this._sidebarLightId) {
       row.classList.add("selected");
     }
 
@@ -15188,21 +15467,20 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const sub = document.createElement("div");
     sub.className = "clock-legend-sub";
-    const unavailable = this._lightIsUnavailable(light.entity_id);
-    if (unavailable) {
+    if (removed) {
+      sub.textContent = this._t("frontend.lights.removed", "Removed");
+    } else if (unavailable) {
       sub.textContent = this._t("frontend.lights.unavailable", "Unavailable");
-    } else if (suggested) {
-      sub.textContent = "Not in an assigned scene yet";
     }
     meta.append(title, sub);
     row.appendChild(meta);
-    if (!suggested && !unavailable) {
+    if (!removed && !unavailable) {
       this._lightNameLabels.push({ light, titleEl: title, subEl: sub });
     }
 
     if (this._view === "edit") {
       const assigned = events.filter((item) => this._eventSceneId(item.id));
-      if (!suggested && assigned.length) {
+      if (!removed && assigned.length) {
         row.classList.add("interactive");
         row.setAttribute("role", "button");
         row.tabIndex = 0;
@@ -15228,7 +15506,7 @@ class CircadianScenesPanel extends HTMLElement {
         });
       }
       const missingScenes = this._missingSceneRows(light);
-      if (missingScenes.length) {
+      if (missingScenes.length && !removed) {
         const names = [
           ...new Set(missingScenes.map((row) => row.scene_name).filter(Boolean)),
         ];
@@ -15239,16 +15517,12 @@ class CircadianScenesPanel extends HTMLElement {
           "Add this light using the typical brightness and color of the other lights in that scene";
         warn.setAttribute(
           "aria-label",
-          suggested
-            ? `Add ${light.name} to scenes`
-            : `Add ${light.name} to ${names.join(", ")}`
+          `Add ${light.name} to ${names.join(", ")}`
         );
         const icon = document.createElement("ha-icon");
         icon.setAttribute("icon", "mdi:lightbulb-plus-outline");
         const text = document.createElement("span");
-        text.textContent = suggested
-          ? "Add to scenes"
-          : `Add to ${names.join(", ")}`;
+        text.textContent = `Add to ${names.join(", ")}`;
         warn.append(icon, text);
         warn.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -15256,24 +15530,12 @@ class CircadianScenesPanel extends HTMLElement {
         });
         row.appendChild(warn);
       }
-      if (!suggested) {
-        const remove = document.createElement("ha-icon-button");
-        remove.className = "light-remove";
-        remove.label = `Remove ${light.name} from scenes`;
-        const removeIcon = document.createElement("ha-icon");
-        removeIcon.setAttribute("icon", "mdi:close");
-        remove.appendChild(removeIcon);
-        remove.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          this._removeLightFromAssignedScenes(light.entity_id);
-        });
-        row.appendChild(remove);
-        if (assigned.length) {
-          const chevron = document.createElement("ha-icon");
-          chevron.className = "clock-legend-chevron";
-          chevron.setAttribute("icon", "mdi:chevron-right");
-          row.appendChild(chevron);
-        }
+      row.appendChild(this._lightMembershipButton(light, { removed }));
+      if (!removed && assigned.length) {
+        const chevron = document.createElement("ha-icon");
+        chevron.className = "clock-legend-chevron";
+        chevron.setAttribute("icon", "mdi:chevron-right");
+        row.appendChild(chevron);
       }
     }
     return row;
@@ -15353,19 +15615,25 @@ class CircadianScenesPanel extends HTMLElement {
 
   _lightRow(light, xOf, events) {
     const suggested = Boolean(light.suggested);
+    const removed = Boolean(light.removed || suggested);
     const row = document.createElement("div");
     row.className = "light-row";
     row.dataset.entityId = light.entity_id;
     if (suggested) {
       row.classList.add("suggested");
     }
+    if (removed) {
+      row.classList.add("removed");
+    }
     if (light.in_area === false) {
       row.classList.add("out-of-area");
     }
-    if (this._lightIsUnavailable(light.entity_id)) {
+    const unavailable =
+      this._lightIsUnavailable(light.entity_id) && !removed;
+    if (unavailable) {
       row.classList.add("unavailable");
     }
-    if (!suggested && light.entity_id === this._sidebarLightId) {
+    if (!removed && light.entity_id === this._sidebarLightId) {
       row.classList.add("selected");
       row.setAttribute("aria-current", "true");
     }
@@ -15395,7 +15663,12 @@ class CircadianScenesPanel extends HTMLElement {
     const name = document.createElement("span");
     name.className = "light-name";
     name.textContent = light.name;
-    if (this._lightIsUnavailable(light.entity_id)) {
+    if (removed) {
+      name.textContent = `${light.name} · ${this._t(
+        "frontend.lights.removed",
+        "Removed"
+      )}`;
+    } else if (unavailable) {
       name.textContent = `${light.name} · ${this._t(
         "frontend.lights.unavailable",
         "Unavailable"
@@ -15404,7 +15677,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (light.in_area === false) {
       name.title = "This light is not in the selected area";
     }
-    if (!suggested && !this._lightIsUnavailable(light.entity_id)) {
+    if (!removed && !unavailable) {
       this._lightNameLabels.push({ light, el: name });
     }
     bar.appendChild(name);
@@ -15518,17 +15791,9 @@ class CircadianScenesPanel extends HTMLElement {
         });
         bar.appendChild(warn);
       }
-      const remove = document.createElement("ha-icon-button");
-      remove.className = "light-remove";
-      remove.label = `Remove ${light.name} from scenes`;
-      const removeIcon = document.createElement("ha-icon");
-      removeIcon.setAttribute("icon", "mdi:close");
-      remove.appendChild(removeIcon);
-      remove.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        this._removeLightFromAssignedScenes(light.entity_id);
-      });
-      bar.appendChild(remove);
+      bar.appendChild(this._lightMembershipButton(light, { removed: false }));
+    } else if (this._view === "edit") {
+      bar.appendChild(this._lightMembershipButton(light, { removed: true }));
     }
     row.appendChild(bar);
     return row;
