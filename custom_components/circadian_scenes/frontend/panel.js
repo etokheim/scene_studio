@@ -10811,6 +10811,33 @@ class CircadianScenesPanel extends HTMLElement {
       }
       return effect;
     };
+    const applyEffect = (next) => {
+      const draft = currentDraft();
+      if (!draft || next == null || next === "") {
+        return;
+      }
+      if (draft.effect === next) {
+        return;
+      }
+      draft.effect = next;
+      draft.state = "on";
+      applyToSession();
+      syncEffectControl();
+      void applyLive();
+    };
+    const bindEffectMenuSelect = (el) => {
+      const dropdown = el.shadowRoot?.querySelector("ha-dropdown");
+      if (!dropdown || dropdown._effectBound) {
+        return Boolean(dropdown);
+      }
+      dropdown._effectBound = true;
+      // ha-control-select-menu no longer fires `select`; the inner
+      // ha-dropdown emits wa-select and that event is not composed.
+      dropdown.addEventListener("wa-select", (ev) => {
+        applyEffect(ev.detail?.item?.value);
+      });
+      return true;
+    };
     const syncEffectControl = () => {
       if (!effectMenu) {
         return;
@@ -10820,6 +10847,9 @@ class CircadianScenesPanel extends HTMLElement {
         draft?.effect && draft.effect !== "none" ? draft.effect : undefined;
       effectMenu.value = value;
       effectMenu.disabled = !draft || draft.state === "off";
+      if (effectMenu.localName === "ha-control-select-menu") {
+        bindEffectMenuSelect(effectMenu);
+      }
     };
     if (effectList.length && customElements.get("ha-control-select-menu")) {
       const menu = document.createElement("ha-control-select-menu");
@@ -10833,17 +10863,12 @@ class CircadianScenesPanel extends HTMLElement {
       icon.slot = "icon";
       icon.setAttribute("icon", "mdi:creation");
       menu.appendChild(icon);
-      menu.addEventListener("select", (ev) => {
-        const next = ev.detail?.item?.value;
-        const draft = currentDraft();
-        if (!draft || !next || draft.effect === next) {
-          return;
-        }
-        draft.effect = next;
-        draft.state = "on";
-        applyToSession();
-        syncEffectControl();
-        void applyLive();
+      menu.addEventListener("wa-select", (ev) => {
+        applyEffect(ev.detail?.item?.value);
+      });
+      menu.addEventListener("value-changed", (ev) => {
+        ev.stopPropagation();
+        applyEffect(ev.detail?.value);
       });
       effectMenu = menu;
       if (customElements.get("ha-more-info-control-select-container")) {
@@ -10854,6 +10879,7 @@ class CircadianScenesPanel extends HTMLElement {
         effectMount.appendChild(menu);
       }
       syncEffectControl();
+      window.requestAnimationFrame(() => bindEffectMenuSelect(menu));
     } else if (effectList.length) {
       // Fallback when more-info controls are not registered yet.
       const sel = document.createElement("ha-selector");
@@ -10870,16 +10896,7 @@ class CircadianScenesPanel extends HTMLElement {
       };
       sel.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
-        const next = ev.detail?.value;
-        const draft = currentDraft();
-        if (!draft || !next || draft.effect === next) {
-          return;
-        }
-        draft.effect = next;
-        draft.state = "on";
-        applyToSession();
-        sel.value = next;
-        void applyLive();
+        applyEffect(ev.detail?.value);
       });
       effectMenu = sel;
       effectMount.appendChild(sel);

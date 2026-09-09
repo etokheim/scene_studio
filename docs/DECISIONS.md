@@ -636,3 +636,10 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Preview has to match what Save would do at that clock, including while scrubbing the sun. Play is a traffic-limited day walk, not a second apply path. Restoring on deselect avoids leaving the house in a draft after browsing scenes.
 - **Do not reverse without user ask.**
 
+## Light sidebar effect menu listens on the inner ha-dropdown
+
+- **Date:** 2026-09-09
+- **Decision:** Apply the chosen effect from `wa-select` on the `ha-dropdown` inside `ha-control-select-menu` (rebind when the menu is enabled). Do not rely on a `select` event on the control — HA no longer fires it after the dropdown migration, and `wa-select` is not composed through the control’s shadow root.
+- **Why:** Selecting an effect looked like a no-op: the UI opened, but the draft never updated.
+- **Do not reverse without user ask.**
+
