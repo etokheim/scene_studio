@@ -521,6 +521,57 @@ function applyTempToDraft(draft, kelvin) {
   draft.state = "on";
 }
 
+function colorPayloadFromDraft(draft) {
+  if (!draft) {
+    return { color_mode: "color_temp", color_temp_kelvin: 3000 };
+  }
+  if (draft.color_mode === "hs" || (draft.hs_color && draft.color_mode !== "color_temp")) {
+    if (draft.hs_color) {
+      return { color_mode: "hs", hs_color: [...draft.hs_color] };
+    }
+  }
+  if (draft.rgb_color && draft.color_mode === "rgb") {
+    return { color_mode: "rgb", rgb_color: [...draft.rgb_color] };
+  }
+  if (draft.color_temp_kelvin != null) {
+    return {
+      color_mode: "color_temp",
+      color_temp_kelvin: Number(draft.color_temp_kelvin),
+    };
+  }
+  if (draft.hs_color) {
+    return { color_mode: "hs", hs_color: [...draft.hs_color] };
+  }
+  if (draft.rgb_color) {
+    return { color_mode: "rgb", rgb_color: [...draft.rgb_color] };
+  }
+  return { color_mode: "color_temp", color_temp_kelvin: 3000 };
+}
+
+function applyVariableToDraft(draft, variable) {
+  if (!draft || !variable) {
+    return;
+  }
+  draft.color_temp_kelvin = undefined;
+  draft.rgb_color = undefined;
+  draft.hs_color = undefined;
+  draft.rgbw_color = undefined;
+  draft.rgbww_color = undefined;
+  Object.assign(draft, variable.color || {});
+  draft.variable_ref = variable.id;
+  const brightness = Number(variable.brightness);
+  if (Number.isFinite(brightness)) {
+    draft.brightness = brightness;
+  }
+  draft.state = Number(draft.brightness) > 0 ? "on" : "off";
+}
+
+function variableSwatchCss(variable) {
+  const rgb = draftRgb(variable?.color || {});
+  const f = Math.max(0, Math.min(1, (Number(variable?.brightness) || 0) / 255));
+  return `rgb(${Math.round(rgb[0] * f)}, ${Math.round(rgb[1] * f)}, ${Math.round(rgb[2] * f)})`;
+}
+
 /** Nearest Helland kelvin in [min,max] to an RGB (for RGB→temp mode convert). */
 function approxKelvinFromRgb(rgb, tempMin, tempMax) {
   const minK = Math.round(Number(tempMin) || 2000);
@@ -1400,6 +1451,8 @@ function createSceneColorWheel({
   getState,
   onSelect,
   onChange,
+  getPalette,
+  onAddPalette,
 }) {
   // Polar HSV + kelvin disk, pin/dot markers, and presets match etokheim/huemane-light-card.
   let mode = hasColor ? "color" : "temp";
@@ -1553,67 +1606,56 @@ function createSceneColorWheel({
     presetTrack.replaceChildren();
     const { scenes, activeId } = getState();
     const active = scenes.find((item) => item.id === activeId);
-    const list = mode === "color" ? HUE_COLOR_PRESETS : HUE_TEMP_PRESETS;
-    presetTrack.setAttribute(
-      "aria-label",
-      mode === "color" ? "Colors" : "Color temperature"
-    );
-    for (const item of list) {
+    const palette = typeof getPalette === "function" ? getPalette() || [] : [];
+    presetTrack.setAttribute("aria-label", "Variables");
+    for (const variable of palette) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "hue-preset";
       btn.setAttribute("role", "listitem");
-      if (mode === "color") {
-        btn.style.backgroundColor = item;
-        btn.title = item.toUpperCase();
-        const rgb = hexToRgb(item);
-        const current = active ? draftRgb(active.draft) : null;
-        if (
-          current &&
-          current[0] === rgb[0] &&
-          current[1] === rgb[1] &&
-          current[2] === rgb[2]
-        ) {
-          btn.classList.add("active");
-        }
-        btn.addEventListener("click", () => {
-          if (!active) {
-            return;
-          }
-          const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
-          applyColorToDraft(active.draft, rgb, hsv);
-          const marker = markers.get(active.id);
-          if (marker) {
-            marker.g.classList.add("glide");
-            clearTimeout(glideTimer);
-            glideTimer = setTimeout(() => marker.g.classList.remove("glide"), 450);
-          }
-          emitChange({ dragging: false });
-          sync();
-        });
-      } else {
-        const rgb = hueTempToRgb(item);
-        btn.style.backgroundColor = rgbCss(rgb);
-        btn.title = `${item} K`;
-        if (active?.draft?.color_temp_kelvin === item) {
-          btn.classList.add("active");
-        }
-        btn.addEventListener("click", () => {
-          if (!active) {
-            return;
-          }
-          applyTempToDraft(active.draft, item);
-          const marker = markers.get(active.id);
-          if (marker) {
-            marker.g.classList.add("glide");
-            clearTimeout(glideTimer);
-            glideTimer = setTimeout(() => marker.g.classList.remove("glide"), 450);
-          }
-          emitChange({ dragging: false });
-          sync();
-        });
+      btn.title = variable.name;
+      btn.style.backgroundColor = variableSwatchCss(variable);
+      if (active?.draft?.variable_ref === variable.id) {
+        btn.classList.add("active");
       }
+      btn.addEventListener("click", () => {
+        if (!active?.draft) {
+          return;
+        }
+        applyVariableToDraft(active.draft, variable);
+        const marker = markers.get(active.id);
+        if (marker) {
+          marker.g.classList.add("glide");
+          clearTimeout(glideTimer);
+          glideTimer = setTimeout(() => marker.g.classList.remove("glide"), 450);
+        }
+        emitChange({ dragging: false, fromPalette: true });
+        sync();
+      });
       presetTrack.appendChild(btn);
+    }
+    if (typeof onAddPalette === "function") {
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "hue-preset add";
+      add.setAttribute("role", "listitem");
+      add.title = "Add variable";
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", "mdi:plus");
+      add.appendChild(icon);
+      add.addEventListener("click", async () => {
+        if (!active?.draft) {
+          return;
+        }
+        const saved = await onAddPalette(active.draft);
+        if (!saved) {
+          return;
+        }
+        applyVariableToDraft(active.draft, saved);
+        emitChange({ dragging: false, fromPalette: true });
+        sync();
+      });
+      presetTrack.appendChild(add);
     }
     requestAnimationFrame(updatePresetOverflow);
   };
@@ -2088,6 +2130,9 @@ export {
   draftRgb,
   applyColorToDraft,
   applyTempToDraft,
+  applyVariableToDraft,
+  colorPayloadFromDraft,
+  variableSwatchCss,
   approxKelvinFromRgb,
   formatWheelReadout,
   inferDraftColorKind,

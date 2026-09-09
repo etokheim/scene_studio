@@ -16,6 +16,7 @@ import {
   medianNumber,
   circularMeanHue,
   lightDraftFingerprint,
+  colorPayloadFromDraft,
 } from "./color_ui.js";
 import {
   isoYear,
@@ -132,8 +133,6 @@ const LIGHT_EDIT_HIT_PX = 40;
 const LIGHT_EDIT_DOT_PX = 5;
 const LIGHT_EDIT_ACTION_PX = 40;
 const UNDO_STACK_LIMIT = 75;
-const DRAFT_STORAGE_VERSION = 1;
-const DRAFT_PERSIST_MS = 200;
 const LIGHT_VIEW_STORAGE_VERSION = 1;
 const LIVE_EDIT_STORAGE_VERSION = 1;
 const ROOM_PREVIEW_STORAGE_VERSION = 1;
@@ -270,9 +269,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._undoStack = [];
     this._redoStack = [];
     this._sessionBaseline = null;
-    this._draftRestore = null;
-    this._draftBannerDismissed = false;
-    this._persistTimer = undefined;
     this._previewInFlight = false;
     this._previewQueued = false;
     this._yearScrubbing = false;
@@ -283,13 +279,15 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockResizeObserver = undefined;
     this._sunPathHome = undefined;
     this._aulResumeInterval = 300;
-    this._hashConfirming = false;
     this._lightView = "dial";
     this._liveEdit = true;
     this._liveEditSidebarHandler = null;
     this._roomPreview = false;
     this._roomPreviewSnapshots = null;
     this._loadGeneration = 0;
+    this._previewGeneration = 0;
+    this._hashSyncing = false;
+    this._hashSyncQueued = false;
     this._sidebarMotionGeneration = 0;
     this._sidebarMotionRaf = undefined;
     this._sidebarMotionTimer = undefined;
@@ -302,7 +300,7 @@ class CircadianScenesPanel extends HTMLElement {
       if (ev?.type === "visibilitychange" && document.visibilityState === "visible") {
         return;
       }
-      this._flushPersistedDraft();
+      void this._saveNow();
     };
     this._onLandscapeChange = () => this._syncYearScrubLayout();
     this._onWindowResize = () => {
@@ -426,7 +424,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    this._flushPersistedDraft();
+    void this._saveNow();
     this._closeSceneSidebar();
     window.removeEventListener("hashchange", this._onHashChange);
     window.removeEventListener("location-changed", this._onLocationChanged);
@@ -2673,6 +2671,22 @@ class CircadianScenesPanel extends HTMLElement {
           background-clip: content-box;
           background-origin: content-box;
         }
+        .hue-preset.add {
+          display: grid;
+          place-items: center;
+          background: transparent;
+          border-style: dashed;
+          border-color: color-mix(
+            in srgb,
+            var(--primary-text-color) 40%,
+            transparent
+          );
+        }
+        .hue-preset.add ha-icon {
+          --mdc-icon-size: 18px;
+          width: 18px;
+          height: 18px;
+        }
         .light-brightness-graph {
           position: relative;
           width: 100%;
@@ -3968,17 +3982,6 @@ class CircadianScenesPanel extends HTMLElement {
                 <ha-icon icon="mdi:close"></ha-icon>
               </ha-icon-button>
             </div>
-            <div class="draft-restore" hidden>
-              <ha-icon icon="mdi:history"></ha-icon>
-              <div class="draft-restore-copy">
-                <div class="title"></div>
-                <div class="detail"></div>
-              </div>
-              <ha-button class="draft-restore-discard" appearance="plain">Discard</ha-button>
-              <ha-icon-button class="draft-restore-dismiss" label="Dismiss">
-                <ha-icon icon="mdi:close"></ha-icon>
-              </ha-icon-button>
-            </div>
           </div>
           <div class="sun-path" hidden>
             <div class="sun-path-stage">
@@ -4004,17 +4007,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockScrubRail = this.shadowRoot.querySelector(".sun-year-scrub-rail");
     this._contentEl = this.shadowRoot.querySelector(".content");
     this._fabEl = this.shadowRoot.querySelector(".fab");
-    this._draftBanner = this.shadowRoot.querySelector(".draft-restore");
-    this._draftBanner
-      ?.querySelector(".draft-restore-discard")
-      ?.addEventListener("click", () => this._discardRestoredDraft());
-    this._draftBanner
-      ?.querySelector(".draft-restore-dismiss")
-      ?.addEventListener("click", () => {
-        this._draftBannerDismissed = true;
-        this._syncDraftBanner();
-      });
-    // Location banner lives with draft under .page-banners (shared inset).
+    // Location banner lives under .page-banners (shared inset).
     this._locationBanner = this.shadowRoot.querySelector(
       ".sun-location-override",
     );
@@ -4082,6 +4075,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (!(await this._confirmLeaveEditor())) {
       return;
     }
+    this._abortPreview();
     this._forceCloseSceneSidebar();
     const previous = (window.location.hash || "#").replace(/^#/, "");
     window.location.hash = hash;
@@ -4093,29 +4087,38 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _syncHash() {
-    if (this._hashConfirming) {
+    this._hashSyncQueued = true;
+    if (this._hashSyncing) {
       return;
     }
+    this._hashSyncing = true;
+    try {
+      while (this._hashSyncQueued) {
+        this._hashSyncQueued = false;
+        await this._syncHashOnce();
+      }
+    } finally {
+      this._hashSyncing = false;
+    }
+  }
+
+  async _syncHashOnce() {
     const hash = (window.location.hash || "#").replace(/^#/, "");
     const current = this._currentHash();
     if (
       hash !== current &&
       (this._lightEditIsDirty() || this._needsLeaveConfirm())
     ) {
-      this._hashConfirming = true;
       history.replaceState(null, "", this._hashHref(current));
       const leave = await this._confirmLeaveEditor();
-      this._hashConfirming = false;
       if (!leave) {
         return;
       }
+      this._abortPreview();
       this._forceCloseSceneSidebar();
       if ((window.location.hash || "#").replace(/^#/, "") !== hash) {
         history.replaceState(null, "", this._hashHref(hash));
       }
-    }
-    if (this._view === "edit" && hash !== current) {
-      this._flushPersistedDraft();
     }
     this._leaveConfirmDone = false;
     if (hash === "new") {
@@ -4132,8 +4135,6 @@ class CircadianScenesPanel extends HTMLElement {
         : emptyFormData();
       this._error = null;
       this._resetSession();
-      this._draftRestore = pending ? null : this._restorePersistedDraft();
-      this._draftBannerDismissed = false;
       this._render();
       if (!this._formData.area) {
         this._openCreateDialog({});
@@ -4181,6 +4182,12 @@ class CircadianScenesPanel extends HTMLElement {
 
   _invalidatePanelLoads() {
     this._loadGeneration += 1;
+    this._abortPreview();
+  }
+
+  _abortPreview() {
+    this._previewGeneration += 1;
+    this._previewQueued = false;
   }
 
   _startPanelLoad() {
@@ -4300,8 +4307,6 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     this._resetSession();
-    this._draftRestore = this._restorePersistedDraft();
-    this._draftBannerDismissed = false;
     this._render();
   }
 
@@ -4368,13 +4373,11 @@ class CircadianScenesPanel extends HTMLElement {
     } else if (this._view === "theme") {
       this._renderThemeEditor();
     } else {
-      this._draftRestore = null;
       this._renderList();
     }
     if (this._view === "edit" || this._view === "theme") {
       this._ensureSunPath();
     }
-    this._syncDraftBanner();
   }
 
   _parkSunPath() {
@@ -4533,6 +4536,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockStickySeconds = undefined;
     this._liveEditSidebarHandler = null;
     this._stopRoomPreview({ restore: true });
+    this._abortPreview();
     this._cancelClockSunArc();
     this._cancelSunPathMorph();
     this._forgetClockDom();
@@ -4738,7 +4742,7 @@ class CircadianScenesPanel extends HTMLElement {
     return dialog;
   }
 
-  _haInput(label, value, { type } = {}) {
+  _haInput(label, value, { type, min, max } = {}) {
     const field = customElements.get("ha-input")
       ? document.createElement("ha-input")
       : document.createElement("ha-selector");
@@ -4746,39 +4750,163 @@ class CircadianScenesPanel extends HTMLElement {
     field.value = value;
     if (field.localName === "ha-selector") {
       field.hass = this._hass;
-      field.selector = type === "number" ? { number: { min: 1000, max: 8000, step: 1, mode: "box" } } : { text: {} };
+      field.selector =
+        type === "number"
+          ? {
+              number: {
+                min: min ?? 0,
+                max: max ?? 8000,
+                step: 1,
+                mode: "box",
+              },
+            }
+          : { text: {} };
     } else if (type === "number") {
       field.type = "number";
+      if (min != null) {
+        field.min = min;
+      }
+      if (max != null) {
+        field.max = max;
+      }
     }
     return field;
   }
 
   _openCreateVariableDialog() {
+    this._openVariableEditor(null);
+  }
+
+  _variableEditorDraft(variable) {
+    if (variable) {
+      return {
+        ...(variable.color || {}),
+        brightness: variable.brightness ?? 255,
+        state: "on",
+      };
+    }
+    return {
+      color_mode: "color_temp",
+      color_temp_kelvin: 3000,
+      brightness: 255,
+      state: "on",
+    };
+  }
+
+  _wheelPalette() {
+    return {
+      getPalette: () => this._variables || [],
+      onAddPalette: (draft) => this._addVariableFromCurrentDraft(draft),
+    };
+  }
+
+  _addVariableFromCurrentDraft(draft) {
     const nameInput = this._haInput(
       this._t("frontend.common.name", "Name"),
       this._t("frontend.library.new_variable", "New variable")
     );
-    const kelvinInput = this._haInput(
-      this._t("frontend.library.kelvin", "Kelvin"),
-      "3000",
-      { type: "number" }
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(value);
+      };
+      const dialog = this._libraryDialog({
+        title: this._t("frontend.library.add_variable", "Add variable"),
+        children: [nameInput],
+        primaryLabel: this._t("frontend.common.save", "Save"),
+        onPrimary: async (host) => {
+          const name = (nameInput.value || "").trim();
+          if (!name) {
+            return;
+          }
+          try {
+            const saved = await this._hass.callWS({
+              type: `${DOMAIN}/save_variable`,
+              data: {
+                name,
+                brightness: Number(draft?.brightness) || 255,
+                color: colorPayloadFromDraft(draft),
+              },
+            });
+            host.open = false;
+            await this._refreshCatalog();
+            finish(saved);
+          } catch (err) {
+            this._error = err.message || String(err);
+            finish(null);
+          }
+        },
+      });
+      dialog.addEventListener("closed", () => finish(null), { once: true });
+    });
+  }
+
+  _openVariableEditor(variable) {
+    const draft = this._variableEditorDraft(variable);
+    const hint = document.createElement("p");
+    hint.textContent = this._t(
+      "frontend.library.variable_edit_hint",
+      "Color and brightness are shared by every theme or light that still uses this variable."
     );
+    const nameInput = this._haInput(
+      this._t("frontend.common.name", "Name"),
+      variable?.name || this._t("frontend.library.new_variable", "New variable")
+    );
+    const briInput = this._haInput(
+      this._t("frontend.lights.brightness", "Brightness"),
+      String(draft.brightness ?? 255),
+      { type: "number", min: 0, max: 255 }
+    );
+    briInput.addEventListener("value-changed", (ev) => {
+      const value = Number(ev.detail?.value ?? briInput.value);
+      if (Number.isFinite(value)) {
+        draft.brightness = value;
+      }
+    });
+    briInput.addEventListener("change", () => {
+      const value = Number(briInput.value);
+      if (Number.isFinite(value)) {
+        draft.brightness = value;
+      }
+    });
+    const wheel = createSceneColorWheel({
+      hasColor: true,
+      hasTemp: true,
+      tempMin: 2000,
+      tempMax: 6500,
+      getState: () => ({
+        scenes: [{ id: "variable", index: 1, draft }],
+        sequence: ["variable"],
+        activeId: "variable",
+      }),
+      onChange: () => {
+        delete draft.variable_ref;
+        wheel.sync();
+      },
+    });
     this._libraryDialog({
-      title: this._t("frontend.library.add_variable", "Add variable"),
-      children: [nameInput, kelvinInput],
+      title: variable
+        ? variable.name
+        : this._t("frontend.library.add_variable", "Add variable"),
+      children: [hint, nameInput, briInput, wheel.el],
       primaryLabel: this._t("frontend.common.save", "Save"),
       onPrimary: async (dialog) => {
         const name = (nameInput.value || "").trim();
-        const kelvin = Number(kelvinInput.value);
-        if (!name || !Number.isFinite(kelvin)) {
+        const brightness = Number(briInput.value ?? draft.brightness);
+        if (!name || !Number.isFinite(brightness)) {
           return;
         }
         await this._hass.callWS({
           type: `${DOMAIN}/save_variable`,
           data: {
+            ...(variable || {}),
             name,
-            brightness: 255,
-            color: { color_mode: "color_temp", color_temp_kelvin: kelvin },
+            brightness,
+            color: colorPayloadFromDraft(draft),
           },
         });
         dialog.open = false;
@@ -4829,45 +4957,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._themes = payload?.themes || [];
     this._floors = payload?.floors || [];
     this._render();
-  }
-
-  _openVariableEditor(variable) {
-    const p = document.createElement("p");
-    p.textContent = this._t(
-      "frontend.library.variable_edit_hint",
-      "Use the color wheels in a scene editor to detach a light. Edit the shared color here by Kelvin."
-    );
-    const nameInput = this._haInput(
-      this._t("frontend.common.name", "Name"),
-      variable.name
-    );
-    const kelvinInput = this._haInput(
-      this._t("frontend.library.kelvin", "Kelvin"),
-      String(variable.color?.color_temp_kelvin || 3000),
-      { type: "number" }
-    );
-    this._libraryDialog({
-      title: variable.name,
-      children: [p, nameInput, kelvinInput],
-      primaryLabel: this._t("frontend.common.save", "Save"),
-      onPrimary: async (dialog) => {
-        const kelvin = Number(kelvinInput.value);
-        const name = (nameInput.value || "").trim();
-        if (!name || !Number.isFinite(kelvin)) {
-          return;
-        }
-        await this._hass.callWS({
-          type: `${DOMAIN}/save_variable`,
-          data: {
-            ...variable,
-            name,
-            color: { color_mode: "color_temp", color_temp_kelvin: kelvin },
-          },
-        });
-        dialog.open = false;
-        await this._refreshCatalog();
-      },
-    });
   }
 
   _openThemeEditor(theme) {
@@ -5055,13 +5144,17 @@ class CircadianScenesPanel extends HTMLElement {
     const ev = this._themeDraft?.events?.[eventId] || {};
     let color = { ...(ev.color || {}) };
     const ref = color.variable_ref;
+    let brightness = ev.brightness ?? 200;
     if (ref) {
       const variable = (this._variables || []).find((item) => item.id === ref);
       color = { ...(variable?.color || {}), variable_ref: ref };
+      if (variable?.brightness != null) {
+        brightness = variable.brightness;
+      }
     }
     return {
       state: "on",
-      brightness: ev.brightness ?? 200,
+      brightness,
       ...color,
     };
   }
@@ -5323,6 +5416,7 @@ class CircadianScenesPanel extends HTMLElement {
         if (brightness > 0) {
           draft.state = "on";
         }
+        delete draft.variable_ref;
         persist();
         brightnessGraphCtl?.sync();
       },
@@ -5336,6 +5430,7 @@ class CircadianScenesPanel extends HTMLElement {
       hasTemp: true,
       tempMin: 2000,
       tempMax: 6500,
+      ...this._wheelPalette(),
       getState: () => ({
         scenes: events.map((item, index) => ({
           id: item.id,
@@ -5353,9 +5448,9 @@ class CircadianScenesPanel extends HTMLElement {
         wheelCtl?.sync();
         this._syncDuskMinimumSlot(duskSlot, eventId);
       },
-      onChange: () => {
+      onChange: ({ fromPalette } = {}) => {
         const draft = drafts.get(currentId);
-        if (draft) {
+        if (draft && !fromPalette) {
           delete draft.variable_ref;
         }
         persist();
@@ -5363,37 +5458,7 @@ class CircadianScenesPanel extends HTMLElement {
       },
     });
     body.appendChild(wheelCtl.el);
-    const palette = document.createElement("div");
-    palette.className = "var-palette";
-    for (const variable of this._variables || []) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.title = variable.name;
-      const t = variable.color?.color_temp_kelvin;
-      if (t) {
-        const u = Math.max(0, Math.min(1, (t - 2000) / 4000));
-        btn.style.background = `rgb(255, ${Math.round(150 + u * 70)}, ${Math.round(90 + u * 130)})`;
-      } else if (variable.color?.hs_color) {
-        btn.style.background = `hsl(${variable.color.hs_color[0]}, ${variable.color.hs_color[1]}%, 55%)`;
-      } else {
-        btn.style.background = "#666";
-      }
-      btn.addEventListener("click", () => {
-        const draft = drafts.get(currentId);
-        if (!draft) {
-          return;
-        }
-        Object.assign(draft, variable.color || {}, {
-          variable_ref: variable.id,
-          state: "on",
-        });
-        persist();
-        wheelCtl?.sync();
-        brightnessGraphCtl?.sync();
-      });
-      palette.appendChild(btn);
-    }
-    body.append(palette, duskSlot);
+    body.append(duskSlot);
     this._syncDuskMinimumSlot(duskSlot, currentId);
     wheelCtl.sync();
     brightnessGraphCtl.sync();
@@ -5959,10 +6024,6 @@ class CircadianScenesPanel extends HTMLElement {
 
   _addButton() {
     return this._fabButton("New extrapolation scene", "mdi:plus", () => {
-      if (this._hasPersistedDraft("new")) {
-        this._go("new");
-        return;
-      }
       this._openAreaDialog({ context: "list" });
     });
   }
@@ -6288,7 +6349,6 @@ class CircadianScenesPanel extends HTMLElement {
       this._editId = saved.id;
       this._upsertSceneInList(saved);
       this._sessionBaseline = this._snapshotSession();
-      this._draftRestore = null;
       this._clearPersistedDraft();
       this._clearPersistedDraft("new");
       if (wasNew) {
@@ -6391,23 +6451,11 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _confirmLeaveEditor() {
-    if (this._lightEditIsDirty() && !(await this._confirmLeaveLightEdit())) {
-      return false;
-    }
+    this._forceCloseSceneSidebar();
     window.clearTimeout(this._saveSoonTimer);
     this._saveSoonTimer = null;
     await this._saveNow();
     return true;
-  }
-
-  _draftStorageKey(sceneKey = this._editId || "new") {
-    const user = this._hass?.user?.id || "anon";
-    return `${DOMAIN}.draft.v1.${user}.${sceneKey}`;
-  }
-
-  _legacyDraftStorageKey(sceneKey = this._editId || "new") {
-    const user = this._hass?.user?.id || "anon";
-    return `${LEGACY_DOMAIN}.draft.v1.${user}.${sceneKey}`;
   }
 
   _lightViewStorageKey() {
@@ -6723,171 +6771,23 @@ class CircadianScenesPanel extends HTMLElement {
     );
   }
 
-  _readPersistedDraft(sceneKey) {
-    try {
-      let raw = this._readLocalStorage(
-        this._draftStorageKey(sceneKey),
-        this._legacyDraftStorageKey(sceneKey)
-      );
-      if (!raw) {
-        return null;
-      }
-      const payload = JSON.parse(raw);
-      if (
-        payload?.v !== DRAFT_STORAGE_VERSION ||
-        !payload.session ||
-        !payload.baseline
-      ) {
-        return null;
-      }
-      return payload;
-    } catch (_err) {
-      return null;
-    }
+  _draftStorageKey(sceneKey = this._editId || "new") {
+    const user = this._hass?.user?.id || "anon";
+    return `${DOMAIN}.draft.v1.${user}.${sceneKey}`;
   }
 
-  _hasPersistedDraft(sceneKey) {
-    const payload = this._readPersistedDraft(sceneKey);
-    if (!payload) {
-      return false;
-    }
-    return !this._sessionEqual(payload.session, payload.baseline);
-  }
-
-  _restorePersistedDraft() {
-    const payload = this._readPersistedDraft(this._editId || "new");
-    if (!payload) {
-      return null;
-    }
-    // Existing scenes: drop the draft if HA's form moved on since we buffered.
-    // #new has no server entity — after refresh we always reset to emptyFormData(),
-    // so comparing baseline to that "server" would wipe every post-wizard draft.
-    if (this._editId) {
-      const server = this._snapshotSession();
-      if (!this._sessionEqual(payload.baseline, server)) {
-        this._clearPersistedDraft();
-        return null;
-      }
-      if (this._sessionEqual(payload.session, server)) {
-        this._clearPersistedDraft();
-        return null;
-      }
-    } else if (this._sessionEqual(payload.session, payload.baseline)) {
-      this._clearPersistedDraft();
-      return null;
-    }
-    this._formData = structuredClone(payload.session.form);
-    this._nativeDrafts = structuredClone(payload.session.nativeDrafts);
-    // Keep the buffered baseline so dirty/discard match the pre-refresh session.
-    this._sessionBaseline = structuredClone(payload.baseline);
-    this._syncPreviewOverlay();
-    this._clearPreviewCache();
-    return { savedAt: payload.savedAt };
-  }
-
-  _persistDraftSoon() {
-    if (this._persistTimer) {
-      window.clearTimeout(this._persistTimer);
-    }
-    this._persistTimer = window.setTimeout(() => {
-      this._persistTimer = undefined;
-      this._flushPersistedDraft();
-    }, DRAFT_PERSIST_MS);
-  }
-
-  _flushPersistedDraft() {
-    if (this._persistTimer) {
-      window.clearTimeout(this._persistTimer);
-      this._persistTimer = undefined;
-    }
-    if (this._view !== "edit") {
-      return;
-    }
-    if (!this._sessionIsDirty() || !this._sessionBaseline) {
-      this._clearPersistedDraft();
-      if (this._draftRestore) {
-        this._draftRestore = null;
-        this._syncDraftBanner();
-      }
-      return;
-    }
-    const payload = {
-      v: DRAFT_STORAGE_VERSION,
-      savedAt: Date.now(),
-      baseline: this._sessionBaseline,
-      session: this._snapshotSession(),
-    };
-    try {
-      window.localStorage.setItem(this._draftStorageKey(), JSON.stringify(payload));
-    } catch (_err) {
-      // Private mode / quota: keep the in-memory session only.
-    }
+  _legacyDraftStorageKey(sceneKey = this._editId || "new") {
+    const user = this._hass?.user?.id || "anon";
+    return `${LEGACY_DOMAIN}.draft.v1.${user}.${sceneKey}`;
   }
 
   _clearPersistedDraft(sceneKey) {
     try {
       window.localStorage.removeItem(this._draftStorageKey(sceneKey));
+      window.localStorage.removeItem(this._legacyDraftStorageKey(sceneKey));
     } catch (_err) {
-      // Ignore storage failures.
+      // Ignore leftover-key cleanup failures.
     }
-  }
-
-  _formatDraftAge(savedAt) {
-    const ms = Date.now() - savedAt;
-    if (!Number.isFinite(ms) || ms < 0) {
-      return "a moment ago";
-    }
-    const sec = Math.round(ms / 1000);
-    if (sec < 45) {
-      return "a moment ago";
-    }
-    const min = Math.round(sec / 60);
-    if (min === 1) {
-      return "a minute ago";
-    }
-    if (min < 45) {
-      return `${min} minutes ago`;
-    }
-    const hr = Math.round(min / 60);
-    if (hr === 1) {
-      return "an hour ago";
-    }
-    if (hr < 22) {
-      return `${hr} hours ago`;
-    }
-    const day = Math.round(hr / 24);
-    if (day === 1) {
-      return "yesterday";
-    }
-    if (day < 7) {
-      return `${day} days ago`;
-    }
-    try {
-      return new Date(savedAt).toLocaleDateString();
-    } catch (_err) {
-      return "earlier";
-    }
-  }
-
-  _syncDraftBanner() {
-    const el = this._draftBanner;
-    if (!el) {
-      return;
-    }
-    const show =
-      this._view === "edit" &&
-      Boolean(this._draftRestore) &&
-      this._sessionIsDirty() &&
-      !this._draftBannerDismissed;
-    el.hidden = !show;
-    this._syncPageBannersVisibility();
-    if (!show) {
-      return;
-    }
-    const age = this._formatDraftAge(this._draftRestore.savedAt);
-    el.querySelector(".title").textContent = "Picked up where you left off";
-    el.querySelector(".detail").textContent =
-      `Unsaved edits from ${age}. This browser only — save the scene to keep them.`;
   }
 
   _syncPageBannersVisibility() {
@@ -6904,25 +6804,6 @@ class CircadianScenesPanel extends HTMLElement {
         this._syncDialHeightBudget();
       }
     });
-  }
-
-  async _discardRestoredDraft() {
-    if (
-      !(await this._confirmDiscard({
-        title: "Discard local edits?",
-        text: "This returns the scene to the last saved version and forgets the copy on this browser.",
-      }))
-    ) {
-      return;
-    }
-    this._applySession(this._sessionBaseline);
-    this._syncUndoButtons();
-    this._clearPersistedDraft();
-    this._draftRestore = null;
-    void this._saveNow();
-    if (!this._editId && !this._formData.area) {
-      this._openAreaDialog({ context: "new" });
-    }
   }
 
   _commitUndo(focus = null) {
@@ -10129,6 +10010,12 @@ class CircadianScenesPanel extends HTMLElement {
     };
 
     const onWheelChange = async (meta = {}) => {
+      if (!meta.fromPalette) {
+        const entry = currentEntry();
+        if (entry?.draft) {
+          delete entry.draft.variable_ref;
+        }
+      }
       applyToSession();
       wheelCtl?.syncPresets();
       brightnessGraphCtl?.sync();
@@ -10274,6 +10161,7 @@ class CircadianScenesPanel extends HTMLElement {
         if (brightness > 0) {
           entry.draft.state = "on";
         }
+        delete entry.draft.variable_ref;
         applyToSession();
         brightnessGraphCtl?.sync();
         colorBriGraphCtl?.sync();
@@ -10388,6 +10276,7 @@ class CircadianScenesPanel extends HTMLElement {
         hasTemp,
         tempMin: attrs.min_color_temp_kelvin || 2000,
         tempMax: attrs.max_color_temp_kelvin || 6500,
+        ...this._wheelPalette(),
         getState: () => ({
           scenes: uniqueScenes
             .filter((item) => drafts.get(item.sceneId)?.member)
@@ -10661,7 +10550,6 @@ class CircadianScenesPanel extends HTMLElement {
         scene_id: this._editId,
       });
       this._clearPersistedDraft();
-      this._draftRestore = null;
       this._dropSceneFromList(this._editId);
       this._go("");
     } catch (err) {
@@ -11366,10 +11254,15 @@ class CircadianScenesPanel extends HTMLElement {
       this._previewQueued = true;
       return;
     }
+    const previewGen = this._previewGeneration;
     this._previewInFlight = true;
     try {
       do {
         this._previewQueued = false;
+        if (this._previewGeneration !== previewGen || this._view !== "edit") {
+          this._parkSunPath();
+          return;
+        }
         const key = this._chartKey();
         const listView = this._view !== "edit";
         if (this._sunPath && this._sunPathKey === key) {
@@ -11418,6 +11311,10 @@ class CircadianScenesPanel extends HTMLElement {
             }
             payload = await this._hass.callWS(msg);
           }
+          if (this._previewGeneration !== previewGen || this._view !== "edit") {
+            this._parkSunPath();
+            return;
+          }
           if (this._chartKey() !== key || (listView !== (this._view !== "edit"))) {
             this._previewQueued = true;
             continue;
@@ -11427,6 +11324,10 @@ class CircadianScenesPanel extends HTMLElement {
           }
           this._commitSunPath(payload, key);
         } catch (err) {
+          if (this._previewGeneration !== previewGen || this._view !== "edit") {
+            this._parkSunPath();
+            return;
+          }
           if (this._chartKey() !== key) {
             this._previewQueued = true;
             continue;
@@ -14412,6 +14313,10 @@ class CircadianScenesPanel extends HTMLElement {
    * would succeed and skip rebuilding the visible dial.
    */
   _forgetClockDom() {
+    if (this._clockOutsideClick) {
+      this.shadowRoot?.removeEventListener("click", this._clockOutsideClick);
+      this._clockOutsideClick = null;
+    }
     this._clockResizeObserver?.disconnect();
     this._clockResizeObserver = undefined;
     this._clockRingsHost = undefined;

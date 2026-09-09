@@ -251,11 +251,13 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       selectedId = id;
       syncTiles();
     },
-    onChange: ({ dragging }) => {
+    onChange: ({ dragging, fromPalette } = {}) => {
       if (!selectedId) {
         return;
       }
-      delete drafts[selectedId].variable_ref;
+      if (!fromPalette) {
+        delete drafts[selectedId].variable_ref;
+      }
       persistLight(selectedId);
       if (!dragging) {
         syncTiles();
@@ -265,35 +267,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     hasTemp: true,
     tempMin: 2000,
     tempMax: 6500,
+    ...panel._wheelPalette(),
   });
   wheels.appendChild(wheel.el);
   wrap.appendChild(wheels);
-
-  const palette = document.createElement("div");
-  palette.className = "var-palette";
-  for (const variable of variables) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.title = variable.name;
-    btn.style.background = colorCss(variable.color) || "#666";
-    btn.addEventListener("click", () => {
-      if (!selectedId) {
-        return;
-      }
-      drafts[selectedId] = {
-        ...drafts[selectedId],
-        ...variable.color,
-        variable_ref: variable.id,
-        brightness: drafts[selectedId]?.brightness ?? 200,
-        state: "on",
-      };
-      persistLight(selectedId);
-      wheel.sync();
-      syncTiles();
-    });
-    palette.appendChild(btn);
-  }
-  wrap.appendChild(palette);
 
   const tiles = document.createElement("div");
   tiles.className = "light-tiles";

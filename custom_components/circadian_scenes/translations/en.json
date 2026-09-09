@@ -36,7 +36,7 @@
       "hint": "Changing a variable or theme updates scenes that still use it. Lights change on the next activate or automatic update — not instantly.",
       "variables": "Variables",
       "themes": "Circadian themes",
-      "variable_edit_hint": "Use the color wheels in a scene editor to detach a light. Edit the shared color here by Kelvin.",
+      "variable_edit_hint": "Color and brightness are shared by every theme or light that still uses this variable.",
       "theme_hint": "Open a theme to edit its color and brightness at each solar event. Changes apply to every circadian scene that still uses the theme; per-light overrides stay as they are.",
       "theme_edit_hint": "Editing {name} changes every circadian scene that still uses this theme. Per-light overrides on those scenes stay as they are.",
       "theme_event_subtitle": "{name} theme",

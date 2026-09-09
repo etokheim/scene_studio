@@ -23,7 +23,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-03
 - **Supersedes:** native YAML scenes as the editable database; “use my existing scenes” wizard; Created-scenes tab; `hide_managed_native_scenes`; per-event native scene attributes on the circadian entity.
-- **Decision:** Circadian and simple scenes persist light state in `circadian_scenes.scenes` (store v4). Color **variables** and **circadian themes** are house-wide, store-only (not HA helpers). Circadian scenes resolve membership `(area lights − exclude) ∪ include`, then theme → variable or per-light override. Simple scenes are the same membership plus a single snapshot that may reference variables. Both kinds stay `scene.*` entities. Wheel-pin edits **detach** a light to a fixed color; variable/theme library edits are the only way to change a shared color. Variable edits apply on next activate / automatic-update tick, not live. v3 rooms freeze-migrate to full overrides with the default theme as a reset target; managed YAML scenes this integration created are deleted. Combined color+kelvin control is `O)` (disk + crescent, gap hysteresis). Desktop is a ~320–360px rail (variables/themes + areas) beside the stage: empty “select a scene” until a card is selected, then the editor replaces that stage. No solar graph on the landing list. Cards have no activate switch.
+- **Superseded in part:** 2026-09-09 — variables store color (kelvin or HS/RGB) plus brightness; swatches dim with brightness. Wheel palettes list those variables (with a + to create one from the current color), not static kelvin/hex presets.
 - **Why:** Generating five native HA scenes per room was MVP baggage. Area membership plus themes is how new lights pick up a look without re-editing every snapshot. Freeze migration keeps existing rooms pixel-identical instead of guessing theme links.
 - **Do not reverse without user ask.**
 
@@ -356,9 +356,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-08-29
 - **Superseded in part:** 2026-08-30 — leaving the editor with an unsaved new scene or a dirty existing session prompts Keep editing / Discard (same dialog as draft discard). Discard clears the local draft; Keep cancels navigation. `localStorage` buffering remains for refresh / remount.
 - **Superseded in part:** 2026-09-01 — `#new` restore must not compare the stored baseline to the post-refresh empty form (there is no server entity). Reapply `session` and reinstall `baseline` from the buffer so Discard / dirty match the pre-refresh session; only drop when session ≡ baseline. Existing scenes still drop when the stored baseline no longer matches the loaded server form.
-- **Decision:** Persist the dirty session (`form` + native drafts, plus the server baseline) in `localStorage` under `circadian_scenes.draft.v1.<user>.<sceneId|new>` as a refresh safety net. Immediate save is the primary path; the banner remains if a tab dies mid-debounce. Do not persist undo/redo stacks. Isolate by `hass.user.id`.
-- **Superseded in part:** 2026-09-09 — leaving the editor flushes `_saveNow` instead of prompting; undo is global and survives navigation.
-- **Why:** Refresh, a closed tab, or going back to the list was dropping work that had not reached YAML yet. The banner makes the restore obvious and gives a way back to the saved scene. A stale baseline means someone already saved a newer copy.
+- **Superseded in part:** 2026-09-09 — edits autosave; the restore banner and `localStorage` session buffer are removed. Hide/leave flushes `_saveNow`.
+- **Why:** Autosave and global undo replaced the browser buffer. Old `localStorage` draft keys are cleared on save/delete if they still exist.
 - **Do not reverse without user ask.**
 
 ## Editor overflow menu for rename and delete

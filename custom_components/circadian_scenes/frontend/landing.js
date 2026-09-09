@@ -1,6 +1,7 @@
 /** Area rail, scene cards, and variable/theme library for the list view. */
 
 import { createSimpleCardMesh } from "./card_mesh.js";
+import { variableSwatchCss } from "./color_ui.js";
 
 const AREA_RAIL_PX = 340;
 
@@ -362,24 +363,13 @@ function themeConic(theme, variables) {
     const color = ref
       ? variables.find((v) => v.id === ref)?.color
       : ev?.color;
+    const brightness = ref
+      ? variables.find((v) => v.id === ref)?.brightness ?? ev?.brightness
+      : ev?.brightness;
     if (!color) {
       return "#444";
     }
-    if (color.color_temp_kelvin) {
-      const k = color.color_temp_kelvin;
-      const t = Math.max(0, Math.min(1, (k - 2000) / 4000));
-      const r = Math.round(255);
-      const g = Math.round(140 + t * 80);
-      const b = Math.round(80 + t * 140);
-      return `rgb(${r},${g},${b})`;
-    }
-    if (color.hs_color) {
-      return `hsl(${color.hs_color[0]}, ${color.hs_color[1]}%, 55%)`;
-    }
-    if (color.rgb_color) {
-      return rgbCss(color.rgb_color);
-    }
-    return "#555";
+    return variableSwatchCss({ color, brightness: brightness ?? 255 });
   });
   const slice = 100 / colors.length;
   const stops = colors
@@ -657,15 +647,7 @@ function renderLibrary(panel, { compact } = {}) {
     chip.className = "var-chip";
     const dot = document.createElement("div");
     dot.className = "var-dot";
-    const color = variable.color || {};
-    if (color.color_temp_kelvin) {
-      const t = Math.max(0, Math.min(1, (color.color_temp_kelvin - 2000) / 4000));
-      dot.style.background = `rgb(255, ${Math.round(150 + t * 70)}, ${Math.round(90 + t * 130)})`;
-    } else if (color.hs_color) {
-      dot.style.background = `hsl(${color.hs_color[0]}, ${color.hs_color[1]}%, 55%)`;
-    } else if (color.rgb_color) {
-      dot.style.background = rgbCss(color.rgb_color);
-    }
+    dot.style.background = variableSwatchCss(variable);
     const name = document.createElement("span");
     name.textContent = variable.name;
     chip.append(dot, name);

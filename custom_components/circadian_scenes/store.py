@@ -88,9 +88,9 @@ def seed_variables() -> dict[str, dict[str, Any]]:
                 "color_mode": "color_temp",
                 "color_temp_kelvin": kelvin,
             },
-            # Brightness lives on the variable so the default theme can
-            # reference it fully.  resolve_variable returns the color dict;
-            # brightness is read separately by theme-event resolution.
+            # Brightness lives on the variable so themes and lights that
+            # reference it pick up both color and level. resolve_variable
+            # returns the color dict plus brightness when present.
             "brightness": brightness,
         }
     return result

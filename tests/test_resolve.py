@@ -36,6 +36,19 @@ class TestResolveVariable:
         result = resolve_variable({VARIABLE_REF: "warm"}, variables)
         assert result == {"color_mode": "color_temp", "color_temp_kelvin": 2700}
 
+    def test_variable_ref_includes_brightness(self):
+        variables = {
+            "warm": {
+                "id": "warm",
+                "name": "Warm",
+                "brightness": 64,
+                "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+            },
+        }
+        result = resolve_variable({VARIABLE_REF: "warm"}, variables)
+        assert result["brightness"] == 64
+        assert result["color_temp_kelvin"] == 2700
+
     def test_missing_variable_raises(self):
         with pytest.raises(HomeAssistantError, match="not found"):
             resolve_variable({VARIABLE_REF: "gone"}, {})
@@ -77,6 +90,18 @@ class TestResolveThemeEvent:
         assert result["brightness"] == 100
         assert result["color_mode"] == "color_temp"
         assert result["color_temp_kelvin"] == 2700
+
+    def test_variable_brightness_overrides_theme_event(self):
+        variables = {
+            "warm": {
+                "id": "warm",
+                "name": "Warm",
+                "brightness": 40,
+                "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+            },
+        }
+        result = resolve_theme_event(self._theme(), "dawn", variables)
+        assert result["brightness"] == 40
 
     def test_fixed_color(self):
         result = resolve_theme_event(self._theme(), "noon", {})

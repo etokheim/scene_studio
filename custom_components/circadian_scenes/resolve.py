@@ -35,7 +35,10 @@ def resolve_variable(
         raise HomeAssistantError(
             f"Variable {ref!r} referenced but not found in the store"
         )
-    return dict(var["color"])
+    resolved = dict(var["color"])
+    if "brightness" in var:
+        resolved["brightness"] = var["brightness"]
+    return resolved
 
 
 def resolve_theme_event(
@@ -53,8 +56,9 @@ def resolve_theme_event(
             f"Theme {theme.get('name', theme.get('id'))!r} has no event {event!r}"
         )
     color = resolve_variable(ev["color"], variables)
+    brightness = color.pop("brightness", ev["brightness"])
     return {
-        "brightness": ev["brightness"],
+        "brightness": brightness,
         **color,
     }
 
@@ -165,10 +169,14 @@ def build_circadian_event_snapshot(
                 },
                 variables,
             )
+            var_brightness = color_part.pop("brightness", None)
             state_dict = {
                 "state": event_override.get("state", "on"),
                 "brightness": event_override.get(
-                    "brightness", theme_state["brightness"]
+                    "brightness",
+                    var_brightness
+                    if var_brightness is not None
+                    else theme_state["brightness"],
                 ),
                 **color_part,
             }
@@ -203,9 +211,10 @@ def build_simple_snapshot(
             {k: v for k, v in raw.items() if k not in ("brightness", "state")},
             variables,
         )
+        var_brightness = color_part.pop("brightness", None)
         state_dict = {
             "state": raw.get("state", "on"),
-            "brightness": raw.get("brightness", 255),
+            "brightness": raw.get("brightness", var_brightness if var_brightness is not None else 255),
             **color_part,
         }
         entities[eid] = _adapt_color_for_modes(state_dict, modes.get(eid))
