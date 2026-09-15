@@ -123,19 +123,42 @@ export const LANDING_CSS = `
     text-align: left;
   }
   .area-empty:hover { background: var(--secondary-background-color); }
+  .scene-card-slot {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    box-sizing: border-box;
+    /* Padding is the glow clip box; adjacent slots meet, they do not overlap. */
+    padding: 4px 6px;
+    margin: 0 -6px;
+  }
+  .scene-card-slot .card-glow {
+    position: absolute;
+    inset: 4px 6px;
+    z-index: 0;
+    width: auto;
+    height: auto;
+    border-radius: 14px;
+    overflow: hidden;
+    pointer-events: none;
+    filter: blur(16px);
+    transform: scale(1.22);
+    opacity: 0.95;
+  }
   .scene-card {
     position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: 8px;
     min-height: 64px;
-    margin: 0 0 8px;
+    margin: 0;
     padding: 10px 4px 10px 12px;
     border: 0;
     border-radius: 14px;
     color: #fff;
     cursor: pointer;
-    overflow: visible;
+    overflow: hidden;
     width: 100%;
     box-sizing: border-box;
     text-align: left;
@@ -545,7 +568,19 @@ function renderAreaBlock(panel, area, scenes) {
   return block;
 }
 
+function makeSceneCardBg(scene) {
+  if (scene.kind === "simple") {
+    return createSimpleCardMesh(scene.card?.dots);
+  }
+  const bg = document.createElement("div");
+  bg.className = "card-bg";
+  applyRampBackground(bg, scene.card?.ramps);
+  return bg;
+}
+
 function renderSceneCard(panel, scene) {
+  const slot = document.createElement("div");
+  slot.className = "scene-card-slot";
   const cardEl = document.createElement("div");
   cardEl.className = "scene-card";
   cardEl.dataset.sceneId = scene.id;
@@ -556,15 +591,7 @@ function renderSceneCard(panel, scene) {
   cardEl.setAttribute("role", "button");
   cardEl.tabIndex = 0;
   cardEl.setAttribute("aria-pressed", selected ? "true" : "false");
-  const card = scene.card || {};
-  let bg;
-  if (scene.kind === "simple") {
-    bg = createSimpleCardMesh(card.dots);
-  } else {
-    bg = document.createElement("div");
-    bg.className = "card-bg";
-    applyRampBackground(bg, card.ramps);
-  }
+  const bg = makeSceneCardBg(scene);
   const body = document.createElement("div");
   body.className = "card-body";
   const name = document.createElement("div");
@@ -583,6 +610,13 @@ function renderSceneCard(panel, scene) {
   overflow.classList.add("card-overflow");
   overflowSlot.appendChild(overflow);
   cardEl.append(bg, body, overflowSlot);
+  if (selected) {
+    const glow = makeSceneCardBg(scene);
+    glow.classList.add("card-glow");
+    slot.append(glow, cardEl);
+  } else {
+    slot.appendChild(cardEl);
+  }
   const activate = () => {
     if (selected) {
       panel._go("");
@@ -606,7 +640,7 @@ function renderSceneCard(panel, scene) {
     ev.preventDefault();
     activate();
   });
-  return cardEl;
+  return slot;
 }
 
 function renderEmptyHero(panel) {

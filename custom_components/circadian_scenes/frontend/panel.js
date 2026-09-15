@@ -6826,6 +6826,10 @@ class CircadianScenesPanel extends HTMLElement {
       if (bg) {
         applyRampBackground(bg, ramps);
       }
+      const glow = card?.parentElement?.querySelector(":scope > .card-glow");
+      if (glow?.classList.contains("card-bg")) {
+        applyRampBackground(glow, ramps);
+      }
     }
     const chipDial = root.querySelector(
       `.theme-chip[data-theme-id="${CSS.escape(themeId)}"] .theme-dial`
@@ -16368,7 +16372,10 @@ class CircadianScenesPanel extends HTMLElement {
       const tickOuterR = 100 * (1 - (2 * tickOuterPad) / w);
       for (const tick of faceTickLines) {
         const outer = tickOuterR;
-        const inner = tickOuterR - tick.len;
+        const len = narrowFace
+          ? CLOCK_TICK_MINOR_LEN
+          : CLOCK_TICK_MINOR_LEN * 1.75;
+        const inner = tickOuterR - len;
         tick.el.setAttribute("x1", (cx + tick.cos * inner).toFixed(2));
         tick.el.setAttribute("y1", (cy + tick.sin * inner).toFixed(2));
         tick.el.setAttribute("x2", (cx + tick.cos * outer).toFixed(2));
