@@ -1,6 +1,13 @@
 /* Color wheel, draft RGB/HS/temp helpers, and Helland kelvin→RGB.
    Extracted from panel.js (no bundler; HA loads as ES modules). */
 
+import {
+  assignmentTR,
+  paletteSwatchCss,
+  samplePaletteWheel,
+  variableIsPalette,
+} from "./palette.js";
+
 const HUE_WHEEL_RENDER = 600;
 const HUE_COLOR_PRESETS = [
   "#ff3b30",
@@ -567,7 +574,16 @@ function colorPayloadFromDraft(draft) {
   return { color_mode: "color_temp", color_temp_kelvin: 3000 };
 }
 
-function applyVariableToDraft(draft, variable) {
+function draftUsesPalette(draft, getPalette) {
+  const ref = draft?.variable_ref;
+  if (!ref || typeof getPalette !== "function") {
+    return false;
+  }
+  const variable = (getPalette() || []).find((item) => item.id === ref);
+  return variableIsPalette(variable);
+}
+
+function applyVariableToDraft(draft, variable, { entityId, seed, catalog } = {}) {
   if (!draft || !variable) {
     return;
   }
@@ -576,11 +592,30 @@ function applyVariableToDraft(draft, variable) {
   draft.hs_color = undefined;
   draft.rgbw_color = undefined;
   draft.rgbww_color = undefined;
-  Object.assign(draft, variable.color || {});
   draft.variable_ref = variable.id;
-  const brightness = Number(variable.brightness);
-  if (Number.isFinite(brightness)) {
-    draft.brightness = brightness;
+  if (variableIsPalette(variable)) {
+    delete draft.palette_t;
+    delete draft.palette_r;
+    const { t, r } = assignmentTR(entityId || "", seed || 0);
+    const sampled = samplePaletteWheel(
+      variable,
+      t,
+      r,
+      catalog || [],
+      draftRgb
+    );
+    draft.hs_color = undefined;
+    draft.rgb_color = sampled.rgb;
+    draft.color_mode = "rgb";
+    draft.brightness = sampled.brightness;
+  } else {
+    delete draft.palette_t;
+    delete draft.palette_r;
+    Object.assign(draft, variable.color || {});
+    const brightness = Number(variable.brightness);
+    if (Number.isFinite(brightness)) {
+      draft.brightness = brightness;
+    }
   }
   draft.state = Number(draft.brightness) > 0 ? "on" : "off";
 }
@@ -595,7 +630,10 @@ function swatchRgb(color, brightness) {
   ];
 }
 
-function variableSwatchCss(variable) {
+function variableSwatchCss(variable, catalog) {
+  if (variableIsPalette(variable)) {
+    return paletteSwatchCss(variable, catalog || [], draftRgb);
+  }
   const rgb = swatchRgb(variable?.color, variable?.brightness);
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
@@ -1341,6 +1379,57 @@ function drawHueWheelImage(mode, tempMin, tempMax) {
   return url;
 }
 
+function paletteTRFromRel(x, y, radius) {
+  const dist = Math.hypot(x, y);
+  const r = radius <= 0 ? 0 : Math.min(1, dist / radius);
+  let t = (Math.atan2(y, x) + Math.PI / 2) / (2 * Math.PI);
+  if (t < 0) {
+    t += 1;
+  }
+  return { t, r };
+}
+
+function relFromPaletteTR(t, r, radius) {
+  const turns = ((Number(t) % 1) + 1) % 1;
+  const sat = Math.max(0, Math.min(1, Number(r) || 0));
+  const phi = turns * 2 * Math.PI - Math.PI / 2;
+  const rad = sat * radius;
+  return { x: rad * Math.cos(phi), y: rad * Math.sin(phi) };
+}
+
+function drawPaletteWheelImage(palette, catalog) {
+  const key = `palette:${palette?.id}:${JSON.stringify(palette?.slots || [])}`;
+  const cached = _hueWheelImageCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = HUE_WHEEL_RENDER;
+  canvas.height = HUE_WHEEL_RENDER;
+  const ctx = canvas.getContext("2d");
+  const radius = HUE_WHEEL_RENDER / 2;
+  const image = ctx.createImageData(HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
+  const data = image.data;
+  for (let x = -radius; x < radius; x += 1) {
+    for (let y = -radius; y < radius; y += 1) {
+      if (Math.hypot(x, y) - 2 > radius) {
+        continue;
+      }
+      const { t, r } = paletteTRFromRel(x, y, radius);
+      const sampled = samplePaletteWheel(palette, t, r, catalog, draftRgb);
+      const index = (x + radius + (y + radius) * HUE_WHEEL_RENDER) * 4;
+      data[index] = sampled.rgb[0];
+      data[index + 1] = sampled.rgb[1];
+      data[index + 2] = sampled.rgb[2];
+      data[index + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  const url = canvas.toDataURL();
+  _hueWheelImageCache.set(key, url);
+  return url;
+}
+
 function createLightBrightnessGraph({
   title: headingText = "Brightness",
   subtitle = "0–100% by solar event",
@@ -1839,6 +1928,9 @@ function createSceneColorWheel({
   getPalette,
   onAddPalette,
   getCapabilities,
+  getAssignmentSeed,
+  getAssignmentEntityId,
+  onRandomizeSeed,
 }) {
   // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
   const stage = document.createElement("div");
@@ -1858,6 +1950,10 @@ function createSceneColorWheel({
   bgColor.className = "hue-wheel-layer hue-wheel-color";
   bgColor.width = HUE_WHEEL_RENDER;
   bgColor.height = HUE_WHEEL_RENDER;
+  const bgPalette = document.createElement("canvas");
+  bgPalette.className = "hue-wheel-layer hue-wheel-palette";
+  bgPalette.width = HUE_WHEEL_RENDER;
+  bgPalette.height = HUE_WHEEL_RENDER;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "hue-wheel-svg");
   svg.innerHTML = `
@@ -1879,7 +1975,7 @@ function createSceneColorWheel({
   const pathLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   pathLayer.setAttribute("class", "hue-wheel-paths");
   svg.appendChild(pathLayer);
-  canvasWrap.append(glow, bgTemp, bgColor, svg);
+  canvasWrap.append(glow, bgTemp, bgColor, bgPalette, svg);
   const floatReadout = document.createElement("div");
   floatReadout.className = "hue-wheel-float-readout";
   floatReadout.hidden = true;
@@ -1894,6 +1990,16 @@ function createSceneColorWheel({
   presetTrack.setAttribute("role", "list");
   presets.appendChild(presetTrack);
   chrome.append(presets);
+  const modePill = document.createElement("div");
+  modePill.className = "wheel-mode-pill";
+  const randomizeBtn = document.createElement("button");
+  randomizeBtn.type = "button";
+  randomizeBtn.className = "wheel-palette-randomize";
+  randomizeBtn.hidden = true;
+  randomizeBtn.textContent = "Randomize";
+  randomizeBtn.addEventListener("click", () => onRandomizeSeed?.());
+  canvasWrap.appendChild(modePill);
+  chrome.append(randomizeBtn);
   stage.append(canvasWrap, chrome);
 
   const markers = new Map();
@@ -1930,10 +2036,37 @@ function createSceneColorWheel({
   };
 
   const radiusPx = () => canvasWrap.clientWidth / 2;
+  let uiMode = null;
+
+  const paletteCatalog = () =>
+    typeof getPalette === "function" ? getPalette() || [] : [];
+
+  const paletteForDraft = (draft) =>
+    paletteCatalog().find((item) => item.id === draft?.variable_ref);
+
+  const entityIdOf = (scene) =>
+    typeof getAssignmentEntityId === "function"
+      ? getAssignmentEntityId(scene)
+      : scene?.id;
+
+  const seedNow = () =>
+    typeof getAssignmentSeed === "function" ? Number(getAssignmentSeed()) || 0 : 0;
+
+  const showingPalette = () => {
+    const { scenes, activeId } = getState();
+    const draft = scenes.find((row) => row.id === activeId)?.draft;
+    if (uiMode === "color" || uiMode === "temp") {
+      return false;
+    }
+    return variableIsPalette(paletteForDraft(draft));
+  };
 
   const currentGeom = () => {
     const radius = radiusPx();
     const { scenes } = getState();
+    if (showingPalette()) {
+      return wheelStackGeom(radius, "color-only", 0, 1, 0);
+    }
     const kind = pinStackKind(scenes, hasColor, hasTemp, capsOf);
     return wheelStackGeom(
       radius,
@@ -2016,11 +2149,29 @@ function createSceneColorWheel({
     canvasWrap.classList.toggle("is-stacked", stacked);
     applyLayer(bgColor, geom.color, radius, geom.front === "color");
     applyLayer(bgTemp, geom.temp, radius, geom.front === "temp");
-    bgColor.hidden = !hasColor || !bandLive(geom.color);
-    bgTemp.hidden = !hasTemp || !bandLive(geom.temp);
-    if (key !== lastGeomKey) {
-      lastGeomKey = key;
-      paintGlow(geom.front);
+    const pal = showingPalette();
+    bgPalette.hidden = !pal;
+    bgColor.hidden = pal || !hasColor || !bandLive(geom.color);
+    bgTemp.hidden = pal || !hasTemp || !bandLive(geom.temp);
+    if (pal) {
+      bgPalette.classList.add("is-front");
+      bgPalette.style.transform = "";
+      bgPalette.style.webkitMaskImage = "";
+      bgPalette.style.maskImage = "";
+      const { scenes, activeId } = getState();
+      const draft = scenes.find((row) => row.id === activeId)?.draft;
+      const variable = paletteForDraft(draft);
+      if (variable) {
+        drawImageTo(bgPalette, drawPaletteWheelImage(variable, paletteCatalog()));
+        paintGlow("color");
+      }
+      lastGeomKey = "";
+    } else {
+      bgPalette.classList.remove("is-front");
+      if (key !== lastGeomKey) {
+        lastGeomKey = key;
+        paintGlow(geom.front);
+      }
     }
   };
 
@@ -2035,8 +2186,23 @@ function createSceneColorWheel({
     marker.y = y;
   };
 
-  const positionForDraft = (draft, markerMode, geom, radius) => {
+  const positionForDraft = (draft, markerMode, geom, radius, entityId) => {
     const cx = radius;
+    const variable = paletteForDraft(draft);
+    if (showingPalette() && variableIsPalette(variable)) {
+      const auto = assignmentTR(entityId || "", seedNow());
+      const t = draft.palette_t ?? auto.t;
+      const r = draft.palette_r ?? auto.r;
+      const rel = relFromPaletteTR(t, r, geom.color.outer || radius);
+      const sampled = samplePaletteWheel(
+        variable,
+        t,
+        r,
+        paletteCatalog(),
+        draftRgb
+      );
+      return { x: cx + rel.x, y: cx + rel.y, rgb: sampled.rgb };
+    }
     if (markerMode === "color") {
       const mixed = draftRgb(draft);
       const chromatic = chromaticRgbFromDraft(draft) || mixed;
@@ -2064,6 +2230,24 @@ function createSceneColorWheel({
     const limited = limitToAnnulus(x, y, radius, band.inner, band.outer);
     const cx = limited.x - radius;
     const cy = limited.y - radius;
+    const variable = paletteForDraft(draft);
+    if (showingPalette() && variableIsPalette(variable)) {
+      const { t, r } = paletteTRFromRel(cx, cy, band.outer);
+      draft.palette_t = t;
+      draft.palette_r = r;
+      const sampled = samplePaletteWheel(
+        variable,
+        t,
+        r,
+        paletteCatalog(),
+        draftRgb
+      );
+      draft.color_temp_kelvin = undefined;
+      draft.hs_color = undefined;
+      draft.rgb_color = sampled.rgb;
+      draft.color_mode = "rgb";
+      return limited;
+    }
     if (mode === "color") {
       const sample = hueColorAt(cx, cy, band.outer);
       if (sample) {
@@ -2145,6 +2329,9 @@ function createSceneColorWheel({
   };
 
   const convertDraftTo = (draft, next, caps) => {
+    delete draft.variable_ref;
+    delete draft.palette_t;
+    delete draft.palette_r;
     if (next === "color") {
       if (!caps.hasColor) {
         return false;
@@ -2159,6 +2346,74 @@ function createSceneColorWheel({
     }
     applyTempToDraft(draft, kelvinForTempConvert(draft, tempMin, tempMax));
     return true;
+  };
+
+  const syncModePill = () => {
+    modePill.replaceChildren();
+    const { scenes, activeId } = getState();
+    const item = scenes.find((row) => row.id === activeId);
+    const draft = item?.draft;
+    const palVar = paletteForDraft(draft);
+    const pal = variableIsPalette(palVar);
+    const modes = [];
+    if (hasColor) {
+      modes.push("color");
+    }
+    if (hasTemp) {
+      modes.push("temp");
+    }
+    if (pal) {
+      modes.push("palette");
+    }
+    modePill.hidden = modes.length < 2;
+    randomizeBtn.hidden = !pal || typeof onRandomizeSeed !== "function";
+    if (modePill.hidden) {
+      return;
+    }
+    const caps = capsOf(item || {});
+    const current = showingPalette()
+      ? "palette"
+      : uiMode === "color" || uiMode === "temp"
+        ? uiMode
+        : draftWheelMode(draft, caps.hasColor, caps.hasTemp);
+    for (const mode of modes) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `wheel-mode-dot wheel-mode-${mode}`;
+      btn.setAttribute("aria-pressed", mode === current ? "true" : "false");
+      if (mode === current) {
+        btn.classList.add("active");
+      }
+      if (mode === "color") {
+        btn.style.background =
+          "conic-gradient(#ff3b30, #ffcc00, #34c759, #007aff, #af52de, #ff3b30)";
+      } else if (mode === "temp") {
+        btn.style.background =
+          "linear-gradient(135deg, #ffb347 0%, #fff4e0 55%, #c9e4ff 100%)";
+      } else {
+        btn.style.background = paletteSwatchCss(
+          palVar,
+          paletteCatalog(),
+          draftRgb
+        );
+      }
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        if (mode === "palette") {
+          uiMode = "palette";
+          sync();
+          return;
+        }
+        const wasPalette = variableIsPalette(paletteForDraft(item?.draft));
+        uiMode = mode;
+        if (wasPalette && item?.draft) {
+          convertDraftTo(item.draft, mode, capsOf(item));
+          emitChange({ dragging: false });
+        }
+        sync();
+      });
+      modePill.appendChild(btn);
+    }
   };
 
   const updatePresetOverflow = () => {
@@ -2181,7 +2436,7 @@ function createSceneColorWheel({
       btn.className = "hue-preset";
       btn.setAttribute("role", "listitem");
       btn.title = variable.name;
-      btn.style.backgroundColor = variableSwatchCss(variable);
+      btn.style.background = variableSwatchCss(variable, palette);
       if (active?.draft?.variable_ref === variable.id) {
         btn.classList.add("active");
       }
@@ -2189,7 +2444,12 @@ function createSceneColorWheel({
         if (!active?.draft) {
           return;
         }
-        applyVariableToDraft(active.draft, variable);
+        applyVariableToDraft(active.draft, variable, {
+          entityId: entityIdOf(active),
+          seed: seedNow(),
+          catalog: palette,
+        });
+        uiMode = variableIsPalette(variable) ? "palette" : null;
         const marker = markers.get(active.id);
         if (marker) {
           marker.g.classList.add("glide");
@@ -2218,7 +2478,11 @@ function createSceneColorWheel({
         if (!saved) {
           return;
         }
-        applyVariableToDraft(active.draft, saved);
+        applyVariableToDraft(active.draft, saved, {
+          entityId: entityIdOf(active),
+          seed: seedNow(),
+          catalog: paletteCatalog(),
+        });
         emitChange({ dragging: false, fromPalette: true });
         sync();
       });
@@ -2228,6 +2492,7 @@ function createSceneColorWheel({
   };
 
   const sync = () => {
+    syncModePill();
     const radius = radiusPx();
     const { scenes, activeId } = getState();
     const geom = radius
@@ -2301,7 +2566,13 @@ function createSceneColorWheel({
       if (!radius) {
         continue;
       }
-      const pos = positionForDraft(scene.draft, markerMode, geom, radius);
+      const pos = positionForDraft(
+        scene.draft,
+        markerMode,
+        geom,
+        radius,
+        entityIdOf(scene)
+      );
       marker.g.style.color = rgbCss(pos.rgb);
       marker.icon.style.fill = pinForeground(pos.rgb);
       placeMarker(marker, pos.x, pos.y, active);
@@ -2324,7 +2595,7 @@ function createSceneColorWheel({
 
   const syncPath = (geom, radius) => {
     pathLayer.replaceChildren();
-    if (!radius) {
+    if (!radius || showingPalette()) {
       return;
     }
     const { scenes, sequence } = getState();
@@ -2425,7 +2696,7 @@ function createSceneColorWheel({
     if (drag.mustEnterHome && pointerInModeInterior(r, geom, pinMode)) {
       drag.mustEnterHome = false;
     }
-    if (!drag.mustEnterHome) {
+    if (!drag.mustEnterHome && !showingPalette()) {
       const nextMode = maybeConvertDrag(item, x, y, geom, radius, pinMode);
       if (nextMode !== pinMode) {
         pinMode = nextMode;
@@ -2457,13 +2728,19 @@ function createSceneColorWheel({
       }
       const caps = capsOf(scene);
       const otherMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
-      const pos = positionForDraft(scene.draft, otherMode, nextGeom, radius);
+      const pos = positionForDraft(
+        scene.draft,
+        otherMode,
+        nextGeom,
+        radius,
+        entityIdOf(scene)
+      );
       other.g.style.color = rgbCss(pos.rgb);
       other.icon.style.fill = pinForeground(pos.rgb);
       placeMarker(other, pos.x, pos.y, false);
     }
     syncPath(nextGeom, radius);
-    emitChange({ dragging: true });
+    emitChange({ dragging: true, fromPalette: showingPalette() });
   };
 
   const onPointerUp = (ev) => {
@@ -2528,11 +2805,15 @@ function createSceneColorWheel({
     const geom = currentGeom();
     const caps = capsOf(item);
     let pinMode = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
-    const hit = regionAt(pt.x, pt.y, geom, radius);
-    if (hit && hit !== pinMode) {
-      if (convertDraftTo(item.draft, hit, caps)) {
-        pinMode = hit;
+    if (!showingPalette()) {
+      const hit = regionAt(pt.x, pt.y, geom, radius);
+      if (hit && hit !== pinMode) {
+        if (convertDraftTo(item.draft, hit, caps)) {
+          pinMode = hit;
+        }
       }
+    } else {
+      pinMode = "color";
     }
     startDrag(ev, item.id, 0, 0, pinMode);
     const band = pinMode === "color" ? geom.color : geom.temp;
@@ -2548,16 +2829,22 @@ function createSceneColorWheel({
     showFloatReadout(item.draft, limited.x, limited.y, pinMode);
     layoutLayers(currentGeom());
     syncPath(currentGeom(), radius);
-    emitChange({ dragging: true });
+    emitChange({ dragging: true, fromPalette: showingPalette() });
   });
 
   const setMode = (next, { convertDraft = false } = {}) => {
+    if (next === "palette") {
+      uiMode = "palette";
+      sync();
+      return;
+    }
     if (next === "color" && !hasColor) {
       return;
     }
     if (next === "temp" && !hasTemp) {
       return;
     }
+    uiMode = next;
     if (convertDraft) {
       const { scenes, activeId } = getState();
       const item = scenes.find((row) => row.id === activeId);
@@ -2669,6 +2956,10 @@ function lightDraftFingerprint(draft) {
     rgbw_color: draft?.rgbw_color ?? null,
     rgbww_color: draft?.rgbww_color ?? null,
     effect: draft?.effect ?? null,
+    variable_ref: draft?.variable_ref ?? null,
+    palette_t: draft?.palette_t ?? null,
+    palette_r: draft?.palette_r ?? null,
+    assignment_seed: draft?.assignment_seed ?? null,
   });
 }
 

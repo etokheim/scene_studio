@@ -647,3 +647,10 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Selecting an effect looked like a no-op: the UI opened, but the draft never updated.
 - **Do not reverse without user ask.**
 
+## Palette variables (five slots, per-light assignment, mode pill)
+
+- **Date:** 2026-09-15
+- **Decision:** Variables are `kind: color` (one color+brightness) or `kind: palette` (always five slots). A slot is a static color+brightness or a `variable_ref` to a **color** variable only (nested palettes are invalid). Applying a palette to a theme event, simple scene, or light stores the palette id; unpinned lights pick a rim slot with FNV-1a `hash(seed, entity_id) % 5` so adding a lamp does not reshuffle others. `assignment_seed` lives on the application site (theme event, simple scene, or light override). **Randomize** changes that seed and clears stored `palette_t`/`palette_r`. Dragging the palette wheel stores polar `palette_t` (around the rim) and `palette_r` (0 = white center, 1 = rim) while keeping `variable_ref`, so the pin stays linked to the palette. Brightness on the event/light can differ from the sampled slot. Every color wheel shows the exclusive color/kelvin mode pill; a third palette-wheel face appears only when the **selected** pin currently uses a palette.
+- **Why:** Multi-light scenes need several related hues from one named token without each lamp sharing one solid. Hash+seed is stable; the polar wheel is how the user pins a blend between those five rim colors.
+- **Do not reverse without user ask.**
+

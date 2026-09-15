@@ -45,6 +45,8 @@ from .const import (
     VARIABLE_REF,
 )
 
+from .palette import KIND_PALETTE, normalize_palette_slots
+
 _LOGGER = logging.getLogger(__name__)
 
 # --- Storage version ---
@@ -603,18 +605,28 @@ class CircadianScenesStore:
     async def async_upsert_variable(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a color variable."""
         var_id = raw.get("id") or str(uuid.uuid4())
+        kind = raw.get("kind") or ("palette" if raw.get("slots") else "color")
         name = (raw.get("name") or "").strip()
         if not name:
             raise ValueError("Variable name is required")
-        color = raw.get("color")
-        if not color or not isinstance(color, dict):
-            raise ValueError("Variable must have a color dict")
-        var = {
-            "id": var_id,
-            "name": name,
-            "color": color,
-            "brightness": raw.get("brightness", 255),
-        }
+        if kind == "palette":
+            var = {
+                "id": var_id,
+                "name": name,
+                "kind": KIND_PALETTE,
+                "slots": normalize_palette_slots(raw.get("slots")),
+            }
+        else:
+            color = raw.get("color")
+            if not color or not isinstance(color, dict):
+                raise ValueError("Variable must have a color dict")
+            var = {
+                "id": var_id,
+                "name": name,
+                "kind": "color",
+                "color": color,
+                "brightness": raw.get("brightness", 255),
+            }
         previous = deepcopy(self.variables.get(var_id))
         self.variables[var_id] = var
         try:
@@ -631,6 +643,15 @@ class CircadianScenesStore:
         """Delete a variable.  Raises if still referenced by themes or scenes."""
         if var_id not in self.variables:
             return False
+        for other in self.variables.values():
+            if other.get("id") == var_id:
+                continue
+            for slot in other.get("slots") or []:
+                if isinstance(slot, dict) and slot.get(VARIABLE_REF) == var_id:
+                    raise HomeAssistantError(
+                        f"Variable {var_id!r} is still referenced by "
+                        f"palette {other.get('name', other.get('id'))!r}"
+                    )
         # Check theme refs.
         for theme in self.themes.values():
             for ev in (theme.get("events") or {}).values():

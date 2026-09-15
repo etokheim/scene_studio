@@ -17,8 +17,12 @@ import {
   medianNumber,
   circularMeanHue,
   lightDraftFingerprint,
+  applyVariableToDraft,
   colorPayloadFromDraft,
+  hexToRgb,
+  variableSwatchCss,
 } from "./color_ui.js";
+import { defaultPaletteSlots, variableIsPalette } from "./palette.js";
 import {
   isoYear,
   daysInYear,
@@ -2527,6 +2531,100 @@ class CircadianScenesPanel extends HTMLElement {
           -webkit-user-select: none;
           touch-action: none;
         }
+        .wheel-mode-pill {
+          position: absolute;
+          left: 50%;
+          top: 0;
+          z-index: 6;
+          transform: translate(-50%, -8px);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: color-mix(
+            in srgb,
+            var(--card-background-color, #1c1c1c) 88%,
+            transparent
+          );
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+          pointer-events: auto;
+        }
+        .wheel-mode-pill[hidden] {
+          display: none !important;
+        }
+        .wheel-mode-dot {
+          width: 36px;
+          height: 36px;
+          margin: 0;
+          padding: 0;
+          border-radius: 50%;
+          border: 3px solid transparent;
+          cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+        }
+        .wheel-mode-dot.active {
+          border-color: #fff;
+        }
+        .wheel-palette-randomize {
+          flex: 0 0 auto;
+          margin: 0;
+          padding: 6px 10px;
+          border: 0;
+          border-radius: 16px;
+          background: var(--secondary-background-color, #242022);
+          color: var(--primary-text-color);
+          font: inherit;
+          font-size: 0.8rem;
+          cursor: pointer;
+        }
+        .wheel-palette-randomize[hidden] {
+          display: none !important;
+        }
+        .palette-kind-row {
+          display: flex;
+          gap: 8px;
+          margin: 8px 0;
+        }
+        .palette-kind-row button {
+          flex: 1;
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--divider-color);
+          background: transparent;
+          color: var(--primary-text-color);
+          cursor: pointer;
+        }
+        .palette-kind-row button.active {
+          border-color: var(--primary-color);
+          background: color-mix(in srgb, var(--primary-color) 18%, transparent);
+        }
+        .palette-slots {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin: 12px 0;
+        }
+        .palette-slot-row {
+          display: grid;
+          grid-template-columns: 36px 44px minmax(0, 1fr) 72px;
+          gap: 8px;
+          align-items: center;
+        }
+        .palette-slot-swatch {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        .palette-slot-row input[type="color"] {
+          width: 44px;
+          height: 32px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+        }
         .hue-wheel-glow,
         .hue-wheel-layer {
           display: block;
@@ -4996,6 +5094,10 @@ class CircadianScenesPanel extends HTMLElement {
 
   _openVariableEditor(variable) {
     const draft = this._variableEditorDraft(variable);
+    let kind = variableIsPalette(variable) ? "palette" : "color";
+    const slots = variableIsPalette(variable)
+      ? structuredClone(variable.slots || defaultPaletteSlots())
+      : defaultPaletteSlots();
     const hint = document.createElement("p");
     hint.textContent = this._t(
       "frontend.library.variable_edit_hint",
@@ -5005,6 +5107,15 @@ class CircadianScenesPanel extends HTMLElement {
       this._t("frontend.common.name", "Name"),
       variable?.name || this._t("frontend.library.new_variable", "New variable")
     );
+    const kindRow = document.createElement("div");
+    kindRow.className = "palette-kind-row";
+    const kindColor = document.createElement("button");
+    kindColor.type = "button";
+    kindColor.textContent = this._t("frontend.library.kind_color", "Color");
+    const kindPalette = document.createElement("button");
+    kindPalette.type = "button";
+    kindPalette.textContent = this._t("frontend.library.kind_palette", "Palette");
+    kindRow.append(kindColor, kindPalette);
     const briInput = this._haInput(
       this._t("frontend.lights.brightness", "Brightness"),
       String(draft.brightness ?? 255),
@@ -5037,26 +5148,149 @@ class CircadianScenesPanel extends HTMLElement {
         wheel.sync();
       },
     });
+    const slotsEl = document.createElement("div");
+    slotsEl.className = "palette-slots";
+    const solids = () =>
+      (this._variables || []).filter(
+        (item) => item.id !== variable?.id && !variableIsPalette(item)
+      );
+    const rgbToHex = (rgb) =>
+      `#${(rgb || [255, 255, 255])
+        .map((c) => Math.max(0, Math.min(255, Number(c) || 0)).toString(16).padStart(2, "0"))
+        .join("")}`;
+    const syncKind = () => {
+      kindColor.classList.toggle("active", kind === "color");
+      kindPalette.classList.toggle("active", kind === "palette");
+      briInput.hidden = kind === "palette";
+      wheel.el.hidden = kind === "palette";
+      slotsEl.hidden = kind !== "palette";
+    };
+    const renderSlots = () => {
+      slotsEl.replaceChildren();
+      for (let index = 0; index < 5; index += 1) {
+        if (!slots[index]) {
+          slots[index] = defaultPaletteSlots()[index];
+        }
+        const slot = slots[index];
+        const row = document.createElement("div");
+        row.className = "palette-slot-row";
+        const swatch = document.createElement("div");
+        swatch.className = "palette-slot-swatch";
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        const refSelect = document.createElement("select");
+        const customOpt = document.createElement("option");
+        customOpt.value = "";
+        customOpt.textContent = this._t(
+          "frontend.library.slot_custom",
+          "Custom color"
+        );
+        refSelect.appendChild(customOpt);
+        for (const item of solids()) {
+          const opt = document.createElement("option");
+          opt.value = item.id;
+          opt.textContent = item.name;
+          refSelect.appendChild(opt);
+        }
+        refSelect.value = slot.variable_ref || "";
+        const bri = document.createElement("input");
+        bri.type = "number";
+        bri.min = "0";
+        bri.max = "255";
+        const paint = () => {
+          if (slot.variable_ref) {
+            const linked = solids().find((item) => item.id === slot.variable_ref);
+            swatch.style.background = linked
+              ? variableSwatchCss(linked, this._variables)
+              : "#888";
+            colorInput.disabled = true;
+            bri.value = String(linked?.brightness ?? 255);
+            bri.disabled = true;
+          } else {
+            const color = slot.color || {};
+            const rgb = color.hs_color
+              ? draftRgb({ ...color, brightness: 255 })
+              : color.rgb_color || [255, 200, 150];
+            swatch.style.background = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+            colorInput.value = rgbToHex(rgb);
+            colorInput.disabled = false;
+            bri.disabled = false;
+            bri.value = String(slot.brightness ?? 255);
+          }
+        };
+        colorInput.addEventListener("input", () => {
+          const rgb = hexToRgb(colorInput.value);
+          slot.variable_ref = undefined;
+          slot.color = {
+            color_mode: "hs",
+            hs_color: (() => {
+              const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
+              return [hsv[0], Math.round(hsv[1] * 100)];
+            })(),
+          };
+          paint();
+        });
+        refSelect.addEventListener("change", () => {
+          if (refSelect.value) {
+            slots[index] = { variable_ref: refSelect.value };
+          } else {
+            slots[index] = defaultPaletteSlots()[index];
+          }
+          renderSlots();
+        });
+        bri.addEventListener("change", () => {
+          const value = Number(bri.value);
+          if (Number.isFinite(value)) {
+            slot.brightness = value;
+          }
+        });
+        paint();
+        row.append(swatch, colorInput, refSelect, bri);
+        slotsEl.appendChild(row);
+      }
+    };
+    kindColor.addEventListener("click", () => {
+      kind = "color";
+      syncKind();
+    });
+    kindPalette.addEventListener("click", () => {
+      kind = "palette";
+      syncKind();
+    });
+    renderSlots();
+    syncKind();
     this._libraryDialog({
       title: variable
         ? variable.name
         : this._t("frontend.library.add_variable", "Add variable"),
-      children: [hint, nameInput, briInput, wheel.el],
+      children: [hint, nameInput, kindRow, briInput, wheel.el, slotsEl],
       primaryLabel: this._t("frontend.common.save", "Save"),
       onPrimary: async (dialog) => {
         const name = (nameInput.value || "").trim();
-        const brightness = Number(briInput.value ?? draft.brightness);
-        if (!name || !Number.isFinite(brightness)) {
+        if (!name) {
+          return;
+        }
+        const payload =
+          kind === "palette"
+            ? {
+                ...(variable || {}),
+                name,
+                kind: "palette",
+                slots,
+              }
+            : {
+                ...(variable || {}),
+                name,
+                kind: "color",
+                brightness: Number(briInput.value ?? draft.brightness),
+                color: colorPayloadFromDraft(draft),
+              };
+        if (kind === "color" && !Number.isFinite(payload.brightness)) {
           return;
         }
         await this._hass.callWS({
           type: `${DOMAIN}/save_variable`,
-          data: {
-            ...(variable || {}),
-            name,
-            brightness,
-            color: colorPayloadFromDraft(draft),
-          },
+          data: payload,
         });
         dialog.open = false;
         await this._refreshCatalog();
@@ -5299,6 +5533,16 @@ class CircadianScenesPanel extends HTMLElement {
     let brightness = ev.brightness ?? 200;
     if (ref) {
       const variable = (this._variables || []).find((item) => item.id === ref);
+      if (variableIsPalette(variable)) {
+        return {
+          state: "on",
+          brightness,
+          variable_ref: ref,
+          palette_t: color.palette_t,
+          palette_r: color.palette_r,
+          assignment_seed: ev.assignment_seed,
+        };
+      }
       color = { ...(variable?.color || {}), variable_ref: ref };
       if (variable?.brightness != null) {
         brightness = variable.brightness;
@@ -5317,10 +5561,19 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const brightness = Number(draft.brightness);
     const value = Number.isFinite(brightness) ? brightness : 0;
+    const prev = this._themeDraft.events[eventId] || {};
     if (draft.variable_ref) {
+      const color = { variable_ref: draft.variable_ref };
+      if (draft.palette_t != null) {
+        color.palette_t = draft.palette_t;
+      }
+      if (draft.palette_r != null) {
+        color.palette_r = draft.palette_r;
+      }
       this._themeDraft.events[eventId] = {
-        color: { variable_ref: draft.variable_ref },
+        color,
         brightness: value,
+        assignment_seed: draft.assignment_seed ?? prev.assignment_seed ?? 0,
       };
       return;
     }
@@ -5337,7 +5590,11 @@ class CircadianScenesPanel extends HTMLElement {
     if (draft.rgb_color) {
       color.rgb_color = draft.rgb_color;
     }
-    this._themeDraft.events[eventId] = { color, brightness: value };
+    this._themeDraft.events[eventId] = {
+      color,
+      brightness: value,
+      assignment_seed: prev.assignment_seed ?? 0,
+    };
   }
 
   /** Selected lamp for dial brightness, else theme (including `theme:` ids). */
@@ -5484,8 +5741,21 @@ class CircadianScenesPanel extends HTMLElement {
       return { state: ov.state || "on", ...ov };
     }
     const row = (light.event_states || []).find((item) => item.event === eventId);
+    const themeEv = this._themeDraft?.events?.[eventId];
+    const ref = themeEv?.color?.variable_ref;
     if (row?.present && row.state) {
-      return { ...row.state };
+      const merged = { ...row.state };
+      if (ref) {
+        merged.variable_ref = ref;
+        if (themeEv.color.palette_t != null) {
+          merged.palette_t = themeEv.color.palette_t;
+        }
+        if (themeEv.color.palette_r != null) {
+          merged.palette_r = themeEv.color.palette_r;
+        }
+        merged.assignment_seed = themeEv.assignment_seed;
+      }
+      return merged;
     }
     if (this._themeDraft) {
       return this._themeEventDraft(eventId);
@@ -5788,7 +6058,6 @@ class CircadianScenesPanel extends HTMLElement {
         if (brightness > 0) {
           draft.state = "on";
         }
-        delete draft.variable_ref;
         persist();
         brightnessGraphCtl?.sync();
       },
@@ -5824,9 +6093,30 @@ class CircadianScenesPanel extends HTMLElement {
         const draft = drafts.get(currentId);
         if (draft && !fromPalette) {
           delete draft.variable_ref;
+          delete draft.palette_t;
+          delete draft.palette_r;
         }
         persist();
         brightnessGraphCtl?.sync();
+      },
+      getAssignmentSeed: () =>
+        Number(drafts.get(currentId)?.assignment_seed) ||
+        Number(this._themeDraft?.events?.[currentId]?.assignment_seed) ||
+        0,
+      onRandomizeSeed: () => {
+        const ev = this._themeDraft?.events?.[currentId];
+        if (!ev) {
+          return;
+        }
+        ev.assignment_seed = (Math.random() * 0xffffffff) >>> 0;
+        const draft = drafts.get(currentId);
+        if (draft) {
+          draft.assignment_seed = ev.assignment_seed;
+          delete draft.palette_t;
+          delete draft.palette_r;
+        }
+        persist();
+        wheelCtl?.sync();
       },
     });
     body.appendChild(wheelCtl.el);
@@ -11009,6 +11299,8 @@ class CircadianScenesPanel extends HTMLElement {
         const entry = currentEntry();
         if (entry?.draft) {
           delete entry.draft.variable_ref;
+          delete entry.draft.palette_t;
+          delete entry.draft.palette_r;
         }
       }
       applyToSession();
@@ -11111,7 +11403,6 @@ class CircadianScenesPanel extends HTMLElement {
         if (brightness > 0) {
           entry.draft.state = "on";
         }
-        delete entry.draft.variable_ref;
         applyToSession();
         brightnessGraphCtl?.sync();
         colorBriGraphCtl?.sync();
@@ -11221,6 +11512,37 @@ class CircadianScenesPanel extends HTMLElement {
         tempMin: attrs.min_color_temp_kelvin || 2000,
         tempMax: attrs.max_color_temp_kelvin || 6500,
         ...this._wheelPalette(),
+        getAssignmentEntityId: () => light.entity_id,
+        getAssignmentSeed: () => {
+          const draft = currentDraft();
+          const themeEv = this._themeDraft?.events?.[currentEvent.id];
+          return (
+            Number(draft?.assignment_seed) ||
+            Number(themeEv?.assignment_seed) ||
+            0
+          );
+        },
+        onRandomizeSeed: () => {
+          const draft = currentDraft();
+          if (!draft) {
+            return;
+          }
+          draft.assignment_seed = (Math.random() * 0xffffffff) >>> 0;
+          delete draft.palette_t;
+          delete draft.palette_r;
+          const linked = (this._variables || []).find(
+            (item) => item.id === draft.variable_ref
+          );
+          if (variableIsPalette(linked)) {
+            applyVariableToDraft(draft, linked, {
+              entityId: light.entity_id,
+              seed: draft.assignment_seed,
+              catalog: this._variables,
+            });
+          }
+          applyToSession();
+          wheelCtl?.sync();
+        },
         getState: () => ({
           scenes: events
             .filter((item) => drafts.get(item.id)?.member)

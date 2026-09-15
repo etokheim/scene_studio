@@ -45,7 +45,11 @@
       "add_theme": "Add theme",
       "new_variable": "New variable",
       "new_theme": "New theme",
-      "kelvin": "Kelvin"
+      "kelvin": "Kelvin",
+      "kind_color": "Color",
+      "kind_palette": "Palette",
+      "slot_custom": "Custom color",
+      "randomize": "Randomize"
     },
     "kinds": {
       "circadian": "Circadian scene",

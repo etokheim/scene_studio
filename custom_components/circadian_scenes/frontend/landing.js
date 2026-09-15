@@ -2,6 +2,7 @@
 
 import { createSimpleCardMesh } from "./card_mesh.js";
 import { swatchRgb, variableSwatchCss } from "./color_ui.js";
+import { resolveSlot, variableIsPalette } from "./palette.js";
 
 const AREA_RAIL_PX = 340;
 
@@ -390,6 +391,13 @@ function themeEventResolved(ev, variables) {
   const variable = ref
     ? (variables || []).find((item) => item.id === ref)
     : null;
+  if (variableIsPalette(variable)) {
+    const slot = resolveSlot(variable, 0, variables);
+    return {
+      color: slot,
+      brightness: ev?.brightness ?? slot.brightness ?? 255,
+    };
+  }
   return {
     color: variable ? variable.color : ev?.color,
     brightness: variable?.brightness ?? ev?.brightness ?? 255,
@@ -721,7 +729,7 @@ function renderLibrary(panel, { compact } = {}) {
     chip.className = "var-chip";
     const dot = document.createElement("div");
     dot.className = "var-dot";
-    dot.style.background = variableSwatchCss(variable);
+    dot.style.background = variableSwatchCss(variable, panel._variables);
     const name = document.createElement("span");
     name.textContent = variable.name;
     chip.append(dot, name);

@@ -13,6 +13,10 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util.color import color_temperature_to_hs
 
 from .const import VARIABLE_REF
+from .palette import (
+    resolve_palette_color,
+    variable_is_palette,
+)
 
 # ---------------------------------------------------------------------------
 # Variable resolution
@@ -22,10 +26,17 @@ from .const import VARIABLE_REF
 def resolve_variable(
     color_or_ref: dict[str, Any],
     variables: dict[str, dict[str, Any]],
+    *,
+    entity_id: str | None = None,
+    seed: int = 0,
+    palette_t: float | None = None,
+    palette_r: float | None = None,
 ) -> dict[str, Any]:
-    """Return a concrete color dict, resolving a variable ref if present.
+    """Return a concrete color dict, resolving a variable or palette ref.
 
-    Raises HomeAssistantError on a missing variable — do not silence.
+    Palettes pick a slot from (seed, entity_id) unless palette_t/r pin a
+    position on the palette wheel. Raises HomeAssistantError on a missing
+    variable — do not silence.
     """
     ref = color_or_ref.get(VARIABLE_REF)
     if ref is None:
@@ -35,7 +46,18 @@ def resolve_variable(
         raise HomeAssistantError(
             f"Variable {ref!r} referenced but not found in the store"
         )
-    resolved = dict(var["color"])
+    if variable_is_palette(var):
+        t = color_or_ref.get("palette_t", palette_t)
+        r = color_or_ref.get("palette_r", palette_r)
+        return resolve_palette_color(
+            var,
+            variables,
+            entity_id=entity_id,
+            seed=int(color_or_ref.get("assignment_seed", seed) or 0),
+            palette_t=t,
+            palette_r=r,
+        )
+    resolved = dict(var.get("color") or {})
     if "brightness" in var:
         resolved["brightness"] = var["brightness"]
     return resolved
@@ -55,7 +77,11 @@ def resolve_theme_event(
         raise HomeAssistantError(
             f"Theme {theme.get('name', theme.get('id'))!r} has no event {event!r}"
         )
-    color = resolve_variable(ev["color"], variables)
+    color = resolve_variable(
+        ev["color"],
+        variables,
+        seed=int(ev.get("assignment_seed") or 0),
+    )
     brightness = color.pop("brightness", ev["brightness"])
     return {
         "brightness": brightness,
@@ -152,9 +178,16 @@ def build_circadian_event_snapshot(
     overrides = scene.get("overrides") or {}
     modes = supported_modes or {}
     entities: dict[str, dict[str, Any]] = {}
+    ev = theme["events"].get(event) or {}
+    seed = int(ev.get("assignment_seed") or 0)
+    theme_ref = (ev.get("color") or {}).get(VARIABLE_REF)
+    theme_var = variables.get(theme_ref) if theme_ref else None
+    theme_is_palette = variable_is_palette(theme_var)
 
-    # Resolve the theme event once (all un-overridden lights share it).
-    theme_state = resolve_theme_event(theme, event, variables)
+    # Solid theme colors are shared; palettes assign per light.
+    theme_state = (
+        None if theme_is_palette else resolve_theme_event(theme, event, variables)
+    )
 
     for eid in member_ids:
         light_overrides = overrides.get(eid, {})
@@ -168,16 +201,34 @@ def build_circadian_event_snapshot(
                     if k not in ("brightness", "state")
                 },
                 variables,
+                entity_id=eid,
+                seed=seed,
             )
             var_brightness = color_part.pop("brightness", None)
+            fallback_bri = (
+                theme_state["brightness"]
+                if theme_state
+                else var_brightness if var_brightness is not None else 255
+            )
             state_dict = {
                 "state": event_override.get("state", "on"),
                 "brightness": event_override.get(
                     "brightness",
-                    var_brightness
-                    if var_brightness is not None
-                    else theme_state["brightness"],
+                    var_brightness if var_brightness is not None else fallback_bri,
                 ),
+                **color_part,
+            }
+        elif theme_is_palette:
+            color_part = resolve_variable(
+                ev.get("color") or {},
+                variables,
+                entity_id=eid,
+                seed=seed,
+            )
+            var_brightness = color_part.pop("brightness", ev.get("brightness", 255))
+            state_dict = {
+                "state": "on",
+                "brightness": var_brightness,
                 **color_part,
             }
         else:
@@ -210,6 +261,8 @@ def build_simple_snapshot(
         color_part = resolve_variable(
             {k: v for k, v in raw.items() if k not in ("brightness", "state")},
             variables,
+            entity_id=eid,
+            seed=int(raw.get("assignment_seed") or scene.get("assignment_seed") or 0),
         )
         var_brightness = color_part.pop("brightness", None)
         state_dict = {

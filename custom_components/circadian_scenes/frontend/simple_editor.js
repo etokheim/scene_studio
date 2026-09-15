@@ -1,10 +1,12 @@
 /** Simple-scene editor: color wheel, light tiles, variable palette. */
 
 import {
+  applyVariableToDraft,
   createSceneColorWheel,
   draftRgb,
   lightWheelCaps,
 } from "./color_ui.js";
+import { variableIsPalette } from "./palette.js";
 
 export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
@@ -239,6 +241,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         brightness: draft.brightness ?? 200,
         variable_ref: draft.variable_ref,
       };
+      if (draft.palette_t != null) {
+        lights[eid].palette_t = draft.palette_t;
+      }
+      if (draft.palette_r != null) {
+        lights[eid].palette_r = draft.palette_r;
+      }
+      if (draft.assignment_seed != null) {
+        lights[eid].assignment_seed = draft.assignment_seed;
+      }
     } else {
       lights[eid] = {
         state: draft.state || "on",
@@ -281,6 +292,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       }
       if (!fromPalette) {
         delete drafts[selectedId].variable_ref;
+        delete drafts[selectedId].palette_t;
+        delete drafts[selectedId].palette_r;
       }
       persistLight(selectedId);
       if (!dragging) {
@@ -293,6 +306,30 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     tempMax: 6500,
     getCapabilities: (scene) =>
       lightWheelCaps(panel._hass?.states?.[scene.id]?.attributes || {}),
+    getAssignmentSeed: () => Number(panel._formData?.assignment_seed) || 0,
+    getAssignmentEntityId: (scene) => scene.id,
+    onRandomizeSeed: () => {
+      const seed = (Math.random() * 0xffffffff) >>> 0;
+      panel._formData = { ...panel._formData, assignment_seed: seed };
+      for (const eid of members) {
+        const draft = drafts[eid];
+        if (!draft) {
+          continue;
+        }
+        delete draft.palette_t;
+        delete draft.palette_r;
+        const linked = variables.find((item) => item.id === draft.variable_ref);
+        if (variableIsPalette(linked)) {
+          applyVariableToDraft(draft, linked, {
+            entityId: eid,
+            seed,
+            catalog: variables,
+          });
+        }
+        persistLight(eid);
+      }
+      wheel.sync();
+    },
     ...panel._wheelPalette(),
   });
   wheels.appendChild(wheel.el);
