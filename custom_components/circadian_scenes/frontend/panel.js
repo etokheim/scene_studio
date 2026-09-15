@@ -114,7 +114,7 @@ const CLOCK_SUN_SCALE_MAX = 2;
 /* Handle tip radius in the dial-core viewBox (path-adjacent). Face chrome
    carries the hour ticks + numbers; solar-event buttons track the sun path. */
 const CLOCK_TICK_OUTER = 94;
-const CLOCK_TICK_MINOR_LEN = 3;
+const CLOCK_TICK_MINOR_LEN = 2;
 /* Desktop px from sun-path radius to event-button center at 100% brightness.
    0% sits on the sun path; the same pixel span is the drag range on mobile
    (buttons leave the path when brightness > 0). Screen pixels so a narrower
@@ -409,6 +409,7 @@ class CircadianScenesPanel extends HTMLElement {
       "data-dark-mode",
       Boolean(this._hass?.themes?.darkMode)
     );
+    this._layoutClockBrightnessCurve();
   }
 
   connectedCallback() {
@@ -1629,6 +1630,10 @@ class CircadianScenesPanel extends HTMLElement {
           /* Hint, not a second rim — quieter than time-override chrome. */
           opacity: 0.32;
         }
+        :host(:not([data-dark-mode])) .clock-brightness-overlay .clock-brightness-arc {
+          stroke: rgb(0 0 0 / 22%);
+          opacity: 1;
+        }
         .clock-brightness-overlay .clock-brightness-fill {
           pointer-events: none;
         }
@@ -1725,7 +1730,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .clock-face-ticks .clock-tick {
           stroke: color-mix(in srgb, var(--primary-text-color) 28%, transparent);
-          stroke-width: 4.5px;
+          stroke-width: 2px;
           vector-effect: non-scaling-stroke;
           stroke-linecap: round;
         }
@@ -1736,7 +1741,7 @@ class CircadianScenesPanel extends HTMLElement {
           font-family: "Iowan Old Style", "Palatino Linotype", Palatino,
             "Times New Roman", Times, serif;
           font-size: 32px;
-          font-weight: 700;
+          font-weight: 400;
           font-variant-numeric: tabular-nums;
           letter-spacing: 0.02em;
           line-height: 1;
@@ -3706,9 +3711,14 @@ class CircadianScenesPanel extends HTMLElement {
           padding: 40px 0 16px;
         }
         .stage-col .simple-editor .hue-wheel-stage {
-          width: 100%;
-          max-width: none;
+          width: min(100%, 650px);
+          max-width: 650px;
+          min-width: 0;
           padding: 0;
+        }
+        .stage-col .simple-editor .hue-wheel-canvas {
+          width: 100%;
+          max-width: 100%;
         }
         .stage-col .hue-wheel-canvas {
           width: 100%;
@@ -3718,10 +3728,10 @@ class CircadianScenesPanel extends HTMLElement {
           position: absolute;
           pointer-events: none;
           z-index: 0;
-          transform: scale(1.85);
+          transform: scale(1.2);
           transform-origin: center center;
-          filter: blur(54px) saturate(1.45);
-          opacity: 0.55;
+          filter: blur(36px) saturate(1.3);
+          opacity: 0.4;
           border-radius: 50%;
         }
         .card-content {
@@ -8896,8 +8906,7 @@ class CircadianScenesPanel extends HTMLElement {
       host._eventId = this._sidebarEventId;
     }
     this._syncEventSelection();
-    // Selected solar event pins the sun (drag sticky yields to the pin).
-    if (this._clockSunEl) {
+    if (this._clockSunEl && this._sunPath?.curve) {
       this._clockSunLive = false;
       this._moveClockSunTo(this._clockSunIdleSeconds());
       if (this._hoverSeconds == null) {
@@ -13676,8 +13685,9 @@ class CircadianScenesPanel extends HTMLElement {
       hovering || eventIdle || sticky
         ? formatClock(seconds)
         : `Now ${formatClock(seconds)}`;
-    const elev = interpolateElevation(this._sunPath.curve, seconds);
-    const sunLabel = `Sun ${elev.toFixed(1)}°`;
+    const curve = this._sunPath?.curve;
+    const elev = curve ? interpolateElevation(curve, seconds) : null;
+    const sunLabel = elev == null ? "" : `Sun ${elev.toFixed(1)}°`;
     readout.replaceChildren();
     const time = document.createElement("span");
     time.className = "sun-hover-time";
@@ -15189,21 +15199,30 @@ class CircadianScenesPanel extends HTMLElement {
     while (grad.firstChild) {
       grad.removeChild(grad.firstChild);
     }
+    const lightMode = !this.hasAttribute("data-dark-mode");
     const mk = (offset, opacity) => {
       const stop = document.createElementNS(
         "http://www.w3.org/2000/svg",
         "stop"
       );
       stop.setAttribute("offset", offset);
-      stop.setAttribute("stop-color", "#fff");
+      stop.setAttribute("stop-color", lightMode ? "#000" : "#fff");
       stop.setAttribute("stop-opacity", String(opacity));
       grad.appendChild(stop);
     };
     const innerPct = (r0 / r1) * 100;
-    mk("0%", 0);
-    mk(`${innerPct.toFixed(2)}%`, 0);
-    mk(`${Math.min(100, innerPct + (100 - innerPct) * 0.55).toFixed(2)}%`, 0.035);
-    mk("100%", 0.08);
+    // Light mode: gray near 0% (path) so the annulus reads on a pale sky;
+    // 100% is transparent. Dark mode: white wash that strengthens outward.
+    if (lightMode) {
+      mk("0%", 0);
+      mk(`${innerPct.toFixed(2)}%`, 0.05);
+      mk("100%", 0);
+    } else {
+      mk("0%", 0);
+      mk(`${innerPct.toFixed(2)}%`, 0);
+      mk(`${Math.min(100, innerPct + (100 - innerPct) * 0.55).toFixed(2)}%`, 0.035);
+      mk("100%", 0.08);
+    }
     const polar = (seconds, radius) => {
       const deg = this._clockAngleDeg(seconds);
       const rad = ((deg - 90) * Math.PI) / 180;
