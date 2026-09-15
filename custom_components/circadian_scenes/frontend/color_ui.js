@@ -852,11 +852,6 @@ function polylinePathD(pts) {
 
 const GRAPH_DAY_SECONDS = 24 * 3600;
 
-function easeInOutCubic(t) {
-  const x = Math.max(0, Math.min(1, Number(t) || 0));
-  return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
-}
-
 function wrapDaySeconds(seconds) {
   return (
     ((Number(seconds) % GRAPH_DAY_SECONDS) + GRAPH_DAY_SECONDS) %
@@ -878,9 +873,9 @@ function stepsForClockSpan(span) {
 }
 
 /**
- * Closed brightness loop in clock space: seconds (angle) stay linear around
- * the wrap; brightness eases in/out between knots. Do not spline Cartesian
- * button positions — that chords through the dial at dusk→dawn.
+ * Closed brightness loop in clock space: seconds and brightness both lerp
+ * linearly between knots (same as runtime). Sample polar so dusk→dawn follows
+ * the rim instead of a Cartesian chord.
  */
 function polarEaseClosedPathD(knots, pointAt) {
   if (!knots?.length) {
@@ -899,7 +894,7 @@ function polarEaseClosedPathD(knots, pointAt) {
     const steps = stepsForClockSpan(span);
     for (let step = 0; step < steps; step += 1) {
       const t = step / steps;
-      const bri = from.bri + (to.bri - from.bri) * easeInOutCubic(t);
+      const bri = from.bri + (to.bri - from.bri) * t;
       pts.push(pointAt(wrapDaySeconds(a + span * t), bri));
     }
   }

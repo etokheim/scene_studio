@@ -304,6 +304,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._lightView = "dial";
     this._liveEdit = true;
     this._liveEditSidebarHandler = null;
+    this._sidebarLiveEditToggle = null;
     // App-bar Live edit: preview the open circadian scene at the selected clock.
     this._roomPreview = false;
     this._roomPreviewSnapshots = null;
@@ -1125,7 +1126,7 @@ class CircadianScenesPanel extends HTMLElement {
             margin-inline: -24px;
           }
           .clock-hour-label {
-            font-size: 16px;
+            font-size: 32px;
           }
         }
         /* Sunrise/sunset shadow + glow sit behind the planet (back-most).
@@ -1734,7 +1735,7 @@ class CircadianScenesPanel extends HTMLElement {
           transform: translate(-50%, -50%);
           font-family: "Iowan Old Style", "Palatino Linotype", Palatino,
             "Times New Roman", Times, serif;
-          font-size: 16px;
+          font-size: 32px;
           font-weight: 700;
           font-variant-numeric: tabular-nums;
           letter-spacing: 0.02em;
@@ -1750,7 +1751,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         @media (min-width: 871px) {
           .clock-hour-label {
-            font-size: 32px;
+            font-size: 48px;
           }
         }
         .clock-event-layer {
@@ -6484,7 +6485,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._lightView = this._readLightView();
     this._liveEdit = this._readLiveEditPref();
-    // Live preview lives in the light sidebar — clear any stale app-bar switch.
+    // Per-light Live edit lives in the light sidebar — clear any stale app-bar switch.
     this._liveEditSwitch = null;
 
     const previewToggle = document.createElement("label");
@@ -6532,10 +6533,20 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._liveEditSwitch) {
       this._liveEditSwitch.checked = Boolean(this._liveEdit);
     }
+    this._syncSidebarLiveEditToggle();
+  }
+
+  _syncSidebarLiveEditToggle() {
+    const el = this._sidebarLiveEditToggle;
+    if (!el) {
+      return;
+    }
+    el.hidden = this._readRoomPreviewPref();
   }
 
   _syncRoomPreviewControl() {
     if (!this._roomPreviewSwitch) {
+      this._syncSidebarLiveEditToggle();
       return;
     }
     const lightSidebar = this._lightSidebarBlocksScenePreview();
@@ -6543,6 +6554,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._roomPreviewSwitch.checked = lightSidebar
       ? this._readRoomPreviewPref()
       : Boolean(this._roomPreview);
+    this._syncSidebarLiveEditToggle();
   }
 
   _maybeResumeRoomPreview() {
@@ -10690,7 +10702,7 @@ class CircadianScenesPanel extends HTMLElement {
     const liveLabel = document.createElement("span");
     liveLabel.textContent = this._t(
       "frontend.actions.live_preview",
-      "Live preview"
+      "Live edit light"
     );
     const liveSwitch = document.createElement("ha-switch");
     liveSwitch.checked = Boolean(this._liveEdit);
@@ -10699,6 +10711,8 @@ class CircadianScenesPanel extends HTMLElement {
     });
     liveToggle.append(liveLabel, liveSwitch);
     this._liveEditSwitch = liveSwitch;
+    this._sidebarLiveEditToggle = liveToggle;
+    this._syncSidebarLiveEditToggle();
 
     const infoBtn = document.createElement("ha-icon-button");
     infoBtn.label = this._loc(
@@ -10738,6 +10752,9 @@ class CircadianScenesPanel extends HTMLElement {
         }
         if (this._liveEditSwitch === liveSwitch) {
           this._liveEditSwitch = null;
+        }
+        if (this._sidebarLiveEditToggle === liveToggle) {
+          this._sidebarLiveEditToggle = null;
         }
         this._sidebarUndoBtn = null;
         this._sidebarRedoBtn = null;
@@ -16321,7 +16338,7 @@ class CircadianScenesPanel extends HTMLElement {
       // Cardinal numerals sit on the old 6h tick tips (near the face edge).
       // Brightness 0% is the sun path; 100% is path + CLOCK_EVENT_GAP.
       const tickOuterPad = w >= 871 ? 10 : 6;
-      const labelFontPx = w >= 871 ? 32 : 16;
+      const labelFontPx = w >= 871 ? 48 : 32;
       const labelPad = tickOuterPad + labelFontPx * 0.42;
       const narrowFace = window.matchMedia("(max-width: 870px)").matches;
       const chromeFloor = Math.ceil(labelPad + 4);
