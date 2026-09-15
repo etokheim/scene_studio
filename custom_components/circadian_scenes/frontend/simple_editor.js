@@ -7,13 +7,20 @@ import {
 } from "./color_ui.js";
 
 export const SIMPLE_EDITOR_CSS = `
+  /* Same stage column as .sun-light-clock: full width, no extra inset. */
+  .simple-editor-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .simple-editor {
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 100%;
     min-height: 0;
-    padding: 0 16px 48px;
+    padding: 40px 0 16px;
     box-sizing: border-box;
     gap: 16px;
   }
@@ -21,7 +28,7 @@ export const SIMPLE_EDITOR_CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
-    width: min(100%, 86vh, var(--dial-face-max, 86vh));
+    width: min(100%, 650px);
   }
   .simple-wheels .hue-wheel-stage {
     width: 100%;
@@ -33,7 +40,7 @@ export const SIMPLE_EDITOR_CSS = `
     flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
-    width: min(100%, 86vh, var(--dial-face-max, 86vh));
+    width: min(100%, 650px);
   }
   .scene-sidebar .var-palette {
     width: 100%;
@@ -53,7 +60,7 @@ export const SIMPLE_EDITOR_CSS = `
     flex-wrap: wrap;
     justify-content: center;
     gap: 12px 16px;
-    width: min(100%, 86vh, var(--dial-face-max, 86vh));
+    width: min(100%, 650px);
     padding: 8px 0 24px;
     position: relative;
   }

@@ -1704,6 +1704,8 @@ class CircadianScenesPanel extends HTMLElement {
           z-index: 6;
         }
         /* Hourly ticks on the face; 00/06/12/18 are numerals, not ticks.
+           Text-colored (not white) so light-mode sky wash stays readable;
+           surface halo replaces the old black shadow. */
         .clock-face-ticks {
           position: absolute;
           inset: 0;
@@ -1733,7 +1735,7 @@ class CircadianScenesPanel extends HTMLElement {
           font-family: "Iowan Old Style", "Palatino Linotype", Palatino,
             "Times New Roman", Times, serif;
           font-size: 16px;
-          font-weight: 500;
+          font-weight: 700;
           font-variant-numeric: tabular-nums;
           letter-spacing: 0.02em;
           line-height: 1;
@@ -3692,13 +3694,17 @@ class CircadianScenesPanel extends HTMLElement {
           overflow: hidden;
           padding: 0;
         }
-        /* Stage wheel matches the circadian dial face budget. Sidebar wheels
-           stay at 320px. */
+        /* Stage wheel: circadian simple editor caps below; sidebar stays 320px. */
         .stage-col .hue-wheel-stage {
           width: min(100%, 86vh, var(--dial-face-max, 86vh));
           max-width: min(100%, 86vh, var(--dial-face-max, 86vh));
           margin: 0 auto;
           padding: 40px 0 16px;
+        }
+        .stage-col .simple-editor .hue-wheel-stage {
+          width: 100%;
+          max-width: none;
+          padding: 0;
         }
         .stage-col .hue-wheel-canvas {
           width: 100%;
@@ -9205,6 +9211,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._formData.kind === "simple") {
       this._parkSunPath();
       const host = document.createElement("div");
+      host.className = "simple-editor-host";
       if (this._narrow) {
         this._contentEl.classList.remove("workspace-split");
         this._contentEl.replaceChildren(host);
