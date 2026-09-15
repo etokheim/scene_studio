@@ -239,8 +239,13 @@ export const LANDING_CSS = `
     width: 72px;
     height: 72px;
     border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.2);
+    border: 0;
     cursor: pointer;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 118% 118%;
   }
   .theme-chip {
     display: flex;
@@ -406,11 +411,11 @@ export function themeConic(theme, variables) {
     }
     return variableSwatchCss({ color, brightness });
   });
-  const slice = 100 / colors.length;
-  const stops = colors
-    .map((c, i) => `${c} ${i * slice}% ${(i + 1) * slice}%`)
-    .join(", ");
-  return `conic-gradient(${stops})`;
+  const [dawn, sunrise, noon, sunset, dusk] = colors;
+  // from 180deg: midnight at the bottom, noon at the top (same as the dial).
+  // Place knots on the clock, not in equal pie slices, so dusk→dawn fills the
+  // night arc out to the rim instead of leaving a dawn wedge on midnight.
+  return `conic-gradient(from 180deg, ${dusk} 0%, ${dawn} 23%, ${sunrise} 27%, ${noon} 50%, ${sunset} 79%, ${dusk} 87%, ${dusk} 100%)`;
 }
 
 function iconButton(iconName, label) {

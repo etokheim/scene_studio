@@ -3067,6 +3067,9 @@ class CircadianScenesPanel extends HTMLElement {
           cursor: pointer;
           user-select: none;
         }
+        .live-edit-toggle[hidden] {
+          display: none !important;
+        }
         .live-edit-toggle ha-switch {
           --mdc-switch-track-width: 36px;
         }
@@ -6545,24 +6548,14 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _syncRoomPreviewControl() {
-    if (!this._roomPreviewSwitch) {
-      this._syncSidebarLiveEditToggle();
-      return;
+    if (this._roomPreviewSwitch) {
+      this._roomPreviewSwitch.checked = Boolean(this._roomPreview);
     }
-    const lightSidebar = this._lightSidebarBlocksScenePreview();
-    this._roomPreviewSwitch.disabled = lightSidebar;
-    this._roomPreviewSwitch.checked = lightSidebar
-      ? this._readRoomPreviewPref()
-      : Boolean(this._roomPreview);
     this._syncSidebarLiveEditToggle();
   }
 
   _maybeResumeRoomPreview() {
-    if (
-      this._view !== "edit" ||
-      this._lightSidebarBlocksScenePreview() ||
-      !this._readRoomPreviewPref()
-    ) {
+    if (this._view !== "edit" || !this._readRoomPreviewPref()) {
       this._syncRoomPreviewControl();
       return;
     }
@@ -6570,11 +6563,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _resumeRoomPreviewIfPreferred() {
-    if (
-      this._view !== "edit" ||
-      this._lightSidebarBlocksScenePreview() ||
-      !this._readRoomPreviewPref()
-    ) {
+    if (this._view !== "edit" || !this._readRoomPreviewPref()) {
       return;
     }
     if (!this._roomPreview) {
@@ -9562,11 +9551,6 @@ class CircadianScenesPanel extends HTMLElement {
       }
       this._setEventScene(event.id, data.scene, canLink ? data.linked : false);
     };
-    const roomPreviewWasOn = this._roomPreview;
-    if (roomPreviewWasOn) {
-      await this._stopRoomPreview({ restore: true });
-      this._syncRoomPreviewControl();
-    }
     const opened = await this._openSceneSidebar({
       title: event.name,
       className: "event-dialog",
@@ -10039,9 +10023,8 @@ class CircadianScenesPanel extends HTMLElement {
     );
   }
 
-  _lightSidebarBlocksScenePreview() {
-    const id = this._sidebarLightId;
-    return Boolean(id && String(id).startsWith("light."));
+  _perLightLiveEditOn() {
+    return Boolean(this._liveEdit) && !this._readRoomPreviewPref();
   }
 
   _scenePlayActive() {
@@ -10051,7 +10034,6 @@ class CircadianScenesPanel extends HTMLElement {
   _scenePreviewWantsApply() {
     return (
       this._view === "edit" &&
-      !this._lightSidebarBlocksScenePreview() &&
       Boolean(this._sunPath?.lights?.length) &&
       (this._roomPreview || this._scenePlayActive())
     );
@@ -10148,10 +10130,6 @@ class CircadianScenesPanel extends HTMLElement {
 
   async _setRoomPreview(on) {
     const next = Boolean(on);
-    if (next && this._lightSidebarBlocksScenePreview()) {
-      this._syncRoomPreviewControl();
-      return;
-    }
     this._writeRoomPreviewPref(next);
     if (this._roomPreview === next) {
       this._syncRoomPreviewControl();
@@ -10273,7 +10251,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _startScenePlay() {
-    if (!this._canPlayScenePreview() || this._lightSidebarBlocksScenePreview()) {
+    if (!this._canPlayScenePreview()) {
       return;
     }
     this._cancelClockSunArc();
@@ -10628,10 +10606,14 @@ class CircadianScenesPanel extends HTMLElement {
       this._saveSoon();
     };
     const restoreLive = async () => {
-      if (liveApplied) {
-        await this._applyLightState(light.entity_id, snapshot);
-        liveApplied = false;
+      if (!liveApplied) {
+        return;
       }
+      liveApplied = false;
+      if (this._roomPreview || this._readRoomPreviewPref()) {
+        return;
+      }
+      await this._applyLightState(light.entity_id, snapshot);
     };
     // Dragging floods pointermove → service calls. Cap live updates and match
     // HA transition length so the lamp blends between samples (same pattern as
@@ -10641,7 +10623,7 @@ class CircadianScenesPanel extends HTMLElement {
     let liveTimer = null;
     let livePending = false;
     const flushLive = async ({ transitionSec = 0 } = {}) => {
-      if (!this._liveEdit) {
+      if (!this._perLightLiveEditOn()) {
         return;
       }
       livePending = false;
@@ -10652,7 +10634,7 @@ class CircadianScenesPanel extends HTMLElement {
       });
     };
     const scheduleLive = async ({ dragging = false } = {}) => {
-      if (!this._liveEdit) {
+      if (!this._perLightLiveEditOn()) {
         return;
       }
       if (!dragging) {
@@ -10735,11 +10717,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
     };
 
-    const roomPreviewWasOn = this._roomPreview;
-    if (roomPreviewWasOn) {
-      await this._stopRoomPreview({ restore: true });
-      this._syncRoomPreviewControl();
-    }
+    this._syncRoomPreviewControl();
 
     const opened = await this._openSceneSidebar({
       title: light.name,
@@ -10955,7 +10933,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       wheelCtl?.sync();
       syncEffectControl();
-      if (this._liveEdit) {
+      if (this._perLightLiveEditOn()) {
         await applyLive();
       }
     };
@@ -11263,15 +11241,21 @@ class CircadianScenesPanel extends HTMLElement {
 
     const bar = document.createElement("div");
     bar.className = "sidebar-actions-bar";
-    const undo = this._undoRedoButton("undo");
-    const redo = this._undoRedoButton("redo");
-    undo.id = "sidebar-button-undo";
-    redo.id = "sidebar-button-redo";
-    bar.append(undo, redo, liveToggle, activateBtn);
+    if (this._narrow) {
+      const undo = this._undoRedoButton("undo");
+      const redo = this._undoRedoButton("redo");
+      undo.id = "sidebar-button-undo";
+      redo.id = "sidebar-button-redo";
+      bar.append(undo, redo, liveToggle, activateBtn);
+      this._sidebarUndoBtn = undo;
+      this._sidebarRedoBtn = redo;
+    } else {
+      bar.append(liveToggle, activateBtn);
+      this._sidebarUndoBtn = null;
+      this._sidebarRedoBtn = null;
+    }
     footer.append(bar);
     this._syncDuskMinimumSlot(duskSlot, currentEvent.id);
-    this._sidebarUndoBtn = undo;
-    this._sidebarRedoBtn = redo;
     this._syncUndoButtons();
 
     host._switchLightEvent = async (next) => {
@@ -11282,7 +11266,7 @@ class CircadianScenesPanel extends HTMLElement {
     brightnessGraphCtl?.sync();
     wheelCtl?.sync();
     this._syncRoomPreviewControl();
-    if (this._liveEdit) {
+    if (this._perLightLiveEditOn()) {
       await applyLive();
     }
   }
