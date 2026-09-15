@@ -114,13 +114,13 @@ const CLOCK_SUN_SCALE_MAX = 2;
 /* Handle tip radius in the dial-core viewBox (path-adjacent). Face chrome
    carries the hour ticks + numbers; solar-event buttons track the sun path. */
 const CLOCK_TICK_OUTER = 94;
-const CLOCK_TICK_MAJOR_LEN = 5;
 const CLOCK_TICK_MINOR_LEN = 3;
 /* Desktop px from sun-path radius to event-button center at 100% brightness.
    0% sits on the sun path; the same pixel span is the drag range on mobile
    (buttons leave the path when brightness > 0). Screen pixels so a narrower
-   viewport does not eat the margin. Seasonal path radius still moves the 0% ring. */
-const CLOCK_EVENT_GAP_FROM_PATH_PX = 56;
+   viewport does not eat the margin. Seasonal path radius still moves the 0% ring.
+   Cardinal hour numerals replaced the 6h ticks, so this gap is wider (92px). */
+const CLOCK_EVENT_GAP_FROM_PATH_PX = 92;
 const CLOCK_EVENT_BRIGHT_DRAG_PX = 10;
 const CLOCK_BRIGHT_MOVE_MS = 400;
 /* Fallback override radius until layout maps face tick tips into core space. */
@@ -317,6 +317,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._scenePlayBtn = null;
     this._scenePlayMain = null;
     this._scenePlayMenu = null;
+    this._clockOverrideArcSweep = null;
     this._loadGeneration = 0;
     this._previewGeneration = 0;
     this._hashSyncing = false;
@@ -1124,7 +1125,7 @@ class CircadianScenesPanel extends HTMLElement {
             margin-inline: -24px;
           }
           .clock-hour-label {
-            display: none;
+            font-size: 16px;
           }
         }
         /* Sunrise/sunset shadow + glow sit behind the planet (back-most).
@@ -1702,9 +1703,7 @@ class CircadianScenesPanel extends HTMLElement {
           /* Below rings so an oversized night sun does not steal planet clicks. */
           z-index: 6;
         }
-        /* Hourly ticks on the face (with hour numbers); majors every 6h.
-           Text-colored (not white) so light-mode sky wash stays readable;
-           surface halo replaces the old black shadow. */
+        /* Hourly ticks on the face; 00/06/12/18 are numerals, not ticks.
         .clock-face-ticks {
           position: absolute;
           inset: 0;
@@ -1727,18 +1726,18 @@ class CircadianScenesPanel extends HTMLElement {
           vector-effect: non-scaling-stroke;
           stroke-linecap: round;
         }
-        .clock-face-ticks .clock-tick.major {
-          stroke: color-mix(in srgb, var(--primary-text-color) 42%, transparent);
-          stroke-width: 6px;
-        }
-        /* HTML hour labels on the face, just inside the tick tips. */
+        /* Cardinal hour numerals sit on the old 6h tick tips (serif, not HA UI). */
         .clock-hour-label {
           position: absolute;
           transform: translate(-50%, -50%);
+          font-family: "Iowan Old Style", "Palatino Linotype", Palatino,
+            "Times New Roman", Times, serif;
           font-size: 16px;
+          font-weight: 500;
           font-variant-numeric: tabular-nums;
+          letter-spacing: 0.02em;
           line-height: 1;
-          color: color-mix(in srgb, var(--primary-text-color) 48%, transparent);
+          color: color-mix(in srgb, var(--primary-text-color) 52%, transparent);
           pointer-events: none;
           z-index: 7;
           text-shadow:
@@ -3463,10 +3462,15 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-hover-reset ha-icon {
           --mdc-icon-size: 18px;
         }
-        /* Keep the menu host as one flex child so items do not join the pill. */
-        .sun-hover-play-split .sun-hover-play-menu {
+        .sun-hover-play-more-wrap {
           display: flex;
           align-items: stretch;
+          pointer-events: auto;
+        }
+        .sun-hover-play-split ha-dropdown {
+          display: flex;
+          align-items: stretch;
+          pointer-events: auto;
         }
         .sun-hover-reset {
           display: inline-grid;
@@ -10328,15 +10332,15 @@ class CircadianScenesPanel extends HTMLElement {
 
     const menu = document.createElement("ha-dropdown");
     menu.className = "sun-hover-play-menu";
-    menu.activatable = true;
     if ("placement" in menu) {
       menu.placement = "bottom-end";
     }
+    const moreWrap = document.createElement("div");
+    moreWrap.className = "sun-hover-play-more-wrap";
     const more = document.createElement("button");
     more.type = "button";
     more.slot = "trigger";
     more.className = "sun-hover-play-more";
-    more.addEventListener("click", (ev) => ev.stopPropagation());
     const chevron = document.createElement("ha-icon");
     chevron.setAttribute("icon", "mdi:menu-down");
     more.appendChild(chevron);
@@ -10364,7 +10368,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._syncScenePlayButton();
     });
 
-    host.append(main, menu);
+    moreWrap.appendChild(menu);
+    host.append(main, moreWrap);
     this._scenePlayBtn = host;
     this._scenePlayMain = main;
     this._scenePlayMenu = menu;
@@ -10381,7 +10386,7 @@ class CircadianScenesPanel extends HTMLElement {
     const playing = this._scenePlayActive();
     const label = playing
       ? this._t("frontend.actions.stop_preview", "Stop")
-      : this._t("frontend.actions.play_scene", "Play scene");
+      : this._t("frontend.actions.play_scene", "Play scene live");
     const duration = this._readScenePlayDurationSec();
     main.title = label;
     main.setAttribute("aria-label", label);
@@ -13702,6 +13707,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._stopScenePlay({ restore: !this._roomPreview });
     }
     this._clockStickySeconds = undefined;
+    this._clockOverrideArcSweep = null;
     this._clockSunDragging = false;
     this._hoverSeconds = undefined;
     this._clockSunLive = false;
@@ -13851,6 +13857,13 @@ class CircadianScenesPanel extends HTMLElement {
       d -= SECONDS_PER_DAY;
     }
     return d;
+  }
+
+  /** Clockwise seconds from `from` to `to` on the 24h circle (0..86400). */
+  _clockwiseSecondsDelta(from, to) {
+    return (
+      (((to - from) % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY
+    );
   }
 
   _cancelClockSunArc() {
@@ -14248,23 +14261,31 @@ class CircadianScenesPanel extends HTMLElement {
     if (overrideSeconds == null) {
       glow.setAttribute("visibility", "hidden");
       arc.setAttribute("visibility", "hidden");
+      this._clockOverrideArcSweep = null;
       return;
     }
     const now = nowSecondsSinceMidnight();
-    const delta = this._shortestSecondsDelta(now, overrideSeconds);
-    if (Math.abs(delta) < 45) {
+    const cw = this._clockwiseSecondsDelta(now, overrideSeconds);
+    const ccw = (SECONDS_PER_DAY - cw) % SECONDS_PER_DAY;
+    if (Math.min(cw, ccw) < 45) {
       glow.setAttribute("visibility", "hidden");
       arc.setAttribute("visibility", "hidden");
+      this._clockOverrideArcSweep = null;
       return;
     }
+    // Keep the sweep that was already growing so the wedge does not flip
+    // to the short arc at 12h (play / long sun drags wrap past halfway).
+    let sweep = this._clockOverrideArcSweep;
+    if (sweep !== 0 && sweep !== 1) {
+      sweep = cw <= ccw ? 1 : 0;
+    }
+    this._clockOverrideArcSweep = sweep;
     const r = this._clockOverrideR ?? CLOCK_OVERRIDE_R;
     glow.setAttribute("r", String(r));
     const start = this._clockPolar(now, r);
     const end = this._clockPolar(overrideSeconds, r);
-    const absSpan = Math.abs(delta);
+    const absSpan = sweep === 1 ? cw : ccw;
     const large = absSpan / SECONDS_PER_DAY > 0.5 ? 1 : 0;
-    // Time increases clockwise on this dial; negative delta sweeps the other way.
-    const sweep = delta >= 0 ? 1 : 0;
     const arcD = `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${large} ${sweep} ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
     const wedgeD = `M ${CLOCK_CX} ${CLOCK_CY} L ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${large} ${sweep} ${end.x.toFixed(2)} ${end.y.toFixed(2)} Z`;
     arc.setAttribute("d", arcD);
@@ -16109,16 +16130,17 @@ class CircadianScenesPanel extends HTMLElement {
       const major = hour % 6 === 0;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
-      const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      tick.setAttribute("class", major ? "clock-tick major" : "clock-tick");
-      faceTicks.appendChild(tick);
-      faceTickLines.push({
-        el: tick,
-        cos,
-        sin,
-        len: major ? CLOCK_TICK_MAJOR_LEN : CLOCK_TICK_MINOR_LEN,
-      });
-      if (major) {
+      if (!major) {
+        const tick = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        tick.setAttribute("class", "clock-tick");
+        faceTicks.appendChild(tick);
+        faceTickLines.push({
+          el: tick,
+          cos,
+          sin,
+          len: CLOCK_TICK_MINOR_LEN,
+        });
+      } else {
         const label = document.createElement("div");
         label.className = "clock-hour-label";
         label.textContent = hour === 0 ? "24" : String(hour).padStart(2, "0");
@@ -16289,20 +16311,13 @@ class CircadianScenesPanel extends HTMLElement {
       if (!w) {
         return;
       }
-      // Face chrome: tick tips near the edge, hour numbers just inside the
-      // ticks. Brightness 0% is the sun path; 100% is path + CLOCK_EVENT_GAP.
+      // Cardinal numerals sit on the old 6h tick tips (near the face edge).
+      // Brightness 0% is the sun path; 100% is path + CLOCK_EVENT_GAP.
       const tickOuterPad = w >= 871 ? 10 : 6;
       const labelFontPx = w >= 871 ? 32 : 16;
-      // Past major tick length + ~half glyph + air so digits do not sit on ticks.
-      const labelInsetPx =
-        (CLOCK_TICK_MAJOR_LEN / 100) * (w / 2) + labelFontPx * 0.55 + 4 + 18;
-      const labelPad = tickOuterPad + labelInsetPx;
+      const labelPad = tickOuterPad + labelFontPx * 0.42;
       const narrowFace = window.matchMedia("(max-width: 870px)").matches;
-      const chromeFloor = narrowFace
-        ? Math.ceil(
-            tickOuterPad + (CLOCK_TICK_MAJOR_LEN / 100) * (w / 2) + 2
-          )
-        : Math.ceil(labelPad + 4);
+      const chromeFloor = Math.ceil(labelPad + 4);
       let chromePx = narrowFace
         ? chromeFloor
         : Math.max(CLOCK_CHROME_PX, chromeFloor);
