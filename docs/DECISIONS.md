@@ -708,6 +708,20 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Recreating the rail DOM was jumping the picker; the editor column is a new document. Restoring immediately after `replaceChildren` ran before workspace height settled, so the browser clamped `scrollTop` and the scroll listener saved the clamped value.
 - **Do not reverse without user ask.**
 
+## Palette rail chips are overlapping hue-presets
+
+- **Date:** 2026-09-16
+- **Decision:** Area-rail palettes are five overlapping slot discs in a `.hue-presets`-style capsule (48px min-height, 8px pad, 24px radius, `0px 2px 3px` shadow, `--surface-2`), not a single conic `palette-dot`. Slot colors come from `resolveSlot` + `variableSwatchCss`.
+- **Why:** Palettes are five colors; a striped disk hid that. The wheel already uses the hue-presets capsule.
+- **Do not reverse without user ask.**
+
+## Re-render when HA `narrow` changes
+
+- **Date:** 2026-09-16
+- **Decision:** When Home Assistant sets the panel `narrow` property (sidebar overlay / mobile), `_render()` so the workspace remounts: rail-only + header back on narrow editors, rail+stage on wide. Do not only update app-bar flags.
+- **Why:** `renderLanding` / `_renderEditor` branch on `_narrow`. Resize without a remount left the desktop tree until a full reload.
+- **Do not reverse without user ask.**
+
 ## Palette editor is wheel + Lys slots
 
 - **Date:** 2026-09-16

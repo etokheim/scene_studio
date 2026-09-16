@@ -2,7 +2,7 @@
 
 import { createSimpleCardMesh } from "./card_mesh.js";
 import { swatchRgb, variableSwatchCss } from "./color_ui.js";
-import { paletteSwatchCss, resolveSlot, variableIsPalette } from "./palette.js";
+import { PALETTE_SLOT_COUNT, resolveSlot, variableIsPalette } from "./palette.js";
 
 const AREA_RAIL_PX = 340;
 
@@ -276,10 +276,39 @@ export const LANDING_CSS = `
     color: var(--primary-text-color);
     font-weight: 600;
   }
-  .var-dot.palette-dot {
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: cover;
+  /* Same capsule chrome as .hue-presets; five overlapping slot discs. */
+  .palette-swatch {
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    min-height: 48px;
+    padding: 8px;
+    min-width: 0;
+    width: max-content;
+    max-width: 100%;
+    border-radius: 24px;
+    box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
+    background: var(--surface-2, var(--secondary-background-color, #242022));
+    overflow: hidden;
+  }
+  .var-chip.selected .palette-swatch {
+    box-shadow:
+      inset 0 0 0 2px var(--primary-color),
+      0px 2px 3px rgba(0, 0, 0, 0.4);
+  }
+  .palette-slot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    position: relative;
+    box-sizing: border-box;
+  }
+  .palette-slot + .palette-slot {
+    margin-left: -12px;
   }
   .theme-dial {
     width: 72px;
@@ -819,12 +848,22 @@ function renderLibrary(panel, { compact } = {}) {
     if (panel._view === "palette" && panel._variableId === palette.id) {
       chip.classList.add("selected");
     }
-    const dot = document.createElement("div");
-    dot.className = "var-dot palette-dot";
-    dot.style.background = paletteSwatchCss(palette, panel._variables);
+    const swatch = document.createElement("div");
+    swatch.className = "palette-swatch";
+    for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
+      const slot = resolveSlot(palette, i, panel._variables);
+      const disc = document.createElement("span");
+      disc.className = "palette-slot";
+      disc.style.zIndex = String(i + 1);
+      disc.style.background = variableSwatchCss(
+        { color: slot, brightness: slot.brightness, kind: "color" },
+        panel._variables
+      );
+      swatch.appendChild(disc);
+    }
     const name = document.createElement("span");
     name.textContent = palette.name;
-    chip.append(dot, name);
+    chip.append(swatch, name);
     chip.addEventListener("click", () => panel._openPaletteEditor(palette));
     palRow.appendChild(chip);
   }

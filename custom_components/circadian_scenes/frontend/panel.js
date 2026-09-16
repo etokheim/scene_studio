@@ -388,25 +388,27 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
+  get narrow() {
+    return Boolean(this._narrow);
+  }
+
   set narrow(value) {
-    this._narrow = value;
+    const next = Boolean(value);
+    const changed = next !== Boolean(this._narrow);
+    this._narrow = next;
     if (this._appBar) {
-      this._appBar.narrow = Boolean(value);
+      this._appBar.narrow = next;
     }
     if (this._menuButtonEl) {
-      this._menuButtonEl.narrow = Boolean(value);
+      this._menuButtonEl.narrow = next;
     }
-    if (this._built) {
-      this._syncAppBarTitle();
-      if (this._view === "edit" || this._view === "theme" || this._view === "list") {
-        if (this._view === "edit") {
-          this._setEditorActions();
-        } else if (this._view === "theme") {
-          this._setEditorActions();
-        } else {
-          this._setListActions();
-        }
-      }
+    if (this._built && changed) {
+      // Landing and editors mount rail vs stage from `_narrow`; the back
+      // button is the nav icon. HA updates this property on resize, but a
+      // title/action refresh alone leaves the previous desktop/mobile tree.
+      this._render();
+      this._syncWorkspaceScrollport();
+      this._syncYearScrubLayout();
     }
   }
 
