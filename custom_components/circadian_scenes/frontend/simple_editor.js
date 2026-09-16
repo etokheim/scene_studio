@@ -48,7 +48,7 @@ export const SIMPLE_EDITOR_CSS = `
     min-width: 0;
     box-sizing: border-box;
     /* Keep .hue-wheel-chrome (mode pill + presets) off the Lys strip. */
-    padding-bottom: 88px;
+    padding-bottom: 24px;
   }
   .simple-wheels .hue-wheel-stage {
     width: min(100%, 650px, var(--dial-face-max, 650px));

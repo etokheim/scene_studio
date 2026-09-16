@@ -704,8 +704,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Area rail keeps scroll; stage resets
 
 - **Date:** 2026-09-16
-- **Decision:** Re-rendering the workspace (selecting another scene, variable, palette, or theme) restores `.area-rail` `scrollTop`. `.stage-scroll` resets to the top so the new editor starts at its face.
-- **Why:** Recreating the rail DOM was jumping the picker; the editor column is a new document.
+- **Decision:** Re-rendering the workspace (selecting another scene, variable, palette, or theme) restores `.area-rail` `scrollTop` **after** the workspace height is applied, and ignores scroll events during that restore (a too-tall rail would clamp `scrollTop` and overwrite the saved value). `.stage-scroll` resets to the top so the new editor starts at its face. The rail still remounts with the landing tree (selected/glow state); do not treat a small jump as “reset to 0”.
+- **Why:** Recreating the rail DOM was jumping the picker; the editor column is a new document. Restoring immediately after `replaceChildren` ran before workspace height settled, so the browser clamped `scrollTop` and the scroll listener saved the clamped value.
 - **Do not reverse without user ask.**
 
 ## Palette editor is wheel + Lys slots

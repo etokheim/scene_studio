@@ -2836,11 +2836,13 @@ class CircadianScenesPanel extends HTMLElement {
           padding: 8px;
           gap: 8px;
           min-width: 0;
+          width: max-content;
+          max-width: 100%;
           border-radius: 24px;
           box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
           background: var(--surface-2, var(--secondary-background-color, #242022));
           position: relative;
-          flex: 1 1 auto;
+          flex: 0 1 auto;
           justify-content: flex-end;
           overflow: hidden;
         }
@@ -2850,7 +2852,8 @@ class CircadianScenesPanel extends HTMLElement {
           align-items: center;
           gap: 8px;
           min-width: 0;
-          width: 100%;
+          width: max-content;
+          max-width: 100%;
           overflow-x: auto;
           overflow-y: hidden;
         }
@@ -4847,6 +4850,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._syncEditorChrome();
     requestAnimationFrame(() => {
+      this._restoreAreaRailScroll(workspace?.querySelector(".area-rail"));
       this._syncStageFaceMax();
       this._layoutDialChromeFn?.();
     });
@@ -4854,9 +4858,25 @@ class CircadianScenesPanel extends HTMLElement {
 
   _captureAreaRailScroll() {
     const rail = this._contentEl?.querySelector(".area-rail");
-    if (rail) {
+    if (rail && !this._areaRailRestoring) {
       this._areaRailScrollTop = rail.scrollTop;
     }
+  }
+
+  _restoreAreaRailScroll(rail) {
+    if (!rail) {
+      return;
+    }
+    const top = this._areaRailScrollTop || 0;
+    this._areaRailRestoring = true;
+    rail.scrollTop = top;
+    requestAnimationFrame(() => {
+      rail.scrollTop = top;
+      requestAnimationFrame(() => {
+        rail.scrollTop = top;
+        this._areaRailRestoring = false;
+      });
+    });
   }
 
   _bindAreaRailScroll(rail) {
@@ -4864,18 +4884,21 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     if (this._areaRailBound === rail) {
-      rail.scrollTop = this._areaRailScrollTop || 0;
+      this._restoreAreaRailScroll(rail);
       return;
     }
     if (this._areaRailBound && this._onAreaRailScroll) {
       this._areaRailBound.removeEventListener("scroll", this._onAreaRailScroll);
     }
     this._onAreaRailScroll = () => {
+      if (this._areaRailRestoring) {
+        return;
+      }
       this._areaRailScrollTop = rail.scrollTop;
     };
     this._areaRailBound = rail;
     rail.addEventListener("scroll", this._onAreaRailScroll, { passive: true });
-    rail.scrollTop = this._areaRailScrollTop || 0;
+    this._restoreAreaRailScroll(rail);
   }
 
   _mountWorkspacePage(page, { resetStageScroll = true } = {}) {
@@ -13797,6 +13820,11 @@ class CircadianScenesPanel extends HTMLElement {
       // Time + date chips stay in the stage toolbar (full column). The rail
       // only holds the date label and year slider beside the face.
       const chrome = this._ensureToolbarChrome();
+      [...chrome.querySelectorAll(".sun-hover-readout")].forEach((el) => {
+        if (el !== this._hoverReadout) {
+          el.remove();
+        }
+      });
       if (this._hoverReadout && this._hoverReadout.parentNode !== chrome) {
         chrome.appendChild(this._hoverReadout);
       }
@@ -13829,6 +13857,11 @@ class CircadianScenesPanel extends HTMLElement {
         // Portrait dial: time/sun + chips in one wrapping chrome row; date +
         // year scrub below (in-flow so the timeline pushes the dial down).
         const chrome = this._ensureToolbarChrome();
+        [...chrome.querySelectorAll(".sun-hover-readout")].forEach((el) => {
+          if (el !== this._hoverReadout) {
+            el.remove();
+          }
+        });
         if (this._hoverReadout && this._hoverReadout.parentNode !== chrome) {
           chrome.appendChild(this._hoverReadout);
         }
@@ -14186,10 +14219,15 @@ class CircadianScenesPanel extends HTMLElement {
       hours.appendChild(span);
     }
 
-    const readout = document.createElement("div");
-    readout.className = "sun-hover-readout";
-    readout.setAttribute("aria-live", "polite");
-    this._hoverReadout = readout;
+    let readout = this._hoverReadout;
+    if (!readout) {
+      readout = document.createElement("div");
+      readout.className = "sun-hover-readout";
+      readout.setAttribute("aria-live", "polite");
+      this._hoverReadout = readout;
+    }
+    // Reuse this node: .sun-toolbar-chrome outlives each _drawSunPath, so a
+    // new readout would stack Now/Sun° labels when switching circadian scenes.
 
     const plots = document.createElement("div");
     plots.className = "sun-plots";
@@ -14251,8 +14289,8 @@ class CircadianScenesPanel extends HTMLElement {
       );
       children.push(note);
     }
-    children.push(readout);
     if (!useClock) {
+      children.push(readout);
       children.push(plots);
     }
     if (clockEl) {
