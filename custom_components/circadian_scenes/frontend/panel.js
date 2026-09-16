@@ -2638,24 +2638,6 @@ class CircadianScenesPanel extends HTMLElement {
         .wheel-palette-randomize[hidden] {
           display: none !important;
         }
-        .palette-kind-row {
-          display: flex;
-          gap: 8px;
-          margin: 8px 0;
-        }
-        .palette-kind-row button {
-          flex: 1;
-          padding: 8px 12px;
-          border-radius: 8px;
-          border: 1px solid var(--divider-color);
-          background: transparent;
-          color: var(--primary-text-color);
-          cursor: pointer;
-        }
-        .palette-kind-row button.active {
-          border-color: var(--primary-color);
-          background: color-mix(in srgb, var(--primary-color) 18%, transparent);
-        }
         .library-editor {
           box-sizing: border-box;
           width: 100%;
@@ -4359,6 +4341,11 @@ class CircadianScenesPanel extends HTMLElement {
     void this._go("");
   }
 
+  _libraryItemHash() {
+    const prefix = this._view === "palette" ? "palette" : "variable";
+    return this._variableId ? `${prefix}/${this._variableId}` : `${prefix}/new`;
+  }
+
   _currentHash() {
     if (this._view === "edit") {
       return this._editId ? `edit/${this._editId}` : "new";
@@ -4366,8 +4353,8 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._view === "theme") {
       return this._themeId ? `theme/${this._themeId}` : "theme/new";
     }
-    if (this._view === "variable") {
-      return this._variableId ? `variable/${this._variableId}` : "variable/new";
+    if (this._view === "variable" || this._view === "palette") {
+      return this._libraryItemHash();
     }
     if (this._view === "variables") {
       return "variables";
@@ -4478,6 +4465,19 @@ class CircadianScenesPanel extends HTMLElement {
       this._loadTheme(themeMatch[1]);
       return;
     }
+    const paletteMatch = hash.match(/^palette\/(.+)$/);
+    if (paletteMatch) {
+      this._view = "palette";
+      this._editId = null;
+      this._themeId = null;
+      this._themeDraft = null;
+      this._variableId = paletteMatch[1] === "new" ? null : paletteMatch[1];
+      this._entityId = null;
+      this._error = null;
+      void this._abandonScenePreview();
+      this._loadVariable(paletteMatch[1]);
+      return;
+    }
     const variableMatch = hash.match(/^variable\/(.+)$/);
     if (variableMatch) {
       this._view = "variable";
@@ -4531,7 +4531,7 @@ class CircadianScenesPanel extends HTMLElement {
       sceneId:
         this._view === "theme"
           ? this._themeId
-          : this._view === "variable"
+          : this._view === "variable" || this._view === "palette"
             ? this._variableId
             : this._editId,
     };
@@ -4545,7 +4545,7 @@ class CircadianScenesPanel extends HTMLElement {
       sceneId:
         this._view === "theme"
           ? this._themeId
-          : this._view === "variable"
+          : this._view === "variable" || this._view === "palette"
             ? this._variableId
             : this._editId,
     });
@@ -4617,7 +4617,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._renderThemeEditor();
       return;
     }
-    if (this._view === "variable") {
+    if (this._view === "variable" || this._view === "palette") {
       this._renderVariableEditor();
     }
   }
@@ -4723,7 +4723,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._renderEditor();
     } else if (this._view === "theme") {
       this._renderThemeEditor();
-    } else if (this._view === "variable") {
+    } else if (this._view === "variable" || this._view === "palette") {
       this._renderVariableEditor();
     } else {
       this._renderList();
@@ -5129,12 +5129,29 @@ class CircadianScenesPanel extends HTMLElement {
     this._go("variable/new");
   }
 
+  _openCreatePaletteDialog() {
+    this._pendingVariableFromDraft = null;
+    this._go("palette/new");
+  }
+
   _openVariableEditor(variable) {
     if (variable?.id) {
-      this._go(`variable/${variable.id}`);
+      this._go(
+        variableIsPalette(variable)
+          ? `palette/${variable.id}`
+          : `variable/${variable.id}`
+      );
       return;
     }
     this._go("variable/new");
+  }
+
+  _openPaletteEditor(palette) {
+    if (palette?.id) {
+      this._go(`palette/${palette.id}`);
+      return;
+    }
+    this._go("palette/new");
   }
 
   _openCreateThemeDialog() {
@@ -5142,7 +5159,17 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _variableWorkingCopy(variable) {
+    const paletteEditor = this._view === "palette";
     if (!variable) {
+      if (paletteEditor) {
+        this._pendingVariableFromDraft = null;
+        return {
+          kind: "palette",
+          name: "",
+          colorDraft: this._variableEditorDraft(null),
+          slots: defaultPaletteSlots(),
+        };
+      }
       const from = this._pendingVariableFromDraft;
       this._pendingVariableFromDraft = null;
       const colorDraft = from
@@ -5160,13 +5187,30 @@ class CircadianScenesPanel extends HTMLElement {
       };
     }
     return {
-      kind: variableIsPalette(variable) ? "palette" : "color",
+      kind: paletteEditor || variableIsPalette(variable) ? "palette" : "color",
       name: variable.name || "",
       colorDraft: this._variableEditorDraft(variable),
       slots: variableIsPalette(variable)
         ? structuredClone(variable.slots || defaultPaletteSlots())
         : defaultPaletteSlots(),
     };
+  }
+
+  _canonicalLibraryHash(item) {
+    const prefix = variableIsPalette(item) ? "palette" : "variable";
+    return `${prefix}/${item.id}`;
+  }
+
+  _alignLibraryView(item) {
+    const want = variableIsPalette(item) ? "palette" : "variable";
+    if (this._view === want) {
+      return;
+    }
+    this._view = want;
+    const hash = this._canonicalLibraryHash(item);
+    if (this._currentHash() !== hash) {
+      history.replaceState(null, "", this._hashHref(hash));
+    }
   }
 
   async _loadVariable(variableId) {
@@ -5190,10 +5234,11 @@ class CircadianScenesPanel extends HTMLElement {
       }
       const variable = (this._variables || []).find((item) => item.id === variableId);
       if (!variable) {
-        this._error = this._t(
-          "frontend.library.variable_missing",
-          "Variable not found"
-        );
+        const missing =
+          this._view === "palette"
+            ? this._t("frontend.library.palette_missing", "Palette not found")
+            : this._t("frontend.library.variable_missing", "Variable not found");
+        this._error = missing;
         this._view = "list";
         this._variableId = null;
         this._variableDraft = null;
@@ -5201,8 +5246,11 @@ class CircadianScenesPanel extends HTMLElement {
         return;
       }
       this._variableId = variable.id;
+      this._alignLibraryView(variable);
       this._variableDraft = this._variableWorkingCopy(variable);
       this._error = null;
+      this._render();
+      return;
     } catch (err) {
       if (!this._panelLoadIsCurrent(token)) {
         return;
@@ -5270,8 +5318,10 @@ class CircadianScenesPanel extends HTMLElement {
         list.push(saved);
       }
       this._variables = list;
-      if (this._currentHash() !== `variable/${saved.id}`) {
-        history.replaceState(null, "", this._hashHref(`variable/${saved.id}`));
+      this._alignLibraryView(saved);
+      const hash = this._canonicalLibraryHash(saved);
+      if (this._currentHash() !== hash) {
+        history.replaceState(null, "", this._hashHref(hash));
       }
     } catch (err) {
       this._error = err.message || String(err);
@@ -5315,16 +5365,26 @@ class CircadianScenesPanel extends HTMLElement {
 
   _fillVariableEditor(host) {
     const working = this._variableDraft || this._variableWorkingCopy(null);
+    working.kind = this._view === "palette" ? "palette" : "color";
     this._variableDraft = working;
+    const isPalette = working.kind === "palette";
     const hint = document.createElement("p");
     hint.className = "library-hint";
-    hint.textContent = this._t(
-      "frontend.library.variable_edit_hint",
-      "Color and brightness are shared by every theme or light that still uses this variable."
-    );
+    hint.textContent = isPalette
+      ? this._t(
+          "frontend.library.palette_edit_hint",
+          "A palette is five colors. Lights that use it pick a slot; changing the palette updates those lights the next time a scene runs."
+        )
+      : this._t(
+          "frontend.library.variable_edit_hint",
+          "Color and brightness are shared by every theme or light that still uses this variable."
+        );
     const nameInput = this._haInput(
       this._t("frontend.common.name", "Name"),
-      working.name || this._t("frontend.library.new_variable", "New variable")
+      working.name ||
+        (isPalette
+          ? this._t("frontend.library.new_palette", "New palette")
+          : this._t("frontend.library.new_variable", "New variable"))
     );
     const bindName = () => {
       working.name = (nameInput.value || "").trim();
@@ -5332,47 +5392,44 @@ class CircadianScenesPanel extends HTMLElement {
     };
     nameInput.addEventListener("value-changed", bindName);
     nameInput.addEventListener("change", bindName);
-    const kindRow = document.createElement("div");
-    kindRow.className = "palette-kind-row";
-    const kindColor = document.createElement("button");
-    kindColor.type = "button";
-    kindColor.textContent = this._t("frontend.library.kind_color", "Color");
-    const kindPalette = document.createElement("button");
-    kindPalette.type = "button";
-    kindPalette.textContent = this._t("frontend.library.kind_palette", "Palette");
-    kindRow.append(kindColor, kindPalette);
-    const draft = working.colorDraft;
-    const briInput = this._haInput(
-      this._t("frontend.lights.brightness", "Brightness"),
-      String(draft.brightness ?? 255),
-      { type: "number", min: 0, max: 255 }
-    );
-    const bindBri = (value) => {
-      if (Number.isFinite(value)) {
-        draft.brightness = value;
-        this._saveSoon();
-      }
-    };
-    briInput.addEventListener("value-changed", (ev) => {
-      bindBri(Number(ev.detail?.value ?? briInput.value));
-    });
-    briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
-    const wheel = createSceneColorWheel({
-      hasColor: true,
-      hasTemp: true,
-      tempMin: 2000,
-      tempMax: 6500,
-      getState: () => ({
-        scenes: [{ id: "variable", index: 1, draft }],
-        sequence: ["variable"],
-        activeId: "variable",
-      }),
-      onChange: () => {
-        delete draft.variable_ref;
-        wheel.sync();
-        this._saveSoon();
-      },
-    });
+    host.append(hint, nameInput);
+    if (!isPalette) {
+      const draft = working.colorDraft;
+      const briInput = this._haInput(
+        this._t("frontend.lights.brightness", "Brightness"),
+        String(draft.brightness ?? 255),
+        { type: "number", min: 0, max: 255 }
+      );
+      const bindBri = (value) => {
+        if (Number.isFinite(value)) {
+          draft.brightness = value;
+          this._saveSoon();
+        }
+      };
+      briInput.addEventListener("value-changed", (ev) => {
+        bindBri(Number(ev.detail?.value ?? briInput.value));
+      });
+      briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
+      const wheel = createSceneColorWheel({
+        hasColor: true,
+        hasTemp: true,
+        tempMin: 2000,
+        tempMax: 6500,
+        getState: () => ({
+          scenes: [{ id: "variable", index: 1, draft }],
+          sequence: ["variable"],
+          activeId: "variable",
+        }),
+        onChange: () => {
+          delete draft.variable_ref;
+          wheel.sync();
+          this._saveSoon();
+        },
+      });
+      host.append(briInput, wheel.el);
+      wheel.sync();
+      return;
+    }
     const slotsEl = document.createElement("div");
     slotsEl.className = "palette-slots";
     const solids = () =>
@@ -5387,13 +5444,6 @@ class CircadianScenesPanel extends HTMLElement {
             .padStart(2, "0")
         )
         .join("")}`;
-    const syncKind = () => {
-      kindColor.classList.toggle("active", working.kind === "color");
-      kindPalette.classList.toggle("active", working.kind === "palette");
-      briInput.hidden = working.kind === "palette";
-      wheel.el.hidden = working.kind === "palette";
-      slotsEl.hidden = working.kind !== "palette";
-    };
     const renderSlots = () => {
       slotsEl.replaceChildren();
       for (let index = 0; index < 5; index += 1) {
@@ -5479,20 +5529,8 @@ class CircadianScenesPanel extends HTMLElement {
         slotsEl.appendChild(row);
       }
     };
-    kindColor.addEventListener("click", () => {
-      working.kind = "color";
-      syncKind();
-      this._saveSoon();
-    });
-    kindPalette.addEventListener("click", () => {
-      working.kind = "palette";
-      syncKind();
-      this._saveSoon();
-    });
     renderSlots();
-    syncKind();
-    host.append(hint, nameInput, kindRow, briInput, wheel.el, slotsEl);
-    wheel.sync();
+    host.appendChild(slotsEl);
   }
 
   async _refreshCatalog() {
@@ -7181,7 +7219,7 @@ class CircadianScenesPanel extends HTMLElement {
       await this._saveThemeQuiet();
       return;
     }
-    if (this._view === "variable") {
+    if (this._view === "variable" || this._view === "palette") {
       await this._saveVariableQuiet();
       return;
     }
@@ -9802,10 +9840,12 @@ class CircadianScenesPanel extends HTMLElement {
       this._headerEl.textContent = this._editorSceneTitle();
       return;
     }
-    if (this._narrow && this._view === "variable") {
+    if (this._narrow && (this._view === "variable" || this._view === "palette")) {
       this._headerEl.textContent =
         this._variableDraft?.name ||
-        this._t("frontend.library.add_variable", "Add variable");
+        (this._view === "palette"
+          ? this._t("frontend.library.add_palette", "Add palette")
+          : this._t("frontend.library.add_variable", "Add variable"));
       return;
     }
     if (this._narrow && this._view === "theme") {

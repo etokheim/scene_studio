@@ -2,7 +2,7 @@
 
 import { createSimpleCardMesh } from "./card_mesh.js";
 import { swatchRgb, variableSwatchCss } from "./color_ui.js";
-import { resolveSlot, variableIsPalette } from "./palette.js";
+import { paletteSwatchCss, resolveSlot, variableIsPalette } from "./palette.js";
 
 const AREA_RAIL_PX = 340;
 
@@ -39,6 +39,15 @@ export const LANDING_CSS = `
     );
     backdrop-filter: blur(18px) saturate(1.2);
     -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  }
+  /* Keep scene-card glow (z-index 0) behind every other rail control. */
+  .area-rail .floor-label,
+  .area-rail .area-head,
+  .area-rail .area-empty,
+  .area-rail .var-row,
+  .area-rail .theme-row {
+    position: relative;
+    z-index: 1;
   }
   .stage-col {
     flex: 1 1 auto;
@@ -126,16 +135,15 @@ export const LANDING_CSS = `
   .area-empty:hover { background: var(--secondary-background-color); }
   .scene-card-slot {
     position: relative;
-    isolation: isolate;
-    overflow: hidden;
+    /* No isolation/overflow clip: glow may bleed into neighbor slots, but
+       stays behind every .scene-card (shared stacking, glow z-index 0). */
+    overflow: visible;
     box-sizing: border-box;
-    /* Padding is the glow clip box; adjacent slots meet, they do not overlap. */
-    padding: 4px 6px;
-    margin: 0 -6px;
+    padding: 4px 0;
   }
   .scene-card-slot .card-glow {
     position: absolute;
-    inset: 4px 6px;
+    inset: 4px 0;
     z-index: 0;
     width: auto;
     height: auto;
@@ -144,6 +152,10 @@ export const LANDING_CSS = `
     pointer-events: none;
     filter: blur(16px);
     transform: scale(1.22);
+    opacity: 0;
+    transition: opacity 0.35s ease-out;
+  }
+  .scene-card-slot.glow-on .card-glow {
     opacity: 0.95;
   }
   .scene-card {
@@ -262,6 +274,11 @@ export const LANDING_CSS = `
   .theme-chip.selected span {
     color: var(--primary-text-color);
     font-weight: 600;
+  }
+  .var-dot.palette-dot {
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
   }
   .theme-dial {
     width: 72px;
@@ -601,9 +618,6 @@ function renderSceneCard(panel, scene) {
   cardEl.className = "scene-card";
   cardEl.dataset.sceneId = scene.id;
   const selected = panel._view === "edit" && panel._editId === scene.id;
-  if (selected) {
-    cardEl.classList.add("selected");
-  }
   cardEl.setAttribute("role", "button");
   cardEl.tabIndex = 0;
   cardEl.setAttribute("aria-pressed", selected ? "true" : "false");
@@ -626,16 +640,42 @@ function renderSceneCard(panel, scene) {
   overflow.classList.add("card-overflow");
   overflowSlot.appendChild(overflow);
   cardEl.append(bg, body, overflowSlot);
+  const glow = makeSceneCardBg(scene);
+  glow.classList.add("card-glow");
+  slot.append(glow, cardEl);
   if (selected) {
-    const glow = makeSceneCardBg(scene);
-    glow.classList.add("card-glow");
-    slot.append(glow, cardEl);
-  } else {
-    slot.appendChild(cardEl);
+    cardEl.classList.add("selected");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => slot.classList.add("glow-on"));
+    });
   }
+  let leaving = false;
   const activate = () => {
+    if (leaving) {
+      return;
+    }
     if (selected) {
-      panel._go("");
+      leaving = true;
+      slot.classList.remove("glow-on");
+      cardEl.classList.remove("selected");
+      let done = false;
+      const finish = () => {
+        if (done) {
+          return;
+        }
+        done = true;
+        panel._go("");
+      };
+      glow.addEventListener(
+        "transitionend",
+        (ev) => {
+          if (ev.propertyName === "opacity") {
+            finish();
+          }
+        },
+        { once: true }
+      );
+      window.setTimeout(finish, 450);
       return;
     }
     panel._go(`edit/${scene.id}`);
@@ -713,6 +753,9 @@ function renderLibrary(panel, { compact } = {}) {
     wrap.append(title, hint);
   }
 
+  const colors = (panel._variables || []).filter((item) => !variableIsPalette(item));
+  const palettes = (panel._variables || []).filter((item) => variableIsPalette(item));
+
   const varHead = document.createElement("div");
   varHead.className = "area-head";
   const varLabel = document.createElement("div");
@@ -731,7 +774,7 @@ function renderLibrary(panel, { compact } = {}) {
 
   const varRow = document.createElement("div");
   varRow.className = "var-row";
-  for (const variable of panel._variables || []) {
+  for (const variable of colors) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "var-chip";
@@ -748,6 +791,42 @@ function renderLibrary(panel, { compact } = {}) {
     varRow.appendChild(chip);
   }
   wrap.appendChild(varRow);
+
+  const palHead = document.createElement("div");
+  palHead.className = "area-head";
+  const palLabel = document.createElement("div");
+  palLabel.className = "floor-label";
+  palLabel.textContent = panel._t("frontend.library.palettes", "Palettes");
+  const addPal = iconButton(
+    "mdi:plus",
+    panel._t("frontend.library.add_palette", "Add palette")
+  );
+  addPal.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    panel._openCreatePaletteDialog();
+  });
+  palHead.append(palLabel, addPal);
+  wrap.appendChild(palHead);
+
+  const palRow = document.createElement("div");
+  palRow.className = "var-row";
+  for (const palette of palettes) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "var-chip";
+    if (panel._view === "palette" && panel._variableId === palette.id) {
+      chip.classList.add("selected");
+    }
+    const dot = document.createElement("div");
+    dot.className = "var-dot palette-dot";
+    dot.style.background = paletteSwatchCss(palette, panel._variables);
+    const name = document.createElement("span");
+    name.textContent = palette.name;
+    chip.append(dot, name);
+    chip.addEventListener("click", () => panel._openPaletteEditor(palette));
+    palRow.appendChild(chip);
+  }
+  wrap.appendChild(palRow);
 
   const themeHead = document.createElement("div");
   themeHead.className = "area-head";

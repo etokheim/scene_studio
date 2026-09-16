@@ -9,7 +9,7 @@ The workspace **stage** (`.stage-col`, the wide column beside the area rail) is 
 
 ## Do this
 
-- Open **scenes**, **variables**, **palettes**, and **circadian themes** in that column (`#edit/<id>`, `#variable/<id>`, `#variable/new`, `#theme/<id>`, `#theme/new`).
+- Open **scenes**, **variables**, **palettes**, and **circadian themes** in that column (`#edit/<id>`, `#variable/<id>`, `#variable/new`, `#palette/<id>`, `#palette/new`, `#theme/<id>`, `#theme/new`).
 - Create and edit them there (name, color wheel, palette slots, theme dial). Autosave like other editors.
 
 ## Do not

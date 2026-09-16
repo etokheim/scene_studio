@@ -652,7 +652,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Palette variables (five slots, per-light assignment, mode pill)
 
 - **Date:** 2026-09-15
-- **Decision:** Variables are `kind: color` (one color+brightness) or `kind: palette` (always five slots). A slot is a static color+brightness or a `variable_ref` to a **color** variable only (nested palettes are invalid). Applying a palette to a theme event, simple scene, or light stores the palette id; unpinned lights pick a rim slot with FNV-1a `hash(seed, entity_id) % 5` so adding a lamp does not reshuffle others. `assignment_seed` lives on the application site (theme event, simple scene, or light override). **Randomize** changes that seed and clears stored `palette_t`/`palette_r`. Dragging the palette wheel stores polar `palette_t` (around the rim) and `palette_r` (0 = white center, 1 = rim) while keeping `variable_ref`, so the pin stays linked to the palette. Brightness on the event/light can differ from the sampled slot. Every color wheel shows the exclusive color/kelvin mode pill; a third palette-wheel face appears only when the **selected** pin currently uses a palette.
+- **Decision:** Color variables (`kind: color`) and palettes (`kind: palette`, always five slots) are separate library kinds. The area rail lists Variables, then Palettes, then Circadian themes. Editors are dedicated (`#variable/<id>|new` vs `#palette/<id>|new`) — no Color/Palette tabs that convert one into the other. A slot is a static color+brightness or a `variable_ref` to a **color** variable only (nested palettes are invalid). Applying a palette to a theme event, simple scene, or light stores the palette id; unpinned lights pick a rim slot with FNV-1a `hash(seed, entity_id) % 5` so adding a lamp does not reshuffle others. `assignment_seed` lives on the application site (theme event, simple scene, or light override). **Randomize** changes that seed and clears stored `palette_t`/`palette_r`. Dragging the palette wheel stores polar `palette_t` (around the rim) and `palette_r` (0 = white center, 1 = rim) while keeping `variable_ref`, so the pin stays linked to the palette. Brightness on the event/light can differ from the sampled slot. Every color wheel shows the exclusive color/kelvin mode pill; a third palette-wheel face appears only when the **selected** pin currently uses a palette.
 - **Why:** Multi-light scenes need several related hues from one named token without each lamp sharing one solid. Hash+seed is stable; the polar wheel is how the user pins a blend between those five rim colors.
 - **Do not reverse without user ask.**
 
@@ -666,7 +666,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Main column is the editor
 
 - **Date:** 2026-09-16
-- **Decision:** `.stage-col` is the editor for scenes, variables, palettes, and circadian themes. Routes: `#edit/<id>`, `#variable/<id>`, `#variable/new`, `#theme/<id>`, `#theme/new`. The area rail only picks items. Do not add/edit library items in `ha-dialog`.
+- **Decision:** `.stage-col` is the editor for scenes, variables, palettes, and circadian themes. Routes: `#edit/<id>`, `#variable/<id>`, `#variable/new`, `#palette/<id>`, `#palette/new`, `#theme/<id>`, `#theme/new`. The area rail only picks items. Do not add/edit library items in `ha-dialog`.
 - **Why:** Dialogs hid the workspace and split create vs edit. One column keeps the same place for every kind of edit.
 - **Do not reverse without user ask.**
 
@@ -690,5 +690,12 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-09-16
 - **Decision:** Circadian scene edit (`#edit/<id>` dial) lists area lights as the same Lys tiles as simple scenes: horizontal strip, centered when the row fits, overflow-x when it does not. Fill/color follow the interpolated sample at the clock. Tap still opens the closest-event light editor; add/remove stay on the tile. Theme-look (`#theme`) has no member strip. Table view keeps brightness bars.
 - **Why:** One light language in both editors. Stacked HA-style legend rows read as a different product.
+- **Do not reverse without user ask.**
+
+## Selected scene-card glow
+
+- **Date:** 2026-09-16
+- **Decision:** The selected scene’s `.card-glow` is always in the slot (opacity 0 when idle). Select fades it in (`opacity` 0.35s); deselect fades it out before leaving `#edit/<id>`. Slots do not `overflow: hidden` or `isolation: isolate`, so the blur is not clipped to the card. Glow is `z-index: 0`; scene cards and other rail controls are `z-index: 1` in the shared rail stacking context so the glow can bleed under neighbors without covering them.
+- **Why:** A hard clip made the halo a rectangle; painting the glow on top of adjacent cards hid their content.
 - **Do not reverse without user ask.**
 
