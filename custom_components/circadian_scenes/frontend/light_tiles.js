@@ -24,6 +24,7 @@ export const LIGHT_TILES_CSS = `
     width: max-content;
     margin-inline: auto;
     flex: 0 0 auto;
+    position: relative;
   }
   .simple-light-selector {
     box-sizing: border-box;
@@ -210,6 +211,26 @@ export const LIGHT_TILES_CSS = `
     z-index: 2;
     cursor: inherit;
   }
+  .simple-light-selector.add-light-tile .simple-light-tile {
+    background: color-mix(
+      in srgb,
+      var(--secondary-background-color, #242022) 70%,
+      transparent
+    );
+    box-shadow: inset 0 0 0 2px
+      color-mix(in srgb, var(--primary-text-color) 22%, transparent);
+    cursor: pointer;
+  }
+  .simple-light-selector.add-light-tile .simple-light-fill {
+    display: none;
+  }
+  .simple-light-selector.add-light-tile .simple-light-labels.layer-off {
+    clip-path: none;
+    -webkit-clip-path: none;
+  }
+  .simple-light-selector.add-light-tile .simple-light-labels.layer-on {
+    display: none;
+  }
 `;
 
 export function lightTileOnTextCss(rgb) {
@@ -277,4 +298,36 @@ export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
   );
   selector.appendChild(tile);
   return { selector, tile, hit };
+}
+
+export function createAddLightTile({ label, onActivate }) {
+  const { selector, tile } = createLightTile({
+    entityId: "__add_light__",
+    name: label,
+    makeIcon: () => {
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", "mdi:plus");
+      return icon;
+    },
+    tapOnly: true,
+  });
+  selector.classList.add("add-light-tile");
+  paintLightTile(selector, {
+    rgb: [64, 60, 58],
+    fillPct: 0,
+    selected: false,
+  });
+  const activate = (ev) => {
+    ev.stopPropagation();
+    onActivate?.(tile);
+  };
+  tile.addEventListener("click", activate);
+  tile.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") {
+      return;
+    }
+    ev.preventDefault();
+    activate(ev);
+  });
+  return selector;
 }

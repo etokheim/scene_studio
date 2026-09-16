@@ -708,3 +708,24 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Recreating the rail DOM was jumping the picker; the editor column is a new document.
 - **Do not reverse without user ask.**
 
+## Palette editor is wheel + Lys slots
+
+- **Date:** 2026-09-16
+- **Decision:** Palette edit (`#palette/<id>`) uses the simple-scene chrome: color wheel plus five Lys tiles (`slot:0`…`slot:4`). There is no slot color list. Slot brightness is the same vertical drag/wheel as lights.
+- **Why:** Palettes are the same color language as lights; a numbered swatch list was a second editor.
+- **Do not reverse without user ask.**
+
+## Create persists immediately; undo deletes
+
+- **Date:** 2026-09-16
+- **Decision:** Add scene / variable / palette / theme saves a named record at once and opens the editor. The undo stack stores a `created` entry so Undo deletes that record and Redo recreates it. Do not leave an unsaved `#…/new` draft as the create path.
+- **Why:** The rail is the source of truth; a draft that is not in the list looks like a failed add. Session snapshots do not include the library list, so create needs its own undo record.
+- **Do not reverse without user ask.**
+
+## Add light is the last Lys tile; unavailable stays editable when caps are known
+
+- **Date:** 2026-09-16
+- **Decision:** “Add light” is the last card in the Lys strip (same 85×135 chrome, dashed/plus), not a separate `ha-button`. Unavailable lights sort after available ones (still before suggested/removed). If Home Assistant still reports color modes or kelvin range, the tile stays editable (`caps-known`); only unknown-capability unavailable lights are inert and grayscale.
+- **Why:** The strip is the membership UI. An unavailable bulb we already know how to drive should still be tunable.
+- **Do not reverse without user ask.**
+

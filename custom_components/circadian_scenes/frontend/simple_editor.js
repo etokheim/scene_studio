@@ -2,13 +2,15 @@
 
 import {
   applyVariableToDraft,
+  colorPayloadFromDraft,
   createSceneColorWheel,
   draftRgb,
   lightWheelCaps,
 } from "./color_ui.js";
-import { variableIsPalette } from "./palette.js";
+import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
 import {
   LIGHT_TILES_CSS,
+  createAddLightTile,
   createLightTile,
   paintLightTile,
 } from "./light_tiles.js";
@@ -57,6 +59,10 @@ export const SIMPLE_EDITOR_CSS = `
     min-width: 0;
     margin: 0;
     aspect-ratio: 1;
+  }
+  .simple-editor .library-name-field {
+    width: min(100%, 650px);
+    margin: 0 auto;
   }
   .var-palette {
     display: flex;
@@ -361,7 +367,20 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const syncTiles = () => {
     tiles.replaceChildren();
     hidePicker();
-    for (const eid of members) {
+    const ordered = [...members].sort((a, b) => {
+      const rank = (id) => {
+        const st = panel._hass?.states?.[id];
+        if (!st) {
+          return 2;
+        }
+        if (st.state === "unavailable") {
+          return 1;
+        }
+        return 0;
+      };
+      return rank(a) - rank(b);
+    });
+    for (const eid of ordered) {
       const draft = drafts[eid] || {};
       const state = panel._hass?.states?.[eid];
       const name =
@@ -372,6 +391,18 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         makeIcon: () => lightIcon(panel, eid),
       });
       paintSelector(selector, eid, draft);
+      const unavailable = !state || state.state === "unavailable";
+      const capsKnown = Boolean(
+        state?.attributes?.supported_color_modes?.length ||
+          state?.attributes?.min_color_temp_kelvin != null
+      );
+      if (unavailable) {
+        selector.classList.add("unavailable");
+        if (capsKnown) {
+          selector.classList.add("caps-known");
+        }
+      }
+      const editable = !unavailable || capsKnown;
 
       let pressTimer = null;
       let drag = null;
@@ -457,7 +488,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       };
 
       hit.addEventListener("pointerdown", (ev) => {
-        if (ev.button && ev.button !== 0) {
+        if (!editable || (ev.button && ev.button !== 0)) {
           return;
         }
         drag = {
@@ -480,6 +511,9 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       tile.addEventListener(
         "wheel",
         (ev) => {
+          if (!editable) {
+            return;
+          }
           const absX = Math.abs(ev.deltaX);
           const absY = Math.abs(ev.deltaY);
           const wantsHorizontal = ev.shiftKey || (absX > 0 && absX >= absY);
@@ -508,6 +542,12 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       );
       tiles.appendChild(selector);
     }
+    tiles.appendChild(
+      createAddLightTile({
+        label: panel._t("frontend.lights.add_light", "Add light"),
+        onActivate: (anchor) => panel._openAddLightPicker(anchor, { simple: true }),
+      })
+    );
   };
   syncTiles();
   host.replaceChildren(wrap);
@@ -519,3 +559,234 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     panel._simpleWheelGlowLayout = null;
   }
 }
+
+function slotToDraft(slot, variables) {
+  if (slot?.variable_ref) {
+    const linked = variables.find((item) => item.id === slot.variable_ref);
+    return {
+      ...(linked?.color || {}),
+      brightness: linked?.brightness ?? 255,
+      variable_ref: slot.variable_ref,
+      state: "on",
+    };
+  }
+  return {
+    ...(slot?.color || {}),
+    brightness: slot?.brightness ?? 255,
+    state: "on",
+  };
+}
+
+function draftToSlot(draft) {
+  if (draft?.variable_ref) {
+    return { variable_ref: draft.variable_ref };
+  }
+  return {
+    color: colorPayloadFromDraft(draft),
+    brightness: Number(draft.brightness) || 255,
+  };
+}
+
+export function renderPaletteEditor(panel, host, { glowHost } = {}) {
+  const working = panel._variableDraft;
+  const variables = panel._variables || [];
+  if (!working.slots || working.slots.length < PALETTE_SLOT_COUNT) {
+    working.slots = working.slots || [];
+    while (working.slots.length < PALETTE_SLOT_COUNT) {
+      working.slots.push({
+        color: {
+          color_mode: "hs",
+          hs_color: [(working.slots.length / PALETTE_SLOT_COUNT) * 360, 70],
+        },
+        brightness: 255,
+      });
+    }
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "simple-editor";
+  const nameInput = panel._haInput(
+    panel._t("frontend.common.name", "Name"),
+    working.name || panel._t("frontend.library.new_palette", "New palette")
+  );
+  nameInput.classList.add("library-name-field");
+  const bindName = () => {
+    working.name = (nameInput.value || "").trim();
+    panel._saveSoon();
+  };
+  nameInput.addEventListener("value-changed", bindName);
+  nameInput.addEventListener("change", bindName);
+
+  const wheels = document.createElement("div");
+  wheels.className = "simple-wheels";
+  const ids = [...Array(PALETTE_SLOT_COUNT)].map((_, i) => `slot:${i}`);
+  let selectedId = ids[0];
+  const drafts = {};
+  for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
+    drafts[ids[i]] = slotToDraft(working.slots[i], variables);
+  }
+  const persistSlot = (id) => {
+    const index = ids.indexOf(id);
+    if (index < 0) {
+      return;
+    }
+    working.slots[index] = draftToSlot(drafts[id]);
+    panel._saveSoon();
+  };
+  const getState = () => ({
+    scenes: ids.map((id, index) => ({
+      id,
+      index: index + 1,
+      draft: drafts[id],
+      label: panel._t("frontend.library.slot_label", "Slot {n}", {
+        n: index + 1,
+      }),
+    })),
+    sequence: ids,
+    activeId: selectedId,
+  });
+  const wheel = createSceneColorWheel({
+    getState,
+    onSelect: (id) => {
+      selectedId = id;
+      syncTiles();
+    },
+    onChange: ({ fromPalette } = {}) => {
+      if (!selectedId) {
+        return;
+      }
+      if (!fromPalette) {
+        delete drafts[selectedId].variable_ref;
+        delete drafts[selectedId].palette_t;
+        delete drafts[selectedId].palette_r;
+      }
+      persistSlot(selectedId);
+      syncTiles();
+    },
+    hasColor: true,
+    hasTemp: true,
+    tempMin: 2000,
+    tempMax: 6500,
+    getPalette: () =>
+      (panel._variables || []).filter((item) => !variableIsPalette(item)),
+    onAddPalette: (draft) => panel._addVariableFromCurrentDraft(draft),
+  });
+  wheels.appendChild(wheel.el);
+
+  const scroller = document.createElement("div");
+  scroller.className = "light-tiles-scroller";
+  const tiles = document.createElement("div");
+  tiles.className = "light-tiles";
+  scroller.appendChild(tiles);
+
+  const fillPercent = (draft) => ((Number(draft.brightness) || 0) / 255) * 100;
+  const syncTiles = () => {
+    tiles.replaceChildren();
+    ids.forEach((id, index) => {
+      const draft = drafts[id];
+      const name = panel._t("frontend.library.slot_label", "Slot {n}", {
+        n: index + 1,
+      });
+      const { selector, tile, hit } = createLightTile({
+        entityId: id,
+        name,
+        makeIcon: () => {
+          const icon = document.createElement("ha-icon");
+          icon.setAttribute("icon", "mdi:palette-swatch");
+          return icon;
+        },
+      });
+      paintLightTile(selector, {
+        rgb: draftRgb(draft),
+        fillPct: fillPercent(draft),
+        selected: id === selectedId,
+      });
+      let drag = null;
+      const applyBri = (next) => {
+        draft.brightness = Math.max(0, Math.min(255, Math.round(next)));
+        delete draft.variable_ref;
+        persistSlot(id);
+        paintLightTile(selector, {
+          rgb: draftRgb(draft),
+          fillPct: fillPercent(draft),
+          selected: id === selectedId,
+        });
+      };
+      const endDrag = (ev) => {
+        if (!drag || (ev && ev.pointerId !== drag.pointerId)) {
+          return;
+        }
+        document.removeEventListener("pointermove", onDocMove);
+        document.removeEventListener("pointerup", endDrag);
+        document.removeEventListener("pointercancel", endDrag);
+        const wasVertical = drag.axis === "y";
+        const suppressTap = drag.suppressTap;
+        drag = null;
+        window.setTimeout(() => tile.classList.remove("dragging"), 250);
+        if (wasVertical || suppressTap) {
+          return;
+        }
+        selectedId = id;
+        wheel.sync();
+        syncTiles();
+      };
+      const onDocMove = (ev) => {
+        if (!drag || ev.pointerId !== drag.pointerId) {
+          return;
+        }
+        const dx = ev.clientX - drag.startX;
+        const dy = ev.clientY - drag.startY;
+        if (!drag.axis) {
+          if (Math.hypot(dx, dy) < 8) {
+            return;
+          }
+          if (Math.abs(dx) > Math.abs(dy)) {
+            drag.axis = "x";
+            drag.suppressTap = true;
+            return;
+          }
+          drag.axis = "y";
+          drag.suppressTap = true;
+          tile.classList.add("dragging");
+          return;
+        }
+        if (drag.axis !== "y") {
+          return;
+        }
+        ev.preventDefault();
+        const rect = tile.getBoundingClientRect();
+        const fromBottom = rect.bottom - ev.clientY;
+        applyBri(
+          (Math.max(0, Math.min(100, (fromBottom / rect.height) * 100)) / 100) *
+            255
+        );
+      };
+      hit.addEventListener("pointerdown", (ev) => {
+        if (ev.button && ev.button !== 0) {
+          return;
+        }
+        drag = {
+          pointerId: ev.pointerId,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          axis: null,
+          suppressTap: false,
+        };
+        document.addEventListener("pointermove", onDocMove);
+        document.addEventListener("pointerup", endDrag);
+        document.addEventListener("pointercancel", endDrag);
+      });
+      tiles.appendChild(selector);
+    });
+  };
+  wrap.append(nameInput, wheels, scroller);
+  syncTiles();
+  host.replaceChildren(wrap);
+  wheel.sync();
+  if (glowHost && typeof wheel.attachGlow === "function") {
+    panel._simpleWheelGlowLayout = wheel.attachGlow(glowHost);
+    requestAnimationFrame(() => panel._simpleWheelGlowLayout?.());
+  } else {
+    panel._simpleWheelGlowLayout = null;
+  }
+}
+

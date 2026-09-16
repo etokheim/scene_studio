@@ -56,8 +56,8 @@ import {
   themeConic,
 } from "./landing.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
-import { SIMPLE_EDITOR_CSS, renderSimpleEditor } from "./simple_editor.js";
-import { createLightTile, paintLightTile } from "./light_tiles.js";
+import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
+import { createAddLightTile, createLightTile, paintLightTile } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -1977,6 +1977,8 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .simple-light-selector.unavailable {
           opacity: 0.55;
+        }
+        .simple-light-selector.unavailable:not(.caps-known) {
           filter: grayscale(1);
           pointer-events: none;
         }
@@ -2040,6 +2042,8 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .clock-legend-row.unavailable {
           opacity: 0.55;
+        }
+        .clock-legend-row.unavailable:not(.caps-known) {
           filter: grayscale(1);
           pointer-events: none;
         }
@@ -2058,10 +2062,12 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .light-row.unavailable {
           opacity: 0.55;
+        }
+        .light-row.unavailable:not(.caps-known) {
           filter: grayscale(1);
           pointer-events: none;
         }
-        .light-row.unavailable .light-bar {
+        .light-row.unavailable:not(.caps-known) .light-bar {
           filter: grayscale(1);
         }
         .light-row.removed {
@@ -4427,26 +4433,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._leaveConfirmDone = false;
     if (hash === "new") {
-      this._invalidatePanelLoads();
-      const pending = this._pendingNewForm;
-      this._pendingNewForm = null;
-      this._view = "edit";
-      this._editId = null;
-      this._themeId = null;
-      this._themeDraft = null;
-      this._variableId = null;
-      this._variableDraft = null;
-      this._entityId = null;
-      this._formData = pending
-        ? { ...emptyFormData(), ...pending }
-        : emptyFormData();
-      this._error = null;
-      void this._abandonScenePreview();
-      this._resetSession();
-      this._render();
-      if (!this._formData.area) {
-        this._openCreateDialog({});
-      }
+      void this._createLibraryItem("scene");
       return;
     }
     const match = hash.match(/^edit\/(.+)$/);
@@ -4463,8 +4450,12 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const themeMatch = hash.match(/^theme\/(.+)$/);
     if (themeMatch) {
+      if (themeMatch[1] === "new") {
+        void this._createLibraryItem("theme");
+        return;
+      }
       this._view = "theme";
-      this._themeId = themeMatch[1] === "new" ? null : themeMatch[1];
+      this._themeId = themeMatch[1];
       this._editId = null;
       this._variableId = null;
       this._variableDraft = null;
@@ -4476,11 +4467,15 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const paletteMatch = hash.match(/^palette\/(.+)$/);
     if (paletteMatch) {
+      if (paletteMatch[1] === "new") {
+        void this._createLibraryItem("palette");
+        return;
+      }
       this._view = "palette";
       this._editId = null;
       this._themeId = null;
       this._themeDraft = null;
-      this._variableId = paletteMatch[1] === "new" ? null : paletteMatch[1];
+      this._variableId = paletteMatch[1];
       this._entityId = null;
       this._error = null;
       void this._abandonScenePreview();
@@ -4489,11 +4484,15 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const variableMatch = hash.match(/^variable\/(.+)$/);
     if (variableMatch) {
+      if (variableMatch[1] === "new") {
+        void this._createLibraryItem("variable");
+        return;
+      }
       this._view = "variable";
       this._editId = null;
       this._themeId = null;
       this._themeDraft = null;
-      this._variableId = variableMatch[1] === "new" ? null : variableMatch[1];
+      this._variableId = variableMatch[1];
       this._entityId = null;
       this._error = null;
       void this._abandonScenePreview();
@@ -5060,113 +5059,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _openCreateDialog({ areaId, areaName } = {}) {
-    const dialog = document.createElement("ha-dialog");
-    dialog.className = "save-dialog";
-    dialog.setAttribute(
-      "header-title",
-      this._t("frontend.create.title", "Create scene")
-    );
-    const body = document.createElement("div");
-    body.style.display = "flex";
-    body.style.flexDirection = "column";
-    body.style.gap = "12px";
-    const createState = { kind: "circadian", theme_id: "default" };
-    const nameInput = customElements.get("ha-input")
-      ? document.createElement("ha-input")
-      : document.createElement("ha-selector");
-    nameInput.label = this._t("frontend.common.name", "Name");
-    nameInput.value = areaName
-      ? `${areaName} Circadian`
-      : this._t("frontend.common.new_scene", "New scene");
-    if (nameInput.localName === "ha-selector") {
-      nameInput.hass = this._hass;
-      nameInput.selector = { text: {} };
-    }
-    let themeSelect;
-    const kindSelect = this._selectSelector(
-      this._t("frontend.create.kind", "Scene type"),
-      [
-        {
-          value: "circadian",
-          label: this._t("frontend.kinds.circadian", "Circadian scene"),
-        },
-        {
-          value: "simple",
-          label: this._t("frontend.kinds.simple", "Simple scene"),
-        },
-      ],
-      createState.kind,
-      (value) => {
-        createState.kind = value || "circadian";
-        themeSelect.style.display =
-          createState.kind === "simple" ? "none" : "";
-        if (areaName) {
-          nameInput.value =
-            createState.kind === "simple"
-              ? `${areaName}`
-              : `${areaName} Circadian`;
-        }
-      }
-    );
-    themeSelect = this._selectSelector(
-      this._t("frontend.create.theme", "Theme"),
-      (this._themes || []).map((theme) => ({
-        value: theme.id,
-        label: theme.name,
-      })),
-      createState.theme_id,
-      (value) => {
-        createState.theme_id = value || "default";
-      }
-    );
-    body.append(kindSelect, themeSelect, nameInput);
-    dialog.appendChild(body);
-    const footer = customElements.get("ha-dialog-footer")
-      ? document.createElement("ha-dialog-footer")
-      : document.createElement("div");
-    footer.slot = "footer";
-    const cancel = document.createElement("ha-button");
-    cancel.slot = "secondaryAction";
-    cancel.appearance = "plain";
-    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
-    const create = document.createElement("ha-button");
-    create.slot = "primaryAction";
-    create.variant = "brand";
-    create.textContent = this._t("frontend.common.save", "Save");
-    cancel.addEventListener("click", () => {
-      dialog.open = false;
-    });
-    create.addEventListener("click", async () => {
-      const kind = createState.kind || "circadian";
-      const data = {
-        kind,
-        scene_name: nameInput.value || "Scene",
-        area: areaId || null,
-        theme_id: kind === "circadian" ? createState.theme_id || "default" : undefined,
-        membership: { exclude: [], include: [] },
-        overrides: {},
-        lights: {},
-      };
-      try {
-        const saved = await this._hass.callWS({
-          type: `${DOMAIN}/save`,
-          data,
-        });
-        dialog.open = false;
-        this._upsertSceneInList(saved);
-        this._refreshVisibleSceneList();
-        this._go(`edit/${saved.id}`);
-      } catch (err) {
-        this._error = err.message || String(err);
-        dialog.open = false;
-        this._renderList();
-      }
-    });
-    footer.append(cancel, create);
-    dialog.appendChild(footer);
-    dialog.addEventListener("closed", () => dialog.remove());
-    this.shadowRoot.appendChild(dialog);
-    dialog.open = true;
+    void this._createLibraryItem("scene", { areaId, areaName });
   }
 
   _haInput(label, value, { type, min, max } = {}) {
@@ -5223,20 +5116,240 @@ class CircadianScenesPanel extends HTMLElement {
     };
   }
 
-  _addVariableFromCurrentDraft(draft) {
-    this._pendingVariableFromDraft = draft ? { ...draft } : null;
-    this._go("variable/new");
-    return Promise.resolve(null);
-  }
-
   _openCreateVariableDialog() {
-    this._pendingVariableFromDraft = null;
-    this._go("variable/new");
+    void this._createLibraryItem("variable");
   }
 
   _openCreatePaletteDialog() {
-    this._pendingVariableFromDraft = null;
-    this._go("palette/new");
+    void this._createLibraryItem("palette");
+  }
+
+  _addVariableFromCurrentDraft(draft) {
+    this._pendingVariableFromDraft = draft ? { ...draft } : null;
+    void this._createLibraryItem("variable", { fromDraft: draft });
+    return Promise.resolve(null);
+  }
+
+  _openCreateThemeDialog() {
+    void this._createLibraryItem("theme");
+  }
+
+  async _createLibraryItem(kind, { fromDraft, areaId, areaName } = {}) {
+    if (this._creatingLibrary) {
+      return;
+    }
+    if (!(await this._confirmLeaveEditor())) {
+      return;
+    }
+    this._creatingLibrary = true;
+    const beforeTarget = this._historyTarget();
+    try {
+      if (kind === "scene") {
+        const saved = await this._hass.callWS({
+          type: `${DOMAIN}/save`,
+          data: {
+            kind: "circadian",
+            scene_name: areaName
+              ? `${areaName} Circadian`
+              : this._t("frontend.common.new_scene", "New scene"),
+            area: areaId || null,
+            theme_id: "default",
+            membership: { exclude: [], include: [] },
+            overrides: {},
+            lights: {},
+          },
+        });
+        this._upsertSceneInList(saved);
+        this._commitCreatedUndo({
+          kind: "scene",
+          id: saved.id,
+          record: saved,
+          beforeTarget,
+        });
+        this._refreshVisibleSceneList();
+        this._go(`edit/${saved.id}`);
+        return;
+      }
+      if (kind === "theme") {
+        const source = (this._themes || [])[0];
+        if (!source?.events) {
+          this._error = this._t("frontend.library.theme_missing", "Theme not found");
+          this._render();
+          return;
+        }
+        const saved = await this._hass.callWS({
+          type: `${DOMAIN}/save_theme`,
+          data: {
+            name: this._t("frontend.library.new_theme", "New theme"),
+            events: structuredClone(source.events),
+          },
+        });
+        this._commitCreatedUndo({
+          kind: "theme",
+          id: saved.id,
+          record: saved,
+          beforeTarget,
+        });
+        this._adoptSavedTheme(saved);
+        this._go(`theme/${saved.id}`);
+        return;
+      }
+      const isPalette = kind === "palette";
+      const from = fromDraft || this._pendingVariableFromDraft;
+      this._pendingVariableFromDraft = null;
+      const data = isPalette
+        ? {
+            name: this._t("frontend.library.new_palette", "New palette"),
+            kind: "palette",
+            slots: defaultPaletteSlots(),
+          }
+        : {
+            name: this._t("frontend.library.new_variable", "New variable"),
+            kind: "color",
+            brightness: Number(from?.brightness) || 255,
+            color: colorPayloadFromDraft(from || this._variableEditorDraft(null)),
+          };
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save_variable`,
+        data,
+      });
+      this._commitCreatedUndo({
+        kind: isPalette ? "palette" : "variable",
+        id: saved.id,
+        record: saved,
+        beforeTarget,
+      });
+      const list = [...(this._variables || [])];
+      const index = list.findIndex((item) => item.id === saved.id);
+      if (index >= 0) {
+        list[index] = saved;
+      } else {
+        list.push(saved);
+      }
+      this._variables = list;
+      this._go(isPalette ? `palette/${saved.id}` : `variable/${saved.id}`);
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._render();
+    } finally {
+      this._creatingLibrary = false;
+    }
+  }
+
+  _commitCreatedUndo({ kind, id, record, beforeTarget }) {
+    this._undoStack.push({
+      session: this._snapshotSession(),
+      after: { created: { kind, id, record } },
+      target: beforeTarget || this._historyTarget(),
+      created: { kind, id, record },
+      focus: null,
+    });
+    if (this._undoStack.length > UNDO_STACK_LIMIT) {
+      this._undoStack.shift();
+    }
+    this._redoStack = [];
+    this._syncUndoButtons();
+  }
+
+  _createdHistoryTarget(created) {
+    if (created.kind === "scene") {
+      return { view: "edit", editId: created.id, themeId: null, variableId: null };
+    }
+    if (created.kind === "theme") {
+      return { view: "theme", editId: null, themeId: created.id, variableId: null };
+    }
+    if (created.kind === "palette") {
+      return {
+        view: "palette",
+        editId: null,
+        themeId: null,
+        variableId: created.id,
+      };
+    }
+    return {
+      view: "variable",
+      editId: null,
+      themeId: null,
+      variableId: created.id,
+    };
+  }
+
+  async _deleteCreated(created) {
+    if (!created?.id) {
+      return;
+    }
+    if (created.kind === "scene") {
+      await this._hass.callWS({
+        type: `${DOMAIN}/delete`,
+        scene_id: created.id,
+      });
+      this._dropSceneFromList(created.id);
+      return;
+    }
+    if (created.kind === "theme") {
+      await this._hass.callWS({
+        type: `${DOMAIN}/delete_theme`,
+        theme_id: created.id,
+      });
+      this._themes = (this._themes || []).filter((item) => item.id !== created.id);
+      if (this._themeId === created.id) {
+        this._themeId = null;
+        this._themeDraft = null;
+      }
+      return;
+    }
+    await this._hass.callWS({
+      type: `${DOMAIN}/delete_variable`,
+      variable_id: created.id,
+    });
+    this._variables = (this._variables || []).filter(
+      (item) => item.id !== created.id
+    );
+    if (this._variableId === created.id) {
+      this._variableId = null;
+      this._variableDraft = null;
+    }
+  }
+
+  async _recreateCreated(created) {
+    if (!created?.record) {
+      return;
+    }
+    if (created.kind === "scene") {
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save`,
+        scene_id: created.id,
+        data: created.record.form || created.record,
+      });
+      created.id = saved.id;
+      created.record = saved;
+      this._upsertSceneInList(saved);
+      return;
+    }
+    if (created.kind === "theme") {
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save_theme`,
+        data: created.record,
+      });
+      created.id = saved.id;
+      created.record = saved;
+      this._adoptSavedTheme(saved);
+      return;
+    }
+    const saved = await this._hass.callWS({
+      type: `${DOMAIN}/save_variable`,
+      data: created.record,
+    });
+    created.id = saved.id;
+    created.record = saved;
+    const list = [...(this._variables || [])];
+    const index = list.findIndex((item) => item.id === saved.id);
+    if (index >= 0) {
+      list[index] = saved;
+    } else {
+      list.push(saved);
+    }
+    this._variables = list;
   }
 
   _openVariableEditor(variable) {
@@ -5248,7 +5361,7 @@ class CircadianScenesPanel extends HTMLElement {
       );
       return;
     }
-    this._go("variable/new");
+    void this._createLibraryItem("variable");
   }
 
   _openPaletteEditor(palette) {
@@ -5256,11 +5369,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._go(`palette/${palette.id}`);
       return;
     }
-    this._go("palette/new");
-  }
-
-  _openCreateThemeDialog() {
-    this._go("theme/new");
+    void this._createLibraryItem("palette");
   }
 
   _variableWorkingCopy(variable) {
@@ -5447,13 +5556,33 @@ class CircadianScenesPanel extends HTMLElement {
     this._parkSunPath();
     const page = renderLanding(this, { includeStage: true });
     const stage = page.querySelector(".stage-col");
+    const isPalette = this._view === "palette";
     const host = document.createElement("div");
-    host.className = "library-editor";
+    host.className = isPalette ? "simple-editor-host" : "library-editor";
     if (this._error) {
       const error = document.createElement("p");
       error.className = "error";
       error.textContent = this._error;
       host.appendChild(error);
+    }
+    const working = this._variableDraft || this._variableWorkingCopy(null);
+    working.kind = isPalette ? "palette" : "color";
+    this._variableDraft = working;
+    if (isPalette) {
+      if (this._narrow) {
+        this._contentEl.classList.remove("workspace-split");
+        this._contentEl.replaceChildren(host);
+        renderPaletteEditor(this, host, { glowHost: null });
+      } else {
+        const scroll = this._stageScrollEl(stage);
+        scroll?.replaceChildren(host);
+        this._mountWorkspacePage(page);
+        this._mountPageBanners(stage);
+        renderPaletteEditor(this, host, { glowHost: this._stageBgEl(stage) });
+      }
+      this._syncWorkspaceScrollport();
+      requestAnimationFrame(() => this._simpleWheelGlowLayout?.());
+      return;
     }
     this._fillVariableEditor(host);
     if (this._narrow) {
@@ -5470,26 +5599,17 @@ class CircadianScenesPanel extends HTMLElement {
 
   _fillVariableEditor(host) {
     const working = this._variableDraft || this._variableWorkingCopy(null);
-    working.kind = this._view === "palette" ? "palette" : "color";
+    working.kind = "color";
     this._variableDraft = working;
-    const isPalette = working.kind === "palette";
     const hint = document.createElement("p");
     hint.className = "library-hint";
-    hint.textContent = isPalette
-      ? this._t(
-          "frontend.library.palette_edit_hint",
-          "A palette is five colors. Lights that use it pick a slot; changing the palette updates those lights the next time a scene runs."
-        )
-      : this._t(
-          "frontend.library.variable_edit_hint",
-          "Color and brightness are shared by every theme or light that still uses this variable."
-        );
+    hint.textContent = this._t(
+      "frontend.library.variable_edit_hint",
+      "Color and brightness are shared by every theme or light that still uses this variable."
+    );
     const nameInput = this._haInput(
       this._t("frontend.common.name", "Name"),
-      working.name ||
-        (isPalette
-          ? this._t("frontend.library.new_palette", "New palette")
-          : this._t("frontend.library.new_variable", "New variable"))
+      working.name || this._t("frontend.library.new_variable", "New variable")
     );
     const bindName = () => {
       working.name = (nameInput.value || "").trim();
@@ -5498,144 +5618,40 @@ class CircadianScenesPanel extends HTMLElement {
     nameInput.addEventListener("value-changed", bindName);
     nameInput.addEventListener("change", bindName);
     host.append(hint, nameInput);
-    if (!isPalette) {
-      const draft = working.colorDraft;
-      const briInput = this._haInput(
-        this._t("frontend.lights.brightness", "Brightness"),
-        String(draft.brightness ?? 255),
-        { type: "number", min: 0, max: 255 }
-      );
-      const bindBri = (value) => {
-        if (Number.isFinite(value)) {
-          draft.brightness = value;
-          this._saveSoon();
-        }
-      };
-      briInput.addEventListener("value-changed", (ev) => {
-        bindBri(Number(ev.detail?.value ?? briInput.value));
-      });
-      briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
-      const wheel = createSceneColorWheel({
-        hasColor: true,
-        hasTemp: true,
-        tempMin: 2000,
-        tempMax: 6500,
-        getState: () => ({
-          scenes: [{ id: "variable", index: 1, draft }],
-          sequence: ["variable"],
-          activeId: "variable",
-        }),
-        onChange: () => {
-          delete draft.variable_ref;
-          wheel.sync();
-          this._saveSoon();
-        },
-      });
-      host.append(briInput, wheel.el);
-      wheel.sync();
-      return;
-    }
-    const slotsEl = document.createElement("div");
-    slotsEl.className = "palette-slots";
-    const solids = () =>
-      (this._variables || []).filter(
-        (item) => item.id !== this._variableId && !variableIsPalette(item)
-      );
-    const rgbToHex = (rgb) =>
-      `#${(rgb || [255, 255, 255])
-        .map((c) =>
-          Math.max(0, Math.min(255, Number(c) || 0))
-            .toString(16)
-            .padStart(2, "0")
-        )
-        .join("")}`;
-    const renderSlots = () => {
-      slotsEl.replaceChildren();
-      for (let index = 0; index < 5; index += 1) {
-        if (!working.slots[index]) {
-          working.slots[index] = defaultPaletteSlots()[index];
-        }
-        const slot = working.slots[index];
-        const row = document.createElement("div");
-        row.className = "palette-slot-row";
-        const swatch = document.createElement("div");
-        swatch.className = "palette-slot-swatch";
-        const colorInput = document.createElement("input");
-        colorInput.type = "color";
-        const refSelect = document.createElement("select");
-        const customOpt = document.createElement("option");
-        customOpt.value = "";
-        customOpt.textContent = this._t(
-          "frontend.library.slot_custom",
-          "Custom color"
-        );
-        refSelect.appendChild(customOpt);
-        for (const item of solids()) {
-          const opt = document.createElement("option");
-          opt.value = item.id;
-          opt.textContent = item.name;
-          refSelect.appendChild(opt);
-        }
-        refSelect.value = slot.variable_ref || "";
-        const bri = document.createElement("input");
-        bri.type = "number";
-        bri.min = "0";
-        bri.max = "255";
-        const paint = () => {
-          if (slot.variable_ref) {
-            const linked = solids().find((item) => item.id === slot.variable_ref);
-            swatch.style.background = linked
-              ? variableSwatchCss(linked, this._variables)
-              : "#888";
-            colorInput.disabled = true;
-            bri.value = String(linked?.brightness ?? 255);
-            bri.disabled = true;
-          } else {
-            const color = slot.color || {};
-            const rgb = color.hs_color
-              ? draftRgb({ ...color, brightness: 255 })
-              : color.rgb_color || [255, 200, 150];
-            swatch.style.background = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-            colorInput.value = rgbToHex(rgb);
-            colorInput.disabled = false;
-            bri.disabled = false;
-            bri.value = String(slot.brightness ?? 255);
-          }
-        };
-        colorInput.addEventListener("input", () => {
-          const rgb = hexToRgb(colorInput.value);
-          slot.variable_ref = undefined;
-          const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
-          slot.color = {
-            color_mode: "hs",
-            hs_color: [hsv[0], Math.round(hsv[1] * 100)],
-          };
-          paint();
-          this._saveSoon();
-        });
-        refSelect.addEventListener("change", () => {
-          if (refSelect.value) {
-            working.slots[index] = { variable_ref: refSelect.value };
-          } else {
-            working.slots[index] = defaultPaletteSlots()[index];
-          }
-          renderSlots();
-          this._saveSoon();
-        });
-        bri.addEventListener("change", () => {
-          const value = Number(bri.value);
-          if (Number.isFinite(value)) {
-            slot.brightness = value;
-            this._saveSoon();
-          }
-        });
-        paint();
-        row.append(swatch, colorInput, refSelect, bri);
-        slotsEl.appendChild(row);
+    const draft = working.colorDraft;
+    const briInput = this._haInput(
+      this._t("frontend.lights.brightness", "Brightness"),
+      String(draft.brightness ?? 255),
+      { type: "number", min: 0, max: 255 }
+    );
+    const bindBri = (value) => {
+      if (Number.isFinite(value)) {
+        draft.brightness = value;
+        this._saveSoon();
       }
     };
-    renderSlots();
-    host.appendChild(slotsEl);
+    briInput.addEventListener("value-changed", (ev) => {
+      bindBri(Number(ev.detail?.value ?? briInput.value));
+    });
+    briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
+    const wheel = createSceneColorWheel({
+      hasColor: true,
+      hasTemp: true,
+      tempMin: 2000,
+      tempMax: 6500,
+      getState: () => ({
+        scenes: [{ id: "variable", index: 1, draft }],
+        sequence: ["variable"],
+        activeId: "variable",
+      }),
+      onChange: () => {
+        delete draft.variable_ref;
+        wheel.sync();
+        this._saveSoon();
+      },
+    });
+    host.append(briInput, wheel.el);
+    wheel.sync();
   }
 
   async _refreshCatalog() {
@@ -7283,6 +7299,7 @@ class CircadianScenesPanel extends HTMLElement {
       view: this._view,
       editId: this._editId,
       themeId: this._themeId,
+      variableId: this._variableId,
     };
   }
 
@@ -7291,7 +7308,8 @@ class CircadianScenesPanel extends HTMLElement {
       target &&
       target.view === this._view &&
       target.editId === this._editId &&
-      target.themeId === this._themeId
+      target.themeId === this._themeId &&
+      target.variableId === this._variableId
     );
   }
 
@@ -7987,9 +8005,23 @@ class CircadianScenesPanel extends HTMLElement {
       this._view = "theme";
       this._themeId = target.themeId;
       this._editId = null;
+      this._variableId = null;
       history.replaceState(null, "", this._hashHref(`theme/${target.themeId}`));
       await this._loadTheme(target.themeId);
       return;
+    }
+    if (target.view === "variable" || target.view === "palette") {
+      this._view = target.view;
+      this._editId = null;
+      this._themeId = null;
+      const id = target.variableId;
+      if (id) {
+        this._variableId = id;
+        const prefix = target.view === "palette" ? "palette" : "variable";
+        history.replaceState(null, "", this._hashHref(`${prefix}/${id}`));
+        await this._loadVariable(id);
+        return;
+      }
     }
     if (target.view === "edit") {
       this._view = "edit";
@@ -8013,6 +8045,21 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _restoreHistory(entry, which) {
+    if (entry?.created) {
+      this._historyRestoring = true;
+      try {
+        if (which === "before") {
+          await this._deleteCreated(entry.created);
+          await this._openHistoryTarget(entry.target);
+        } else {
+          await this._recreateCreated(entry.created);
+          await this._openHistoryTarget(this._createdHistoryTarget(entry.created));
+        }
+      } finally {
+        this._historyRestoring = false;
+      }
+      return;
+    }
     const snap = which === "after" ? entry.after || entry.session : entry.session;
     if (!snap) {
       return;
@@ -8046,6 +8093,7 @@ class CircadianScenesPanel extends HTMLElement {
       after: entry.after || this._snapshotSession(),
       target: entry.target || this._historyTarget(),
       focus: entry.focus || null,
+      created: entry.created || null,
     });
     void this._restoreHistory(entry, "before");
     this._syncUndoButtons();
@@ -8080,7 +8128,14 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this.isConnected) {
       return;
     }
-    if (this._view !== "edit" && this._view !== "theme" && this._view !== "list" && this._view !== "variables") {
+    if (
+      this._view !== "edit" &&
+      this._view !== "theme" &&
+      this._view !== "list" &&
+      this._view !== "variables" &&
+      this._view !== "variable" &&
+      this._view !== "palette"
+    ) {
       return;
     }
     if (!ev.ctrlKey && !ev.metaKey) {
@@ -8687,65 +8742,42 @@ class CircadianScenesPanel extends HTMLElement {
     await this._ensureSunPath();
   }
 
-  _lightListAddControl() {
-    if (this._view !== "edit") {
-      return null;
+  _addLightToSimpleMembers(entityId) {
+    if (!entityId?.startsWith("light.")) {
+      return;
     }
-    const wrap = document.createElement("div");
-    wrap.className = "light-list-add";
-    const label = this._t("frontend.lights.add_light", "Add light");
-
-    // Prefer the native entity picker add-button — one tap opens the search
-    // list (no wrapping dialog + second click on ha-selector).
-    if (customElements.get("ha-entity-picker")) {
-      const picker = document.createElement("ha-entity-picker");
-      picker.addButton = true;
-      picker.addButtonLabel = label;
-      picker.includeDomains = ["light"];
-      picker.hideClearIcon = true;
-      picker.searchLabel = label;
-      const listed = () =>
-        (this._sunPath?.lights || [])
-          .filter((light) => !light.suggested)
-          .map((light) => light.entity_id);
-      picker.excludeEntities = listed();
-      picker.addEventListener("value-changed", (ev) => {
-        ev.stopPropagation();
-        const entityId = ev.detail?.value;
-        // Clear so the control returns to the add-button chrome.
-        picker.value = undefined;
-        picker.excludeEntities = listed();
-        if (!entityId || !String(entityId).startsWith("light.")) {
-          return;
-        }
-        void this._addLightToAssignedScenes(entityId);
-      });
-      wrap.appendChild(picker);
-      return wrap;
+    const members = this._simpleMembers || [];
+    if (members.includes(entityId)) {
+      return;
     }
-
-    const btn = document.createElement("ha-button");
-    btn.appearance = "plain";
-    btn.textContent = label;
-    const icon = document.createElement("ha-icon");
-    icon.slot = "start";
-    icon.setAttribute("icon", "mdi:plus");
-    btn.appendChild(icon);
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      void this._openAddLightPicker(btn);
-    });
-    wrap.appendChild(btn);
-    return wrap;
+    this._commitUndo();
+    const membership = {
+      exclude: [...(this._formData.membership?.exclude || [])].filter(
+        (id) => id !== entityId
+      ),
+      include: [...(this._formData.membership?.include || [])],
+    };
+    const areaId = this._formData.area;
+    const floorAreas = (this._floors || []).flatMap((f) => f.areas || []);
+    const area = floorAreas.find((a) => a.id === areaId);
+    const inArea = (area?.lights || []).includes(entityId);
+    if (!inArea && !membership.include.includes(entityId)) {
+      membership.include.push(entityId);
+    }
+    this._formData = { ...this._formData, membership };
+    this._saveSoon();
+    this._renderEditor();
   }
 
-  async _openAddLightPicker(anchor) {
+  async _openAddLightPicker(anchor, { simple = false } = {}) {
     if (!customElements.get("ha-entity-picker")) {
       return;
     }
-    const listed = (this._sunPath?.lights || [])
-      .filter((light) => !light.suggested)
-      .map((light) => light.entity_id);
+    const listed = simple
+      ? [...(this._simpleMembers || [])]
+      : (this._sunPath?.lights || [])
+          .filter((light) => !light.suggested)
+          .map((light) => light.entity_id);
     this.shadowRoot.querySelector(".light-add-picker-host")?.remove();
     const host = document.createElement("div");
     host.className = "light-add-picker-host";
@@ -8755,7 +8787,6 @@ class CircadianScenesPanel extends HTMLElement {
     picker.hideClearIcon = true;
     picker.searchLabel = this._t("frontend.lights.add_light", "Add light");
     host.appendChild(picker);
-    // Anchor under the add control so the popover opens nearby.
     if (anchor?.parentElement) {
       anchor.parentElement.appendChild(host);
     } else {
@@ -8773,10 +8804,13 @@ class CircadianScenesPanel extends HTMLElement {
       if (!entityId || !String(entityId).startsWith("light.")) {
         return;
       }
+      if (simple) {
+        this._addLightToSimpleMembers(entityId);
+        return;
+      }
       void this._addLightToAssignedScenes(entityId);
     };
     const onClosed = () => {
-      // Dismiss without a selection — drop the temporary host.
       if (!picker.value) {
         cleanup();
       }
@@ -10131,6 +10165,17 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const state = this._hass?.states?.[entityId];
     return !state || state.state === "unavailable";
+  }
+
+  _lightHasKnownCaps(entityId) {
+    const attrs = this._hass?.states?.[entityId]?.attributes;
+    if (!attrs) {
+      return false;
+    }
+    return Boolean(
+      (attrs.supported_color_modes && attrs.supported_color_modes.length) ||
+        attrs.min_color_temp_kelvin != null
+    );
   }
 
   _clockRingLights(lights) {
@@ -17145,15 +17190,17 @@ class CircadianScenesPanel extends HTMLElement {
     for (const light of legendLights) {
       tiles.appendChild(this._clockLegendRow(light, events));
     }
-    if (legendLights.length) {
+    if (this._view === "edit") {
+      tiles.appendChild(
+        createAddLightTile({
+          label: this._t("frontend.lights.add_light", "Add light"),
+          onActivate: (anchor) => this._openAddLightPicker(anchor),
+        })
+      );
+    }
+    if (tiles.childElementCount) {
       scroller.appendChild(tiles);
       legend.appendChild(scroller);
-    }
-    const addBtn = this._lightListAddControl();
-    if (addBtn) {
-      legend.appendChild(addBtn);
-    }
-    if (legendLights.length || addBtn) {
       this._clockLegendEl = legend;
       wrap.appendChild(legend);
     } else {
@@ -17207,21 +17254,26 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const unavailable =
       this._lightIsUnavailable(light.entity_id) && !removed;
+    const capsKnown = unavailable && this._lightHasKnownCaps(light.entity_id);
     if (unavailable) {
       selector.classList.add("unavailable");
+      if (capsKnown) {
+        selector.classList.add("caps-known");
+      }
     }
     paintLightTile(selector, {
       rgb: sample.rgb,
-      fillPct: removed || unavailable ? 0 : sample.brightness,
+      fillPct: removed ? 0 : sample.brightness,
       selected: !removed && light.entity_id === this._sidebarLightId,
     });
-    if (!removed && !unavailable) {
+    if (!removed && (!unavailable || capsKnown)) {
       this._lightNameLabels.push({ light, selector });
     }
 
     if (this._view === "edit") {
       const assigned = events.filter((item) => this._eventSceneId(item.id));
-      if (!removed && assigned.length) {
+      const canEdit = !removed && assigned.length && (!unavailable || capsKnown);
+      if (canEdit) {
         tile.setAttribute("aria-label", `Edit ${light.name}`);
         const openClosest = (ev) => {
           ev.stopPropagation();
@@ -17330,7 +17382,7 @@ class CircadianScenesPanel extends HTMLElement {
   _buildLightBars(xOf, events) {
     this._lightNameLabels = [];
     const lights = this._sunPath.lights || [];
-    if (!lights.length) {
+    if (!lights.length && this._view !== "edit") {
       return null;
     }
     const wrap = document.createElement("div");
@@ -17338,9 +17390,16 @@ class CircadianScenesPanel extends HTMLElement {
     for (const light of this._legendLights(lights)) {
       wrap.appendChild(this._lightRow(light, xOf, events));
     }
-    const addBtn = this._lightListAddControl();
-    if (addBtn) {
-      wrap.appendChild(addBtn);
+    if (this._view === "edit") {
+      wrap.appendChild(
+        createAddLightTile({
+          label: this._t("frontend.lights.add_light", "Add light"),
+          onActivate: (anchor) => this._openAddLightPicker(anchor),
+        })
+      );
+    }
+    if (!wrap.childElementCount) {
+      return null;
     }
     return wrap;
   }
@@ -17362,8 +17421,12 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const unavailable =
       this._lightIsUnavailable(light.entity_id) && !removed;
+    const capsKnown = unavailable && this._lightHasKnownCaps(light.entity_id);
     if (unavailable) {
       row.classList.add("unavailable");
+      if (capsKnown) {
+        row.classList.add("caps-known");
+      }
     }
     if (!removed && light.entity_id === this._sidebarLightId) {
       row.classList.add("selected");
@@ -17409,7 +17472,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (light.in_area === false) {
       name.title = "This light is not in the selected area";
     }
-    if (!removed && !unavailable) {
+    if (!removed && (!unavailable || capsKnown)) {
       this._lightNameLabels.push({ light, el: name });
     }
     bar.appendChild(name);
