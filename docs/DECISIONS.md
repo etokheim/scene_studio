@@ -668,3 +668,10 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Dialogs hid the workspace and split create vs edit. One column keeps the same place for every kind of edit.
 - **Do not reverse without user ask.**
 
+## Simple-scene lights are huemane Lys tiles
+
+- **Date:** 2026-09-16
+- **Decision:** Simple-scene members are huemane light cards (85×90, 5px pad, radius 24, fill-from-bottom `--hue-light-fill`, dual clipped label layers, 2px selected ring). They sit in a full-column `overflow-x` strip; the inner row is `width: max-content; margin-inline: auto` so a short list centers and an overflowing list scrolls from the start. Vertical drag/wheel owns brightness after an 8px axis lock; horizontal pan stays native strip scroll. Do not use circular tiles.
+- **Why:** The circular strip only shared wheel-to-brightness; the cards are the house language for lights.
+- **Do not reverse without user ask.**
+
