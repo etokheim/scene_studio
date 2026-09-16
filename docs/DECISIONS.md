@@ -755,9 +755,16 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Dial and simple-editor enter/exit
 
 - **Date:** 2026-09-16
-- **Supersedes in part:** clock enter plays once per editor visit (reset on list).
-- **Decision:** Clock enter (spin/fade/scale + sun arc) plays when arriving on a **dial** surface from a non-dial one (list, simple editor, table). Dial→dial (another circadian scene or theme) does not replay. Leaving a dial plays the reverse as exit before the next view mounts. Simple scenes, variables, and palettes use the same fade/scale without the spin. Reduced motion skips both.
-- **Why:** The enter was a one-shot per session in the editor, so returning from the list felt dead. Cross-dial navigation should not restart the sun.
+- **Supersedes in part:** clock enter plays once per editor visit (reset on list); 2026-09-16 reverse-exit before mount.
+- **Decision:** Switching between the empty stage, the circadian dial, and simple/variable/palette editors **crossfades**: outgoing `.stage-scroll` content is lifted into a `.stage-motion-layer` overlay while the next view mounts underneath. Enter and exit **both scale up** (in 0.92→1, out 1→1.08) with a ~280ms fade / ~400ms scale. The dial still adds a short overlay spin and sun arc on enter only. Dial→dial and simple→simple skip the motion. Empty stage uses the same enter. Reduced motion skips both.
+- **Why:** Awaiting a reverse (scale-down) exit made the swap feel slow and like the animation played backward. Overlapping scale-up matches a single direction.
+- **Do not reverse without user ask.**
+
+## Stage empty copy matches HA empty states
+
+- **Date:** 2026-09-16
+- **Decision:** The unselected-scene (and first-run) stage empty is Home Assistant’s empty-state layout: large muted icon, title, two body paragraphs, Learn more + open-in-new. No decorative rings.
+- **Why:** Concentric rings read as a fake dial, not HA’s “Start automating” empty.
 - **Do not reverse without user ask.**
 
 ## Simple editors have no stage wash

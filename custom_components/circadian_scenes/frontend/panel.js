@@ -291,6 +291,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockStickySeconds = undefined;
     this._clockEnterPlayed = false;
     this._simpleEnterPlayed = false;
+    this._emptyEnterPlayed = false;
+    this._emptyShouldEnter = false;
+    this._outgoingStageLayer = null;
     this._surfaceKind = "none";
     this._motionFromKind = "none";
     this._layoutDialChromeFn = undefined;
@@ -1155,33 +1158,35 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-light-clock-core .sun-light-clock-rings {
           pointer-events: auto;
         }
+        /* Enter and exit both scale up (0.92→1 in, 1→1.08 out). Overlay
+           crossfade lives on .stage-motion-layer so views overlap. */
         .sun-light-clock-face.clock-face-enter {
           animation:
-            clock-face-fade 750ms cubic-bezier(0.2, 0, 0, 1) both,
-            clock-face-scale 1500ms cubic-bezier(0.2, 0, 0, 1) both;
+            stage-surface-fade-in 280ms cubic-bezier(0.2, 0, 0, 1) both,
+            stage-surface-enter-scale 400ms cubic-bezier(0.2, 0, 0, 1) both;
         }
         .sun-light-clock-face.clock-face-enter .sun-light-clock-overlay {
           transform-origin: center center;
-          animation: clock-overlay-spin 1500ms cubic-bezier(0.2, 0, 0, 1) both;
+          animation: clock-overlay-spin 400ms cubic-bezier(0.2, 0, 0, 1) both;
         }
         /* Cancel overlay spin on the sun fill/glow so it stays locked to the
            HTML outline (both follow the JS enter arc only). */
         .sun-light-clock-face.clock-face-enter .clock-sun-day-group {
           transform-box: view-box;
           transform-origin: center;
-          animation: clock-sun-counter-spin 1500ms cubic-bezier(0.2, 0, 0, 1) both;
+          animation: clock-sun-counter-spin 400ms cubic-bezier(0.2, 0, 0, 1) both;
         }
         /* Buttons live on the face (outside the SVG overlay). Spin this layer
            around the dial center so they orbit with the path, not in place.
            Anchors counter-rotate so the icon + label stay screen-level. */
         .sun-light-clock-face.clock-face-enter .clock-event-layer {
           transform-origin: center center;
-          animation: clock-overlay-spin 1500ms cubic-bezier(0.2, 0, 0, 1) both;
+          animation: clock-overlay-spin 400ms cubic-bezier(0.2, 0, 0, 1) both;
         }
         .sun-light-clock-face.clock-face-enter .clock-event-anchor {
-          animation: clock-event-counter-spin 1500ms cubic-bezier(0.2, 0, 0, 1) both;
+          animation: clock-event-counter-spin 400ms cubic-bezier(0.2, 0, 0, 1) both;
         }
-        @keyframes clock-face-fade {
+        @keyframes stage-surface-fade-in {
           from {
             opacity: 0;
           }
@@ -1189,17 +1194,33 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 1;
           }
         }
-        @keyframes clock-face-scale {
+        @keyframes stage-surface-fade-out {
           from {
-            transform: scale(0.9);
+            opacity: 1;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+        @keyframes stage-surface-enter-scale {
+          from {
+            transform: scale(0.92);
           }
           to {
             transform: scale(1);
           }
         }
+        @keyframes stage-surface-exit-scale {
+          from {
+            transform: scale(1);
+          }
+          to {
+            transform: scale(1.08);
+          }
+        }
         @keyframes clock-overlay-spin {
           from {
-            transform: translateZ(0) rotate(-12deg);
+            transform: translateZ(0) rotate(-8deg);
           }
           to {
             transform: translateZ(0) rotate(0deg);
@@ -1207,7 +1228,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         @keyframes clock-sun-counter-spin {
           from {
-            transform: rotate(12deg);
+            transform: rotate(8deg);
           }
           to {
             transform: rotate(0deg);
@@ -1215,54 +1236,42 @@ class CircadianScenesPanel extends HTMLElement {
         }
         @keyframes clock-event-counter-spin {
           from {
-            transform: translate(-50%, -50%) rotate(12deg);
+            transform: translate(-50%, -50%) rotate(8deg);
           }
           to {
             transform: translate(-50%, -50%) rotate(0deg);
           }
         }
-        .sun-light-clock-face.clock-face-exit {
-          animation:
-            clock-face-fade 500ms cubic-bezier(0.4, 0, 1, 1) both reverse,
-            clock-face-scale 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
-        }
-        .sun-light-clock-face.clock-face-exit .sun-light-clock-overlay {
-          transform-origin: center center;
-          animation: clock-overlay-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
-        }
-        .sun-light-clock-face.clock-face-exit .clock-sun-day-group {
-          transform-box: view-box;
-          transform-origin: center;
-          animation: clock-sun-counter-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
-        }
-        .sun-light-clock-face.clock-face-exit .clock-event-layer {
-          transform-origin: center center;
-          animation: clock-overlay-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
-        }
-        .sun-light-clock-face.clock-face-exit .clock-event-anchor {
-          animation: clock-event-counter-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
-        }
         .simple-editor-host.simple-editor-enter,
-        .library-editor.simple-editor-enter {
+        .library-editor.simple-editor-enter,
+        .empty-state.stage-surface-enter {
           transform-origin: center center;
           animation:
-            clock-face-fade 750ms cubic-bezier(0.2, 0, 0, 1) both,
-            clock-face-scale 1500ms cubic-bezier(0.2, 0, 0, 1) both;
+            stage-surface-fade-in 280ms cubic-bezier(0.2, 0, 0, 1) both,
+            stage-surface-enter-scale 400ms cubic-bezier(0.2, 0, 0, 1) both;
         }
-        .simple-editor-host.simple-editor-exit,
-        .library-editor.simple-editor-exit {
+        .stage-motion-layer {
+          position: absolute;
+          inset: 0;
+          z-index: 6;
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          overflow: hidden;
+          pointer-events: none;
           transform-origin: center center;
+        }
+        .stage-motion-layer.stage-motion-exit-active {
           animation:
-            clock-face-fade 500ms cubic-bezier(0.4, 0, 1, 1) both reverse,
-            clock-face-scale 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+            stage-surface-fade-out 280ms cubic-bezier(0.4, 0, 1, 1) both,
+            stage-surface-exit-scale 400ms cubic-bezier(0.4, 0, 1, 1) both;
         }
         @media (prefers-reduced-motion: reduce) {
           .sun-light-clock-face.clock-face-enter,
-          .sun-light-clock-face.clock-face-exit,
           .simple-editor-host.simple-editor-enter,
-          .simple-editor-host.simple-editor-exit,
           .library-editor.simple-editor-enter,
-          .library-editor.simple-editor-exit {
+          .empty-state.stage-surface-enter,
+          .stage-motion-layer.stage-motion-exit-active {
             animation-duration: 1ms !important;
           }
         }
@@ -3495,7 +3504,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .empty-state > ha-icon {
           --mdc-icon-size: 80px;
-          color: var(--primary-text-color);
+          color: var(--disabled-text-color, var(--secondary-text-color));
           margin-bottom: 16px;
         }
         .empty-state h1 {
@@ -3504,6 +3513,13 @@ class CircadianScenesPanel extends HTMLElement {
           font-weight: 400;
           line-height: 1.3;
           color: var(--primary-text-color);
+        }
+        .stage-scroll > .empty-state {
+          flex: 1 1 auto;
+          width: 100%;
+          max-width: 560px;
+          min-height: 100%;
+          padding: 48px 24px 64px;
         }
         .empty-state p {
           margin: 0 0 12px;
@@ -3525,6 +3541,9 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .empty-state a.learn-more ha-icon {
           --mdc-icon-size: 16px;
+        }
+        .empty-state .auto-configure {
+          margin-top: 16px;
         }
         .empty {
           text-align: center;
@@ -4166,34 +4185,53 @@ class CircadianScenesPanel extends HTMLElement {
     });
   }
 
-  async _playClockExitAnimation() {
-    const face = this._clockFaceEl;
-    if (!face?.isConnected || this._prefersReducedMotion()) {
+  _disposeOutgoingStageLayer() {
+    const layer = this._outgoingStageLayer;
+    this._outgoingStageLayer = null;
+    if (!layer) {
       return;
     }
-    face.classList.remove("clock-face-enter");
-    void face.offsetWidth;
-    face.classList.add("clock-face-exit");
-    const idle =
-      this._clockSunDisplayedSeconds ?? this._clockSunIdleSeconds();
-    const to =
-      (((idle - 6 * 3600) % SECONDS_PER_DAY) + SECONDS_PER_DAY) %
-      SECONDS_PER_DAY;
-    this._animateClockSunArc(idle, to, 750, { forward: false });
-    await this._waitForAnimation(face, "clock-face-scale", 850);
+    const hadSun = this._sunPathEl && layer.contains(this._sunPathEl);
+    layer.remove();
+    if (hadSun) {
+      this._parkSunPath();
+    }
   }
 
-  async _playSimpleExitAnimation() {
-    const el =
-      this._simpleEditorHost ||
-      this._contentEl?.querySelector(".simple-editor-host, .library-editor");
-    if (!el?.isConnected || this._prefersReducedMotion()) {
+  _liftOutgoingStageLayer() {
+    this._disposeOutgoingStageLayer();
+    const stage = this._contentEl?.querySelector(".stage-col");
+    const scroll = this._stageScrollEl(stage);
+    if (!scroll?.firstChild) {
       return;
     }
-    el.classList.remove("simple-editor-enter");
-    void el.offsetWidth;
-    el.classList.add("simple-editor-exit");
-    await this._waitForAnimation(el, "clock-face-scale", 850);
+    const layer = document.createElement("div");
+    layer.className = "stage-motion-layer";
+    while (scroll.firstChild) {
+      layer.appendChild(scroll.firstChild);
+    }
+    this._outgoingStageLayer = layer;
+  }
+
+  _attachOutgoingStageLayer(stage) {
+    const layer = this._outgoingStageLayer;
+    if (!layer) {
+      return;
+    }
+    if (!stage) {
+      this._disposeOutgoingStageLayer();
+      return;
+    }
+    stage.appendChild(layer);
+    void layer.offsetWidth;
+    layer.classList.add("stage-motion-exit-active");
+    void this._waitForAnimation(layer, "stage-surface-exit-scale", 480).then(
+      () => {
+        if (this._outgoingStageLayer === layer) {
+          this._disposeOutgoingStageLayer();
+        }
+      }
+    );
   }
 
   _playSimpleEnterIfNeeded(el) {
@@ -4205,11 +4243,10 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     this._simpleEnterPlayed = true;
-    el.classList.remove("simple-editor-exit");
     void el.offsetWidth;
     el.classList.add("simple-editor-enter");
     const clear = (ev) => {
-      if (ev.animationName && ev.animationName !== "clock-face-scale") {
+      if (ev.animationName && ev.animationName !== "stage-surface-enter-scale") {
         return;
       }
       el.classList.remove("simple-editor-enter");
@@ -4218,14 +4255,35 @@ class CircadianScenesPanel extends HTMLElement {
     el.addEventListener("animationend", clear);
   }
 
+  _prepareEmptyEnter(el) {
+    if (!el) {
+      return;
+    }
+    if (!this._emptyShouldEnter || this._prefersReducedMotion()) {
+      this._emptyShouldEnter = false;
+      this._emptyEnterPlayed = true;
+      return;
+    }
+    el.classList.add("stage-surface-enter");
+    this._emptyShouldEnter = false;
+    this._emptyEnterPlayed = true;
+    const clear = (ev) => {
+      if (ev.animationName && ev.animationName !== "stage-surface-enter-scale") {
+        return;
+      }
+      el.classList.remove("stage-surface-enter");
+      el.removeEventListener("animationend", clear);
+    };
+    el.addEventListener("animationend", clear);
+  }
+
   async _transitionSurfaces(fromKind, toKind) {
     const from = fromKind || "none";
     const to = toKind || "none";
-    if (from === "dial" && to !== "dial") {
-      await this._playClockExitAnimation();
-    }
-    if (from === "simple" && to !== "simple") {
-      await this._playSimpleExitAnimation();
+    if (from !== to && !this._prefersReducedMotion()) {
+      this._liftOutgoingStageLayer();
+    } else {
+      this._disposeOutgoingStageLayer();
     }
     if (to === "dial" && from === "dial") {
       this._clockEnterPlayed = true;
@@ -4237,6 +4295,8 @@ class CircadianScenesPanel extends HTMLElement {
     } else if (to === "simple") {
       this._simpleEnterPlayed = false;
     }
+    this._emptyShouldEnter =
+      to === "none" && (from !== "none" || !this._emptyEnterPlayed);
   }
 
   _untitledLabel() {
@@ -4458,6 +4518,9 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._sunPathEl) {
       return;
     }
+    if (this._outgoingStageLayer?.contains(this._sunPathEl)) {
+      return;
+    }
     const home = this._sunPathHome;
     if (home && this._sunPathEl.parentNode !== home) {
       const content = this._contentEl;
@@ -4639,6 +4702,7 @@ class CircadianScenesPanel extends HTMLElement {
         scroll.scrollTop = 0;
       }
     }
+    this._attachOutgoingStageLayer(page.querySelector(".stage-col"));
   }
 
   _syncStageFaceMax() {
@@ -4759,6 +4823,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._syncWorkspaceScrollport();
     this._setListActions();
     this._setFab(null);
+    this._prepareEmptyEnter(
+      this._contentEl.querySelector(".stage-scroll > .empty-state")
+    );
   }
 
   _noteSimpleDirty() {
@@ -14686,7 +14753,6 @@ class CircadianScenesPanel extends HTMLElement {
     void face.offsetWidth;
     face.classList.add("clock-face-enter");
     const clearEnter = (ev) => {
-      // Overlay + event-layer spin finish together (1.5s).
       if (ev.animationName && ev.animationName !== "clock-overlay-spin") {
         return;
       }
@@ -14694,7 +14760,7 @@ class CircadianScenesPanel extends HTMLElement {
       face.removeEventListener("animationend", clearEnter);
     };
     face.addEventListener("animationend", clearEnter);
-    this._animateClockSunArc(from, idle, 2250, { forward: true });
+    this._animateClockSunArc(from, idle, 700, { forward: true });
   }
 
   _paintClockSunPath(overlay, events, { includeSun = true } = {}) {

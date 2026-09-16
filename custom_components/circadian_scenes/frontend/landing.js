@@ -345,36 +345,6 @@ export const LANDING_CSS = `
   .auto-configure {
     margin-top: 16px;
   }
-  .empty-select {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 52vh;
-    padding: 32px 16px;
-    text-align: center;
-  }
-  .empty-select-rings {
-    width: 220px;
-    height: 220px;
-    border-radius: 50%;
-    margin: 0 auto 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background:
-      radial-gradient(circle, var(--card-background-color, #2b2b2b) 0 38%, transparent 39%),
-      radial-gradient(circle, transparent 0 54%, rgba(255,255,255,0.14) 55% 56%, transparent 57%),
-      radial-gradient(circle, transparent 0 72%, rgba(255,255,255,0.12) 73% 74%, transparent 75%),
-      radial-gradient(circle, transparent 0 90%, rgba(255,255,255,0.1) 91% 92%, transparent 93%);
-  }
-  .empty-select-rings span {
-    max-width: 7.5em;
-    font-size: 14px;
-    line-height: 1.35;
-    color: var(--primary-text-color);
-  }
   @media (max-width: 870px) {
     .workspace { flex-direction: column; }
     .area-rail {
@@ -748,18 +718,24 @@ function renderSceneCard(panel, scene) {
 }
 
 function renderEmptyHero(panel) {
-  const el = document.createElement("div");
-  el.className = "empty-hero";
-  const h = document.createElement("h1");
-  h.textContent = panel._t(
-    "frontend.empty.extrapolation_title",
-    "Start lighting with the sun"
-  );
-  const p = document.createElement("p");
-  p.textContent = panel._t(
-    "frontend.empty.auto_configure_body",
-    "Auto configure creates a circadian scene for every area that has lights, using the default theme. You can edit variables and themes here anytime — lights update the next time a scene runs."
-  );
+  const el = panel._buildEmptyState({
+    icon: "mdi:white-balance-sunny",
+    title: panel._t(
+      "frontend.empty.extrapolation_title",
+      "Start lighting with the sun"
+    ),
+    paragraphs: [
+      panel._t(
+        "frontend.empty.extrapolation_body",
+        "Circadian Scenes blend your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day."
+      ),
+      panel._t(
+        "frontend.empty.auto_configure_body",
+        "Auto configure creates a circadian scene for every area that has lights, using the default theme. You can edit variables and themes here anytime — lights update the next time a scene runs."
+      ),
+    ],
+    learnMore: true,
+  });
   const btn = document.createElement("ha-button");
   btn.className = "auto-configure";
   btn.textContent = panel._t(
@@ -767,23 +743,29 @@ function renderEmptyHero(panel) {
     "Auto configure"
   );
   btn.addEventListener("click", () => panel._autoConfigure());
-  el.append(h, p, btn);
+  el.appendChild(btn);
   return el;
 }
 
 function renderSelectEmpty(panel) {
-  const el = document.createElement("div");
-  el.className = "empty-select";
-  const rings = document.createElement("div");
-  rings.className = "empty-select-rings";
-  const label = document.createElement("span");
-  label.textContent = panel._t(
-    "frontend.empty.select_scene",
-    "Select a scene to get started"
-  );
-  rings.appendChild(label);
-  el.appendChild(rings);
-  return el;
+  return panel._buildEmptyState({
+    icon: "mdi:white-balance-sunny",
+    title: panel._t(
+      "frontend.empty.extrapolation_title",
+      "Start lighting with the sun"
+    ),
+    paragraphs: [
+      panel._t(
+        "frontend.empty.extrapolation_body",
+        "Circadian Scenes blend your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day."
+      ),
+      panel._t(
+        "frontend.empty.select_scene_body",
+        "Choose a scene from the list to edit its lights through the day, or add a scene from an area."
+      ),
+    ],
+    learnMore: true,
+  });
 }
 
 function renderLibrary(panel, { compact } = {}) {

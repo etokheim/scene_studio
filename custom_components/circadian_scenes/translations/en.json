@@ -28,6 +28,7 @@
       "auto_configure_body": "Auto configure creates a circadian scene for every area that has lights, using the default theme. You can edit variables and themes here anytime — lights update the next time a scene runs.",
       "area_no_scenes": "No scenes yet — create one for this area",
       "select_scene": "Select a scene to get started",
+      "select_scene_body": "Choose a scene from the list to edit its lights through the day, or add a scene from an area.",
       "no_areas": "No Home Assistant areas yet. Add floors and areas in Settings, then come back.",
       "learn_more": "Learn more"
     },
