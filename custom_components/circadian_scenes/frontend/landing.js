@@ -539,7 +539,8 @@ export function renderLanding(panel, { includeStage = true } = {}) {
     if (
       panel._view !== "edit" &&
       panel._view !== "theme" &&
-      panel._view !== "variable"
+      panel._view !== "variable" &&
+      panel._view !== "palette"
     ) {
       if (!items.length) {
         scroll.appendChild(renderEmptyHero(panel));

@@ -19,6 +19,8 @@ export const SIMPLE_EDITOR_CSS = `
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
   }
@@ -30,6 +32,7 @@ export const SIMPLE_EDITOR_CSS = `
     width: 100%;
     min-width: 0;
     min-height: 0;
+    flex: 1 1 auto;
     padding: 40px 0 16px;
     box-sizing: border-box;
     gap: 16px;
@@ -48,10 +51,12 @@ export const SIMPLE_EDITOR_CSS = `
     padding-bottom: 88px;
   }
   .simple-wheels .hue-wheel-stage {
-    width: min(100%, 86vh, var(--dial-face-max, 86vh));
-    max-width: min(100%, 86vh, var(--dial-face-max, 86vh));
+    width: min(100%, 650px, var(--dial-face-max, 650px));
+    max-width: min(100%, 650px, var(--dial-face-max, 650px));
+    max-height: 100%;
     min-width: 0;
     margin: 0;
+    aspect-ratio: 1;
   }
   .var-palette {
     display: flex;

@@ -96,8 +96,11 @@ const CLOCK_SCRUB_RAIL_PAD_PX = 16;
 /* Landscape rail needs room for empty left gutter + dial + rail; below this
    width keep the portrait toolbar (avoids empty “black bar” side columns). */
 const CLOCK_LANDSCAPE_SCRUB_MIN_WIDTH_PX = 900;
-/** Leave this much of the first light-list row visible under the dial face. */
-const DIAL_LIST_PEEK_PX = 32;
+/** Dial / color-wheel face floors; below these the stage column scrolls. */
+const DIAL_FACE_MIN_PX = 600;
+const WHEEL_FACE_MIN_PX = 400;
+/** Color wheels (simple / variable) cap; the stage column stays full width. */
+const WHEEL_FACE_MAX_PX = 650;
 /* Rings host inset so CSS outer edge matches CLOCK_RINGS_OUTER in viewBox. */
 const CLOCK_RINGS_INSET_PCT = 50 - CLOCK_RINGS_OUTER / 2;
 /* Wedges/rays cover the square including corners; back layer is slightly
@@ -1056,12 +1059,10 @@ class CircadianScenesPanel extends HTMLElement {
              margin so ticks bleed past the column; page/dial-wide clips
              horizon bleed instead (overflow-x:hidden+visible Y → auto). */
           overflow: visible;
-          /* Fallback until _syncDialHeightBudget measures: fill below the
-             header, keep event-label pad + gap, leave ~32px of the first
-             light row peeking. */
+          /* Fallback until _syncStageFaceMax measures: fill below the header,
+             keep event-label pad + gap, leave room for the Lys strip. */
           --dial-face-max: calc(
-            100vh - var(--header-height, 64px) - 40px - 16px -
-              ${DIAL_LIST_PEEK_PX}px
+            100vh - var(--header-height, 64px) - 40px - 16px - 180px
           );
         }
         .sun-light-clock {
@@ -1078,8 +1079,8 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .sun-path.dial-view .sun-light-clock {
           position: relative;
-          /* Do not cap height to the viewport — face size comes from
-             --dial-face-max; the legend stacks under and scrolls into view. */
+          /* Face size comes from --dial-face-max (fits Lys tiles above the
+             fold when it can; min-height 600px otherwise scrolls). */
           min-height: 0;
           gap: 16px;
           padding-bottom: 16px;
@@ -1109,9 +1110,8 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .sun-light-clock-face {
           position: relative;
-          /* Leave headroom for the app bar + event labels around the dial. */
-          width: min(100%, 86vh, var(--dial-face-max, 86vh));
-          max-width: min(100%, 86vh, var(--dial-face-max, 86vh));
+          width: min(100%, var(--dial-face-max, 86vh));
+          max-width: min(100%, var(--dial-face-max, 86vh));
           aspect-ratio: 1;
           flex: 0 0 auto;
           /* Allow page scroll over the dial; only the sun/handle capture. */
@@ -2643,6 +2643,8 @@ class CircadianScenesPanel extends HTMLElement {
           width: 100%;
           max-width: none;
           min-width: 0;
+          min-height: 0;
+          flex: 1 1 auto;
           margin: 0 auto;
           padding: 16px 8px 48px;
         }
@@ -3737,6 +3739,9 @@ class CircadianScenesPanel extends HTMLElement {
           padding-inline: 12px;
           box-sizing: border-box;
         }
+        /* Workspace (rail + .stage-col) always uses the full panel — same
+           shell as the circadian dial, including simple/variable editors. */
+        .page:has(.workspace),
         .page.dial-wide {
           --page-max-width: none;
           max-width: none;
@@ -3756,6 +3761,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         /* Clip X on the wide page. Horizon may bleed under the frosted rail;
            height is capped in _layoutClockHorizonBack. */
+        .page:has(.workspace),
         .page.dial-wide {
           overflow-x: clip;
         }
@@ -3852,16 +3858,19 @@ class CircadianScenesPanel extends HTMLElement {
           overflow: hidden;
           padding: 0;
         }
-        /* Stage wheel: same face budget as the circadian dial. */
+        /* Color wheels cap at WHEEL_FACE_MAX; --dial-face-max shrinks them to
+           fit above Lys tiles. The stage column itself stays full width. */
         .stage-col .hue-wheel-stage {
-          width: min(100%, 86vh, var(--dial-face-max, 86vh));
-          max-width: min(100%, 86vh, var(--dial-face-max, 86vh));
+          width: min(100%, ${WHEEL_FACE_MAX_PX}px, var(--dial-face-max, ${WHEEL_FACE_MAX_PX}px));
+          max-width: min(100%, ${WHEEL_FACE_MAX_PX}px, var(--dial-face-max, ${WHEEL_FACE_MAX_PX}px));
           margin: 0 auto;
           padding: 40px 0 16px;
+          box-sizing: border-box;
         }
         .stage-col .simple-editor .hue-wheel-stage {
           min-width: 0;
           padding: 0;
+          max-height: 100%;
         }
         .stage-col .simple-editor .hue-wheel-canvas,
         .stage-col .hue-wheel-canvas {
@@ -4850,12 +4859,55 @@ class CircadianScenesPanel extends HTMLElement {
       const hostH = this.clientHeight || window.innerHeight;
       const available = Math.max(120, Math.floor(hostH - (contentTop - hostTop)));
       workspace.style.height = `${available}px`;
+      this._bindAreaRailScroll(workspace.querySelector(".area-rail"));
       this._syncStageFaceMax();
       this._bindStageScrollLayout(workspace.querySelector(".stage-scroll"));
     } else if (workspace) {
       workspace.style.height = "";
     }
-    requestAnimationFrame(() => this._layoutDialChromeFn?.());
+    this._syncEditorChrome();
+    requestAnimationFrame(() => {
+      this._syncStageFaceMax();
+      this._layoutDialChromeFn?.();
+    });
+  }
+
+  _captureAreaRailScroll() {
+    const rail = this._contentEl?.querySelector(".area-rail");
+    if (rail) {
+      this._areaRailScrollTop = rail.scrollTop;
+    }
+  }
+
+  _bindAreaRailScroll(rail) {
+    if (!rail) {
+      return;
+    }
+    if (this._areaRailBound === rail) {
+      rail.scrollTop = this._areaRailScrollTop || 0;
+      return;
+    }
+    if (this._areaRailBound && this._onAreaRailScroll) {
+      this._areaRailBound.removeEventListener("scroll", this._onAreaRailScroll);
+    }
+    this._onAreaRailScroll = () => {
+      this._areaRailScrollTop = rail.scrollTop;
+    };
+    this._areaRailBound = rail;
+    rail.addEventListener("scroll", this._onAreaRailScroll, { passive: true });
+    rail.scrollTop = this._areaRailScrollTop || 0;
+  }
+
+  _mountWorkspacePage(page, { resetStageScroll = true } = {}) {
+    this._captureAreaRailScroll();
+    this._contentEl.replaceChildren(page);
+    this._bindAreaRailScroll(page.querySelector(".area-rail"));
+    if (resetStageScroll) {
+      const scroll = page.querySelector(".stage-scroll");
+      if (scroll) {
+        scroll.scrollTop = 0;
+      }
+    }
   }
 
   _syncStageFaceMax() {
@@ -4863,21 +4915,74 @@ class CircadianScenesPanel extends HTMLElement {
     if (!stage) {
       return;
     }
-    const hostH = this.clientHeight || window.innerHeight;
-    const headerVar = parseFloat(
-      getComputedStyle(this).getPropertyValue("--header-height")
-    );
-    const headerH = Number.isFinite(headerVar) && headerVar > 0 ? headerVar : 64;
-    const hostTop = this.getBoundingClientRect().top;
     const scroll = this._stageScrollEl(stage);
-    const scrollTop = (scroll || stage).getBoundingClientRect().top;
-    const bannerH = Math.max(0, Math.round(scrollTop - (hostTop + headerH)));
-    const overhead = 40 + 16;
-    const maxPx = Math.max(
-      160,
-      Math.floor(hostH - headerH - bannerH - overhead - DIAL_LIST_PEEK_PX)
+    const box = scroll || stage;
+    const scrollH = box.clientHeight || 0;
+    const scrollW = box.clientWidth || 0;
+    if (scrollH < 1 || scrollW < 1) {
+      return;
+    }
+    const isDial = this._isDialView();
+    const minPx = isDial ? DIAL_FACE_MIN_PX : WHEEL_FACE_MIN_PX;
+    const widthCap = isDial ? scrollW : Math.min(scrollW, WHEEL_FACE_MAX_PX);
+    const strip =
+      box.querySelector(".sun-light-clock-legend") ||
+      box.querySelector(".light-tiles-scroller");
+    let stripH = strip
+      ? Math.ceil(strip.getBoundingClientRect().height)
+      : 0;
+    if (
+      !stripH &&
+      (box.querySelector(".simple-editor") ||
+        (isDial && this._view === "edit" && this._formData?.kind !== "simple"))
+    ) {
+      stripH = 181;
+    }
+    let overhead = 40 + 16;
+    const clock = box.querySelector(".sun-light-clock");
+    const editor = box.querySelector(".simple-editor, .library-editor");
+    if (clock) {
+      const cs = getComputedStyle(clock);
+      const padTop = parseFloat(cs.paddingTop);
+      const padBottom = parseFloat(cs.paddingBottom);
+      const gap = parseFloat(cs.rowGap || cs.gap);
+      overhead =
+        (Number.isFinite(padTop) ? padTop : 40) +
+        (Number.isFinite(padBottom) ? padBottom : 16) +
+        (Number.isFinite(gap) ? gap : 16);
+    } else if (editor) {
+      const cs = getComputedStyle(editor);
+      const padTop = parseFloat(cs.paddingTop);
+      const padBottom = parseFloat(cs.paddingBottom);
+      const gap = parseFloat(cs.rowGap || cs.gap);
+      overhead =
+        (Number.isFinite(padTop) ? padTop : 40) +
+        (Number.isFinite(padBottom) ? padBottom : 16) +
+        (Number.isFinite(gap) ? gap : 16);
+      const wheels = box.querySelector(".simple-wheels");
+      if (wheels) {
+        const wheelPad = parseFloat(getComputedStyle(wheels).paddingBottom);
+        overhead += Number.isFinite(wheelPad) ? wheelPad : 0;
+      }
+    }
+    let toolbarH = 0;
+    if (
+      isDial &&
+      this._dateToolbar &&
+      !this._dateToolbar.classList.contains("toolbar-rail-only") &&
+      !this._sunPathStage?.classList.contains("landscape-clock-scrub")
+    ) {
+      toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
+    }
+    const available = scrollH - stripH - overhead - toolbarH;
+    const size = Math.max(
+      1,
+      Math.floor(Math.min(widthCap, Math.max(minPx, available)))
     );
-    stage.style.setProperty("--dial-face-max", `${maxPx}px`);
+    stage.style.setProperty("--dial-face-max", `${size}px`);
+    if (this._sunPathEl?.classList.contains("dial-view")) {
+      this._sunPathEl.style.setProperty("--dial-face-max", `${size}px`);
+    }
   }
 
   _renderList({ keepSidebar = false } = {}) {
@@ -4916,7 +5021,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
 
     const page = renderLanding(this, { includeStage: true });
-    this._contentEl.replaceChildren(page);
+    this._mountWorkspacePage(page);
     const stage = page.querySelector(".stage-col");
     if (stage) {
       this._mountPageBanners(stage);
@@ -5357,7 +5462,7 @@ class CircadianScenesPanel extends HTMLElement {
     } else {
       const scroll = this._stageScrollEl(stage);
       scroll?.replaceChildren(host);
-      this._contentEl.replaceChildren(page);
+      this._mountWorkspacePage(page);
       this._mountPageBanners(stage);
     }
     this._syncWorkspaceScrollport();
@@ -5636,7 +5741,7 @@ class CircadianScenesPanel extends HTMLElement {
         this._sunPathEl.hidden = false;
       }
     } else {
-      this._contentEl.replaceChildren(page);
+      this._mountWorkspacePage(page);
       if (stage) {
         const nameInput = this._haInput(
           this._t("frontend.common.name", "Name"),
@@ -9772,7 +9877,7 @@ class CircadianScenesPanel extends HTMLElement {
       } else {
         const scroll = this._stageScrollEl(stage);
         scroll?.replaceChildren(host);
-        this._contentEl.replaceChildren(page);
+        this._mountWorkspacePage(page);
         this._mountPageBanners(stage);
         this._simpleEditorHost = host;
       }
@@ -9804,7 +9909,7 @@ class CircadianScenesPanel extends HTMLElement {
         this._sunPathEl.hidden = false;
       }
     } else {
-      this._contentEl.replaceChildren(page);
+      this._mountWorkspacePage(page);
       if (stage) {
         this._mountSunPath(stage);
       }
@@ -13769,42 +13874,13 @@ class CircadianScenesPanel extends HTMLElement {
     }
     path.style.setProperty("--dial-timeline-h", `${toolbarH}px`);
 
-    // Face fills available height under the app bar, minus overhead above the
-    // face (event-label pad) and gap, leaving ~32px of the first light row
-    // peeking so the list is discoverable without shrinking on mobile past
-    // the width/aspect lock. Draft/location banners live in .stage-col above
-    // the scrollport — reserve their reach so the dial shrinks instead of
-    // pushing the list below the fold.
+    // Draft/location banners live in .stage-col above the scrollport.
+    // Face size (fits Lys tiles, min 600px) is _syncStageFaceMax.
     const hostRect = this.getBoundingClientRect();
-    const hostH = this.clientHeight || window.innerHeight;
-    const headerVar = parseFloat(
-      getComputedStyle(this).getPropertyValue("--header-height")
-    );
-    const headerH = Number.isFinite(headerVar) && headerVar > 0 ? headerVar : 64;
     const pathTop = path.getBoundingClientRect().top;
-    // Vignette / horizon: extend to the host top (under app bar + banners).
     const vignetteReach = Math.max(0, Math.round(pathTop - hostRect.top));
-    // Face budget: only the stack below the app bar (banners), not the header
-    // itself (already subtracted as headerH).
-    const bannerH = Math.max(0, Math.round(pathTop - (hostRect.top + headerH)));
     path.style.setProperty("--dial-banner-h", `${vignetteReach}px`);
-    const clock = path.querySelector(".sun-light-clock");
-    let overhead = 40 + 16;
-    if (clock) {
-      const cs = getComputedStyle(clock);
-      const padTop = parseFloat(cs.paddingTop);
-      const gap = parseFloat(cs.rowGap || cs.gap);
-      overhead =
-        (Number.isFinite(padTop) ? padTop : 40) +
-        (Number.isFinite(gap) ? gap : 16);
-    }
-    const maxPx = Math.max(
-      160,
-      Math.floor(
-        hostH - headerH - bannerH - overhead - toolbarH - DIAL_LIST_PEEK_PX
-      )
-    );
-    path.style.setProperty("--dial-face-max", `${maxPx}px`);
+    this._syncStageFaceMax();
     // Face size may have changed — re-align landscape rail / chrome next frame.
     requestAnimationFrame(() => this._alignYearScrubRail());
   }

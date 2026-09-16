@@ -37,6 +37,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Supersedes in part:** “Desktop drawer overlays backgrounds” (horizon reach) and “Use HA’s top app bar” (workspace scrollport).
 - **Superseded in part:** 2026-09-15 — simple-scene stage uses the same `.sun-light-clock` padding (40px 0 16px, no extra 16px inset) so the workspace grid lines up with circadian. Color/kelvin wheels (and the tile/palette column under them) cap at **650px** (`max-width` + `min-width: 0` so flex cannot grow to `--dial-face-max`). Stage wheel glow stays near the disk (scale 1.2), not a stage-filling wash.
 - **Superseded in part:** 2026-09-16 — simple-scene and library wheels use the same stage face budget as the circadian dial (`min(100%, 86vh, var(--dial-face-max, 86vh))`). Do not cap them at 650px; the Lys strip is already full-column.
+- **Superseded in part:** 2026-09-16 — `.page` is full-width whenever a `.workspace` is shown (same shell as `.page.dial-wide`), not only for circadian dial. Color wheels cap at **650px** and shrink with `--dial-face-max` so they stay above the Lys tiles (floor **400px**, then the stage scrolls). The circadian dial uses the same fit (floor **600px** on `.sun-light-clock-face`) so tiles are on-screen without a 32px peek. `.stage-col` stays full remaining width; max-width lives on the wheel/dial, not the column.
 - **Decision:** Workspace `.content` has no top padding. `.stage-col` stays `overflow: visible` and splits into `.stage-bg` (pointer-events none; clock horizon and simple-scene wheel glow) plus `.stage-scroll` (`overflow-y: auto`, `overflow-x: clip`) for the face and light list. Horizon/glow are laid out from the face/wheel center and may paint under the frosted area rail. The app-bar scroller stays `overflow: hidden` while a workspace is shown. Simple-scene and variable/palette wheels share the circadian dial diameter. Circadian themes open `#theme/<id>` on that dial; each solar event stores color **and** brightness on the shared theme (wheel-pin detaches a `variable_ref` on that event only). Theme and scene dial chrome share `_isDialView()` so the landscape year rail, date morph, and sticky “now” reset land in the same places. Editing a theme from a circadian scene keeps that scene’s light rings and list; only `#theme/<id>` uses the single theme-ring preview. Sidebar brightness/color drags still patch the open scene’s lights from the theme draft (per-light overrides keep their stops), paint matching circadian scene cards, and `sync()` the graph handle — do not wait for `_saveSoon` / WS list ramps for those visuals.
 - **Why:** Padding plus `overflow: visible` on the stage left a header gap and no middle-column scroll. Putting glow in the same box as `overflow-y: auto` clips bleed (CSS overflow axis quirk). A sibling background layer keeps graphics full-bleed while the list can scroll.
 - **Do not reverse without user ask.**
@@ -480,6 +481,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-30
 - **Superseded in part:** 2026-09-01 — `--dial-face-max` now reserves ~32px so the first light-list row peeks under the face (discoverability). List still flows under the face; do not move it into the landscape left gutter.
+- **Superseded in part:** 2026-09-16 — the dial shrinks so the **full** Lys strip fits in the stage scrollport (floor 600px, then scroll). Do not reserve only a 32px peek.
 - **Superseded in part:** 2026-09-01 — draft/location `.page-banners` reduce `--dial-face-max` by their measured reach so the list still peeks above the fold; dial vignette `top` extends by `--dial-banner-h` (path→host) so it matches `.clock-horizon-back` under the banners.
 - **Superseded in part:** 2026-09-16 — the under-face list is the Lys tile strip (full column width, centered when it fits, overflow-x when it does not), not stacked `clock-legend-row` cards. It still flows under the face; do not move it into the landscape left gutter.
 - **Decision:** The dial light list always flows **under** the clock face (portrait and landscape), same width as the face. Do **not** move the list into the landscape left grid column; that column is only a matching gutter so the timeline rail can take width while the dial stays optically centered. Ring hover name sits flush above the outer light ring (`top` = rings inset inside the core), not above `--clock-chrome` / face chrome. Legend actions order: Add to …, then remove (X), then chevron.
@@ -697,5 +699,12 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-09-16
 - **Decision:** The selected scene’s `.card-glow` is always in the slot (opacity 0 when idle). Select fades it in (`opacity` 0.35s); deselect fades it out before leaving `#edit/<id>`. Slots do not `overflow: hidden` or `isolation: isolate`, so the blur is not clipped to the card. Glow is `z-index: 0`; scene cards and other rail controls are `z-index: 1` in the shared rail stacking context so the glow can bleed under neighbors without covering them.
 - **Why:** A hard clip made the halo a rectangle; painting the glow on top of adjacent cards hid their content.
+- **Do not reverse without user ask.**
+
+## Area rail keeps scroll; stage resets
+
+- **Date:** 2026-09-16
+- **Decision:** Re-rendering the workspace (selecting another scene, variable, palette, or theme) restores `.area-rail` `scrollTop`. `.stage-scroll` resets to the top so the new editor starts at its face.
+- **Why:** Recreating the rail DOM was jumping the picker; the editor column is a new document.
 - **Do not reverse without user ask.**
 
