@@ -217,8 +217,9 @@ export const LIGHT_TILES_CSS = `
       var(--secondary-background-color, #242022) 70%,
       transparent
     );
-    box-shadow: inset 0 0 0 2px
+    border: 2px dashed
       color-mix(in srgb, var(--primary-text-color) 22%, transparent);
+    box-shadow: none;
     cursor: pointer;
   }
   .simple-light-selector.add-light-tile .simple-light-fill {
@@ -330,4 +331,134 @@ export function createAddLightTile({ label, onActivate }) {
     activate(ev);
   });
   return selector;
+}
+
+/** Vertical drag + wheel brightness (0–255). Horizontal pan stays strip scroll. */
+export function bindLightTileBrightness(tile, hit, {
+  isEditable,
+  getBrightness,
+  setBrightness,
+}) {
+  let drag = null;
+  let wheelAxis = null;
+  let wheelAxisTimer = null;
+  let historyPending = false;
+
+  const applyBri = (next) => {
+    const value = Math.max(0, Math.min(255, Math.round(Number(next) || 0)));
+    setBrightness(value, { history: historyPending });
+    historyPending = false;
+  };
+
+  const endDrag = (ev) => {
+    if (!drag || (ev && ev.pointerId !== drag.pointerId)) {
+      return;
+    }
+    document.removeEventListener("pointermove", onDocMove);
+    document.removeEventListener("pointerup", endDrag);
+    document.removeEventListener("pointercancel", endDrag);
+    try {
+      tile.releasePointerCapture(drag.pointerId);
+    } catch (_err) {
+      /* already released */
+    }
+    if (drag.suppressTap) {
+      tile._lysSuppressTap = true;
+      window.setTimeout(() => {
+        tile._lysSuppressTap = false;
+      }, 0);
+    }
+    drag = null;
+    window.setTimeout(() => tile.classList.remove("dragging"), 250);
+  };
+
+  const onDocMove = (ev) => {
+    if (!drag || ev.pointerId !== drag.pointerId) {
+      return;
+    }
+    const dx = ev.clientX - drag.startX;
+    const dy = ev.clientY - drag.startY;
+    if (!drag.axis) {
+      if (Math.hypot(dx, dy) < 8) {
+        return;
+      }
+      if (Math.abs(dx) > Math.abs(dy)) {
+        drag.axis = "x";
+        drag.suppressTap = true;
+        return;
+      }
+      drag.axis = "y";
+      drag.suppressTap = true;
+      historyPending = true;
+      tile.classList.add("dragging");
+      try {
+        tile.setPointerCapture(ev.pointerId);
+      } catch (_err) {
+        /* ignore */
+      }
+      return;
+    }
+    if (drag.axis !== "y") {
+      return;
+    }
+    ev.preventDefault();
+    const rect = tile.getBoundingClientRect();
+    const fromBottom = rect.bottom - ev.clientY;
+    applyBri(
+      (Math.max(0, Math.min(100, (fromBottom / rect.height) * 100)) / 100) * 255
+    );
+  };
+
+  hit.addEventListener("pointerdown", (ev) => {
+    if (!isEditable() || (ev.button && ev.button !== 0)) {
+      return;
+    }
+    historyPending = true;
+    drag = {
+      pointerId: ev.pointerId,
+      startX: ev.clientX,
+      startY: ev.clientY,
+      axis: null,
+      suppressTap: false,
+    };
+    document.addEventListener("pointermove", onDocMove);
+    document.addEventListener("pointerup", endDrag);
+    document.addEventListener("pointercancel", endDrag);
+  });
+
+  tile.addEventListener(
+    "wheel",
+    (ev) => {
+      if (!isEditable()) {
+        return;
+      }
+      const absX = Math.abs(ev.deltaX);
+      const absY = Math.abs(ev.deltaY);
+      const wantsHorizontal = ev.shiftKey || (absX > 0 && absX >= absY);
+      if (wheelAxis === "x" || (wantsHorizontal && wheelAxis !== "y")) {
+        wheelAxis = "x";
+        window.clearTimeout(wheelAxisTimer);
+        wheelAxisTimer = window.setTimeout(() => {
+          wheelAxis = null;
+        }, 180);
+        return;
+      }
+      if (absY === 0) {
+        return;
+      }
+      if (wheelAxis !== "y") {
+        historyPending = true;
+      }
+      wheelAxis = "y";
+      window.clearTimeout(wheelAxisTimer);
+      wheelAxisTimer = window.setTimeout(() => {
+        wheelAxis = null;
+      }, 180);
+      ev.preventDefault();
+      tile.classList.add("wheel-adjusting");
+      applyBri((Number(getBrightness()) || 0) - Math.sign(ev.deltaY) * 8);
+      window.setTimeout(() => tile.classList.remove("wheel-adjusting"), 250);
+    },
+    { passive: false }
+  );
 }

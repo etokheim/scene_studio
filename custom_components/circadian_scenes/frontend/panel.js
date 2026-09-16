@@ -57,7 +57,7 @@ import {
 } from "./landing.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { createAddLightTile, createLightTile, paintLightTile } from "./light_tiles.js";
+import { bindLightTileBrightness, createAddLightTile, createLightTile, paintLightTile } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -123,6 +123,9 @@ const CLOCK_SUN_SCALE_MAX = 2;
    carries the hour ticks + numbers; solar-event buttons track the sun path. */
 const CLOCK_TICK_OUTER = 94;
 const CLOCK_TICK_MINOR_LEN = 2;
+/* Cardinal hour numerals sit this many px farther from the face center
+   than the tick-tip inset (screen pixels, same as chrome). */
+const CLOCK_HOUR_LABEL_OUTSET_PX = 12;
 /* Desktop px from sun-path radius to event-button center at 100% brightness.
    0% sits on the sun path; the same pixel span is the drag range on mobile
    (buttons leave the path when brightness > 0). Screen pixels so a narrower
@@ -1933,6 +1936,10 @@ class CircadianScenesPanel extends HTMLElement {
           position: relative;
           z-index: 5;
           pointer-events: auto;
+        }
+        .sun-light-clock-legend:not(.event-bright-edit)
+          .simple-light-tile:not(.tap-only) {
+          cursor: pointer;
         }
         .sun-light-clock-legend .light-tiles-scroller {
           padding: 8px 0 8px;
@@ -5968,8 +5975,9 @@ class CircadianScenesPanel extends HTMLElement {
     return null;
   }
 
-  _dialEventBrightness(eventId) {
-    const lightId = this._dialBrightnessLightId();
+  _dialEventBrightness(eventId, lightIdArg) {
+    const lightId =
+      lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
     if (lightId) {
       const overridden = this._formData?.overrides?.[lightId]?.[eventId];
       if (overridden && overridden.brightness != null) {
@@ -6020,12 +6028,13 @@ class CircadianScenesPanel extends HTMLElement {
     return payload;
   }
 
-  _writeDialEventBrightness(eventId, brightness, { history = false } = {}) {
+  _writeDialEventBrightness(eventId, brightness, { history = false, lightId: lightIdArg } = {}) {
     const value = Number(brightness);
     if (!Number.isFinite(value)) {
       return;
     }
-    const lightId = this._dialBrightnessLightId();
+    const lightId =
+      lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
     if (!lightId) {
       if (!this._themeDraft) {
         void this._ensureThemeDraft();
@@ -9592,6 +9601,7 @@ class CircadianScenesPanel extends HTMLElement {
       host._eventId = this._sidebarEventId;
     }
     this._syncEventSelection();
+    this._syncClockLegendBrightEdit();
     if (this._clockSunEl && this._sunPath?.curve) {
       this._clockSunLive = false;
       this._moveClockSunTo(this._clockSunIdleSeconds());
@@ -9682,6 +9692,34 @@ class CircadianScenesPanel extends HTMLElement {
         item.removeAttribute("aria-current");
       }
     }
+  }
+
+  _syncClockLegendBrightEdit() {
+    this._clockLegendEl?.classList.toggle(
+      "event-bright-edit",
+      Boolean(this._sidebarEventId) && this._view === "edit"
+    );
+  }
+
+  _clockLegendTileLook(light, seconds) {
+    const eventId = this._sidebarEventId;
+    if (
+      eventId &&
+      this._clockStickySeconds == null &&
+      (this._sunPath?.events || []).some((item) => item.id === eventId)
+    ) {
+      const stored = this._lightEventStoredState(light, eventId);
+      const rgb = draftRgb(stored) || [0, 0, 0];
+      const bri = Number(stored?.brightness);
+      const fillPct =
+        stored?.state === "off" || !(bri > 0) ? 0 : (bri * 100) / 255;
+      return { rgb, fillPct };
+    }
+    if (seconds == null) {
+      return null;
+    }
+    const sample = interpolateLightSample(light.samples || [], seconds);
+    return { rgb: sample.rgb, fillPct: sample.brightness };
   }
 
   _closeSceneSidebar({ animate = false, clearSelection = true } = {}) {
@@ -14479,13 +14517,13 @@ class CircadianScenesPanel extends HTMLElement {
     for (const entry of this._lightNameLabels || []) {
       const { light, titleEl, subEl, el, selector } = entry;
       if (selector) {
-        if (seconds == null) {
+        const look = this._clockLegendTileLook(light, seconds);
+        if (!look) {
           continue;
         }
-        const sample = interpolateLightSample(light.samples || [], seconds);
         paintLightTile(selector, {
-          rgb: sample.rgb,
-          fillPct: sample.brightness,
+          rgb: look.rgb,
+          fillPct: look.fillPct,
           selected: light.entity_id === this._sidebarLightId,
         });
         continue;
@@ -14837,6 +14875,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._updateHorizonGlow(elev, glowLook);
     }
     this._updateOverrideArc(this._clockStickySeconds);
+    this._updateLightNameBrightness(seconds);
   }
 
   /** Prefer connected core sun/hit nodes over detached paint leftovers. */
@@ -16443,6 +16482,17 @@ class CircadianScenesPanel extends HTMLElement {
         return false;
       }
     }
+    if (this._lightNameLabels?.length) {
+      const byId = new Map(
+        legendLights.map((item) => [item.entity_id, item])
+      );
+      for (const entry of this._lightNameLabels) {
+        const next = byId.get(entry.light?.entity_id);
+        if (next) {
+          entry.light = next;
+        }
+      }
+    }
     for (let index = 0; index < rings.length; index += 1) {
       if (rings[index].dataset.entityId !== ringLights[index].entity_id) {
         return false;
@@ -17080,9 +17130,10 @@ class CircadianScenesPanel extends HTMLElement {
       // Brightness 0% is the sun path; 100% is path + CLOCK_EVENT_GAP.
       const tickOuterPad = w >= 871 ? 10 : 6;
       const labelFontPx = w >= 871 ? 48 : 32;
-      const labelPad = tickOuterPad + labelFontPx * 0.42;
+      const labelPad =
+        tickOuterPad + labelFontPx * 0.42 - CLOCK_HOUR_LABEL_OUTSET_PX;
       const narrowFace = window.matchMedia("(max-width: 870px)").matches;
-      const chromeFloor = Math.ceil(labelPad + 4);
+      const chromeFloor = Math.ceil(tickOuterPad + labelFontPx * 0.42 + 4);
       let chromePx = narrowFace
         ? chromeFloor
         : Math.max(CLOCK_CHROME_PX, chromeFloor);
@@ -17225,6 +17276,7 @@ class CircadianScenesPanel extends HTMLElement {
       scroller.appendChild(tiles);
       legend.appendChild(scroller);
       this._clockLegendEl = legend;
+      this._syncClockLegendBrightEdit();
     } else {
       this._clockLegendEl = null;
     }
@@ -17258,12 +17310,14 @@ class CircadianScenesPanel extends HTMLElement {
       this._clockSunDisplayedSeconds ??
       this._clockStickySeconds ??
       this._clockSunIdleSeconds();
-    const sample = interpolateLightSample(light.samples || [], seconds);
-    const { selector, tile } = createLightTile({
+    const look = this._clockLegendTileLook(light, seconds) || {
+      rgb: [0, 0, 0],
+      fillPct: 0,
+    };
+    const { selector, tile, hit } = createLightTile({
       entityId: light.entity_id,
       name: light.name,
       makeIcon: () => this._lightEntityIcon(light.entity_id),
-      tapOnly: true,
     });
     if (suggested) {
       selector.classList.add("suggested");
@@ -17284,8 +17338,8 @@ class CircadianScenesPanel extends HTMLElement {
       }
     }
     paintLightTile(selector, {
-      rgb: sample.rgb,
-      fillPct: removed ? 0 : sample.brightness,
+      rgb: look.rgb,
+      fillPct: removed ? 0 : look.fillPct,
       selected: !removed && light.entity_id === this._sidebarLightId,
     });
     if (!removed && (!unavailable || capsKnown)) {
@@ -17298,12 +17352,18 @@ class CircadianScenesPanel extends HTMLElement {
       if (canEdit) {
         tile.setAttribute("aria-label", `Edit ${light.name}`);
         const openClosest = (ev) => {
+          if (tile._lysSuppressTap) {
+            return;
+          }
           ev.stopPropagation();
+          const pinned = assigned.find(
+            (item) => item.id === this._sidebarEventId
+          );
           const now =
             this._clockSunDisplayedSeconds ??
             this._clockStickySeconds ??
             this._clockSunIdleSeconds();
-          const closest = this._closestEvent(assigned, now);
+          const closest = pinned || this._closestEvent(assigned, now);
           if (closest) {
             this._openLightEditDialog(light, closest);
           }
@@ -17315,6 +17375,19 @@ class CircadianScenesPanel extends HTMLElement {
           }
           ev.preventDefault();
           openClosest(ev);
+        });
+        bindLightTileBrightness(tile, hit, {
+          isEditable: () =>
+            Boolean(this._sidebarEventId) &&
+            assigned.some((item) => item.id === this._sidebarEventId),
+          getBrightness: () =>
+            this._dialEventBrightness(this._sidebarEventId, light.entity_id),
+          setBrightness: (value, { history } = {}) => {
+            this._writeDialEventBrightness(this._sidebarEventId, value, {
+              history,
+              lightId: light.entity_id,
+            });
+          },
         });
       }
       const missingScenes = this._missingSceneRows(light);

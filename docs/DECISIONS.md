@@ -736,6 +736,20 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** The rail is the source of truth; a draft that is not in the list looks like a failed add. Session snapshots do not include the library list, so create needs its own undo record.
 - **Do not reverse without user ask.**
 
+## Cardinal hour numerals sit 12px farther out
+
+- **Date:** 2026-09-16
+- **Decision:** 00/06/12/18 labels sit **12px** farther from the dial center than the previous tick-tip inset (`CLOCK_HOUR_LABEL_OUTSET_PX`). Chrome still sizes to the un-outset inset so the numerals stay on the face.
+- **Why:** They sat too tight on the planet.
+- **Do not reverse without user ask.**
+
+## Dial Lys tiles follow clock time; brightness when an event is selected
+
+- **Date:** 2026-09-16
+- **Decision:** Circadian Lys fills interpolate at the displayed clock time. While a solar event is selected (and the sun is not sticky-scrubbed), fills use that event’s stored/override color and brightness. Vertical drag and wheel write `overrides[light][event]` brightness (0–255). Add-light tiles use a **dashed** 2px border, not a solid inset ring.
+- **Why:** Tiles were tap-only and kept stale `light.samples` after a dial patch, so they did not match the clock or take brightness edits.
+- **Do not reverse without user ask.**
+
 ## Add light is the last Lys tile; unavailable stays editable when caps are known
 
 - **Date:** 2026-09-16
