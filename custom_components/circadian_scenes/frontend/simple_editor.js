@@ -18,11 +18,11 @@ import {
 export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
   .simple-editor-host {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-width: 0;
-    min-height: 0;
     width: 100%;
-    height: 100%;
+    height: auto;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
   }
@@ -33,8 +33,7 @@ export const SIMPLE_EDITOR_CSS = `
     position: relative;
     width: 100%;
     min-width: 0;
-    min-height: 0;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     padding: 40px 0 16px;
     box-sizing: border-box;
     gap: 16px;
@@ -43,8 +42,7 @@ export const SIMPLE_EDITOR_CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 1 1 auto;
-    min-height: 0;
+    flex: 0 0 auto;
     width: 100%;
     max-width: none;
     min-width: 0;
@@ -55,10 +53,10 @@ export const SIMPLE_EDITOR_CSS = `
   .simple-wheels .hue-wheel-stage {
     width: min(100%, 650px, var(--dial-face-max, 650px));
     max-width: min(100%, 650px, var(--dial-face-max, 650px));
-    max-height: 100%;
     min-width: 0;
     margin: 0;
     aspect-ratio: 1;
+    flex: 0 0 auto;
   }
   .simple-editor .library-name-field {
     width: min(100%, 650px);

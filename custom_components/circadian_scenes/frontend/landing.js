@@ -82,7 +82,8 @@ export const LANDING_CSS = `
   }
   .stage-col .sun-path {
     margin-top: 0;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
+    width: 100%;
   }
   .library-col {
     flex: 1 1 auto;
@@ -151,12 +152,12 @@ export const LANDING_CSS = `
     overflow: hidden;
     pointer-events: none;
     filter: blur(16px);
-    transform: scale(1.22);
+    transform: scale(1.1);
     opacity: 0;
     transition: opacity 0.35s ease-out;
   }
   .scene-card-slot.glow-on .card-glow {
-    opacity: 0.95;
+    opacity: 0.55;
   }
   .scene-card {
     position: relative;

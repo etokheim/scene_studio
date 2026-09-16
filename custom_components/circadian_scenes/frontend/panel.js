@@ -802,7 +802,7 @@ class CircadianScenesPanel extends HTMLElement {
            down (ticks stay clear). Horizon glow still bleeds behind it
            (_layoutClockHorizonBack covers the host). Flush left so Now/Sun°
            meet the page edge like chips (no shared 16px inset). */
-        .sun-path.dial-view .sun-toolbar:not(.toolbar-rail-only) {
+        .sun-path.dial-view .sun-toolbar {
           position: relative;
           z-index: 6;
           box-sizing: border-box;
@@ -810,7 +810,7 @@ class CircadianScenesPanel extends HTMLElement {
           background: transparent;
           padding: 8px 12px 0 16px;
         }
-        .sun-path.dial-view .sun-toolbar:not(.toolbar-rail-only) > * {
+        .sun-path.dial-view .sun-toolbar > * {
           pointer-events: auto;
         }
         /* Time/sun + date chips share one full-width wrapping row. */
@@ -823,8 +823,7 @@ class CircadianScenesPanel extends HTMLElement {
           width: 100%;
           box-sizing: border-box;
         }
-        /* Must beat .sun-path.dial-view .sun-hover-readout position:absolute
-           (same specificity, later in the sheet) or time sits on top of chips. */
+        /* Must beat table-view .sun-hover-readout so time sits in the chrome row. */
         .sun-path.dial-view .sun-toolbar-chrome .sun-hover-readout {
           position: static;
           top: auto;
@@ -869,16 +868,6 @@ class CircadianScenesPanel extends HTMLElement {
           align-items: center;
           gap: 8px;
           min-width: 0;
-        }
-        /* Scrub/date live in the right rail — do not leave empty toolbar padding
-           above the dial (would push the face down). */
-        .sun-toolbar.toolbar-rail-only {
-          padding: 0;
-          gap: 0;
-          min-height: 0;
-        }
-        .sun-toolbar.toolbar-rail-only .sun-toolbar-chrome {
-          display: none;
         }
         .sun-toolbar-row {
           display: flex;
@@ -3540,29 +3529,22 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-hover-readout[data-active] {
           color: var(--primary-text-color);
         }
-        /* Dial: float over the face so the readout does not push the clock down. */
+        /* Dial: readout/chips live in .sun-toolbar (full stage width). Table
+           view still puts the readout in .sun-path-body under the chart. */
         .sun-path.dial-view .sun-path-body {
           position: relative;
+          width: 100%;
         }
         .sun-path.dial-view .sun-hover-readout {
-          position: absolute;
-          top: 0;
-          left: 0;
+          position: relative;
+          top: auto;
+          left: auto;
           z-index: 4;
           min-height: 0;
           margin: 0;
           padding: 8px 12px 8px 8px;
           pointer-events: none;
           color: var(--primary-text-color);
-        }
-        /* Landscape: body is grid column 2 (empty left rail centers the dial).
-           Shift the readout into that gutter so Now/Sun° meet the panel edge
-           like the date chips meet the right rail — not the dial column. */
-        .sun-path-stage.landscape-clock-scrub .sun-hover-readout {
-          left: calc(-1 * var(--scrub-rail-width));
-          top: 12px;
-          /* Match .page-banners margin-inline so Now/Sun° line up with the banner. */
-          padding-left: 16px;
         }
         .sun-hover-time {
           font-weight: 500;
@@ -3876,7 +3858,6 @@ class CircadianScenesPanel extends HTMLElement {
         .stage-col .simple-editor .hue-wheel-stage {
           min-width: 0;
           padding: 0;
-          max-height: 100%;
         }
         .stage-col .simple-editor .hue-wheel-canvas,
         .stage-col .hue-wheel-canvas {
@@ -4963,14 +4944,13 @@ class CircadianScenesPanel extends HTMLElement {
         const wheelPad = parseFloat(getComputedStyle(wheels).paddingBottom);
         overhead += Number.isFinite(wheelPad) ? wheelPad : 0;
       }
+      const nameField = box.querySelector(".library-name-field");
+      if (nameField) {
+        overhead += Math.ceil(nameField.getBoundingClientRect().height) || 0;
+      }
     }
     let toolbarH = 0;
-    if (
-      isDial &&
-      this._dateToolbar &&
-      !this._dateToolbar.classList.contains("toolbar-rail-only") &&
-      !this._sunPathStage?.classList.contains("landscape-clock-scrub")
-    ) {
+    if (isDial && this._dateToolbar?.isConnected) {
       toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
     }
     const available = scrollH - stripH - overhead - toolbarH;
@@ -13799,7 +13779,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._yearScrub.classList.toggle("vertical", landscapeClock);
     this._sunPathStage?.classList.toggle("landscape-clock-scrub", landscapeClock);
     this._sunPathStage?.classList.toggle("scrub-collapsed", collapse);
-    this._dateToolbar?.classList.toggle("toolbar-rail-only", landscapeClock);
     this._yearScrub.setAttribute("aria-hidden", collapse || hideToolbarScrub ? "true" : "false");
     if (this._scrubDateBtn) {
       this._scrubDateBtn.hidden = collapse || hideToolbarScrub;
@@ -13815,22 +13794,20 @@ class CircadianScenesPanel extends HTMLElement {
       if (this._scrubBlock.parentNode !== this._clockScrubRail) {
         this._clockScrubRail.appendChild(this._scrubBlock);
       }
-      // Rail: chips above date; readout stays on the dial body (top-left).
-      if (this._toolbarChrome) {
-        this._toolbarChrome.remove();
+      // Time + date chips stay in the stage toolbar (full column). The rail
+      // only holds the date label and year slider beside the face.
+      const chrome = this._ensureToolbarChrome();
+      if (this._hoverReadout && this._hoverReadout.parentNode !== chrome) {
+        chrome.appendChild(this._hoverReadout);
       }
-      if (
-        this._hoverReadout &&
-        this._sunPathBodyEl &&
-        this._hoverReadout.parentNode !== this._sunPathBodyEl
-      ) {
-        this._sunPathBodyEl.insertBefore(
-          this._hoverReadout,
-          this._sunPathBodyEl.firstChild
-        );
+      if (this._chipRow && this._chipRow.parentNode !== chrome) {
+        chrome.appendChild(this._chipRow);
       }
-      if (this._dateTools && this._chipRow && this._scrubDateBtn) {
-        this._dateTools.append(this._chipRow, this._scrubDateBtn);
+      if (chrome.parentNode !== this._dateToolbar) {
+        this._dateToolbar.insertBefore(chrome, this._dateToolbar.firstChild);
+      }
+      if (this._dateTools && this._scrubDateBtn) {
+        this._dateTools.replaceChildren(this._scrubDateBtn);
       }
     } else {
       this._sunPathStage?.classList.remove("scrub-collapsed");
@@ -13903,18 +13880,11 @@ class CircadianScenesPanel extends HTMLElement {
       path.style.removeProperty("--dial-banner-h");
       return;
     }
-    const landscape =
-      landscapeClock ??
-      this._sunPathStage?.classList.contains("landscape-clock-scrub");
-    // Portrait: toolbar (chips + year scrub) is in-flow — reserve its height so
-    // the face shrinks instead of the timeline covering hour ticks. Landscape
-    // rail sits beside the face (timeline-h = 0).
+    // Toolbar (time + chips; portrait also date + year scrub) is in-flow so
+    // the face shrinks, then scrolls at DIAL_FACE_MIN. Landscape year rail
+    // sits beside the face (not in the toolbar).
     let toolbarH = 0;
-    if (
-      !landscape &&
-      this._dateToolbar &&
-      !this._dateToolbar.classList.contains("toolbar-rail-only")
-    ) {
+    if (this._dateToolbar?.isConnected) {
       toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
     }
     path.style.setProperty("--dial-timeline-h", `${toolbarH}px`);
@@ -14290,7 +14260,14 @@ class CircadianScenesPanel extends HTMLElement {
     }
 
     this._sunPathEl.hidden = false;
+    if (!clockEl) {
+      this._clockLegendEl?.remove();
+      this._clockLegendEl = null;
+    }
     this._sunPathBodyEl.replaceChildren(...children);
+    if (this._clockLegendEl) {
+      this._sunPathEl.appendChild(this._clockLegendEl);
+    }
     if (this._view === "edit" || this._view === "theme") {
       this._syncEditorChrome();
       this._syncYearScrubLayout();
@@ -16374,6 +16351,8 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockHorizonBackEl?.remove();
     this._clockHorizonBackEl = undefined;
     this._clockFaceEl = undefined;
+    this._clockLegendEl?.remove();
+    this._clockLegendEl = undefined;
     this._clockBrightnessGradEl = undefined;
     this._clockBrightnessFillEl = undefined;
     this._clockBrightnessArcEl = undefined;
@@ -16400,7 +16379,9 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const legendLights = this._legendLights(payload.lights || []);
     const legendRows = [
-      ...(this._clockLegendEl?.querySelectorAll(".simple-light-selector") || []),
+      ...(this._clockLegendEl?.querySelectorAll(
+        ".simple-light-selector:not(.add-light-tile)"
+      ) || []),
     ];
     if (legendRows.length !== legendLights.length) {
       return false;
@@ -16579,6 +16560,8 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _buildLightClock(events) {
+    this._clockLegendEl?.remove();
+    this._clockLegendEl = null;
     this._lightNameLabels = [];
     const lights = this._sunPath.lights || [];
     const ringLights = this._clockRingLights(lights);
@@ -17202,7 +17185,6 @@ class CircadianScenesPanel extends HTMLElement {
       scroller.appendChild(tiles);
       legend.appendChild(scroller);
       this._clockLegendEl = legend;
-      wrap.appendChild(legend);
     } else {
       this._clockLegendEl = null;
     }
