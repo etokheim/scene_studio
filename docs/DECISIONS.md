@@ -407,6 +407,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-29
 - **Superseded in part:** 2026-08-29 — the light-edit sidebar includes a horizontal brightness graph above the color wheel: one point per assigned solar event (Y = brightness, fill = that lamp’s color along the day). Non-members show `+` (click to add); members drag. Linked dawn/sunrise/sunset share a draft, so those points stay synced. See “Edit a light at a solar event; write the native scene”.
+- **Superseded in part:** 2026-09-16 — brightness-graph `+` (peer-typical add) is gone. A missing event is a dashed handle; click selects that event. Membership is Lys tiles / sidebar Remove.
 - **Superseded in part:** 2026-08-29 — clock glow is sky-from-elevation (not outer-ring conic); sun marker is a CSS disc+flare (not `mdi:weather-sunny`); hover scrubs sun position, sky glow, and the time/elevation readout while light rings stay the full-day preview.
 - **Superseded in part:** 2026-08-29 — no dashed horizon circle on the clock; the outer ring edge remains the geometric horizon for the sun path.
 - **Superseded in part:** 2026-08-29 — sun path strokes are 0.5px day / 0.25px night with `vector-effect: non-scaling-stroke` (viewBox units were scaling thicker than CSS px); hour labels sit outside the ticks at 8px.
@@ -418,6 +419,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Superseded in part:** 2026-08-29 — clock solar-event markers get a 0.5px dashed spoke to the horizon and upright name · time + scene labels immediately above the icon (screen-space, not radial); sunrise/sunset labels sit below the icon so they do not collide with dawn/dusk.
 - **Superseded in part:** 2026-08-29 — view toggle is a single app-bar button labeled `Table view` / `Dial view` (destination); location pin shares the header.
 - **Superseded in part:** 2026-08-30 — on narrow, location preview and Table/Dial view move into the overflow menu (with undo/redo); Live edit stays in the app bar. Wide layouts keep the header buttons.
+- **Superseded in part:** 2026-09-16 — circadian edit is always the dial. Table/list light bars and the Table/Dial overflow toggle are removed.
 - **Superseded in part:** 2026-08-29 — dial orientation: midnight at the bottom, noon at the top (`_clockAngleDeg` +180°; light rings `conic-gradient(from 180deg)`). Library theme chips use the same `from 180deg` conic, with dusk→dawn wrapping the night arc (not equal pie slices) and a slightly oversized background so color reaches the rim.
 - **Superseded in part:** 2026-09-09 — sky *fills* stay at the half-prior mixes (day wedge `dayAlpha * 0.5`, night 36% / deep 39%). Day/night *glow* is `.clock-horizon-glow` opacity: 15% away from the horizon, full through civil twilight (±6°) so the gold→pink sunrise/sunset ramp is not dimmed. Mixed-mode kelvin pins rest on the annulus centerline, not the inner rim.
 - **Superseded in part:** 2026-08-29 — horizon glow + solar-event shadow (wedges/rays/spokes) paint in a back layer that bleeds past the face (not clipped to the planet); night sun disc is **black**; sun is ~⅓ prior size with a center→tip hour handle gapping through it; dial hour labels 10px / 14px (≥871px); 15-minute ticks (2px majors at 6h, 1px otherwise); canvas allows touch pan — only sun/handle use `touch-action: none`.
@@ -690,7 +692,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Lys tiles under the circadian dial
 
 - **Date:** 2026-09-16
-- **Decision:** Circadian scene edit (`#edit/<id>` dial) lists area lights as the same Lys tiles as simple scenes: horizontal strip, centered when the row fits, overflow-x when it does not. Fill/color follow the interpolated sample at the clock. Tap still opens the closest-event light editor; add/remove stay on the tile. Theme-look (`#theme`) has no member strip. Table view keeps brightness bars.
+- **Decision:** Circadian scene edit (`#edit/<id>` dial) lists area lights as the same Lys tiles as simple scenes: horizontal strip, centered when the row fits, overflow-x when it does not. Fill/color follow the interpolated sample at the clock. Tap still opens the closest-event light editor; add/remove stay on the tile. Theme-look (`#theme`) has no member strip.
 - **Why:** One light language in both editors. Stacked HA-style legend rows read as a different product.
 - **Do not reverse without user ask.**
 
@@ -798,5 +800,12 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-09-16
 - **Decision:** “Add light” is the last card in the Lys strip (same 85×135 chrome, dashed/plus), not a separate `ha-button`. Unavailable lights sort after available ones (still before suggested/removed). If Home Assistant still reports color modes or kelvin range, the tile stays editable (`caps-known`); only unknown-capability unavailable lights are inert and grayscale.
 - **Why:** The strip is the membership UI. An unavailable bulb we already know how to drive should still be tunable.
+- **Do not reverse without user ask.**
+
+## Circadian edit is dial-only; graph plus does not add membership
+
+- **Date:** 2026-09-16
+- **Decision:** Circadian scene edit always uses the 24-hour dial (no stacked light-bar table, no Table/Dial overflow toggle). Sidebar brightness handles for events the lamp is not in have no `+`; click selects that solar event. Adding the light is the Lys tile / Add light path, not a typical-peer seed from the graph.
+- **Why:** Table view duplicated membership chrome. Graph `+` looked like per-event add while scene membership is per-lamp.
 - **Do not reverse without user ask.**
 

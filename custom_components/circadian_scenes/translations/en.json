@@ -122,8 +122,6 @@
       "play_duration": "Play duration",
       "play_duration_seconds": "{seconds}s",
       "activate_scene": "Activate scene",
-      "table_view": "Table view",
-      "dial_view": "Dial view",
       "preview_location": "Preview another location",
       "use_home_location": "Use home location",
       "name_scene": "Name scene",

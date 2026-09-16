@@ -14,8 +14,6 @@ import {
   createLightBrightnessGraph,
   createSceneColorWheel,
   polarEaseClosedPathD,
-  medianNumber,
-  circularMeanHue,
   lightDraftFingerprint,
   applyVariableToDraft,
   colorPayloadFromDraft,
@@ -63,14 +61,6 @@ const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
 const LEGACY_DOMAIN = "scene_extrapolation";
 const SECONDS_PER_DAY = 24 * 3600;
-const CHART_WIDTH = 1000;
-const CHART_HEIGHT = 200;
-const PLOT_TOP = 28;
-const PLOT_BOTTOM = 168;
-const PLOT_LEFT = 16;
-const PLOT_RIGHT = 984;
-const SUN_LINE_DAY = "#ffb74d";
-const SUN_LINE_NIGHT = "#5a2e0a";
 /* Clock overlay viewBox is 200×200. Planet (rings) sits inside a circular
    sun path whose radius scales with the day's peak elevation. */
 const CLOCK_VIEW = 200;
@@ -146,14 +136,7 @@ const DATE_MORPH_MS = 1500;
 const PREVIEW_REFINE_MS = 800;
 /** Settled preview samples are denser than scrub knots (≤8 incl. midnight). */
 const AUTHORITATIVE_SAMPLE_MIN = 9;
-const LIGHT_BAR_HEIGHT = 108;
-const LIGHT_FEATHER_PX = 36;
-const LIGHT_BAR_EDGE_HEIGHT = LIGHT_BAR_HEIGHT - LIGHT_FEATHER_PX;
-const LIGHT_EDIT_HIT_PX = 40;
-const LIGHT_EDIT_DOT_PX = 5;
-const LIGHT_EDIT_ACTION_PX = 40;
 const UNDO_STACK_LIMIT = 75;
-const LIGHT_VIEW_STORAGE_VERSION = 1;
 const LIVE_EDIT_STORAGE_VERSION = 1;
 const ROOM_PREVIEW_STORAGE_VERSION = 1;
 const SCENE_PLAY_STORAGE_VERSION = 2;
@@ -188,12 +171,6 @@ function registerFeatherProperties() {
     return;
   }
   for (const spec of [
-    {
-      name: "--light-feather",
-      syntax: "<length>",
-      inherits: true,
-      initialValue: `${LIGHT_FEATHER_PX}px`,
-    },
     {
       name: "--clock-feather",
       syntax: "<percentage>",
@@ -320,7 +297,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockResizeObserver = undefined;
     this._sunPathHome = undefined;
     this._aulResumeInterval = 300;
-    this._lightView = "dial";
     this._liveEdit = true;
     this._liveEditSidebarHandler = null;
     this._sidebarLiveEditToggle = null;
@@ -833,7 +809,7 @@ class CircadianScenesPanel extends HTMLElement {
           width: 100%;
           box-sizing: border-box;
         }
-        /* Must beat table-view .sun-hover-readout so time sits in the chrome row. */
+        /* Time sits in the chrome row (not an overlay readout). */
         .sun-path.dial-view .sun-toolbar-chrome .sun-hover-readout {
           position: static;
           top: auto;
@@ -1044,10 +1020,6 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .sun-location-btn[hidden] {
           display: none;
-        }
-        .light-view-toggle-btn {
-          --ha-button-height: 40px;
-          color: var(--primary-text-color);
         }
         .sun-path.dial-view {
           --dial-timeline-h: 0px;
@@ -2011,173 +1983,6 @@ class CircadianScenesPanel extends HTMLElement {
           filter: grayscale(1);
           pointer-events: none;
         }
-        .clock-legend-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          min-height: 56px;
-          padding: 10px 12px 10px 10px;
-          border-radius: var(--ha-border-radius-lg, 12px);
-          box-sizing: border-box;
-          background: var(--card-background-color, var(--ha-card-background, #1c1c1c));
-          box-shadow: var(--ha-card-box-shadow, none);
-        }
-        .clock-legend-row.interactive {
-          cursor: pointer;
-        }
-        .clock-legend-row.interactive:hover {
-          background: color-mix(
-            in srgb,
-            var(--primary-color) 10%,
-            var(--card-background-color, #1c1c1c)
-          );
-        }
-        .clock-legend-row.selected {
-          outline: 2px solid
-            color-mix(in srgb, var(--primary-color) 55%, transparent);
-          outline-offset: -2px;
-        }
-        .clock-legend-row.interactive.selected:hover {
-          background: color-mix(
-            in srgb,
-            var(--primary-color) 14%,
-            var(--card-background-color, #1c1c1c)
-          );
-        }
-        .clock-legend-row.out-of-area .clock-legend-title {
-          color: var(--warning-color, var(--error-color));
-        }
-        .clock-legend-row.suggested {
-          opacity: 0.92;
-        }
-        .clock-legend-row.removed {
-          /* Toned down like unavailable, but not grayscale — still actionable. */
-          opacity: 0.68;
-          filter: none;
-          pointer-events: auto;
-        }
-        .clock-legend-row.removed .clock-legend-icon-wrap {
-          background: color-mix(
-            in srgb,
-            var(--secondary-text-color) 16%,
-            transparent
-          );
-          color: var(--secondary-text-color);
-        }
-        .clock-legend-row.removed .clock-legend-title,
-        .clock-legend-row.removed .clock-legend-sub,
-        .light-row.removed .light-name {
-          color: var(--secondary-text-color);
-        }
-        .clock-legend-row.unavailable {
-          opacity: 0.55;
-        }
-        .clock-legend-row.unavailable:not(.caps-known) {
-          filter: grayscale(1);
-          pointer-events: none;
-        }
-        .clock-legend-row.unavailable .clock-legend-icon-wrap {
-          background: color-mix(
-            in srgb,
-            var(--disabled-text-color, var(--secondary-text-color)) 18%,
-            transparent
-          );
-          color: var(--disabled-text-color, var(--secondary-text-color));
-        }
-        .clock-legend-row.unavailable .clock-legend-title,
-        .clock-legend-row.unavailable .clock-legend-sub,
-        .light-row.unavailable .light-name {
-          color: var(--disabled-text-color, var(--secondary-text-color));
-        }
-        .light-row.unavailable {
-          opacity: 0.55;
-        }
-        .light-row.unavailable:not(.caps-known) {
-          filter: grayscale(1);
-          pointer-events: none;
-        }
-        .light-row.unavailable:not(.caps-known) .light-bar {
-          filter: grayscale(1);
-        }
-        .light-row.removed {
-          opacity: 0.68;
-          filter: none;
-          pointer-events: auto;
-        }
-        .light-row.removed .light-bar {
-          filter: none;
-          background: color-mix(
-            in srgb,
-            var(--secondary-text-color) 12%,
-            var(--card-background-color)
-          );
-        }
-        .clock-legend-icon-wrap {
-          flex-shrink: 0;
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: color-mix(
-            in srgb,
-            var(--clock-legend-accent, var(--state-light-color, #ff9800)) 22%,
-            transparent
-          );
-          color: var(--clock-legend-accent, var(--state-light-color, #ff9800));
-        }
-        .clock-legend-icon-wrap .clock-legend-icon,
-        .clock-legend-icon-wrap ha-state-icon,
-        .clock-legend-icon-wrap ha-icon {
-          --mdc-icon-size: 22px;
-          --icon-primary-color: currentColor;
-          width: 22px;
-          height: 22px;
-          color: inherit !important;
-        }
-        .clock-legend-meta {
-          flex: 1 1 auto;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .clock-legend-title {
-          font-size: 15px;
-          font-weight: 500;
-          line-height: 1.25;
-          color: var(--primary-text-color);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .clock-legend-sub {
-          font-size: 13px;
-          font-weight: 400;
-          line-height: 1.25;
-          color: var(--secondary-text-color);
-          font-variant-numeric: tabular-nums;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .clock-legend-row .light-remove,
-        .clock-legend-row .light-add {
-          position: static;
-          transform: none;
-          flex-shrink: 0;
-          margin: 0;
-          --mdc-icon-button-size: 36px;
-        }
-        .clock-legend-chevron {
-          flex-shrink: 0;
-          --mdc-icon-size: 20px;
-          width: 20px;
-          height: 20px;
-          color: var(--secondary-text-color);
-          opacity: 0.7;
-        }
         .sun-location-override {
           display: flex;
           align-items: center;
@@ -2265,242 +2070,6 @@ class CircadianScenesPanel extends HTMLElement {
           margin: 8px 16px 0;
           font-size: 13px;
           color: var(--secondary-text-color);
-        }
-        .sun-lights {
-          display: flex;
-          flex-direction: column;
-          gap: 0;
-          padding: 0;
-          --light-feather: ${LIGHT_FEATHER_PX}px;
-          /* Transition on the element that changes the variable (not the svg).
-             --light-feather is registered via CSS.registerProperty. */
-          transition: --light-feather 220ms cubic-bezier(0.2, 0, 0, 1);
-        }
-        .light-row {
-          position: relative;
-          z-index: 0;
-          margin-top: -${LIGHT_FEATHER_PX}px;
-          pointer-events: none;
-        }
-        .light-row:first-child {
-          margin-top: 0;
-        }
-        /* Hovered / selected row paints above the next row’s fade. */
-        .light-row:hover {
-          z-index: 2;
-        }
-        .light-row.selected {
-          z-index: 3;
-        }
-        .light-bar {
-          position: relative;
-          height: ${LIGHT_BAR_HEIGHT}px;
-          cursor: pointer;
-          /* Bar itself does not capture: the feathered top must stay
-             pass-through so the previous row’s pencil hit stays usable.
-             .light-bar-hit covers only the opaque strip. */
-          pointer-events: none;
-          transition: filter 180ms cubic-bezier(0.2, 0, 0, 1);
-        }
-        .light-bar-hit {
-          position: absolute;
-          left: 0;
-          right: 0;
-          top: ${LIGHT_FEATHER_PX}px;
-          bottom: 0;
-          z-index: 1;
-          pointer-events: auto;
-          cursor: pointer;
-        }
-        /* First row has no incoming overlap to hide, so it is one feather
-           shorter. Last row stays full height so its visible band matches
-           the others. */
-        .light-row:first-child .light-bar {
-          height: ${LIGHT_BAR_EDGE_HEIGHT}px;
-        }
-        .light-row:first-child .light-bar-hit,
-        .light-row:only-child .light-bar-hit {
-          top: 0;
-        }
-        .light-row:only-child .light-bar {
-          height: ${LIGHT_BAR_HEIGHT}px;
-        }
-        .light-row:not(.suggested):hover .light-bar {
-          filter: brightness(1.12);
-        }
-        .light-row.selected:not(.suggested) .light-bar {
-          filter: brightness(1.06)
-            drop-shadow(0 0 2px var(--primary-color))
-            drop-shadow(
-              0 0 8px color-mix(in srgb, var(--primary-color) 55%, transparent)
-            );
-        }
-        .light-row.selected:not(.suggested):hover .light-bar {
-          filter: brightness(1.12)
-            drop-shadow(0 0 2px var(--primary-color))
-            drop-shadow(
-              0 0 8px color-mix(in srgb, var(--primary-color) 55%, transparent)
-            );
-        }
-        .light-bar svg {
-          display: block;
-          width: 100%;
-          height: 100%;
-          /* SVG default pointer-events is visiblePainted, so the masked
-             incoming edge and unpainted gutters ate row clicks. The hit
-             layer is the band target. */
-          pointer-events: none;
-          /* Fade only the incoming top over an opaque previous row. Hover
-             shortens the fade; the opaque start stays at 36px so the
-             visible band does not grow into the overlap. */
-          -webkit-mask-image: linear-gradient(
-            to bottom,
-            transparent 0%,
-            transparent calc(${LIGHT_FEATHER_PX}px - var(--light-feather)),
-            #000 ${LIGHT_FEATHER_PX}px,
-            #000 100%
-          );
-          mask-image: linear-gradient(
-            to bottom,
-            transparent 0%,
-            transparent calc(${LIGHT_FEATHER_PX}px - var(--light-feather)),
-            #000 ${LIGHT_FEATHER_PX}px,
-            #000 100%
-          );
-        }
-        .light-row:first-child .light-bar svg,
-        .light-row:only-child .light-bar svg {
-          -webkit-mask-image: none;
-          mask-image: none;
-        }
-        .sun-lights:hover {
-          --light-feather: 1px;
-        }
-        .light-name {
-          position: absolute;
-          left: 16px;
-          top: calc(${LIGHT_FEATHER_PX}px + (100% - ${LIGHT_FEATHER_PX}px) / 2);
-          z-index: 1;
-          margin: 0;
-          padding: 0;
-          border: 0;
-          background: none;
-          font: inherit;
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--primary-text-color);
-          pointer-events: none;
-          transform: translateY(-50%);
-          text-shadow: 0 0 6px var(--card-background-color);
-        }
-        .light-row:first-child .light-name,
-        .light-row:only-child .light-name {
-          top: 50%;
-        }
-        .light-name .light-brightness {
-          font-weight: 400;
-          font-variant-numeric: tabular-nums;
-        }
-        .light-row.out-of-area .light-name {
-          color: var(--warning-color, var(--error-color));
-        }
-        .light-row.suggested {
-          margin-top: 4px;
-        }
-        .light-row.suggested:first-child {
-          margin-top: 0;
-        }
-        .light-row:not(.suggested) + .light-row.suggested {
-          margin-top: 8px;
-        }
-        .light-row.suggested .light-bar {
-          height: 40px;
-          cursor: default;
-          pointer-events: auto;
-          background: color-mix(
-            in srgb,
-            var(--secondary-text-color) 10%,
-            var(--card-background-color)
-          );
-        }
-        .light-row.suggested .light-bar-hit {
-          display: none;
-        }
-        .light-row.suggested .light-name {
-          top: 50%;
-          color: var(--secondary-text-color);
-        }
-        .light-edits {
-          position: absolute;
-          left: 0;
-          right: 0;
-          top: calc(${LIGHT_FEATHER_PX}px + (100% - ${LIGHT_FEATHER_PX}px) / 2);
-          height: 0;
-          pointer-events: none;
-          z-index: 2;
-        }
-        .light-row:first-child .light-edits,
-        .light-row:only-child .light-edits {
-          top: 50%;
-        }
-        .light-edit {
-          position: absolute;
-          top: 0;
-          width: ${LIGHT_EDIT_HIT_PX}px;
-          height: ${LIGHT_EDIT_HIT_PX}px;
-          /* Hit is 40px; the idle disc stays 5px. Do not scale the disc:
-             that stacked a second circle on ha-icon-button and drifted. */
-          margin: -${LIGHT_EDIT_HIT_PX / 2}px 0 0 -${LIGHT_EDIT_HIT_PX / 2}px;
-          padding: 0;
-          overflow: visible;
-          pointer-events: auto;
-          cursor: pointer;
-        }
-        .light-edit-dot {
-          position: absolute;
-          left: 50%;
-          top: 50%;
-          width: ${LIGHT_EDIT_DOT_PX}px;
-          height: ${LIGHT_EDIT_DOT_PX}px;
-          border-radius: 50%;
-          background: var(--primary-text-color);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-          pointer-events: none;
-          transform: translate(-50%, -50%);
-          transition: opacity 140ms cubic-bezier(0.2, 0, 0, 1);
-        }
-        .light-edit-action {
-          position: absolute;
-          left: 50%;
-          top: 50%;
-          width: ${LIGHT_EDIT_ACTION_PX}px;
-          height: ${LIGHT_EDIT_ACTION_PX}px;
-          display: grid;
-          place-items: center;
-          border-radius: 50%;
-          background: var(--primary-text-color);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-          pointer-events: none;
-          opacity: 0;
-          transform: translate(-50%, -50%) scale(${LIGHT_EDIT_DOT_PX / LIGHT_EDIT_ACTION_PX});
-          transform-origin: center center;
-          transition:
-            transform 140ms cubic-bezier(0.2, 0, 0, 1),
-            opacity 140ms cubic-bezier(0.2, 0, 0, 1);
-        }
-        .light-edit-action ha-icon {
-          --mdc-icon-size: 20px;
-          color: var(--card-background-color);
-        }
-        .light-edit.expanded {
-          z-index: 5;
-        }
-        .light-edit-dot.expanded {
-          opacity: 0;
-        }
-        .light-edit-action.expanded {
-          opacity: 1;
-          transform: translate(-50%, -50%) scale(1);
         }
         .light-scene-list {
           display: flex;
@@ -3031,14 +2600,6 @@ class CircadianScenesPanel extends HTMLElement {
         .light-brightness-graph .handle-fill {
           stroke: none;
         }
-        .light-brightness-graph .handle-plus {
-          fill: var(--primary-color);
-          font-size: 14px;
-          font-weight: 600;
-          text-anchor: middle;
-          dominant-baseline: central;
-          pointer-events: none;
-        }
         .light-brightness-graph .handle-label {
           fill: var(--secondary-text-color);
           font-size: 10px;
@@ -3092,11 +2653,7 @@ class CircadianScenesPanel extends HTMLElement {
           .fab {
             transition-duration: 1ms;
           }
-          .light-bar svg,
-          .sun-lights,
           .sun-light-clock-rings,
-          .light-edit-dot,
-          .light-edit-action,
           .scene-sidebar-body,
           .scene-sidebar-footer,
           .hue-presets::after {
@@ -3296,30 +2853,6 @@ class CircadianScenesPanel extends HTMLElement {
         .event-scene-error {
           color: var(--error-color);
         }
-        .light-row .light-remove,
-        .light-row .light-add {
-          position: absolute;
-          right: 4px;
-          top: calc(${LIGHT_FEATHER_PX}px + (100% - ${LIGHT_FEATHER_PX}px) / 2);
-          z-index: 2;
-          transform: translateY(-50%);
-          pointer-events: auto;
-          --mdc-icon-button-size: 36px;
-          color: var(--primary-text-color);
-        }
-        .light-row:first-child .light-remove,
-        .light-row:only-child .light-remove,
-        .light-row:first-child .light-add,
-        .light-row:only-child .light-add {
-          top: 50%;
-        }
-        .sun-events {
-          display: flex;
-          justify-content: space-evenly;
-          align-items: stretch;
-          gap: 8px;
-          padding: 12px 16px 8px;
-        }
         .sun-event {
           flex: 1 1 0;
           min-width: 0;
@@ -3414,103 +2947,6 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-event .time .clamp-time {
           color: var(--primary-text-color);
           font-weight: 600;
-        }
-        .sun-chart {
-          position: relative;
-          height: ${CHART_HEIGHT}px;
-        }
-        /* Same L/T/R surface vignette as dial (table view elevation chart). */
-        .sun-chart::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          z-index: 3;
-          pointer-events: none;
-          background:
-            linear-gradient(
-              to right,
-              color-mix(in srgb, var(--primary-background-color) 50%, transparent) 0%,
-              color-mix(in srgb, var(--primary-background-color) 22%, transparent) 36px,
-              transparent 96px
-            ),
-            linear-gradient(
-              to left,
-              color-mix(in srgb, var(--primary-background-color) 50%, transparent) 0%,
-              color-mix(in srgb, var(--primary-background-color) 22%, transparent) 36px,
-              transparent 96px
-            ),
-            linear-gradient(
-              to bottom,
-              color-mix(in srgb, var(--primary-background-color) 50%, transparent) 0%,
-              color-mix(in srgb, var(--primary-background-color) 22%, transparent) 40px,
-              transparent 110px
-            );
-        }
-        .sun-chart svg {
-          display: block;
-          width: 100%;
-          height: ${CHART_HEIGHT}px;
-        }
-        /* Dial-style event buttons anchored on the elevation curve. */
-        .sun-chart .clock-event {
-          position: absolute;
-          inset: auto;
-          left: 0;
-          top: 0;
-          width: 32px;
-          height: 32px;
-          margin: 0;
-          transform: translate(-50%, -50%);
-          z-index: 2;
-        }
-        .sun-chart .clock-event:hover,
-        .sun-chart .clock-event:focus-visible,
-        .sun-chart .clock-event:active,
-        .sun-chart .clock-event.selected {
-          transform: translate(-50%, -50%) scale(1.12);
-        }
-        .sun-chart .clock-event.ghost {
-          width: 22px;
-          height: 22px;
-        }
-        .sun-chart .clock-event.ghost:hover,
-        .sun-chart .clock-event.ghost:focus-visible,
-        .sun-chart .clock-event.ghost:active,
-        .sun-chart .clock-event.ghost.selected {
-          transform: translate(-50%, -50%);
-        }
-        /* List chart: same look, not interactive. */
-        .sun-chart .clock-event.inert {
-          cursor: default;
-          pointer-events: none;
-          box-shadow: none;
-          border-color: color-mix(
-            in srgb,
-            var(--divider-color) 70%,
-            var(--primary-text-color) 30%
-          );
-          background: color-mix(
-            in srgb,
-            var(--card-background-color) 88%,
-            var(--primary-text-color) 12%
-          );
-        }
-        .sun-chart .clock-event.inert:hover,
-        .sun-chart .clock-event.inert:focus-visible,
-        .sun-chart .clock-event.inert:active,
-        .sun-chart .clock-event.inert.selected {
-          transform: translate(-50%, -50%);
-        }
-        .sun-chart .clock-event.inert.missing {
-          box-shadow: none;
-        }
-        .sun-hours {
-          display: flex;
-          justify-content: space-between;
-          padding: 0 1.6% 10px;
-          color: var(--secondary-text-color);
-          font-size: 11px;
-          font-variant-numeric: tabular-nums;
         }
         .sun-hover-readout {
           display: flex;
@@ -4691,9 +4127,6 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._view === "edit") {
       if (this._formData?.kind === "simple") {
         return "simple";
-      }
-      if (this._lightView === "table") {
-        return "other";
       }
       return "dial";
     }
@@ -6034,7 +5467,6 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._syncAppBarTitle();
     this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
-    this._lightView = "dial";
     this._setEditorActions();
     this._syncEditorChrome();
     this._syncSaveFab();
@@ -7476,7 +6908,6 @@ class CircadianScenesPanel extends HTMLElement {
       this._liveEditSwitch = null;
       this._roomPreviewSwitch = null;
       this._locationBtn = null;
-      this._lightViewToggleBtn = null;
       if (this._narrow) {
         const undo = this._undoRedoButton("undo");
         const redo = this._undoRedoButton("redo");
@@ -7494,7 +6925,6 @@ class CircadianScenesPanel extends HTMLElement {
       this._syncUndoButtons();
       return;
     }
-    this._lightView = this._readLightView();
     this._liveEdit = this._readLiveEditPref();
     // Per-light Live edit lives in the light sidebar — clear any stale app-bar switch.
     this._liveEditSwitch = null;
@@ -7514,9 +6944,8 @@ class CircadianScenesPanel extends HTMLElement {
     previewToggle.append(previewLabel, previewSwitch);
     this._roomPreviewSwitch = previewSwitch;
 
-    // Location + dial/table view always live in the overflow menu.
+    // Location lives in the overflow menu.
     this._locationBtn = null;
-    this._lightViewToggleBtn = null;
 
     if (this._narrow) {
       const undo = this._undoRedoButton("undo");
@@ -7885,17 +7314,6 @@ class CircadianScenesPanel extends HTMLElement {
     await this._saveNow();
     return true;
   }
-
-  _lightViewStorageKey() {
-    const user = this._hass?.user?.id || "anon";
-    return `${DOMAIN}.lightView.v${LIGHT_VIEW_STORAGE_VERSION}.${user}`;
-  }
-
-  _legacyLightViewStorageKey() {
-    const user = this._hass?.user?.id || "anon";
-    return `${LEGACY_DOMAIN}.lightView.v${LIGHT_VIEW_STORAGE_VERSION}.${user}`;
-  }
-
   _liveEditStorageKey() {
     const user = this._hass?.user?.id || "anon";
     return `${DOMAIN}.liveEdit.v${LIVE_EDIT_STORAGE_VERSION}.${user}`;
@@ -8145,71 +7563,10 @@ class CircadianScenesPanel extends HTMLElement {
       this.shadowRoot.appendChild(dialog);
     });
   }
-
-  _readLightView() {
-    const raw = this._readLocalStorage(
-      this._lightViewStorageKey(),
-      this._legacyLightViewStorageKey()
-    );
-    // Explicit table stays table; migrate legacy "clock" → dial.
-    if (raw === "table") {
-      return "table";
-    }
-    return "dial";
-  }
-
-  _setLightView(view) {
-    const next = view === "dial" || view === "clock" ? "dial" : "table";
-    if (this._lightView === next) {
-      this._syncLightViewButtons();
-      this._syncEditorChrome();
-      return;
-    }
-    this._lightView = next;
-    try {
-      window.localStorage.setItem(this._lightViewStorageKey(), next);
-    } catch (_err) {
-      /* ignore quota / private mode */
-    }
-    this._syncLightViewButtons();
-    this._syncEditorChrome();
-    // Narrow: view label lives in the overflow menu — rebuild so it updates.
-    // Wide too: location + view are overflow-only now.
-    if (this._view === "edit") {
-      this._setEditorActions();
-    }
-    if (this._sunPath) {
-      // Scrub/knots only until settle. Keep settled HA samples as-is.
-      // Switching to table with sparse samples: refetch so bands use the same
-      // extrapolator grid as the dial (not a client RGB 5-minute densify).
-      const sparse =
-        this._view === "edit" &&
-        next === "table" &&
-        !this._yearScrubbing &&
-        !this._hasAuthoritativeLightSamples(this._sunPath.lights) &&
-        (this._sunPath.lights || []).some(
-          (light) => !light.suggested && (light.event_states || []).length
-        );
-      if (sparse) {
-        // Drop the in-memory scrub knots; reuse cached settled preview when
-        // present, otherwise fetch DOMAIN/preview for HA mid-segment samples.
-        this._sunPathKey = undefined;
-        this._ensureSunPath();
-      } else {
-        this._sunPath = this._withClientLightSamples(this._sunPath);
-        this._drawSunPath();
-      }
-    } else {
-      this._syncYearScrubLayout();
-    }
-  }
-
   _isDialView() {
     return (
       this._view === "theme" ||
-      (this._view === "edit" &&
-        this._lightView === "dial" &&
-        this._formData?.kind !== "simple")
+      (this._view === "edit" && this._formData?.kind !== "simple")
     );
   }
 
@@ -8220,22 +7577,6 @@ class CircadianScenesPanel extends HTMLElement {
     // Host-level vignette (not .sun-path) — must not track sidebar gutter.
     this.toggleAttribute("data-dial-view", dial);
   }
-
-  _syncLightViewButtons() {
-    if (!this._lightViewToggleBtn) {
-      return;
-    }
-    // Label is the destination view (single toggle in the app bar).
-    this._lightViewToggleBtn.textContent =
-      this._lightView === "dial"
-        ? this._t("frontend.actions.table_view", "Table view")
-        : this._t("frontend.actions.dial_view", "Dial view");
-    this._lightViewToggleBtn.setAttribute(
-      "aria-label",
-      this._lightView === "dial" ? "Switch to table view" : "Switch to dial view"
-    );
-  }
-
   _draftStorageKey(sceneKey = this._editId || "new") {
     const user = this._hass?.user?.id || "anon";
     return `${DOMAIN}.draft.v1.${user}.${sceneKey}`;
@@ -8726,13 +8067,11 @@ class CircadianScenesPanel extends HTMLElement {
 
   _captureLightRowRects() {
     const map = new Map();
-    const root = this._clockLegendEl || this._sunPathBodyEl?.querySelector(".sun-lights");
+    const root = this._clockLegendEl;
     if (!root) {
       return map;
     }
-    for (const el of root.querySelectorAll(
-      ":scope .simple-light-selector, :scope > .clock-legend-row, :scope > .light-row"
-    )) {
+    for (const el of root.querySelectorAll(":scope .simple-light-selector")) {
       const id = el.dataset.entityId;
       if (id) {
         map.set(id, el.getBoundingClientRect());
@@ -8748,13 +8087,11 @@ class CircadianScenesPanel extends HTMLElement {
     if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
       return;
     }
-    const root = this._clockLegendEl || this._sunPathBodyEl?.querySelector(".sun-lights");
+    const root = this._clockLegendEl;
     if (!root) {
       return;
     }
-    for (const el of root.querySelectorAll(
-      ":scope .simple-light-selector, :scope > .clock-legend-row, :scope > .light-row"
-    )) {
+    for (const el of root.querySelectorAll(":scope .simple-light-selector")) {
       const prev = before.get(el.dataset.entityId);
       if (!prev) {
         continue;
@@ -8825,74 +8162,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._playLightRowFlip(before);
     this._ensureSunPath();
   }
-
-  _peerStatesInScene(sceneId, exceptEntityId) {
-    const peers = [];
-    for (const light of this._sunPath?.lights || []) {
-      if (light.entity_id === exceptEntityId) {
-        continue;
-      }
-      const row = (light.event_states || []).find(
-        (item) => item.scene_entity_id === sceneId && item.present
-      );
-      if (row?.state) {
-        peers.push(row.state);
-      }
-    }
-    return peers;
-  }
-
-  _typicalStateFromPeers(sceneId, exceptEntityId) {
-    const peers = this._peerStatesInScene(sceneId, exceptEntityId);
-    if (!peers.length) {
-      return null;
-    }
-    const on = peers.filter((state) => state.state === "on");
-    if (!on.length) {
-      return { state: "off" };
-    }
-    const typical = { state: "on" };
-    const brightness = medianNumber(on.map((state) => state.brightness));
-    if (brightness != null) {
-      typical.brightness = Math.round(brightness);
-    }
-    const kelvin = medianNumber(on.map((state) => state.color_temp_kelvin));
-    if (kelvin != null) {
-      typical.color_temp_kelvin = Math.round(kelvin);
-      return typical;
-    }
-    const hues = [];
-    const sats = [];
-    for (const state of on) {
-      if (Array.isArray(state.hs_color) && state.hs_color.length >= 2) {
-        hues.push(state.hs_color[0]);
-        sats.push(state.hs_color[1]);
-      }
-    }
-    if (hues.length) {
-      typical.hs_color = [circularMeanHue(hues), medianNumber(sats)];
-      return typical;
-    }
-    const reds = [];
-    const greens = [];
-    const blues = [];
-    for (const state of on) {
-      if (Array.isArray(state.rgb_color) && state.rgb_color.length >= 3) {
-        reds.push(state.rgb_color[0]);
-        greens.push(state.rgb_color[1]);
-        blues.push(state.rgb_color[2]);
-      }
-    }
-    if (reds.length) {
-      typical.rgb_color = [
-        Math.round(medianNumber(reds)),
-        Math.round(medianNumber(greens)),
-        Math.round(medianNumber(blues)),
-      ];
-    }
-    return typical;
-  }
-
   _eventDefaultLightState(entityId, eventId) {
     const profile =
       LINKED_EVENTS.includes(eventId) && this._formData.display_scenes_combined
@@ -9250,20 +8519,13 @@ class CircadianScenesPanel extends HTMLElement {
         { disabled: !this._redoStack.length }
       );
     }
-    // Location + table/dial: always in overflow (Preview scene replaces Activate).
+    // Location preview stays in overflow (Preview scene replaced Activate).
     addItem(
       "preview-location",
       this._t("frontend.actions.preview_location", "Preview another location"),
       "mdi:map-marker-outline",
       // Banner Change covers this while an override is active.
       { disabled: Boolean(this._previewLocation) }
-    );
-    addItem(
-      "toggle-view",
-      this._lightView === "dial"
-        ? this._t("frontend.actions.table_view", "Table view")
-        : this._t("frontend.actions.dial_view", "Dial view"),
-      this._lightView === "dial" ? "mdi:table" : "mdi:clock-outline"
     );
     addItem(
       "show-info",
@@ -9660,10 +8922,6 @@ class CircadianScenesPanel extends HTMLElement {
       this._openLocationDialog();
       return;
     }
-    if (action === "toggle-view") {
-      this._setLightView(this._lightView === "dial" ? "table" : "dial");
-      return;
-    }
     if (action === "show-info") {
       this._showMoreInfo();
       return;
@@ -9947,19 +9205,10 @@ class CircadianScenesPanel extends HTMLElement {
       }
     }
     for (const row of root.querySelectorAll(
-      ".simple-light-selector[data-entity-id], .clock-legend-row[data-entity-id]"
+      ".simple-light-selector[data-entity-id]"
     )) {
       const on = row.dataset.entityId === selected;
       row.classList.toggle("active", on);
-      row.classList.toggle("selected", on);
-      if (on) {
-        row.setAttribute("aria-current", "true");
-      } else {
-        row.removeAttribute("aria-current");
-      }
-    }
-    for (const row of root.querySelectorAll(".light-row[data-entity-id]")) {
-      const on = row.dataset.entityId === selected;
       row.classList.toggle("selected", on);
       if (on) {
         row.setAttribute("aria-current", "true");
@@ -11539,16 +10788,6 @@ class CircadianScenesPanel extends HTMLElement {
     }
     return best;
   }
-
-  _secondsFromElementPointer(ev, el) {
-    const rect = el.getBoundingClientRect();
-    const viewX = rect.width
-      ? ((ev.clientX - rect.left) / rect.width) * CHART_WIDTH
-      : PLOT_LEFT;
-    const t = (viewX - PLOT_LEFT) / (PLOT_RIGHT - PLOT_LEFT);
-    return Math.max(0, Math.min(SECONDS_PER_DAY, t * SECONDS_PER_DAY));
-  }
-
   async _openLightEditDialog(light, event) {
     if (!this._eventSceneId(event.id)) {
       return;
@@ -12093,55 +11332,6 @@ class CircadianScenesPanel extends HTMLElement {
           selectScene(next);
         }
       },
-      onAdd: async (sceneId, eventId) => {
-        const next = events.find((item) => item.id === eventId);
-        if (!next) {
-          return;
-        }
-        let entry = drafts.get(eventId);
-        if (!entry) {
-          entry = {
-            draft: null,
-            saved: "absent",
-            member: false,
-            event: next,
-            index: drafts.size + 1,
-          };
-          drafts.set(eventId, entry);
-        }
-        if (entry.member && entry.draft) {
-          await selectScene(next);
-          return;
-        }
-        if (!undoCommitted) {
-          this._commitUndo();
-          undoCommitted = true;
-        }
-        const typical =
-          this._typicalStateFromPeers(sceneId, light.entity_id) ||
-          this._lightEventStoredState(light, eventId);
-        entry.draft = this._adaptStateToLight(
-          light.entity_id,
-          typical,
-          eventId
-        );
-        entry.member = true;
-        entry.event = next;
-        this._writeLightEventOverride(light.entity_id, eventId, {
-          ...entry.draft,
-        });
-        entry.saved = lightDraftFingerprint(entry.draft);
-        this._syncPreviewOverlay();
-        this._patchDialFromSession();
-        this._syncThemePreviewSurfaces();
-        this._saveSoon();
-        await selectScene(next);
-        brightnessGraphCtl?.sync();
-        colorBriGraphCtl?.sync();
-        whiteBriGraphCtl?.sync();
-        wheelCtl?.sync();
-        await applyLive();
-      },
       onBrightness: async (sceneId, brightness) => {
         const entry = drafts.get(sceneId);
         if (!entry?.member || !entry.draft) {
@@ -12195,12 +11385,6 @@ class CircadianScenesPanel extends HTMLElement {
             selectScene(next);
           }
         },
-        onAdd: async (_sceneId, eventId) => {
-          const next = events.find((item) => item.id === eventId);
-          if (next) {
-            await selectScene(next);
-          }
-        },
         onBrightness: async (sceneId, brightness) => {
           const entry = drafts.get(sceneId);
           if (!entry?.member || !entry.draft) {
@@ -12228,12 +11412,6 @@ class CircadianScenesPanel extends HTMLElement {
           const next = events.find((item) => item.id === eventId);
           if (next) {
             selectScene(next);
-          }
-        },
-        onAdd: async (_sceneId, eventId) => {
-          const next = events.find((item) => item.id === eventId);
-          if (next) {
-            await selectScene(next);
           }
         },
         onBrightness: async (sceneId, brightness) => {
@@ -13246,7 +12424,7 @@ class CircadianScenesPanel extends HTMLElement {
     // "from" at each "to" timestamp — no RGB densify (wrong path).
     this._sunPath = from;
     this._displayedSunPath = from;
-    if (this._lightView === "dial" && this._clockRingsHost) {
+    if (this._clockRingsHost) {
       this._patchLightClock(from, { morphing: true });
     }
     const started = performance.now();
@@ -13256,9 +12434,7 @@ class CircadianScenesPanel extends HTMLElement {
       const frame = lerpSunPath(from, to, eased);
       this._sunPath = frame;
       this._displayedSunPath = frame;
-      const patched =
-        this._lightView === "dial" &&
-        this._patchLightClock(frame, { morphing: true });
+      const patched = this._patchLightClock(frame, { morphing: true });
       if (!patched) {
         this._drawSunPath();
         this._cancelSunPathMorph();
@@ -13414,7 +12590,7 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     // Dial year scrub: client sun + in-place patch (no mid-drag HA preview).
-    if (this._yearScrubbing && this._lightView === "dial") {
+    if (this._yearScrubbing) {
       this._applyClientScrubDay(iso);
       return;
     }
@@ -14339,14 +13515,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._sunPathEl || !this._sunPath || !this._sunPath.curve?.length) {
       return;
     }
-    if ((this._view === "edit" || this._view === "theme") && !this._dateToolbar) {
-      this._lightView = this._view === "theme" ? "dial" : this._readLightView();
-    }
-    const useClock =
-      this._view === "theme" ||
-      (this._view === "edit" && this._lightView === "dial");
     if (
-      useClock &&
       this._clockRingsHost?.isConnected &&
       this._patchLightClock(this._sunPath)
     ) {
@@ -14363,280 +13532,21 @@ class CircadianScenesPanel extends HTMLElement {
       this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
       return;
     }
-    const { events, curve } = this._sunPath;
-    const isToday = Boolean(this._sunPath.today);
-    const nowSeconds = nowSecondsSinceMidnight();
-    const elevations = curve.map((point) => point[1]);
-    for (const event of events) {
-      elevations.push(event.elevation);
+    const { events } = this._sunPath;
+    const clockEl = this._buildLightClock(events);
+    if (!this._dateToolbar) {
+      this._dateToolbar = this._buildDateToolbar();
     }
-    // Y scale is this location's annual max, not today's peak — a winter noon
-    // that only just clears the horizon must sit near 0°, not the top of the plot.
-    const peakElev = this._sunPath.max_elevation;
-    const minElev = Math.min(-peakElev, ...elevations);
-    const maxElev = Math.max(peakElev, ...elevations);
-    const span = maxElev - minElev;
-    const xOf = (seconds) => {
-      const s =
-        ((Number(seconds) % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY;
-      return PLOT_LEFT + (s / SECONDS_PER_DAY) * (PLOT_RIGHT - PLOT_LEFT);
-    };
-    const yOf = (elevation) =>
-      PLOT_TOP + ((maxElev - elevation) / span) * (PLOT_BOTTOM - PLOT_TOP);
-
-    const nowElev = interpolateElevation(curve, nowSeconds);
-    const horizonY = yOf(0);
-    const hourLabels = ["00:00", "06:00", "12:00", "18:00", "24:00"];
-    // Table/list chart: constant stroke — solid day, dashed night.
-    const chartStrokeOf = () => 2;
-    const horizonLook = skyLookFromElevation(0);
-    const rampBottom = Math.min(CHART_HEIGHT - 4, horizonY + 56);
-    const rampHeight = Math.max(0, rampBottom - horizonY);
-    const pathRuns = sunStrokePathRuns(curve, chartStrokeOf)
-      .map((run) => {
-        const d = run.points
-          .map(([seconds, elev], index) => {
-            const x = xOf(seconds).toFixed(1);
-            const y = yOf(elev).toFixed(1);
-            return `${index === 0 ? "M" : "L"}${x} ${y}`;
-          })
-          .join("");
-        if (run.night) {
-          // Night: dashed, slightly stronger than day opacity so it stays
-          // readable over the horizon ramp.
-          return `<path d="${d}" fill="none" stroke="color-mix(in srgb, var(--primary-text-color) 55%, transparent)" stroke-width="2px" stroke-opacity="0.9" stroke-dasharray="5 6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>`;
-        }
-        return `<path d="${d}" fill="none" stroke="var(--primary-text-color)" stroke-width="2px" stroke-opacity="1" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>`;
-      })
-      .join("");
-
-    const svg = `
-      <svg viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="se-horizon-ramp" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="${horizonLook.pathColor}" stop-opacity="0.48"/>
-            <stop offset="55%" stop-color="${horizonLook.pathColor}" stop-opacity="0.14"/>
-            <stop offset="100%" stop-color="${horizonLook.pathColor}" stop-opacity="0"/>
-          </linearGradient>
-        </defs>
-        <rect x="${PLOT_LEFT}" y="${horizonY.toFixed(1)}" width="${PLOT_RIGHT - PLOT_LEFT}" height="${rampHeight.toFixed(1)}" fill="url(#se-horizon-ramp)"/>
-        <line x1="${PLOT_LEFT}" x2="${PLOT_RIGHT}" y1="${horizonY.toFixed(1)}" y2="${horizonY.toFixed(1)}" stroke="color-mix(in srgb, ${horizonLook.pathColor} 55%, var(--primary-text-color) 45%)" stroke-width="1.5" stroke-opacity="0.95" vector-effect="non-scaling-stroke"/>
-        ${pathRuns}
-      </svg>
-    `;
-
-    const eventsRow = document.createElement("div");
-    eventsRow.className = "sun-events";
-    const editable = this._view === "edit" || this._view === "theme";
-    for (const event of events) {
-      const item = document.createElement(editable ? "button" : "div");
-      item.className = "sun-event";
-      if (editable) {
-        item.type = "button";
-        item.classList.add("clickable");
-        item.dataset.eventId = event.id;
-        if (this._sidebarEventId === event.id) {
-          item.classList.add("selected");
-          item.setAttribute("aria-current", "true");
-        }
-        item.addEventListener("click", () => this._toggleEventSceneDialog(event));
-      }
-      const bits = [];
-      if (event.overridden) {
-        bits.push(
-          this._t(
-            "frontend.chart.overridden_dusk",
-            "{name} uses the dusk minimum ({solar_time} solar dusk)",
-            { name: event.name, solar_time: event.solar_time }
-          )
-        );
-      }
-      if (event.fallback) {
-        bits.push(
-          this._t(
-            "frontend.chart.seasonal_fallback",
-            "Seasonal fallback (no real solar event this day)"
-          )
-        );
-      }
-      if (bits.length) {
-        item.title = bits.join(" · ");
-      } else {
-        item.title = event.name;
-      }
-      const name = document.createElement("span");
-      name.className = "name";
-      name.textContent = event.name;
-      const time = document.createElement("span");
-      time.className = "time";
-      if (event.overridden && event.solar_time) {
-        const struck = document.createElement("span");
-        struck.className = "solar-struck";
-        struck.textContent = event.fallback
-          ? `${event.solar_time}*`
-          : event.solar_time;
-        const clamp = document.createElement("span");
-        clamp.className = "clamp-time";
-        clamp.textContent = event.time;
-        time.append(struck, clamp);
-      } else {
-        time.textContent = event.fallback ? `${event.time}*` : event.time;
-      }
-      item.append(name, time);
-      eventsRow.appendChild(item);
+    if (this._dateToolbar.parentNode !== this._sunPathEl) {
+      const before = this._sunPathStage || this._sunPathBodyEl;
+      this._sunPathEl.insertBefore(this._dateToolbar, before);
     }
-
-    const chart = document.createElement("div");
-    chart.className = "sun-chart";
-    chart.innerHTML = svg;
-    for (const event of events) {
-      const markSeconds = this._eventMarkSeconds(event);
-      const buttonSeconds = this._eventButtonSeconds(event);
-      if (buttonSeconds == null && markSeconds == null) {
-        continue;
-      }
-      const placeSeconds = buttonSeconds ?? markSeconds;
-      const placeElev = interpolateElevation(curve, placeSeconds);
-      const left = `${(xOf(placeSeconds) / CHART_WIDTH) * 100}%`;
-      const top = `${yOf(placeElev)}px`;
-      const btn = document.createElement(editable ? "button" : "div");
-      btn.className = "clock-event";
-      if (!editable) {
-        btn.classList.add("inert");
-      } else {
-        btn.type = "button";
-        btn.dataset.eventId = event.id;
-        if (this._sidebarEventId === event.id) {
-          btn.classList.add("selected");
-          btn.setAttribute("aria-current", "true");
-        }
-        btn.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          this._toggleEventSceneDialog(event);
-        });
-      }
-      btn.style.left = left;
-      btn.style.top = top;
-      btn.title = event.name;
-      const icon = document.createElement("ha-icon");
-      icon.setAttribute("icon", event.icon);
-      btn.appendChild(icon);
-      chart.appendChild(btn);
-      if (
-        event.overridden &&
-        markSeconds != null &&
-        buttonSeconds != null &&
-        buttonSeconds !== markSeconds
-      ) {
-        const markElev = interpolateElevation(curve, markSeconds);
-        const markLeftPct = (xOf(markSeconds) / CHART_WIDTH) * 100;
-        const markTopPx = yOf(markElev);
-        const ghost = document.createElement("div");
-        ghost.className = "clock-event ghost inert";
-        ghost.style.left = `${markLeftPct}%`;
-        ghost.style.top = `${markTopPx}px`;
-        ghost.setAttribute("aria-hidden", "true");
-        ghost.title = `${event.name} · solar ${event.solar_time || event.time}`;
-        const ghostIcon = document.createElement("ha-icon");
-        ghostIcon.setAttribute("icon", event.icon);
-        ghost.appendChild(ghostIcon);
-        chart.appendChild(ghost);
-        const dyPx = yOf(placeElev) - markTopPx;
-        const link = document.createElement("div");
-        link.className = "sun-clamp-link";
-        link.style.left = `${markLeftPct}%`;
-        link.style.top = `${markTopPx}px`;
-        chart.appendChild(link);
-        requestAnimationFrame(() => {
-          const w = chart.clientWidth;
-          if (!(w > 0)) {
-            return;
-          }
-          const dx =
-            ((xOf(placeSeconds) / CHART_WIDTH) * 100 - markLeftPct) / 100 * w;
-          link.style.width = `${Math.hypot(dx, dyPx)}px`;
-          link.style.transform = `rotate(${(Math.atan2(dyPx, dx) * 180) / Math.PI}deg)`;
-        });
-      }
-    }
-    if (isToday) {
-      const nowDot = document.createElement("div");
-      nowDot.className = "sun-now";
-      nowDot.title = `Now ${formatClock(nowSeconds)}`;
-      nowDot.style.left = `${(xOf(nowSeconds) / CHART_WIDTH) * 100}%`;
-      nowDot.style.top = `${yOf(nowElev)}px`;
-      chart.appendChild(nowDot);
-    }
-
-    const hours = document.createElement("div");
-    hours.className = "sun-hours";
-    for (const label of hourLabels) {
-      const span = document.createElement("span");
-      span.textContent = label;
-      hours.appendChild(span);
-    }
-
-    let readout = this._hoverReadout;
-    if (!readout) {
-      readout = document.createElement("div");
-      readout.className = "sun-hover-readout";
-      readout.setAttribute("aria-live", "polite");
-      this._hoverReadout = readout;
-    }
-    // Reuse this node: .sun-toolbar-chrome outlives each _drawSunPath, so a
-    // new readout would stack Now/Sun° labels when switching circadian scenes.
-
-    const plots = document.createElement("div");
-    plots.className = "sun-plots";
-    const hoverLine = document.createElement("div");
-    hoverLine.className = "sun-hover-line";
-    this._hoverLine = hoverLine;
-    let clockEl = null;
-    if (this._view === "edit" || this._view === "theme") {
-      if (useClock) {
-        clockEl = this._buildLightClock(events);
-      } else {
-        plots.append(chart, hours);
-        const lights = this._buildLightBars(xOf, events);
-        if (lights) {
-          plots.appendChild(lights);
-        }
-      }
+    if (this._yearScrubbing) {
+      this._syncYearScrub();
     } else {
-      plots.append(chart, hours);
+      this._syncDateToolbar();
     }
-    if (isToday && !useClock) {
-      const nowLine = document.createElement("div");
-      nowLine.className = "sun-now-line";
-      nowLine.style.left = `${(xOf(nowSeconds) / CHART_WIDTH) * 100}%`;
-      plots.appendChild(nowLine);
-    }
-    if (!useClock) {
-      plots.appendChild(hoverLine);
-      this._bindPlotHover(plots);
-    } else {
-      this._hoverLine = null;
-    }
-
     const children = [];
-    if (this._view === "edit" || this._view === "theme") {
-      if (!this._dateToolbar) {
-        this._dateToolbar = this._buildDateToolbar();
-      }
-      if (this._dateToolbar.parentNode !== this._sunPathEl) {
-        const before = this._sunPathStage || this._sunPathBodyEl;
-        this._sunPathEl.insertBefore(this._dateToolbar, before);
-      }
-      if (this._yearScrubbing) {
-        this._syncYearScrub();
-      } else {
-        this._syncDateToolbar();
-      }
-    } else if (this._dateToolbar) {
-      this._dateToolbar.remove();
-    }
-    // Event assignment cards only in the editor; list uses inert chart buttons.
-    children.push(...(useClock || !editable ? [] : [eventsRow]));
     if (events.some((event) => event.fallback)) {
       const note = document.createElement("p");
       note.className = "sun-fallback-note";
@@ -14646,81 +13556,17 @@ class CircadianScenesPanel extends HTMLElement {
       );
       children.push(note);
     }
-    if (!useClock) {
-      children.push(readout);
-      children.push(plots);
-    }
-    if (clockEl) {
-      children.push(clockEl);
-    }
-
+    children.push(clockEl);
     this._sunPathEl.hidden = false;
-    if (!clockEl) {
-      this._clockLegendEl?.remove();
-      this._clockLegendEl = null;
-    }
     this._sunPathBodyEl.replaceChildren(...children);
     if (this._clockLegendEl) {
       this._sunPathEl.appendChild(this._clockLegendEl);
     }
-    if (this._view === "edit" || this._view === "theme") {
-      this._syncEditorChrome();
-      this._syncYearScrubLayout();
-    } else {
-      this._syncEditorChrome();
-    }
+    this._syncEditorChrome();
+    this._syncYearScrubLayout();
     this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
     this._displayedSunPath = this._sunPath;
   }
-
-  _secondsFromPlotPointer(ev, plots) {
-    const rect = plots.getBoundingClientRect();
-    const viewX = rect.width
-      ? ((ev.clientX - rect.left) / rect.width) * CHART_WIDTH
-      : PLOT_LEFT;
-    const t = (viewX - PLOT_LEFT) / (PLOT_RIGHT - PLOT_LEFT);
-    return Math.max(0, Math.min(SECONDS_PER_DAY, t * SECONDS_PER_DAY));
-  }
-
-  _bindPlotHover(plots) {
-    const apply = (seconds) => {
-      this._hoverSeconds = seconds;
-      const left = `${((PLOT_LEFT + (seconds / SECONDS_PER_DAY) * (PLOT_RIGHT - PLOT_LEFT)) / CHART_WIDTH) * 100}%`;
-      this._hoverLine.style.left = left;
-      plots.setAttribute("data-hovering", "");
-      this._fillHoverReadout(seconds, { hovering: true });
-    };
-    const clear = () => {
-      this._hoverSeconds = undefined;
-      plots.removeAttribute("data-hovering");
-      this._fillHoverReadout(
-        this._sunPath?.today ? nowSecondsSinceMidnight() : null,
-        { hovering: false }
-      );
-    };
-    plots.addEventListener("pointermove", (ev) => {
-      this._pendingHoverX = ev.clientX;
-      if (this._hoverRaf) {
-        return;
-      }
-      this._hoverRaf = window.requestAnimationFrame(() => {
-        this._hoverRaf = undefined;
-        if (this._pendingHoverX == null) {
-          return;
-        }
-        apply(this._secondsFromPlotPointer({ clientX: this._pendingHoverX }, plots));
-      });
-    });
-    plots.addEventListener("pointerleave", () => {
-      this._pendingHoverX = undefined;
-      if (this._hoverRaf) {
-        window.cancelAnimationFrame(this._hoverRaf);
-        this._hoverRaf = undefined;
-      }
-      clear();
-    });
-  }
-
   _patchHoverReadoutClock(seconds) {
     this._updateLightNameBrightness(seconds);
     const readout = this._hoverReadout;
@@ -17205,7 +16051,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       if (
         t.closest(
-          ".scene-sidebar, .sun-light-clock-rings, .simple-light-selector, .clock-legend-row.interactive, .clock-event, .sun-event"
+          ".scene-sidebar, .sun-light-clock-rings, .simple-light-selector, .clock-event, .sun-event"
         )
       ) {
         return;
@@ -17602,7 +16448,7 @@ class CircadianScenesPanel extends HTMLElement {
     return wrap;
   }
 
-  _lightMembershipButton(light, { removed, tile = false }) {
+  _lightMembershipButton(light, { removed }) {
     const label = removed
       ? this._t("frontend.lights.add_named_to_scene", "Add {name} to the scene", {
           name: light.name,
@@ -17612,18 +16458,11 @@ class CircadianScenesPanel extends HTMLElement {
           "Remove {name} from the scene",
           { name: light.name }
         );
-    const btn = tile
-      ? document.createElement("button")
-      : document.createElement("ha-icon-button");
+    const btn = document.createElement("button");
     btn.className = removed ? "light-add" : "light-remove";
-    if (tile) {
-      btn.type = "button";
-      btn.setAttribute("aria-label", label);
-      btn.tabIndex = -1;
-    } else {
-      btn.label = label;
-      btn.tabIndex = removed ? 0 : -1;
-    }
+    btn.type = "button";
+    btn.setAttribute("aria-label", label);
+    btn.tabIndex = -1;
     const icon = document.createElement("ha-icon");
     icon.setAttribute("icon", removed ? "mdi:plus" : "mdi:close");
     btn.appendChild(icon);
@@ -17759,7 +16598,7 @@ class CircadianScenesPanel extends HTMLElement {
         });
       }
       if (!removed) {
-        selector.appendChild(this._lightMembershipButton(light, { removed: false, tile: true }));
+        selector.appendChild(this._lightMembershipButton(light, { removed: false }));
       }
     }
     return selector;
@@ -17818,193 +16657,8 @@ class CircadianScenesPanel extends HTMLElement {
     );
     return icon;
   }
-
-  _buildLightBars(xOf, events) {
-    this._lightNameLabels = [];
-    const lights = this._sunPath.lights || [];
-    if (!lights.length && this._view !== "edit") {
-      return null;
-    }
-    const wrap = document.createElement("div");
-    wrap.className = "sun-lights";
-    for (const light of this._legendLights(lights)) {
-      wrap.appendChild(this._lightRow(light, xOf, events));
-    }
-    if (this._view === "edit") {
-      wrap.appendChild(
-        createAddLightTile({
-          label: this._t("frontend.lights.add_light", "Add light"),
-          onActivate: (anchor) => this._openAddLightPicker(anchor),
-        })
-      );
-    }
-    if (!wrap.childElementCount) {
-      return null;
-    }
-    return wrap;
-  }
-
-  _lightRow(light, xOf, events) {
-    const suggested = Boolean(light.suggested);
-    const removed = Boolean(light.removed || suggested);
-    const row = document.createElement("div");
-    row.className = "light-row";
-    row.dataset.entityId = light.entity_id;
-    if (suggested) {
-      row.classList.add("suggested");
-    }
-    if (removed) {
-      row.classList.add("removed");
-    }
-    if (light.in_area === false) {
-      row.classList.add("out-of-area");
-    }
-    const unavailable =
-      this._lightIsUnavailable(light.entity_id) && !removed;
-    const capsKnown = unavailable && this._lightHasKnownCaps(light.entity_id);
-    if (unavailable) {
-      row.classList.add("unavailable");
-      if (capsKnown) {
-        row.classList.add("caps-known");
-      }
-    }
-    if (!removed && light.entity_id === this._sidebarLightId) {
-      row.classList.add("selected");
-      row.setAttribute("aria-current", "true");
-    }
-
-    const bar = document.createElement("div");
-    bar.className = "light-bar";
-    if (!suggested) {
-      const samples = light.samples || [];
-      const gradientId = `light-grad-${light.entity_id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-      const stops = samples
-        .map((sample) => {
-          const offset = (sample[0] / SECONDS_PER_DAY) * 100;
-          return `<stop offset="${offset.toFixed(2)}%" stop-color="${darkenedRgb(sample)}"/>`;
-        })
-        .join("");
-      bar.innerHTML = `
-        <svg viewBox="0 0 ${CHART_WIDTH} ${LIGHT_BAR_HEIGHT}" preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="${gradientId}" gradientUnits="userSpaceOnUse" x1="${PLOT_LEFT}" y1="0" x2="${PLOT_RIGHT}" y2="0">
-              ${stops}
-            </linearGradient>
-          </defs>
-          <rect x="${PLOT_LEFT}" y="0" width="${PLOT_RIGHT - PLOT_LEFT}" height="${LIGHT_BAR_HEIGHT}" fill="url(#${gradientId})"></rect>
-        </svg>
-      `;
-    }
-    const name = document.createElement("span");
-    name.className = "light-name";
-    name.textContent = light.name;
-    if (removed) {
-      name.textContent = `${light.name} · ${this._t(
-        "frontend.lights.removed",
-        "Removed"
-      )}`;
-    } else if (unavailable) {
-      name.textContent = `${light.name} · ${this._t(
-        "frontend.lights.unavailable",
-        "Unavailable"
-      )}`;
-    }
-    if (light.in_area === false) {
-      name.title = "This light is not in the selected area";
-    }
-    if (!removed && (!unavailable || capsKnown)) {
-      this._lightNameLabels.push({ light, el: name });
-    }
-    bar.appendChild(name);
-    if (this._view === "edit" && !suggested) {
-      const assigned = events.filter((item) => this._eventSceneId(item.id));
-      const hit = document.createElement("div");
-      hit.className = "light-bar-hit";
-      hit.setAttribute("role", "button");
-      hit.tabIndex = 0;
-      hit.setAttribute("aria-label", `Edit ${light.name}`);
-      const openClosest = (ev) => {
-        ev.stopPropagation();
-        const seconds = this._secondsFromElementPointer(ev, bar);
-        const closest = this._closestEvent(assigned, seconds);
-        if (closest) {
-          this._openLightEditDialog(light, closest);
-        }
-      };
-      hit.addEventListener("click", openClosest);
-      hit.addEventListener("keydown", (ev) => {
-        if (ev.key !== "Enter" && ev.key !== " ") {
-          return;
-        }
-        ev.preventDefault();
-        ev.stopPropagation();
-        const seconds =
-          this._hoverSeconds ??
-          (this._sunPath?.today
-            ? nowSecondsSinceMidnight()
-            : SECONDS_PER_DAY / 2);
-        const closest = this._closestEvent(assigned, seconds);
-        if (closest) {
-          this._openLightEditDialog(light, closest);
-        }
-      });
-      bar.appendChild(hit);
-      const edits = document.createElement("div");
-      edits.className = "light-edits";
-      for (const event of assigned) {
-        const editHit = document.createElement("div");
-        editHit.className = "light-edit";
-        editHit.style.left = `${(xOf(event.seconds) / CHART_WIDTH) * 100}%`;
-        editHit.setAttribute("role", "button");
-        editHit.tabIndex = 0;
-        editHit.setAttribute("aria-label", `Edit ${light.name} at ${event.name}`);
-        const dot = document.createElement("span");
-        dot.className = "light-edit-dot";
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("icon", "mdi:pencil");
-        const action = document.createElement("span");
-        action.className = "light-edit-action";
-        action.appendChild(icon);
-        const setExpanded = (on) => {
-          /* Class on each node: :hover descendant rules do not restyle
-             children inside this shadow tree. */
-          editHit.classList.toggle("expanded", on);
-          dot.classList.toggle("expanded", on);
-          action.classList.toggle("expanded", on);
-        };
-        editHit.addEventListener("pointerenter", () => setExpanded(true));
-        editHit.addEventListener("pointerleave", () => setExpanded(false));
-        editHit.addEventListener("focusin", () => setExpanded(true));
-        editHit.addEventListener("focusout", () => {
-          window.requestAnimationFrame(() => {
-            if (!editHit.contains(editHit.getRootNode().activeElement)) {
-              setExpanded(false);
-            }
-          });
-        });
-        const open = (ev) => {
-          ev.stopPropagation();
-          this._openLightEditDialog(light, event);
-        };
-        editHit.addEventListener("click", open);
-        editHit.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter" || ev.key === " ") {
-            ev.preventDefault();
-            open(ev);
-          }
-        });
-        editHit.append(dot, action);
-        edits.appendChild(editHit);
-      }
-      bar.appendChild(edits);
-      bar.appendChild(this._lightMembershipButton(light, { removed: false }));
-    } else if (this._view === "edit") {
-      bar.appendChild(this._lightMembershipButton(light, { removed: true }));
-    }
-    row.appendChild(bar);
-    return row;
-  }
 }
+
 function entitySelector(hass, domain, areaId, nativeScenesOnly, extraIds) {
   const config = { domain, multiple: false };
   const include = [];

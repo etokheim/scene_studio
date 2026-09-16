@@ -1436,7 +1436,6 @@ function createLightBrightnessGraph({
   subtitle = "0–100% by solar event",
   getPoints,
   onSelect,
-  onAdd,
   onBrightness,
   onDragEnd,
 }) {
@@ -1729,11 +1728,6 @@ function createLightBrightnessGraph({
         circle.setAttribute("cx", match.x.toFixed(1));
         circle.setAttribute("cy", match.y.toFixed(1));
       }
-      const plus = node.querySelector(".handle-plus");
-      if (plus) {
-        plus.setAttribute("x", match.x.toFixed(1));
-        plus.setAttribute("y", match.y.toFixed(1));
-      }
       const fill = node.querySelector(".handle-fill");
       if (fill) {
         const [r, g, b] = match.point.rgb;
@@ -1835,23 +1829,12 @@ function createLightBrightnessGraph({
       label.textContent = c.point.name;
       group.append(hit, dot, fill);
       if (!c.point.member) {
-        const plus = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "text"
-        );
-        plus.setAttribute("class", "handle-plus");
-        plus.setAttribute("x", c.x.toFixed(1));
-        plus.setAttribute("y", c.y.toFixed(1));
-        plus.textContent = "+";
-        group.appendChild(plus);
-        group.setAttribute(
-          "aria-label",
-          `Add to ${c.point.name}`
-        );
+        group.setAttribute("aria-label", c.point.name);
+        // Missing-event handles select only; add/remove lives on Lys tiles.
         group.addEventListener("click", (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          onAdd?.(c.point.sceneId, c.point.eventId);
+          onSelect?.(c.point.eventId);
         });
       } else {
         group.addEventListener("pointerdown", (ev) => {
@@ -2925,33 +2908,6 @@ function createSceneColorWheel({
   return { el: stage, setMode, sync, syncPresets, attachGlow, disconnect };
 }
 
-function medianNumber(values) {
-  const sorted = values
-    .filter((value) => value != null && Number.isFinite(Number(value)))
-    .map(Number)
-    .sort((left, right) => left - right);
-  if (!sorted.length) {
-    return null;
-  }
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2) {
-    return sorted[mid];
-  }
-  return (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function circularMeanHue(hues) {
-  let x = 0;
-  let y = 0;
-  for (const hue of hues) {
-    const rad = (Number(hue) * Math.PI) / 180;
-    x += Math.cos(rad);
-    y += Math.sin(rad);
-  }
-  const deg = (Math.atan2(y / hues.length, x / hues.length) * 180) / Math.PI;
-  return (deg + 360) % 360;
-}
-
 function lightDraftFingerprint(draft) {
   return JSON.stringify({
     state: draft?.state || "off",
@@ -3032,8 +2988,6 @@ export {
   drawHueWheelImage,
   createLightBrightnessGraph,
   createSceneColorWheel,
-  medianNumber,
-  circularMeanHue,
   lightDraftFingerprint,
   HUE_WHEEL_RENDER,
   HUE_COLOR_PRESETS,
