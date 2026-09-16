@@ -7,6 +7,11 @@ import {
   lightWheelCaps,
 } from "./color_ui.js";
 import { variableIsPalette } from "./palette.js";
+import {
+  LIGHT_TILES_CSS,
+  createLightTile,
+  paintLightTile,
+} from "./light_tiles.js";
 
 export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
@@ -70,195 +75,7 @@ export const SIMPLE_EDITOR_CSS = `
     cursor: pointer;
     padding: 0;
   }
-  /* Huemane Lys strip: full-width scroller, row centered when it fits. */
-  .light-tiles-scroller {
-    display: flex;
-    align-self: stretch;
-    flex: 0 0 auto;
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    padding: 8px 16px 24px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
-    position: relative;
-  }
-  .light-tiles {
-    display: flex;
-    flex-flow: row nowrap;
-    align-items: flex-end;
-    gap: 10px;
-    width: max-content;
-    margin-inline: auto;
-    flex: 0 0 auto;
-  }
-  .simple-light-selector {
-    box-sizing: border-box;
-    flex: 0 0 auto;
-    border: 2px solid transparent;
-    padding: 2px;
-    border-radius: 28px;
-  }
-  .simple-light-selector.active {
-    border-color: var(
-      --hue-light-on-color,
-      var(--hue-light-on-background, #ffda95)
-    );
-  }
-  .simple-light-tile {
-    --hue-unfilled-mix: 50%;
-    --hue-unfilled-opacity: 100%;
-    --hue-unfilled-color: color-mix(
-      in srgb,
-      var(--hue-light-on-color, var(--hue-light-on-background, #ffda95))
-        var(--hue-unfilled-mix),
-      var(--hue-light-off-background, var(--surface-2, #242022))
-    );
-    --hue-light-off-text-color: var(--hue-light-on-text-color, rgba(0, 0, 0, 0.7));
-    box-sizing: content-box;
-    position: relative;
-    /* No switch slot — painted size matches huemane 85×90 + 5px pad. */
-    width: 85px;
-    height: 90px;
-    padding: 5px;
-    border: 0;
-    border-radius: 24px;
-    overflow: hidden;
-    cursor: ns-resize;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: pan-x;
-    box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
-    background: color-mix(
-      in srgb,
-      var(--hue-unfilled-color) var(--hue-unfilled-opacity),
-      transparent
-    );
-    color: inherit;
-  }
-  .simple-light-tile.is-off {
-    --hue-unfilled-mix: 0%;
-    --hue-unfilled-opacity: 100%;
-    background: var(--hue-light-off-background, var(--surface-2, #242022));
-    --hue-light-off-text-color: #fff;
-  }
-  .simple-light-tile.dragging,
-  .simple-light-tile.wheel-adjusting {
-    --hue-unfilled-mix: 0%;
-    --hue-unfilled-opacity: 100%;
-    --hue-light-off-text-color: #fff;
-    touch-action: none;
-  }
-  @media (hover: hover) {
-    .simple-light-tile:hover:not(.is-off):not(.dragging):not(.wheel-adjusting) {
-      --hue-unfilled-mix: 25%;
-      --hue-unfilled-opacity: 85%;
-      --hue-light-off-text-color: #fff;
-    }
-    .simple-light-tile:hover:not(.is-off):not(.dragging):not(.wheel-adjusting)
-      .simple-light-fill::after {
-      height: 0;
-    }
-  }
-  .simple-light-fill {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: var(--hue-light-fill, 0%);
-    background: var(--hue-light-on-background, #ffda95);
-    border-radius: 8px 8px 0 0;
-    pointer-events: none;
-    z-index: 0;
-    overflow: hidden;
-  }
-  .simple-light-fill::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    height: 20px;
-    background: color-mix(
-      in srgb,
-      var(--hue-unfilled-color, var(--hue-light-off-background, #242022))
-        var(--hue-unfilled-opacity, 100%),
-      transparent
-    );
-    -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
-    mask-image: linear-gradient(to bottom, #000, transparent);
-    pointer-events: none;
-  }
-  .simple-light-tile.dragging .simple-light-fill::after,
-  .simple-light-tile.wheel-adjusting .simple-light-fill::after,
-  .simple-light-tile.is-off .simple-light-fill::after {
-    height: 0;
-  }
-  .simple-light-labels {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    pointer-events: none;
-    display: flex;
-    flex-flow: column;
-  }
-  .simple-light-labels.layer-off {
-    color: var(--hue-light-off-text-color, #fff);
-    clip-path: inset(0 0 var(--hue-light-fill, 0%) 0);
-  }
-  .simple-light-labels.layer-on {
-    color: var(--hue-light-on-text-color, rgba(0, 0, 0, 0.7));
-    clip-path: inset(calc(100% - var(--hue-light-fill, 0%)) 0 0 0);
-  }
-  .simple-light-tap {
-    display: flex;
-    flex-flow: column;
-    flex: 1 1 auto;
-    height: 100%;
-  }
-  .simple-light-icon-slot {
-    display: flex;
-    flex-flow: column;
-    flex: 1 1 auto;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-  }
-  .simple-light-icon-slot ha-state-icon,
-  .simple-light-icon-slot ha-icon {
-    color: inherit;
-    --icon-primary-color: currentColor;
-    --mdc-icon-size: 24px;
-    transform: scale(1.40625);
-  }
-  .simple-light-title {
-    color: inherit;
-    padding: 0 2px 10px;
-    font-size: 12px;
-    line-height: 15px;
-    font-weight: 500;
-    height: 35px;
-    text-align: center;
-    display: flex;
-    flex-flow: column;
-    justify-content: center;
-  }
-  .simple-light-title span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-  .simple-light-hit {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    cursor: inherit;
-  }
+  ${LIGHT_TILES_CSS}
   .simple-mode-picker {
     position: absolute;
     z-index: 6;
@@ -290,16 +107,6 @@ export const SIMPLE_EDITOR_CSS = `
   .simple-mode-picker .m-color { left: 46px; bottom: 0; }
   .simple-mode-picker .m-var { left: 0; top: 46px; }
 `;
-
-function onTextCss(rgb) {
-  const toLin = (channel) => {
-    const c = Math.max(0, Math.min(255, Number(channel) || 0)) / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  const luma =
-    0.2126 * toLin(rgb[0]) + 0.7152 * toLin(rgb[1]) + 0.0722 * toLin(rgb[2]);
-  return luma > 0.45 ? "rgba(0, 0, 0, 0.7)" : "#fff";
-}
 
 function colorCss(color) {
   if (!color) {
@@ -539,35 +346,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   };
 
   const paintSelector = (selector, eid, draft) => {
-    const rgb = draftRgb(draft);
-    const onBg = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-    selector.style.setProperty("--hue-light-on-background", onBg);
-    selector.style.setProperty("--hue-light-on-color", onBg);
-    selector.style.setProperty("--hue-light-on-text-color", onTextCss(rgb));
-    selector.style.setProperty("--hue-light-off-background", "#242022");
-    const tile = selector.querySelector(".simple-light-tile");
-    const pct = fillPercent(draft);
-    tile.style.setProperty("--hue-light-fill", `${pct}%`);
-    tile.classList.toggle("is-off", pct <= 0);
-    selector.classList.toggle("active", eid === selectedId);
-  };
-
-  const makeLabels = (layer, eid, name) => {
-    const labels = document.createElement("div");
-    labels.className = `simple-light-labels ${layer}`;
-    const tap = document.createElement("div");
-    tap.className = "simple-light-tap";
-    const iconSlot = document.createElement("div");
-    iconSlot.className = "simple-light-icon-slot";
-    iconSlot.appendChild(lightIcon(panel, eid));
-    const title = document.createElement("div");
-    title.className = "simple-light-title";
-    const span = document.createElement("span");
-    span.textContent = name;
-    title.appendChild(span);
-    tap.append(iconSlot, title);
-    labels.appendChild(tap);
-    return labels;
+    paintLightTile(selector, {
+      rgb: draftRgb(draft),
+      fillPct: fillPercent(draft),
+      selected: eid === selectedId,
+    });
   };
 
   const syncTiles = () => {
@@ -578,24 +361,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const state = panel._hass?.states?.[eid];
       const name =
         state?.attributes?.friendly_name || eid.replace(/^light\./, "");
-      const selector = document.createElement("div");
-      selector.className = "simple-light-selector";
-      selector.dataset.entityId = eid;
-      const tile = document.createElement("div");
-      tile.className = "simple-light-tile";
-      tile.setAttribute("role", "button");
-      tile.tabIndex = 0;
-      const fill = document.createElement("div");
-      fill.className = "simple-light-fill";
-      const hit = document.createElement("div");
-      hit.className = "simple-light-hit";
-      tile.append(
-        fill,
-        makeLabels("layer-off", eid, name),
-        makeLabels("layer-on", eid, name),
-        hit
-      );
-      selector.appendChild(tile);
+      const { selector, tile, hit } = createLightTile({
+        entityId: eid,
+        name,
+        makeIcon: () => lightIcon(panel, eid),
+      });
       paintSelector(selector, eid, draft);
 
       let pressTimer = null;

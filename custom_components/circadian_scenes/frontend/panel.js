@@ -57,6 +57,7 @@ import {
 } from "./landing.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor } from "./simple_editor.js";
+import { createLightTile, paintLightTile } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -1086,10 +1087,10 @@ class CircadianScenesPanel extends HTMLElement {
         .sun-path.dial-view .sun-light-clock-legend {
           position: relative;
           z-index: 5;
-          width: min(100%, 500px);
-          max-width: 500px;
-          /* Match the 8px gap between legend rows. */
-          padding-inline: 8px;
+          width: 100%;
+          max-width: none;
+          align-self: stretch;
+          padding-inline: 0;
           box-sizing: border-box;
           flex: 0 0 auto;
           pointer-events: auto;
@@ -1932,14 +1933,52 @@ class CircadianScenesPanel extends HTMLElement {
             0 2px 8px rgba(0, 0, 0, 0.22);
         }
         .sun-light-clock-legend {
-          width: min(100%, 500px);
-          max-width: 500px;
+          width: 100%;
+          max-width: none;
           display: flex;
           flex-direction: column;
+          align-items: stretch;
           gap: 8px;
           position: relative;
           z-index: 5;
           pointer-events: auto;
+        }
+        .sun-light-clock-legend .light-tiles-scroller {
+          padding: 8px 0 8px;
+        }
+        .sun-light-clock-legend .light-list-add {
+          width: min(100%, 500px);
+          margin-inline: auto;
+        }
+        .simple-light-selector .light-warn,
+        .simple-light-selector .light-remove,
+        .simple-light-selector .light-add {
+          position: absolute;
+          z-index: 4;
+          pointer-events: auto;
+        }
+        .simple-light-selector .light-remove,
+        .simple-light-selector .light-add {
+          top: 0;
+          right: 0;
+          --mdc-icon-button-size: 32px;
+        }
+        .simple-light-selector .light-warn {
+          left: 50%;
+          bottom: 4px;
+          transform: translateX(-50%);
+          max-width: 90px;
+        }
+        .simple-light-selector.suggested {
+          opacity: 0.92;
+        }
+        .simple-light-selector.removed {
+          opacity: 0.68;
+        }
+        .simple-light-selector.unavailable {
+          opacity: 0.55;
+          filter: grayscale(1);
+          pointer-events: none;
         }
         .clock-legend-row {
           display: flex;
@@ -8148,7 +8187,7 @@ class CircadianScenesPanel extends HTMLElement {
       return map;
     }
     for (const el of root.querySelectorAll(
-      ":scope > .clock-legend-row, :scope > .light-row"
+      ":scope .simple-light-selector, :scope > .clock-legend-row, :scope > .light-row"
     )) {
       const id = el.dataset.entityId;
       if (id) {
@@ -8170,7 +8209,7 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     for (const el of root.querySelectorAll(
-      ":scope > .clock-legend-row, :scope > .light-row"
+      ":scope .simple-light-selector, :scope > .clock-legend-row, :scope > .light-row"
     )) {
       const prev = before.get(el.dataset.entityId);
       if (!prev) {
@@ -9427,9 +9466,10 @@ class CircadianScenesPanel extends HTMLElement {
       }
     }
     for (const row of root.querySelectorAll(
-      ".clock-legend-row[data-entity-id]"
+      ".simple-light-selector[data-entity-id], .clock-legend-row[data-entity-id]"
     )) {
       const on = row.dataset.entityId === selected;
+      row.classList.toggle("active", on);
       row.classList.toggle("selected", on);
       if (on) {
         row.setAttribute("aria-current", "true");
@@ -14264,8 +14304,20 @@ class CircadianScenesPanel extends HTMLElement {
 
   _updateLightNameBrightness(seconds) {
     for (const entry of this._lightNameLabels || []) {
-      const { light, titleEl, subEl, el } = entry;
-      // Dial cards: title + subtitle. Table bars: single name span.
+      const { light, titleEl, subEl, el, selector } = entry;
+      if (selector) {
+        if (seconds == null) {
+          continue;
+        }
+        const sample = interpolateLightSample(light.samples || [], seconds);
+        paintLightTile(selector, {
+          rgb: sample.rgb,
+          fillPct: sample.brightness,
+          selected: light.entity_id === this._sidebarLightId,
+        });
+        continue;
+      }
+      // Table bars: single name span (dial uses Lys tiles + selector).
       if (titleEl) {
         titleEl.textContent = light.name;
         if (!subEl) {
@@ -16192,8 +16244,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     const legendLights = this._legendLights(payload.lights || []);
     const legendRows = [
-      ...(this._clockLegendEl?.querySelectorAll(":scope > .clock-legend-row") ||
-        []),
+      ...(this._clockLegendEl?.querySelectorAll(".simple-light-selector") || []),
     ];
     if (legendRows.length !== legendLights.length) {
       return false;
@@ -16605,7 +16656,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       if (
         t.closest(
-          ".scene-sidebar, .sun-light-clock-rings, .clock-legend-row.interactive, .clock-event, .sun-event"
+          ".scene-sidebar, .sun-light-clock-rings, .simple-light-selector, .clock-legend-row.interactive, .clock-event, .sun-event"
         )
       ) {
         return;
@@ -16976,8 +17027,16 @@ class CircadianScenesPanel extends HTMLElement {
 
     const legend = document.createElement("div");
     legend.className = "sun-light-clock-legend";
+    const scroller = document.createElement("div");
+    scroller.className = "light-tiles-scroller";
+    const tiles = document.createElement("div");
+    tiles.className = "light-tiles";
     for (const light of legendLights) {
-      legend.appendChild(this._clockLegendRow(light, events));
+      tiles.appendChild(this._clockLegendRow(light, events));
+    }
+    if (legendLights.length) {
+      scroller.appendChild(tiles);
+      legend.appendChild(scroller);
     }
     const addBtn = this._lightListAddControl();
     if (addBtn) {
@@ -17015,78 +17074,57 @@ class CircadianScenesPanel extends HTMLElement {
   _clockLegendRow(light, events) {
     const suggested = Boolean(light.suggested);
     const removed = Boolean(light.removed || suggested);
-    const row = document.createElement("div");
-    row.className = "clock-legend-row";
-    row.dataset.entityId = light.entity_id;
+    const seconds =
+      this._clockSunDisplayedSeconds ??
+      this._clockStickySeconds ??
+      this._clockSunIdleSeconds();
+    const sample = interpolateLightSample(light.samples || [], seconds);
+    const { selector, tile } = createLightTile({
+      entityId: light.entity_id,
+      name: light.name,
+      makeIcon: () => this._lightEntityIcon(light.entity_id),
+      tapOnly: true,
+    });
     if (suggested) {
-      row.classList.add("suggested");
+      selector.classList.add("suggested");
     }
     if (removed) {
-      row.classList.add("removed");
+      selector.classList.add("removed");
     }
     if (light.in_area === false) {
-      row.classList.add("out-of-area");
+      selector.classList.add("out-of-area");
     }
     const unavailable =
       this._lightIsUnavailable(light.entity_id) && !removed;
     if (unavailable) {
-      row.classList.add("unavailable");
+      selector.classList.add("unavailable");
     }
-    if (!removed && light.entity_id === this._sidebarLightId) {
-      row.classList.add("selected");
-    }
-
-    const accent = this._lightLegendAccent(light);
-    if (accent) {
-      row.style.setProperty("--clock-legend-accent", accent);
-    }
-
-    const iconWrap = document.createElement("div");
-    iconWrap.className = "clock-legend-icon-wrap";
-    iconWrap.appendChild(this._lightEntityIcon(light.entity_id));
-    row.appendChild(iconWrap);
-
-    const meta = document.createElement("div");
-    meta.className = "clock-legend-meta";
-    const title = document.createElement("div");
-    title.className = "clock-legend-title";
-    title.textContent = light.name;
-    if (light.in_area === false) {
-      title.title = "This light is not in the selected area";
-    }
-    const sub = document.createElement("div");
-    sub.className = "clock-legend-sub";
-    if (removed) {
-      sub.textContent = this._t("frontend.lights.removed", "Removed");
-    } else if (unavailable) {
-      sub.textContent = this._t("frontend.lights.unavailable", "Unavailable");
-    }
-    meta.append(title, sub);
-    row.appendChild(meta);
+    paintLightTile(selector, {
+      rgb: sample.rgb,
+      fillPct: removed || unavailable ? 0 : sample.brightness,
+      selected: !removed && light.entity_id === this._sidebarLightId,
+    });
     if (!removed && !unavailable) {
-      this._lightNameLabels.push({ light, titleEl: title, subEl: sub });
+      this._lightNameLabels.push({ light, selector });
     }
 
     if (this._view === "edit") {
       const assigned = events.filter((item) => this._eventSceneId(item.id));
       if (!removed && assigned.length) {
-        row.classList.add("interactive");
-        row.setAttribute("role", "button");
-        row.tabIndex = 0;
-        row.setAttribute("aria-label", `Edit ${light.name}`);
+        tile.setAttribute("aria-label", `Edit ${light.name}`);
         const openClosest = (ev) => {
           ev.stopPropagation();
-          const seconds =
+          const now =
             this._clockSunDisplayedSeconds ??
             this._clockStickySeconds ??
             this._clockSunIdleSeconds();
-          const closest = this._closestEvent(assigned, seconds);
+          const closest = this._closestEvent(assigned, now);
           if (closest) {
             this._openLightEditDialog(light, closest);
           }
         };
-        row.addEventListener("click", openClosest);
-        row.addEventListener("keydown", (ev) => {
+        tile.addEventListener("click", openClosest);
+        tile.addEventListener("keydown", (ev) => {
           if (ev.key !== "Enter" && ev.key !== " ") {
             return;
           }
@@ -17117,17 +17155,11 @@ class CircadianScenesPanel extends HTMLElement {
           ev.stopPropagation();
           this._addLightToMissingScenes(light);
         });
-        row.appendChild(warn);
+        selector.appendChild(warn);
       }
-      row.appendChild(this._lightMembershipButton(light, { removed }));
-      if (!removed && assigned.length) {
-        const chevron = document.createElement("ha-icon");
-        chevron.className = "clock-legend-chevron";
-        chevron.setAttribute("icon", "mdi:chevron-right");
-        row.appendChild(chevron);
-      }
+      selector.appendChild(this._lightMembershipButton(light, { removed }));
     }
-    return row;
+    return selector;
   }
 
   _lightLegendAccent(light) {

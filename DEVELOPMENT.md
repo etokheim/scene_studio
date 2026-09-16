@@ -73,3 +73,7 @@ Config, onboarding, and your test entities persist in `dev/config/` (runtime fil
 ## Agent REST token (optional)
 
 To let Cursor agents call the sandbox REST API, create a long-lived token in the sandbox UI (Profile → Long-Lived Access Tokens), copy `dev/config/secrets.yaml.example` to `dev/config/secrets.yaml`, and set `cursor_ha_token`. See [`.cursor/skills/home-assistant-api/SKILL.md`](.cursor/skills/home-assistant-api/SKILL.md).
+
+## Agent UI login (optional)
+
+Same `secrets.yaml` holds `sandbox_ha_username` and `sandbox_ha_password` for Chrome DevTools MCP against `http://127.0.0.1:8123/circadian_scenes`. If those keys are missing, agents should ask. Do not commit `secrets.yaml`.

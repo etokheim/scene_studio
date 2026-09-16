@@ -1,19 +1,23 @@
 ---
-description: Never hard-reload the HA/Cursor browser from the agent
+description: Never hard-reload the Cursor HA tab; verify UI with Chrome DevTools MCP
 alwaysApply: true
 ---
 
-# Do not hard-reload the browser from the agent
+# Browser reload and UI verification
 
 Do **not** hard-reload the Cursor-owned HA tab. CDP `Page.reload` with `ignoreCache`, Ctrl+Shift+R / Cmd+Shift+R, “empty cache and hard refresh”, or opening a **new** Cursor browser tab to force a fresh `panel.js` / custom element can reload the **whole Cursor window**.
 
-## Do this instead
+## Verify the panel in Chrome DevTools MCP
 
-- Pick up new `panel.js` by bumping `PANEL_ASSET_REV` in `panel.py` and `docker compose restart`. The versioned asset URL is the cache-bust — see [`docs/DECISIONS.md`](../../docs/DECISIONS.md).
-- Keep using the **already-open** sandbox tab.
-- In-page Home Assistant navigation is fine (sidebar, hash routes, `browser_navigate` to an HA URL).
-- A **normal** refresh is often **required** after a rev bump: `location.reload()` (no `ignoreCache`), or the user hitting reload. Soft hash-only navigation frequently keeps the old `circadian-scenes-panel` custom element registered, so you can still be looking at pre-restart JS.
-- After reload, **verify the new build** before debugging layout (shadow DOM / CSS marker for your change, or absence of removed nodes). Wait until HA finishes startup (“Wrapping up startup…”) — early loads 404 or show a spinner.
-- Landscape checks: CDP `Emulation.setDeviceMetricsOverride` (wide × short) + `resize` / `_syncYearScrubLayout()`; pierce shadow to find `circadian-scenes-panel`.
+Use the **Chrome DevTools MCP** (`plugin-devtools-for-agents-chrome-devtools`), not the Cursor-owned browser, for layout and interaction checks.
 
-Prefer measuring the already-open sandbox tab after a restart plus a normal document reload.
+1. Bump `PANEL_ASSET_REV` in `panel.py` and `docker compose restart`.
+2. `navigate_page` to `http://127.0.0.1:8123/circadian_scenes` (or `type: reload` **without** `ignoreCache` on an existing Chrome MCP tab).
+3. If HA shows the login form, extract **only** `sandbox_ha_username` and `sandbox_ha_password` from [`dev/config/secrets.yaml`](../../dev/config/secrets.yaml) (see [secrets-handling](secrets-handling.mdc)). Do not print them. If either key is missing or still `CHANGEME`, **ask the user** — do not guess.
+4. After a rev bump, confirm the document loaded `/api/circadian_scenes/assets/<version>-<rev>/panel.js` before debugging layout. Wait until HA finishes startup (“Wrapping up startup…”).
+
+In-page Home Assistant navigation (sidebar, hash routes) is fine. Soft hash-only navigation often keeps a stale `circadian-scenes-panel` custom element — use a **normal** document reload in the Chrome MCP tab.
+
+Landscape checks: emulate a wide × short viewport, then pierce shadow to find `circadian-scenes-panel`.
+
+Auth and REST details: [`.cursor/skills/home-assistant-api/SKILL.md`](../skills/home-assistant-api/SKILL.md).

@@ -480,6 +480,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-08-30
 - **Superseded in part:** 2026-09-01 — `--dial-face-max` now reserves ~32px so the first light-list row peeks under the face (discoverability). List still flows under the face; do not move it into the landscape left gutter.
 - **Superseded in part:** 2026-09-01 — draft/location `.page-banners` reduce `--dial-face-max` by their measured reach so the list still peeks above the fold; dial vignette `top` extends by `--dial-banner-h` (path→host) so it matches `.clock-horizon-back` under the banners.
+- **Superseded in part:** 2026-09-16 — the under-face list is the Lys tile strip (full column width, centered when it fits, overflow-x when it does not), not stacked `clock-legend-row` cards. It still flows under the face; do not move it into the landscape left gutter.
 - **Decision:** The dial light list always flows **under** the clock face (portrait and landscape), same width as the face. Do **not** move the list into the landscape left grid column; that column is only a matching gutter so the timeline rail can take width while the dial stays optically centered. Ring hover name sits flush above the outer light ring (`top` = rings inset inside the core), not above `--clock-chrome` / face chrome. Legend actions order: Add to …, then remove (X), then chevron.
 - **Why:** Parking the list in the left gutter left-aligned/truncated names and broke parity with portrait. Under-face flow matches mobile. A small peek of the first row is enough to hint scroll without returning to the “shrink the dial for the whole legend” approach.
 - **Do not reverse without user ask.**
@@ -671,7 +672,22 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Simple-scene lights are huemane Lys tiles
 
 - **Date:** 2026-09-16
+- **Superseded in part:** 2026-09-16 — the same Lys strip is the circadian dial light list (under the face), not only simple scenes.
 - **Decision:** Simple-scene members are huemane light cards (85×90, 5px pad, radius 24, fill-from-bottom `--hue-light-fill`, dual clipped label layers, 2px selected ring). They sit in a full-column `overflow-x` strip with `flex: 0 0 auto` so the wheel cannot collapse it; the inner row is `width: max-content; margin-inline: auto` so a short list centers and an overflowing list scrolls from the start. Vertical drag/wheel owns brightness after an 8px axis lock; horizontal pan stays native strip scroll. Do not use circular tiles.
 - **Why:** The circular strip only shared wheel-to-brightness; the cards are the house language for lights.
+- **Do not reverse without user ask.**
+
+## Lighting chrome is ours, launched from huemane-light-card
+
+- **Date:** 2026-09-16
+- **Decision:** Mode pill, Lys tiles, and related wheel chrome in this panel are **our** components (`frontend/light_tiles.js`, `hue_mode_icons.js`, color-wheel chrome). They were built to match `etokheim/huemane-light-card` as a launchpad. Future lighting UI should reuse and extend these, not re-clone huemane or invent a third card language. Improve in place when the product needs it.
+- **Why:** Matching huemane got the house language in the door; Circadian Scenes owns the next steps (circadian fill at the clock, membership, palettes).
+- **Do not reverse without user ask.**
+
+## Lys tiles under the circadian dial
+
+- **Date:** 2026-09-16
+- **Decision:** Circadian scene edit (`#edit/<id>` dial) lists area lights as the same Lys tiles as simple scenes: horizontal strip, centered when the row fits, overflow-x when it does not. Fill/color follow the interpolated sample at the clock. Tap still opens the closest-event light editor; add/remove stay on the tile. Theme-look (`#theme`) has no member strip. Table view keeps brightness bars.
+- **Why:** One light language in both editors. Stacked HA-style legend rows read as a different product.
 - **Do not reverse without user ask.**
 
