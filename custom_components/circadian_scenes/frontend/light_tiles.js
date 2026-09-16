@@ -51,9 +51,9 @@ export const LIGHT_TILES_CSS = `
     --hue-light-off-text-color: var(--hue-light-on-text-color, rgba(0, 0, 0, 0.7));
     box-sizing: content-box;
     position: relative;
-    /* No switch slot — painted size matches huemane 85×90 + 5px pad. */
+    /* Huemane Lys: 85×(90+45 switch slot), 5px pad, radius 24. No switch painted. */
     width: 85px;
-    height: 90px;
+    height: 135px;
     padding: 5px;
     border: 0;
     border-radius: 24px;
@@ -69,9 +69,13 @@ export const LIGHT_TILES_CSS = `
       transparent
     );
     color: inherit;
+    transition: all 0.3s ease-out 0s, transform 0.15s;
   }
   .simple-light-tile.tap-only {
     cursor: pointer;
+  }
+  .simple-light-tile:not(.dragging):active:hover {
+    transform: scale(0.95);
   }
   .simple-light-tile.is-off {
     --hue-unfilled-mix: 0%;
@@ -85,6 +89,7 @@ export const LIGHT_TILES_CSS = `
     --hue-unfilled-opacity: 100%;
     --hue-light-off-text-color: #fff;
     touch-action: none;
+    transform: none;
   }
   @media (hover: hover) {
     .simple-light-tile:hover:not(.is-off):not(.dragging):not(.wheel-adjusting) {
@@ -108,6 +113,7 @@ export const LIGHT_TILES_CSS = `
     pointer-events: none;
     z-index: 0;
     overflow: hidden;
+    transition: height 0.3s ease-out;
   }
   .simple-light-fill::after {
     content: "";
@@ -125,11 +131,13 @@ export const LIGHT_TILES_CSS = `
     -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
     mask-image: linear-gradient(to bottom, #000, transparent);
     pointer-events: none;
+    transition: height 0.3s ease-out;
   }
   .simple-light-tile.dragging .simple-light-fill::after,
   .simple-light-tile.wheel-adjusting .simple-light-fill::after,
   .simple-light-tile.is-off .simple-light-fill::after {
     height: 0;
+    transition: none;
   }
   .simple-light-labels {
     position: absolute;
@@ -138,6 +146,15 @@ export const LIGHT_TILES_CSS = `
     pointer-events: none;
     display: flex;
     flex-flow: column;
+    transition: clip-path 0.3s ease-out;
+  }
+  .simple-light-tile.dragging .simple-light-fill,
+  .simple-light-tile.dragging .simple-light-labels {
+    transition: none;
+  }
+  .simple-light-tile.wheel-adjusting .simple-light-fill,
+  .simple-light-tile.wheel-adjusting .simple-light-labels {
+    transition: height 25ms ease-out, clip-path 25ms ease-out;
   }
   .simple-light-labels.layer-off {
     color: var(--hue-light-off-text-color, #fff);

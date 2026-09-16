@@ -2659,7 +2659,7 @@ class CircadianScenesPanel extends HTMLElement {
         .library-editor {
           box-sizing: border-box;
           width: 100%;
-          max-width: 650px;
+          max-width: none;
           min-width: 0;
           margin: 0 auto;
           padding: 16px 8px 48px;
@@ -3870,7 +3870,7 @@ class CircadianScenesPanel extends HTMLElement {
           overflow: hidden;
           padding: 0;
         }
-        /* Stage wheel: circadian simple editor caps below; sidebar stays 320px. */
+        /* Stage wheel: same face budget as the circadian dial. */
         .stage-col .hue-wheel-stage {
           width: min(100%, 86vh, var(--dial-face-max, 86vh));
           max-width: min(100%, 86vh, var(--dial-face-max, 86vh));
@@ -3878,15 +3878,10 @@ class CircadianScenesPanel extends HTMLElement {
           padding: 40px 0 16px;
         }
         .stage-col .simple-editor .hue-wheel-stage {
-          width: min(100%, 650px);
-          max-width: 650px;
           min-width: 0;
           padding: 0;
         }
-        .stage-col .simple-editor .hue-wheel-canvas {
-          width: 100%;
-          max-width: 100%;
-        }
+        .stage-col .simple-editor .hue-wheel-canvas,
         .stage-col .hue-wheel-canvas {
           width: 100%;
           max-width: none;

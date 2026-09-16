@@ -40,16 +40,16 @@ export const SIMPLE_EDITOR_CSS = `
     justify-content: center;
     flex: 1 1 auto;
     min-height: 0;
-    width: min(100%, 650px);
-    max-width: 650px;
+    width: 100%;
+    max-width: none;
     min-width: 0;
     box-sizing: border-box;
     /* Keep .hue-wheel-chrome (mode pill + presets) off the Lys strip. */
     padding-bottom: 88px;
   }
   .simple-wheels .hue-wheel-stage {
-    width: 100%;
-    max-width: 100%;
+    width: min(100%, 86vh, var(--dial-face-max, 86vh));
+    max-width: min(100%, 86vh, var(--dial-face-max, 86vh));
     min-width: 0;
     margin: 0;
   }
@@ -58,8 +58,8 @@ export const SIMPLE_EDITOR_CSS = `
     flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
-    width: min(100%, 650px);
-    max-width: 650px;
+    width: 100%;
+    max-width: none;
     min-width: 0;
   }
   .scene-sidebar .var-palette {
