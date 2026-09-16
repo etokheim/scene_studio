@@ -772,6 +772,13 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Forcing a name at create blocked getting to the editor. The FAB is the prompt once you can see what you made.
 - **Do not reverse without user ask.**
 
+## Lys tile X is mouse-hover only; touch removes from the sidebar
+
+- **Date:** 2026-09-16
+- **Decision:** The close control on a member Lys tile is visible only under `(hover: hover) and (pointer: fine)` while the tile is hovered. Coarse pointers get no hit target. Touch (and mouse) can remove from the light sidebar (**Remove light from scene**). Removed/suggested tiles have no corner plus; the bulb icon becomes plus and the label is **Add {name}**, and tapping the tile restores membership. The X is a 20px disc whose center sits on the tile’s top-right corner; the strip pads so overflow-x scroll does not clip it.
+- **Why:** A 32px corner control is a fat-finger trap on the brightness tile, and overflow-x auto would otherwise clip a corner-centered control.
+- **Do not reverse without user ask.**
+
 ## Add light is the last Lys tile; unavailable stays editable when caps are known
 
 - **Date:** 2026-09-16

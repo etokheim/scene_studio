@@ -230,6 +230,10 @@
       "graph_sub": "0–100% by solar event",
       "solar_events": "Solar events",
       "add_light": "Add light",
+      "add_named": "Add {name}",
+      "add_named_to_scene": "Add {name} to the scene",
+      "remove_from_scene": "Remove light from scene",
+      "remove_named_from_scene": "Remove {name} from the scene",
       "add_light_title": "Add light",
       "add_light_help": "Add a light from another area (or any light not yet in these scenes). Its current look is copied into every assigned native scene.",
       "light": "Light"

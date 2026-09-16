@@ -8,7 +8,8 @@ export const LIGHT_TILES_CSS = `
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    padding: 8px 16px 24px;
+    /* Top/side pad so the hover-only remove control can sit on the tile corner. */
+    padding: 16px 18px 24px;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -33,6 +34,41 @@ export const LIGHT_TILES_CSS = `
     padding: 2px;
     border-radius: 28px;
     position: relative;
+    overflow: visible;
+  }
+  /* Mouse-only: center of the control sits on the tile's top-right corner. */
+  .simple-light-selector .light-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    z-index: 6;
+    display: none;
+    --mdc-icon-button-size: 20px;
+    --mdc-icon-size: 14px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin: 0;
+    transform: translate(50%, -50%);
+    border-radius: 50%;
+    background: var(--card-background-color, #1c1c1c);
+    color: var(--primary-text-color);
+    box-shadow: 0 0 0 1px
+      color-mix(in srgb, var(--divider-color, #888) 55%, transparent);
+    pointer-events: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .simple-light-selector .light-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+    }
+    .simple-light-selector:hover .light-remove,
+    .simple-light-selector .light-remove:focus-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
   .simple-light-selector.active {
     border-color: var(

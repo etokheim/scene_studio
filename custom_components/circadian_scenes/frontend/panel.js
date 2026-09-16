@@ -1991,26 +1991,16 @@ class CircadianScenesPanel extends HTMLElement {
           cursor: pointer;
         }
         .sun-light-clock-legend .light-tiles-scroller {
-          padding: 8px 0 8px;
+          padding: 16px 14px 12px;
         }
         .sun-light-clock-legend .light-list-add {
           width: min(100%, 500px);
           margin-inline: auto;
         }
-        .simple-light-selector .light-warn,
-        .simple-light-selector .light-remove,
-        .simple-light-selector .light-add {
+        .simple-light-selector .light-warn {
           position: absolute;
           z-index: 4;
           pointer-events: auto;
-        }
-        .simple-light-selector .light-remove,
-        .simple-light-selector .light-add {
-          top: 0;
-          right: 0;
-          --mdc-icon-button-size: 32px;
-        }
-        .simple-light-selector .light-warn {
           left: 50%;
           bottom: 4px;
           transform: translateX(-50%);
@@ -3231,6 +3221,9 @@ class CircadianScenesPanel extends HTMLElement {
         .sidebar-actions-bar .activate-scene-btn {
           margin-inline-end: 4px;
         }
+        .sidebar-actions-bar .remove-light-from-scene-btn {
+          margin-inline-start: auto;
+        }
         .light-effect-row {
           display: flex;
           justify-content: center;
@@ -3357,8 +3350,8 @@ class CircadianScenesPanel extends HTMLElement {
         .light-row:only-child .light-warn {
           top: 50%;
         }
-        .light-remove,
-        .light-add {
+        .light-row .light-remove,
+        .light-row .light-add {
           position: absolute;
           right: 4px;
           top: calc(${LIGHT_FEATHER_PX}px + (100% - ${LIGHT_FEATHER_PX}px) / 2);
@@ -12367,16 +12360,27 @@ class CircadianScenesPanel extends HTMLElement {
 
     const bar = document.createElement("div");
     bar.className = "sidebar-actions-bar";
+    const removeFromSceneBtn = document.createElement("ha-button");
+    removeFromSceneBtn.className = "remove-light-from-scene-btn";
+    removeFromSceneBtn.appearance = "plain";
+    removeFromSceneBtn.textContent = this._t(
+      "frontend.lights.remove_from_scene",
+      "Remove light from scene"
+    );
+    removeFromSceneBtn.hidden = Boolean(this._editingThemeLook());
+    removeFromSceneBtn.addEventListener("click", () => {
+      this._removeLightFromAssignedScenes(light.entity_id);
+    });
     if (this._narrow) {
       const undo = this._undoRedoButton("undo");
       const redo = this._undoRedoButton("redo");
       undo.id = "sidebar-button-undo";
       redo.id = "sidebar-button-redo";
-      bar.append(undo, redo, liveToggle, activateBtn);
+      bar.append(undo, redo, liveToggle, activateBtn, removeFromSceneBtn);
       this._sidebarUndoBtn = undo;
       this._sidebarRedoBtn = redo;
     } else {
-      bar.append(liveToggle, activateBtn);
+      bar.append(liveToggle, activateBtn, removeFromSceneBtn);
       this._sidebarUndoBtn = null;
       this._sidebarRedoBtn = null;
     }
@@ -17629,8 +17633,15 @@ class CircadianScenesPanel extends HTMLElement {
     const btn = document.createElement("ha-icon-button");
     btn.className = removed ? "light-add" : "light-remove";
     btn.label = removed
-      ? `Add ${light.name} to the scene`
-      : `Remove ${light.name} from the scene`;
+      ? this._t("frontend.lights.add_named_to_scene", "Add {name} to the scene", {
+          name: light.name,
+        })
+      : this._t(
+          "frontend.lights.remove_named_from_scene",
+          "Remove {name} from the scene",
+          { name: light.name }
+        );
+    btn.tabIndex = removed ? 0 : -1;
     const icon = document.createElement("ha-icon");
     icon.setAttribute("icon", removed ? "mdi:plus" : "mdi:close");
     btn.appendChild(icon);
@@ -17656,10 +17667,21 @@ class CircadianScenesPanel extends HTMLElement {
       rgb: [0, 0, 0],
       fillPct: 0,
     };
+    const displayName = removed
+      ? this._t("frontend.lights.add_named", "Add {name}", { name: light.name })
+      : light.name;
     const { selector, tile, hit } = createLightTile({
       entityId: light.entity_id,
-      name: light.name,
-      makeIcon: () => this._lightEntityIcon(light.entity_id),
+      name: displayName,
+      tapOnly: removed,
+      makeIcon: () => {
+        if (removed) {
+          const icon = document.createElement("ha-icon");
+          icon.setAttribute("icon", "mdi:plus");
+          return icon;
+        }
+        return this._lightEntityIcon(light.entity_id);
+      },
     });
     if (suggested) {
       selector.classList.add("suggested");
@@ -17690,6 +17712,26 @@ class CircadianScenesPanel extends HTMLElement {
 
     if (this._view === "edit") {
       const assigned = events.filter((item) => this._eventSceneId(item.id));
+      if (removed) {
+        tile.setAttribute(
+          "aria-label",
+          this._t("frontend.lights.add_named_to_scene", "Add {name} to the scene", {
+            name: light.name,
+          })
+        );
+        const addBack = (ev) => {
+          ev.stopPropagation();
+          void this._addLightToAssignedScenes(light.entity_id);
+        };
+        tile.addEventListener("click", addBack);
+        tile.addEventListener("keydown", (ev) => {
+          if (ev.key !== "Enter" && ev.key !== " ") {
+            return;
+          }
+          ev.preventDefault();
+          addBack(ev);
+        });
+      }
       const canEdit = !removed && assigned.length && (!unavailable || capsKnown);
       if (canEdit) {
         tile.setAttribute("aria-label", `Edit ${light.name}`);
@@ -17757,7 +17799,9 @@ class CircadianScenesPanel extends HTMLElement {
         });
         selector.appendChild(warn);
       }
-      selector.appendChild(this._lightMembershipButton(light, { removed }));
+      if (!removed) {
+        selector.appendChild(this._lightMembershipButton(light, { removed: false }));
+      }
     }
     return selector;
   }
