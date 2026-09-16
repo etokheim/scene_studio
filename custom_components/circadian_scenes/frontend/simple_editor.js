@@ -33,7 +33,8 @@ export const SIMPLE_EDITOR_CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-height: 0;
     width: min(100%, 650px);
     max-width: 650px;
     min-width: 0;
@@ -70,6 +71,7 @@ export const SIMPLE_EDITOR_CSS = `
   .light-tiles-scroller {
     display: flex;
     align-self: stretch;
+    flex: 0 0 auto;
     width: 100%;
     min-width: 0;
     box-sizing: border-box;

@@ -2566,7 +2566,9 @@ function createSceneColorWheel({
       const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.path.setAttribute("d", active ? HUE_PIN_PATH : HUE_DOT_PATH);
       marker.g.classList.toggle("active", active);
-      marker.icon.textContent = String(scene.index);
+      /* Simple scenes have no solar event index; do not stringify undefined. */
+      marker.icon.textContent =
+        scene.index == null || scene.index === "" ? "" : String(scene.index);
       marker.hit.style.display = active ? "none" : "";
       if (!radius) {
         continue;
