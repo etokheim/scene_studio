@@ -1998,15 +1998,6 @@ class CircadianScenesPanel extends HTMLElement {
           width: min(100%, 500px);
           margin-inline: auto;
         }
-        .simple-light-selector .light-warn {
-          position: absolute;
-          z-index: 4;
-          pointer-events: auto;
-          left: 50%;
-          bottom: 4px;
-          transform: translateX(-50%);
-          max-width: 90px;
-        }
         .simple-light-selector.suggested {
           opacity: 0.92;
         }
@@ -2170,12 +2161,6 @@ class CircadianScenesPanel extends HTMLElement {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-        }
-        .clock-legend-row .light-warn {
-          position: static;
-          transform: none;
-          flex-shrink: 0;
-          text-shadow: none;
         }
         .clock-legend-row .light-remove,
         .clock-legend-row .light-add {
@@ -2444,10 +2429,6 @@ class CircadianScenesPanel extends HTMLElement {
         .light-row.suggested .light-name {
           top: 50%;
           color: var(--secondary-text-color);
-        }
-        .light-row.suggested .light-warn {
-          top: 50%;
-          right: 12px;
         }
         .light-edits {
           position: absolute;
@@ -3315,42 +3296,6 @@ class CircadianScenesPanel extends HTMLElement {
         .event-scene-error {
           color: var(--error-color);
         }
-        .light-warn {
-          position: absolute;
-          right: 48px;
-          top: calc(${LIGHT_FEATHER_PX}px + (100% - ${LIGHT_FEATHER_PX}px) / 2);
-          z-index: 2;
-          pointer-events: auto;
-          transform: translateY(-50%);
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          margin: 0;
-          padding: 2px 6px;
-          border: 0;
-          border-radius: 8px;
-          background: transparent;
-          font: inherit;
-          font-size: 12px;
-          color: var(--warning-color, var(--error-color));
-          text-shadow: 0 0 6px var(--card-background-color);
-          cursor: pointer;
-        }
-        .light-warn:hover {
-          background: color-mix(
-            in srgb,
-            var(--warning-color, var(--error-color)) 18%,
-            transparent
-          );
-        }
-        .light-warn:focus-visible {
-          outline: 2px solid var(--warning-color, var(--error-color));
-          outline-offset: 2px;
-        }
-        .light-row:first-child .light-warn,
-        .light-row:only-child .light-warn {
-          top: 50%;
-        }
         .light-row .light-remove,
         .light-row .light-add {
           position: absolute;
@@ -3367,9 +3312,6 @@ class CircadianScenesPanel extends HTMLElement {
         .light-row:first-child .light-add,
         .light-row:only-child .light-add {
           top: 50%;
-        }
-        .light-warn ha-icon {
-          --mdc-icon-size: 14px;
         }
         .sun-events {
           display: flex;
@@ -8884,32 +8826,6 @@ class CircadianScenesPanel extends HTMLElement {
     this._ensureSunPath();
   }
 
-  _missingSceneRows(light) {
-    const missing = [];
-    const seen = new Set();
-    for (const row of light.event_states || []) {
-      if (!row.scene_entity_id || seen.has(row.scene_entity_id)) {
-        continue;
-      }
-      if (this._nativeDrafts[row.scene_entity_id]?.deleted) {
-        continue;
-      }
-      const draftEntity =
-        this._nativeDrafts[row.scene_entity_id]?.entities?.[light.entity_id];
-      // Truthy draft = added in session; null = removed; else use row.present.
-      if (draftEntity) {
-        continue;
-      }
-      const isMissing = draftEntity === null ? true : !row.present;
-      if (!isMissing) {
-        continue;
-      }
-      seen.add(row.scene_entity_id);
-      missing.push(row);
-    }
-    return missing;
-  }
-
   _peerStatesInScene(sceneId, exceptEntityId) {
     const peers = [];
     for (const light of this._sunPath?.lights || []) {
@@ -9051,25 +8967,6 @@ class CircadianScenesPanel extends HTMLElement {
       }
     }
     return payload;
-  }
-
-  _addLightToMissingScenes(light) {
-    const missing = this._missingSceneRows(light);
-    if (!missing.length) {
-      return;
-    }
-    this._commitUndo();
-    for (const row of missing) {
-      const typical =
-        this._typicalStateFromPeers(row.scene_entity_id, light.entity_id) ||
-        this._eventDefaultLightState(light.entity_id, row.event);
-      this._ensureNativeDraft(row.scene_entity_id).entities[light.entity_id] =
-        this._adaptStateToLight(light.entity_id, typical, row.event);
-    }
-    this._syncPreviewOverlay();
-    this._clearPreviewCache();
-    this._patchDialFromSession();
-    this._saveSoon();
   }
 
   _optimisticIncludeLight(entityId) {
@@ -17861,31 +17758,6 @@ class CircadianScenesPanel extends HTMLElement {
           onDragEnd: () => this._endBrightnessScrub(),
         });
       }
-      const missingScenes = this._missingSceneRows(light);
-      if (missingScenes.length && !removed) {
-        const names = [
-          ...new Set(missingScenes.map((row) => row.scene_name).filter(Boolean)),
-        ];
-        const warn = document.createElement("button");
-        warn.type = "button";
-        warn.className = "light-warn";
-        warn.title =
-          "Add this light using the typical brightness and color of the other lights in that scene";
-        warn.setAttribute(
-          "aria-label",
-          `Add ${light.name} to ${names.join(", ")}`
-        );
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("icon", "mdi:lightbulb-plus-outline");
-        const text = document.createElement("span");
-        text.textContent = `Add to ${names.join(", ")}`;
-        warn.append(icon, text);
-        warn.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          this._addLightToMissingScenes(light);
-        });
-        selector.appendChild(warn);
-      }
       if (!removed) {
         selector.appendChild(this._lightMembershipButton(light, { removed: false, tile: true }));
       }
@@ -18125,35 +17997,6 @@ class CircadianScenesPanel extends HTMLElement {
         edits.appendChild(editHit);
       }
       bar.appendChild(edits);
-      const missingScenes = this._missingSceneRows(light);
-      if (missingScenes.length) {
-        const names = [
-          ...new Set(missingScenes.map((row) => row.scene_name).filter(Boolean)),
-        ];
-        const warn = document.createElement("button");
-        warn.type = "button";
-        warn.className = "light-warn";
-        warn.title =
-          "Add this light using the typical brightness and color of the other lights in that scene";
-        warn.setAttribute(
-          "aria-label",
-          suggested
-            ? `Add ${light.name} to scenes`
-            : `Add ${light.name} to ${names.join(", ")}`
-        );
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("icon", "mdi:lightbulb-plus-outline");
-        const text = document.createElement("span");
-        text.textContent = suggested
-          ? "Add to scenes"
-          : `Add to ${names.join(", ")}`;
-        warn.append(icon, text);
-        warn.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          this._addLightToMissingScenes(light);
-        });
-        bar.appendChild(warn);
-      }
       bar.appendChild(this._lightMembershipButton(light, { removed: false }));
     } else if (this._view === "edit") {
       bar.appendChild(this._lightMembershipButton(light, { removed: true }));

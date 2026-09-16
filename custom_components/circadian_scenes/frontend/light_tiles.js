@@ -173,7 +173,7 @@ export const LIGHT_TILES_CSS = `
     left: 0;
     right: 0;
     top: 0;
-    height: 20px;
+    height: var(--hue-light-ramp, 20px);
     background: color-mix(
       in srgb,
       var(--hue-unfilled-color, var(--hue-light-off-background, #242022))
@@ -283,6 +283,16 @@ export const LIGHT_TILES_CSS = `
   .simple-light-selector.add-light-tile .simple-light-labels.layer-on {
     display: none;
   }
+  @media (hover: hover) and (pointer: fine) {
+    .simple-light-selector.add-light-tile .simple-light-tile:hover {
+      background: color-mix(
+        in srgb,
+        var(--secondary-background-color, #242022) 92%,
+        transparent
+      );
+      border-color: color-mix(in srgb, var(--primary-text-color) 42%, transparent);
+    }
+  }
 `;
 
 export function lightTileOnTextCss(rgb) {
@@ -305,6 +315,10 @@ export function paintLightTile(selector, { rgb, fillPct, selected }) {
   const tile = selector.querySelector(".simple-light-tile");
   const pct = Number(fillPct) || 0;
   tile.style.setProperty("--hue-light-fill", `${pct}%`);
+  const tileH = tile.clientHeight || 135;
+  const rampPx =
+    pct <= 0 || pct >= 100 ? 0 : Math.min(20, ((100 - pct) / 100) * tileH);
+  tile.style.setProperty("--hue-light-ramp", `${rampPx}px`);
   tile.classList.toggle("is-off", pct <= 0);
   selector.classList.toggle("active", Boolean(selected));
 }

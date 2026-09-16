@@ -154,7 +154,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-26
 - **Superseded in part:** 2026-08-27 — still one full-width row per light with the name on the plot, but Y is not brightness (see “Light brightness darkens the band”).
-- **Superseded in part:** 2026-08-29 — a light missing from some assigned scenes is an “Add to …” button, not a static warning. Click writes a session draft for each missing native scene. The initial state is the typical on-state of the other lights already in that scene (median brightness; median kelvin, else circular-mean HS / median RGB), adapted to the lamp’s color modes. No peers → same circadian seeds as creating a native scene. Until added, preview still treats the gap as off.
+- **Superseded:** 2026-09-16 — per-event “Add to …” / light-warn on Lys tiles and table rows is gone. Membership is whole-scene (tile / sidebar). Sidebar graph `+` can still seed a missing event from peers.
 - **Superseded in part:** 2026-08-29 — with an area selected, lights in that area that are in none of the assigned scenes appear as compact suggested rows (`Add to scenes`). Lights that are in the scenes but not in the area keep their graphs and use the warning color on the name. No area → no suggestions and no out-of-area mark. Preview `area` uses `lights_in_area` (entity area, else device).
 - **Superseded in part:** 2026-08-29 — a toolbar toggle can wrap the same light samples into concentric 24-hour rings. See “Light graphs: stacked bands or a 24-hour clock”.
 - **Superseded in part:** 2026-08-29 — an unassigned solar event is an off-knot in the preview: every lamp is off there (graphs go dark), not skipped so neighbors interpolate across it.
@@ -784,6 +784,13 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-09-16
 - **Decision:** While a brightness scrub is in progress (Lys tile, sidebar graph, or radial event handle), write the override and paint handles/tiles immediately. Do not resample the sun path, ease event-button radii (`CLOCK_BRIGHT_MOVE_MS`), or autosave until pointerup. Tile fill CSS transitions are off during that scrub.
 - **Why:** Full `_patchDialFromSession` plus a 400ms ease made the dial buttons lag and reverse while the pointer was still moving.
+- **Do not reverse without user ask.**
+
+## Lys fill ramp shrinks as brightness approaches 100%
+
+- **Date:** 2026-09-16
+- **Decision:** The fade at the top of a Lys fill is at most 20px, and no taller than the unfilled remainder of the tile. At 100% there is no ramp.
+- **Why:** A fixed 20px wash made a full tile look partly dim.
 - **Do not reverse without user ask.**
 
 ## Add light is the last Lys tile; unavailable stays editable when caps are known
