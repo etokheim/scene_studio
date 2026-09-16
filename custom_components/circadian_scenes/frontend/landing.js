@@ -258,7 +258,11 @@ export const LANDING_CSS = `
     cursor: pointer;
     padding: 0;
   }
-  .var-chip span { font-size: 12px; color: var(--secondary-text-color); }
+  .var-chip.selected span,
+  .theme-chip.selected span {
+    color: var(--primary-text-color);
+    font-weight: 600;
+  }
   .theme-dial {
     width: 72px;
     height: 72px;
@@ -515,7 +519,11 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   page.appendChild(rail);
   if (includeStage) {
     const { stage, scroll } = makeStageCol();
-    if (panel._view !== "edit" && panel._view !== "theme") {
+    if (
+      panel._view !== "edit" &&
+      panel._view !== "theme" &&
+      panel._view !== "variable"
+    ) {
       if (!items.length) {
         scroll.appendChild(renderEmptyHero(panel));
       } else {
@@ -727,6 +735,9 @@ function renderLibrary(panel, { compact } = {}) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "var-chip";
+    if (panel._view === "variable" && panel._variableId === variable.id) {
+      chip.classList.add("selected");
+    }
     const dot = document.createElement("div");
     dot.className = "var-dot";
     dot.style.background = variableSwatchCss(variable, panel._variables);
@@ -761,6 +772,9 @@ function renderLibrary(panel, { compact } = {}) {
     chip.type = "button";
     chip.className = "theme-chip";
     chip.dataset.themeId = theme.id;
+    if (panel._view === "theme" && panel._themeId === theme.id) {
+      chip.classList.add("selected");
+    }
     const dial = document.createElement("div");
     dial.className = "theme-dial";
     dial.style.background = themeConic(theme, panel._variables || []);

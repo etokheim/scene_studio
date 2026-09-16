@@ -7,7 +7,7 @@ Custom Home Assistant integration in `custom_components/circadian_scenes/`. This
 - **Commit after each change set** — see [`.cursor/rules/commit-after-changes.mdc`](.cursor/rules/commit-after-changes.mdc). Overrides global “only commit when asked.” Dirty tree after your edits = commit before finishing the turn.
 - **Do not hard-reload the HA/Cursor browser** — bump `PANEL_ASSET_REV`, restart, then a **normal** reload (custom elements stay stale on hash-only nav). See [`.cursor/rules/no-browser-reload.mdc`](.cursor/rules/no-browser-reload.mdc).
 - **Do not silence bugs** — fix the cause; do not clamp or catch-and-guess to hide invariant failures. See [`.cursor/rules/dont-silence-bugs.mdc`](.cursor/rules/dont-silence-bugs.mdc).
-- **Record non-obvious decisions** inline or in [`docs/DECISIONS.md`](docs/DECISIONS.md). See [`.cursor/rules/document-decisions.mdc`](.cursor/rules/document-decisions.mdc).
+- **The main column is the editor** — scenes, variables, palettes, and themes open in `.stage-col`, not dialogs. See [`.cursor/rules/editor-in-main-column.mdc`](.cursor/rules/editor-in-main-column.mdc).
 - **HA Jinja templates** — follow [`.cursor/skills/home-assistant-templates/SKILL.md`](.cursor/skills/home-assistant-templates/SKILL.md); update that skill when you find new quirks.
 - **HA REST API** — local sandbox at `http://127.0.0.1:8123`; auth via `cursor_ha_token` in `dev/config/secrets.yaml`. See [`.cursor/skills/home-assistant-api/SKILL.md`](.cursor/skills/home-assistant-api/SKILL.md).
 - **Git** — day-to-day work is on `dev`. A PR to `master` is a release. See [`docs/GIT.md`](docs/GIT.md).

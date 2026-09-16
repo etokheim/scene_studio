@@ -49,7 +49,8 @@
       "kind_color": "Color",
       "kind_palette": "Palette",
       "slot_custom": "Custom color",
-      "randomize": "Randomize"
+      "randomize": "Randomize",
+      "variable_missing": "Variable not found"
     },
     "kinds": {
       "circadian": "Circadian scene",

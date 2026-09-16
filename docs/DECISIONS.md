@@ -654,3 +654,17 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Multi-light scenes need several related hues from one named token without each lamp sharing one solid. Hash+seed is stable; the polar wheel is how the user pins a blend between those five rim colors.
 - **Do not reverse without user ask.**
 
+## Color/kelvin mode selector matches huemane-light-card
+
+- **Date:** 2026-09-16
+- **Decision:** The wheel mode control is the Hue/huemane pill: 48px capsule (`8px` padding, `8px` gap, `0px 2px 3px` shadow, `--surface-2` / `#242022`), 32px wrappers with 24px faces, 2px white ring when active. Color and kelvin faces use the PNGs from `etokheim/huemane-light-card`. It sits in `.hue-wheel-chrome` **bottom-left**; variable swatches stay **bottom-right** in the same chrome. A third 24px face (palette conic) is added only when the selected pin uses a palette. Do not overlay a larger custom pill on the disk.
+- **Why:** That control is already the house language for switching wheels; a top-centered 36px version read as a different widget.
+- **Do not reverse without user ask.**
+
+## Main column is the editor
+
+- **Date:** 2026-09-16
+- **Decision:** `.stage-col` is the editor for scenes, variables, palettes, and circadian themes. Routes: `#edit/<id>`, `#variable/<id>`, `#variable/new`, `#theme/<id>`, `#theme/new`. The area rail only picks items. Do not add/edit library items in `ha-dialog`.
+- **Why:** Dialogs hid the workspace and split create vs edit. One column keeps the same place for every kind of edit.
+- **Do not reverse without user ask.**
+

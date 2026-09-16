@@ -255,6 +255,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._editId = null;
     this._themeId = null;
     this._themeDraft = null;
+    this._variableId = null;
+    this._variableDraft = null;
+    this._pendingVariableFromDraft = null;
     this._themeSaveTimer = null;
     this._saveSoonTimer = null;
     this._historyRestoring = false;
@@ -2511,7 +2514,7 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-stage {
           position: relative;
           margin: 8px -8px 0;
-          padding: 28px 8px 16px;
+          padding: 8px 8px 8px;
           display: flex;
           flex-direction: column;
           align-items: stretch;
@@ -2532,40 +2535,53 @@ class CircadianScenesPanel extends HTMLElement {
           touch-action: none;
         }
         .wheel-mode-pill {
-          position: absolute;
-          left: 50%;
-          top: 0;
-          z-index: 6;
-          transform: translate(-50%, -8px);
+          box-sizing: border-box;
           display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 6px 10px;
-          border-radius: 999px;
-          background: color-mix(
-            in srgb,
-            var(--card-background-color, #1c1c1c) 88%,
-            transparent
-          );
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+          height: 48px;
+          padding: 8px;
+          gap: 8px;
+          border-radius: 24px;
+          box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
+          background: var(--surface-2, var(--secondary-background-color, #242022));
           pointer-events: auto;
         }
         .wheel-mode-pill[hidden] {
           display: none !important;
         }
-        .wheel-mode-dot {
-          width: 36px;
-          height: 36px;
+        .wheel-mode-pill .wheel-wrapper {
+          box-sizing: border-box;
+          width: 32px;
+          height: 32px;
           margin: 0;
-          padding: 0;
-          border-radius: 50%;
-          border: 3px solid transparent;
+          padding: 2px;
+          border-radius: 16px;
+          border: 2px solid transparent;
+          background: transparent;
           cursor: pointer;
           appearance: none;
           -webkit-appearance: none;
         }
-        .wheel-mode-dot.active {
+        .wheel-mode-pill .wheel-wrapper:hover,
+        .wheel-mode-pill .wheel-wrapper:active {
+          background-color: var(--surface-2, var(--secondary-background-color, #242022));
+        }
+        .wheel-mode-pill .wheel-wrapper.active {
           border-color: #fff;
+        }
+        .wheel-mode-pill .wheel {
+          display: block;
+          width: 24px;
+          height: 24px;
+          border-radius: 12px;
+          background-size: cover;
+          background-position: center;
+        }
+        .hue-wheel-mode-cluster {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+          flex: 0 0 auto;
         }
         .wheel-palette-randomize {
           flex: 0 0 auto;
@@ -2573,7 +2589,8 @@ class CircadianScenesPanel extends HTMLElement {
           padding: 6px 10px;
           border: 0;
           border-radius: 16px;
-          background: var(--secondary-background-color, #242022);
+          box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
+          background: var(--surface-2, var(--secondary-background-color, #242022));
           color: var(--primary-text-color);
           font: inherit;
           font-size: 0.8rem;
@@ -2599,6 +2616,19 @@ class CircadianScenesPanel extends HTMLElement {
         .palette-kind-row button.active {
           border-color: var(--primary-color);
           background: color-mix(in srgb, var(--primary-color) 18%, transparent);
+        }
+        .library-editor {
+          box-sizing: border-box;
+          width: 100%;
+          max-width: 650px;
+          min-width: 0;
+          margin: 0 auto;
+          padding: 16px 8px 48px;
+        }
+        .library-name-field {
+          display: block;
+          margin: 8px 8px 16px;
+          max-width: 650px;
         }
         .palette-slots {
           display: flex;
@@ -2784,16 +2814,16 @@ class CircadianScenesPanel extends HTMLElement {
           display: flex;
           flex-wrap: nowrap;
           align-items: center;
-          min-height: 40px;
+          min-height: 48px;
           padding: 8px;
           gap: 8px;
           min-width: 0;
-          border-radius: 20px;
-          box-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
-          background: var(--secondary-background-color, #242022);
+          border-radius: 24px;
+          box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
+          background: var(--surface-2, var(--secondary-background-color, #242022));
           position: relative;
           flex: 1 1 auto;
-          justify-content: flex-start;
+          justify-content: flex-end;
           overflow: hidden;
         }
         .hue-presets-track {
@@ -4300,7 +4330,10 @@ class CircadianScenesPanel extends HTMLElement {
       return this._editId ? `edit/${this._editId}` : "new";
     }
     if (this._view === "theme") {
-      return this._themeId ? `theme/${this._themeId}` : "";
+      return this._themeId ? `theme/${this._themeId}` : "theme/new";
+    }
+    if (this._view === "variable") {
+      return this._variableId ? `variable/${this._variableId}` : "variable/new";
     }
     if (this._view === "variables") {
       return "variables";
@@ -4371,6 +4404,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._editId = null;
       this._themeId = null;
       this._themeDraft = null;
+      this._variableId = null;
+      this._variableDraft = null;
       this._entityId = null;
       this._formData = pending
         ? { ...emptyFormData(), ...pending }
@@ -4390,6 +4425,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._editId = match[1];
       this._themeId = null;
       this._themeDraft = null;
+      this._variableId = null;
+      this._variableDraft = null;
       this._error = null;
       this._loadItem(this._editId);
       return;
@@ -4397,12 +4434,27 @@ class CircadianScenesPanel extends HTMLElement {
     const themeMatch = hash.match(/^theme\/(.+)$/);
     if (themeMatch) {
       this._view = "theme";
-      this._themeId = themeMatch[1];
+      this._themeId = themeMatch[1] === "new" ? null : themeMatch[1];
       this._editId = null;
+      this._variableId = null;
+      this._variableDraft = null;
       this._entityId = null;
       this._error = null;
       void this._abandonScenePreview();
-      this._loadTheme(this._themeId);
+      this._loadTheme(themeMatch[1]);
+      return;
+    }
+    const variableMatch = hash.match(/^variable\/(.+)$/);
+    if (variableMatch) {
+      this._view = "variable";
+      this._editId = null;
+      this._themeId = null;
+      this._themeDraft = null;
+      this._variableId = variableMatch[1] === "new" ? null : variableMatch[1];
+      this._entityId = null;
+      this._error = null;
+      void this._abandonScenePreview();
+      this._loadVariable(variableMatch[1]);
       return;
     }
     if (hash === "variables") {
@@ -4410,6 +4462,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._editId = null;
       this._themeId = null;
       this._themeDraft = null;
+      this._variableId = null;
+      this._variableDraft = null;
       this._entityId = null;
       void this._abandonScenePreview();
       this._loadList();
@@ -4419,6 +4473,8 @@ class CircadianScenesPanel extends HTMLElement {
     this._editId = null;
     this._themeId = null;
     this._themeDraft = null;
+    this._variableId = null;
+    this._variableDraft = null;
     this._entityId = null;
     void this._abandonScenePreview();
     this._loadList();
@@ -4438,7 +4494,12 @@ class CircadianScenesPanel extends HTMLElement {
     const token = {
       generation: ++this._loadGeneration,
       view: this._view,
-      sceneId: this._view === "theme" ? this._themeId : this._editId,
+      sceneId:
+        this._view === "theme"
+          ? this._themeId
+          : this._view === "variable"
+            ? this._variableId
+            : this._editId,
     };
     return token;
   }
@@ -4447,7 +4508,12 @@ class CircadianScenesPanel extends HTMLElement {
     return panelLoadIsCurrent(token, {
       generation: this._loadGeneration,
       view: this._view,
-      sceneId: this._view === "theme" ? this._themeId : this._editId,
+      sceneId:
+        this._view === "theme"
+          ? this._themeId
+          : this._view === "variable"
+            ? this._variableId
+            : this._editId,
     });
   }
 
@@ -4515,6 +4581,10 @@ class CircadianScenesPanel extends HTMLElement {
     }
     if (this._view === "theme") {
       this._renderThemeEditor();
+      return;
+    }
+    if (this._view === "variable") {
+      this._renderVariableEditor();
     }
   }
 
@@ -4619,6 +4689,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._renderEditor();
     } else if (this._view === "theme") {
       this._renderThemeEditor();
+    } else if (this._view === "variable") {
+      this._renderVariableEditor();
     } else {
       this._renderList();
     }
@@ -4958,37 +5030,6 @@ class CircadianScenesPanel extends HTMLElement {
     dialog.open = true;
   }
 
-  _libraryDialog({ title, children, primaryLabel, onPrimary }) {
-    const dialog = document.createElement("ha-dialog");
-    dialog.className = "save-dialog";
-    dialog.setAttribute("header-title", title);
-    for (const child of children) {
-      dialog.appendChild(child);
-    }
-    const footer = customElements.get("ha-dialog-footer")
-      ? document.createElement("ha-dialog-footer")
-      : document.createElement("div");
-    footer.slot = "footer";
-    const cancel = document.createElement("ha-button");
-    cancel.slot = "secondaryAction";
-    cancel.appearance = "plain";
-    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
-    cancel.addEventListener("click", () => {
-      dialog.open = false;
-    });
-    const save = document.createElement("ha-button");
-    save.slot = "primaryAction";
-    save.variant = "brand";
-    save.textContent = primaryLabel;
-    save.addEventListener("click", () => onPrimary(dialog));
-    footer.append(cancel, save);
-    dialog.appendChild(footer);
-    dialog.addEventListener("closed", () => dialog.remove());
-    this.shadowRoot.appendChild(dialog);
-    dialog.open = true;
-    return dialog;
-  }
-
   _haInput(label, value, { type, min, max } = {}) {
     const field = customElements.get("ha-input")
       ? document.createElement("ha-input")
@@ -5020,10 +5061,6 @@ class CircadianScenesPanel extends HTMLElement {
     return field;
   }
 
-  _openCreateVariableDialog() {
-    this._openVariableEditor(null);
-  }
-
   _variableEditorDraft(variable) {
     if (variable) {
       return {
@@ -5048,65 +5085,219 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _addVariableFromCurrentDraft(draft) {
-    const nameInput = this._haInput(
-      this._t("frontend.common.name", "Name"),
-      this._t("frontend.library.new_variable", "New variable")
-    );
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (value) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        resolve(value);
-      };
-      const dialog = this._libraryDialog({
-        title: this._t("frontend.library.add_variable", "Add variable"),
-        children: [nameInput],
-        primaryLabel: this._t("frontend.common.save", "Save"),
-        onPrimary: async (host) => {
-          const name = (nameInput.value || "").trim();
-          if (!name) {
-            return;
-          }
-          try {
-            const saved = await this._hass.callWS({
-              type: `${DOMAIN}/save_variable`,
-              data: {
-                name,
-                brightness: Number(draft?.brightness) || 255,
-                color: colorPayloadFromDraft(draft),
-              },
-            });
-            host.open = false;
-            await this._refreshCatalog();
-            finish(saved);
-          } catch (err) {
-            this._error = err.message || String(err);
-            finish(null);
-          }
-        },
-      });
-      dialog.addEventListener("closed", () => finish(null), { once: true });
-    });
+    this._pendingVariableFromDraft = draft ? { ...draft } : null;
+    this._go("variable/new");
+    return Promise.resolve(null);
+  }
+
+  _openCreateVariableDialog() {
+    this._pendingVariableFromDraft = null;
+    this._go("variable/new");
   }
 
   _openVariableEditor(variable) {
-    const draft = this._variableEditorDraft(variable);
-    let kind = variableIsPalette(variable) ? "palette" : "color";
-    const slots = variableIsPalette(variable)
-      ? structuredClone(variable.slots || defaultPaletteSlots())
-      : defaultPaletteSlots();
+    if (variable?.id) {
+      this._go(`variable/${variable.id}`);
+      return;
+    }
+    this._go("variable/new");
+  }
+
+  _openCreateThemeDialog() {
+    this._go("theme/new");
+  }
+
+  _variableWorkingCopy(variable) {
+    if (!variable) {
+      const from = this._pendingVariableFromDraft;
+      this._pendingVariableFromDraft = null;
+      const colorDraft = from
+        ? {
+            ...colorPayloadFromDraft(from),
+            brightness: Number(from.brightness) || 255,
+            state: "on",
+          }
+        : this._variableEditorDraft(null);
+      return {
+        kind: "color",
+        name: "",
+        colorDraft,
+        slots: defaultPaletteSlots(),
+      };
+    }
+    return {
+      kind: variableIsPalette(variable) ? "palette" : "color",
+      name: variable.name || "",
+      colorDraft: this._variableEditorDraft(variable),
+      slots: variableIsPalette(variable)
+        ? structuredClone(variable.slots || defaultPaletteSlots())
+        : defaultPaletteSlots(),
+    };
+  }
+
+  async _loadVariable(variableId) {
+    const token = this._startPanelLoad();
+    try {
+      const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
+      this._items = payload?.scenes || [];
+      this._variables = payload?.variables || [];
+      this._themes = payload?.themes || [];
+      this._floors = payload?.floors || [];
+      this._adoptSettings(payload?.settings);
+      if (variableId === "new") {
+        this._variableId = null;
+        this._variableDraft = this._variableWorkingCopy(null);
+        this._error = null;
+        this._render();
+        return;
+      }
+      const variable = (this._variables || []).find((item) => item.id === variableId);
+      if (!variable) {
+        this._error = this._t(
+          "frontend.library.variable_missing",
+          "Variable not found"
+        );
+        this._view = "list";
+        this._variableId = null;
+        this._variableDraft = null;
+        this._render();
+        return;
+      }
+      this._variableId = variable.id;
+      this._variableDraft = this._variableWorkingCopy(variable);
+      this._error = null;
+    } catch (err) {
+      if (!this._panelLoadIsCurrent(token)) {
+        return;
+      }
+      this._error = err.message || String(err);
+      this._variableDraft = null;
+    }
+    if (!this._panelLoadIsCurrent(token)) {
+      return;
+    }
+    this._render();
+  }
+
+  _variableSavePayload() {
+    const working = this._variableDraft;
+    if (!working) {
+      return null;
+    }
+    const name = (working.name || "").trim();
+    if (!name) {
+      return null;
+    }
+    if (working.kind === "palette") {
+      return {
+        id: this._variableId || undefined,
+        name,
+        kind: "palette",
+        slots: working.slots,
+      };
+    }
+    const brightness = Number(working.colorDraft?.brightness);
+    if (!Number.isFinite(brightness)) {
+      return null;
+    }
+    return {
+      id: this._variableId || undefined,
+      name,
+      kind: "color",
+      brightness,
+      color: colorPayloadFromDraft(working.colorDraft),
+    };
+  }
+
+  async _saveVariableQuiet() {
+    const data = this._variableSavePayload();
+    if (!data) {
+      return;
+    }
+    if (this._saving) {
+      this._saveSoon();
+      return;
+    }
+    this._saving = true;
+    try {
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save_variable`,
+        data,
+      });
+      this._variableId = saved.id;
+      const list = [...(this._variables || [])];
+      const index = list.findIndex((item) => item.id === saved.id);
+      if (index >= 0) {
+        list[index] = saved;
+      } else {
+        list.push(saved);
+      }
+      this._variables = list;
+      if (this._currentHash() !== `variable/${saved.id}`) {
+        history.replaceState(null, "", this._hashHref(`variable/${saved.id}`));
+      }
+    } catch (err) {
+      this._error = err.message || String(err);
+    } finally {
+      this._saving = false;
+    }
+  }
+
+  _renderVariableEditor() {
+    this._syncAppBarTitle();
+    this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
+    this._setListActions();
+    this._syncEditorChrome();
+    this._syncSaveFab();
+    this._contentEl.classList.add("wide");
+    const split = !this._narrow;
+    this._contentEl.classList.toggle("workspace-split", split);
+    this._parkSunPath();
+    const page = renderLanding(this, { includeStage: true });
+    const stage = page.querySelector(".stage-col");
+    const host = document.createElement("div");
+    host.className = "library-editor";
+    if (this._error) {
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = this._error;
+      host.appendChild(error);
+    }
+    this._fillVariableEditor(host);
+    if (this._narrow) {
+      this._contentEl.classList.remove("workspace-split");
+      this._contentEl.replaceChildren(host);
+    } else {
+      const scroll = this._stageScrollEl(stage);
+      scroll?.replaceChildren(host);
+      this._contentEl.replaceChildren(page);
+      this._mountPageBanners(stage);
+    }
+    this._syncWorkspaceScrollport();
+  }
+
+  _fillVariableEditor(host) {
+    const working = this._variableDraft || this._variableWorkingCopy(null);
+    this._variableDraft = working;
     const hint = document.createElement("p");
+    hint.className = "library-hint";
     hint.textContent = this._t(
       "frontend.library.variable_edit_hint",
       "Color and brightness are shared by every theme or light that still uses this variable."
     );
     const nameInput = this._haInput(
       this._t("frontend.common.name", "Name"),
-      variable?.name || this._t("frontend.library.new_variable", "New variable")
+      working.name || this._t("frontend.library.new_variable", "New variable")
     );
+    const bindName = () => {
+      working.name = (nameInput.value || "").trim();
+      this._saveSoon();
+    };
+    nameInput.addEventListener("value-changed", bindName);
+    nameInput.addEventListener("change", bindName);
     const kindRow = document.createElement("div");
     kindRow.className = "palette-kind-row";
     const kindColor = document.createElement("button");
@@ -5116,23 +5307,22 @@ class CircadianScenesPanel extends HTMLElement {
     kindPalette.type = "button";
     kindPalette.textContent = this._t("frontend.library.kind_palette", "Palette");
     kindRow.append(kindColor, kindPalette);
+    const draft = working.colorDraft;
     const briInput = this._haInput(
       this._t("frontend.lights.brightness", "Brightness"),
       String(draft.brightness ?? 255),
       { type: "number", min: 0, max: 255 }
     );
+    const bindBri = (value) => {
+      if (Number.isFinite(value)) {
+        draft.brightness = value;
+        this._saveSoon();
+      }
+    };
     briInput.addEventListener("value-changed", (ev) => {
-      const value = Number(ev.detail?.value ?? briInput.value);
-      if (Number.isFinite(value)) {
-        draft.brightness = value;
-      }
+      bindBri(Number(ev.detail?.value ?? briInput.value));
     });
-    briInput.addEventListener("change", () => {
-      const value = Number(briInput.value);
-      if (Number.isFinite(value)) {
-        draft.brightness = value;
-      }
-    });
+    briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
     const wheel = createSceneColorWheel({
       hasColor: true,
       hasTemp: true,
@@ -5146,32 +5336,37 @@ class CircadianScenesPanel extends HTMLElement {
       onChange: () => {
         delete draft.variable_ref;
         wheel.sync();
+        this._saveSoon();
       },
     });
     const slotsEl = document.createElement("div");
     slotsEl.className = "palette-slots";
     const solids = () =>
       (this._variables || []).filter(
-        (item) => item.id !== variable?.id && !variableIsPalette(item)
+        (item) => item.id !== this._variableId && !variableIsPalette(item)
       );
     const rgbToHex = (rgb) =>
       `#${(rgb || [255, 255, 255])
-        .map((c) => Math.max(0, Math.min(255, Number(c) || 0)).toString(16).padStart(2, "0"))
+        .map((c) =>
+          Math.max(0, Math.min(255, Number(c) || 0))
+            .toString(16)
+            .padStart(2, "0")
+        )
         .join("")}`;
     const syncKind = () => {
-      kindColor.classList.toggle("active", kind === "color");
-      kindPalette.classList.toggle("active", kind === "palette");
-      briInput.hidden = kind === "palette";
-      wheel.el.hidden = kind === "palette";
-      slotsEl.hidden = kind !== "palette";
+      kindColor.classList.toggle("active", working.kind === "color");
+      kindPalette.classList.toggle("active", working.kind === "palette");
+      briInput.hidden = working.kind === "palette";
+      wheel.el.hidden = working.kind === "palette";
+      slotsEl.hidden = working.kind !== "palette";
     };
     const renderSlots = () => {
       slotsEl.replaceChildren();
       for (let index = 0; index < 5; index += 1) {
-        if (!slots[index]) {
-          slots[index] = defaultPaletteSlots()[index];
+        if (!working.slots[index]) {
+          working.slots[index] = defaultPaletteSlots()[index];
         }
-        const slot = slots[index];
+        const slot = working.slots[index];
         const row = document.createElement("div");
         row.className = "palette-slot-row";
         const swatch = document.createElement("div");
@@ -5221,27 +5416,28 @@ class CircadianScenesPanel extends HTMLElement {
         colorInput.addEventListener("input", () => {
           const rgb = hexToRgb(colorInput.value);
           slot.variable_ref = undefined;
+          const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
           slot.color = {
             color_mode: "hs",
-            hs_color: (() => {
-              const hsv = rgb2hsv(rgb[0], rgb[1], rgb[2]);
-              return [hsv[0], Math.round(hsv[1] * 100)];
-            })(),
+            hs_color: [hsv[0], Math.round(hsv[1] * 100)],
           };
           paint();
+          this._saveSoon();
         });
         refSelect.addEventListener("change", () => {
           if (refSelect.value) {
-            slots[index] = { variable_ref: refSelect.value };
+            working.slots[index] = { variable_ref: refSelect.value };
           } else {
-            slots[index] = defaultPaletteSlots()[index];
+            working.slots[index] = defaultPaletteSlots()[index];
           }
           renderSlots();
+          this._saveSoon();
         });
         bri.addEventListener("change", () => {
           const value = Number(bri.value);
           if (Number.isFinite(value)) {
             slot.brightness = value;
+            this._saveSoon();
           }
         });
         paint();
@@ -5250,87 +5446,19 @@ class CircadianScenesPanel extends HTMLElement {
       }
     };
     kindColor.addEventListener("click", () => {
-      kind = "color";
+      working.kind = "color";
       syncKind();
+      this._saveSoon();
     });
     kindPalette.addEventListener("click", () => {
-      kind = "palette";
+      working.kind = "palette";
       syncKind();
+      this._saveSoon();
     });
     renderSlots();
     syncKind();
-    this._libraryDialog({
-      title: variable
-        ? variable.name
-        : this._t("frontend.library.add_variable", "Add variable"),
-      children: [hint, nameInput, kindRow, briInput, wheel.el, slotsEl],
-      primaryLabel: this._t("frontend.common.save", "Save"),
-      onPrimary: async (dialog) => {
-        const name = (nameInput.value || "").trim();
-        if (!name) {
-          return;
-        }
-        const payload =
-          kind === "palette"
-            ? {
-                ...(variable || {}),
-                name,
-                kind: "palette",
-                slots,
-              }
-            : {
-                ...(variable || {}),
-                name,
-                kind: "color",
-                brightness: Number(briInput.value ?? draft.brightness),
-                color: colorPayloadFromDraft(draft),
-              };
-        if (kind === "color" && !Number.isFinite(payload.brightness)) {
-          return;
-        }
-        await this._hass.callWS({
-          type: `${DOMAIN}/save_variable`,
-          data: payload,
-        });
-        dialog.open = false;
-        await this._refreshCatalog();
-      },
-    });
-  }
-
-  _openCreateThemeDialog() {
-    const source = (this._themes || [])[0];
-    if (!source?.events) {
-      return;
-    }
-    const nameInput = this._haInput(
-      this._t("frontend.common.name", "Name"),
-      this._t("frontend.library.new_theme", "New theme")
-    );
-    this._libraryDialog({
-      title: this._t("frontend.library.add_theme", "Add theme"),
-      children: [nameInput],
-      primaryLabel: this._t("frontend.common.save", "Save"),
-      onPrimary: async (dialog) => {
-        const name = (nameInput.value || "").trim();
-        if (!name) {
-          return;
-        }
-        const item = await this._hass.callWS({
-          type: `${DOMAIN}/save_theme`,
-          data: {
-            name,
-            events: structuredClone(source.events),
-          },
-        });
-        dialog.open = false;
-        if (item?.id) {
-          this._go(`theme/${item.id}`);
-        } else {
-          await this._refreshCatalog();
-        }
-      },
-    });
+    host.append(hint, nameInput, kindRow, briInput, wheel.el, slotsEl);
+    wheel.sync();
   }
 
   async _refreshCatalog() {
@@ -5360,6 +5488,26 @@ class CircadianScenesPanel extends HTMLElement {
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
       this._adoptSettings(payload?.settings);
+      if (themeId === "new") {
+        const source = (this._themes || [])[0];
+        if (!source?.events) {
+          this._error = this._t("frontend.library.theme_missing", "Theme not found");
+          this._view = "list";
+          this._themeId = null;
+          this._themeDraft = null;
+          this._render();
+          return;
+        }
+        this._themeId = null;
+        this._themeDraft = {
+          name: "",
+          events: structuredClone(source.events),
+        };
+        this._error = null;
+        this._resetSession();
+        this._render();
+        return;
+      }
       const theme = (this._themes || []).find((item) => item.id === themeId);
       if (!theme) {
         this._error = this._t("frontend.library.theme_missing", "Theme not found");
@@ -5418,6 +5566,22 @@ class CircadianScenesPanel extends HTMLElement {
     } else {
       this._contentEl.replaceChildren(page);
       if (stage) {
+        const nameInput = this._haInput(
+          this._t("frontend.common.name", "Name"),
+          this._themeDraft?.name || ""
+        );
+        const bindThemeName = () => {
+          if (!this._themeDraft) {
+            return;
+          }
+          this._themeDraft.name = (nameInput.value || "").trim();
+          this._syncAppBarTitle();
+          this._saveSoon();
+        };
+        nameInput.addEventListener("value-changed", bindThemeName);
+        nameInput.addEventListener("change", bindThemeName);
+        nameInput.classList.add("library-name-field");
+        this._stageScrollEl(stage)?.prepend(nameInput);
         this._mountSunPath(stage);
       }
     }
@@ -6983,6 +7147,10 @@ class CircadianScenesPanel extends HTMLElement {
       await this._saveThemeQuiet();
       return;
     }
+    if (this._view === "variable") {
+      await this._saveVariableQuiet();
+      return;
+    }
     if (this._view !== "edit") {
       return;
     }
@@ -7034,6 +7202,9 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._themeDraft) {
       return;
     }
+    if (!(this._themeDraft.name || "").trim()) {
+      return;
+    }
     try {
       const saved = await this._hass.callWS({
         type: `${DOMAIN}/save_theme`,
@@ -7041,7 +7212,11 @@ class CircadianScenesPanel extends HTMLElement {
       });
       this._adoptSavedTheme(saved);
       if (this._view === "theme") {
+        this._themeId = saved.id;
         this._sessionBaseline = this._snapshotSession();
+        if (this._currentHash() !== `theme/${saved.id}`) {
+          history.replaceState(null, "", this._hashHref(`theme/${saved.id}`));
+        }
       }
       await this._refreshListItemsSilent();
       if (this._themeDraft) {
@@ -7057,6 +7232,7 @@ class CircadianScenesPanel extends HTMLElement {
       const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
       this._items = payload?.scenes || this._items;
       this._themes = payload?.themes || this._themes;
+      this._variables = payload?.variables || this._variables;
       this._syncRailCardBackgrounds();
     } catch (_err) {
       /* keep the current rail */
@@ -9589,6 +9765,12 @@ class CircadianScenesPanel extends HTMLElement {
     const integration = this._t("frontend.title", "Circadian Scenes");
     if (this._narrow && this._view === "edit") {
       this._headerEl.textContent = this._editorSceneTitle();
+      return;
+    }
+    if (this._narrow && this._view === "variable") {
+      this._headerEl.textContent =
+        this._variableDraft?.name ||
+        this._t("frontend.library.add_variable", "Add variable");
       return;
     }
     if (this._narrow && this._view === "theme") {

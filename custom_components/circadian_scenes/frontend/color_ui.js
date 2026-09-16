@@ -7,6 +7,7 @@ import {
   samplePaletteWheel,
   variableIsPalette,
 } from "./palette.js";
+import { MODE_COLOR_ICON, MODE_TEMP_ICON } from "./hue_mode_icons.js";
 
 const HUE_WHEEL_RENDER = 600;
 const HUE_COLOR_PRESETS = [
@@ -1998,8 +1999,10 @@ function createSceneColorWheel({
   randomizeBtn.hidden = true;
   randomizeBtn.textContent = "Randomize";
   randomizeBtn.addEventListener("click", () => onRandomizeSeed?.());
-  canvasWrap.appendChild(modePill);
-  chrome.append(randomizeBtn);
+  const modeCluster = document.createElement("div");
+  modeCluster.className = "hue-wheel-mode-cluster";
+  modeCluster.append(modePill, randomizeBtn);
+  chrome.prepend(modeCluster);
   stage.append(canvasWrap, chrome);
 
   const markers = new Map();
@@ -2377,27 +2380,29 @@ function createSceneColorWheel({
         ? uiMode
         : draftWheelMode(draft, caps.hasColor, caps.hasTemp);
     for (const mode of modes) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `wheel-mode-dot wheel-mode-${mode}`;
-      btn.setAttribute("aria-pressed", mode === current ? "true" : "false");
+      const wrap = document.createElement("button");
+      wrap.type = "button";
+      wrap.className = "wheel-wrapper";
+      wrap.setAttribute("aria-pressed", mode === current ? "true" : "false");
       if (mode === current) {
-        btn.classList.add("active");
+        wrap.classList.add("active");
       }
+      const face = document.createElement("span");
+      face.className = `wheel wheel-mode-${mode}`;
       if (mode === "color") {
-        btn.style.background =
-          "conic-gradient(#ff3b30, #ffcc00, #34c759, #007aff, #af52de, #ff3b30)";
+        face.style.backgroundImage = `url(${MODE_COLOR_ICON})`;
       } else if (mode === "temp") {
-        btn.style.background =
-          "linear-gradient(135deg, #ffb347 0%, #fff4e0 55%, #c9e4ff 100%)";
+        face.style.backgroundImage = `url(${MODE_TEMP_ICON})`;
       } else {
-        btn.style.background = paletteSwatchCss(
+        face.style.backgroundImage = "none";
+        face.style.background = paletteSwatchCss(
           palVar,
           paletteCatalog(),
           draftRgb
         );
       }
-      btn.addEventListener("click", (ev) => {
+      wrap.appendChild(face);
+      wrap.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if (mode === "palette") {
           uiMode = "palette";
@@ -2412,7 +2417,7 @@ function createSceneColorWheel({
         }
         sync();
       });
-      modePill.appendChild(btn);
+      modePill.appendChild(wrap);
     }
   };
 

@@ -1,0 +1,20 @@
+---
+description: The main column is always the editor; do not use dialogs for library items
+alwaysApply: true
+---
+
+# Editor lives in the main column
+
+The workspace **stage** (`.stage-col`, the wide column beside the area rail) is the only editor surface.
+
+## Do this
+
+- Open **scenes**, **variables**, **palettes**, and **circadian themes** in that column (`#edit/<id>`, `#variable/<id>`, `#variable/new`, `#theme/<id>`, `#theme/new`).
+- Create and edit them there (name, color wheel, palette slots, theme dial). Autosave like other editors.
+
+## Do not
+
+- Do not put add/edit UI for variables, palettes, or themes in `ha-dialog` / `_libraryDialog`.
+- Do not use a separate full-page library column as the editor (the rail stays a picker).
+
+Rationale: [`docs/DECISIONS.md`](../../docs/DECISIONS.md) (“Main column is the editor”).
