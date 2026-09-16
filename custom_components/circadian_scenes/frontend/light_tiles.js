@@ -9,7 +9,7 @@ export const LIGHT_TILES_CSS = `
     min-width: 0;
     box-sizing: border-box;
     /* Top/side pad so the hover-only remove control can sit on the tile corner. */
-    padding: 16px 18px 24px;
+    padding: 24px 24px 24px;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -36,25 +36,35 @@ export const LIGHT_TILES_CSS = `
     position: relative;
     overflow: visible;
   }
-  /* Mouse-only: center of the control sits on the tile's top-right corner. */
+  /* Native button: ha-icon-button keeps a 48px MDC hit even when the host is smaller. */
   .simple-light-selector .light-remove {
     position: absolute;
     top: 2px;
     right: 2px;
     z-index: 6;
     display: none;
-    --mdc-icon-button-size: 20px;
-    --mdc-icon-size: 14px;
-    width: 20px;
-    height: 20px;
+    box-sizing: border-box;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
     padding: 0;
     margin: 0;
+    border: 0;
+    appearance: none;
+    -webkit-appearance: none;
     transform: translate(50%, -50%);
     border-radius: 50%;
     background: var(--card-background-color, #1c1c1c);
     color: var(--primary-text-color);
     box-shadow: 0 0 0 1px
       color-mix(in srgb, var(--divider-color, #888) 55%, transparent);
+    cursor: pointer;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .simple-light-selector .light-remove ha-icon {
+    --mdc-icon-size: 22px;
     pointer-events: none;
   }
   @media (hover: hover) and (pointer: fine) {
@@ -151,6 +161,11 @@ export const LIGHT_TILES_CSS = `
     z-index: 0;
     overflow: hidden;
     transition: height 0.3s ease-out;
+  }
+  .simple-light-tile.dragging .simple-light-fill,
+  .simple-light-tile.wheel-adjusting .simple-light-fill,
+  .sun-light-clock-legend.bright-scrubbing .simple-light-fill {
+    transition: none;
   }
   .simple-light-fill::after {
     content: "";
@@ -374,6 +389,7 @@ export function bindLightTileBrightness(tile, hit, {
   isEditable,
   getBrightness,
   setBrightness,
+  onDragEnd,
 }) {
   let drag = null;
   let wheelAxis = null;
@@ -404,8 +420,12 @@ export function bindLightTileBrightness(tile, hit, {
         tile._lysSuppressTap = false;
       }, 0);
     }
+    const wasY = drag.axis === "y";
     drag = null;
     window.setTimeout(() => tile.classList.remove("dragging"), 250);
+    if (wasY) {
+      onDragEnd?.();
+    }
   };
 
   const onDocMove = (ev) => {

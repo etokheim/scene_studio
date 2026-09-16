@@ -775,8 +775,15 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Lys tile X is mouse-hover only; touch removes from the sidebar
 
 - **Date:** 2026-09-16
-- **Decision:** The close control on a member Lys tile is visible only under `(hover: hover) and (pointer: fine)` while the tile is hovered. Coarse pointers get no hit target. Touch (and mouse) can remove from the light sidebar (**Remove light from scene**). Removed/suggested tiles have no corner plus; the bulb icon becomes plus and the label is **Add {name}**, and tapping the tile restores membership. The X is a 20px disc whose center sits on the tile’s top-right corner; the strip pads so overflow-x scroll does not clip it.
+- **Decision:** The close control on a member Lys tile is visible only under `(hover: hover) and (pointer: fine)` while the tile is hovered. Coarse pointers get no hit target. Touch (and mouse) can remove from the light sidebar (**Remove light from scene**). Removed/suggested tiles have no corner plus; the bulb icon becomes plus and the label is **Add {name}**, and tapping the tile restores membership. The X is a native 40px disc (not `ha-icon-button`, whose MDC hit stays 48px) whose center sits on the tile’s top-right corner; the strip pads so overflow-x scroll does not clip it.
 - **Why:** A 32px corner control is a fat-finger trap on the brightness tile, and overflow-x auto would otherwise clip a corner-centered control.
+- **Do not reverse without user ask.**
+
+## Brightness drags skip dial resample and event-button easing
+
+- **Date:** 2026-09-16
+- **Decision:** While a brightness scrub is in progress (Lys tile, sidebar graph, or radial event handle), write the override and paint handles/tiles immediately. Do not resample the sun path, ease event-button radii (`CLOCK_BRIGHT_MOVE_MS`), or autosave until pointerup. Tile fill CSS transitions are off during that scrub.
+- **Why:** Full `_patchDialFromSession` plus a 400ms ease made the dial buttons lag and reverse while the pointer was still moving.
 - **Do not reverse without user ask.**
 
 ## Add light is the last Lys tile; unavailable stays editable when caps are known

@@ -310,6 +310,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockBrightAnimT0 = 0;
     this._clockBrightAnimRaf = undefined;
     this._clockBrightDragging = false;
+    this._brightnessScrubbing = false;
     this._clockStickySeconds = undefined;
     this._clockEnterPlayed = false;
     this._simpleEnterPlayed = false;
@@ -1991,7 +1992,7 @@ class CircadianScenesPanel extends HTMLElement {
           cursor: pointer;
         }
         .sun-light-clock-legend .light-tiles-scroller {
-          padding: 16px 14px 12px;
+          padding: 24px 22px 12px;
         }
         .sun-light-clock-legend .light-list-add {
           width: min(100%, 500px);
@@ -6395,6 +6396,10 @@ class CircadianScenesPanel extends HTMLElement {
         }
         hook.sync?.();
       }
+      if (this._eventBrightnessIsLive()) {
+        this._paintLiveEventBrightness();
+        return;
+      }
       this._patchDialFromSession({ applyTheme: true });
       this._syncThemePreviewSurfaces();
       this._saveSoon();
@@ -6433,9 +6438,61 @@ class CircadianScenesPanel extends HTMLElement {
       }
       hook.sync?.();
     }
+    if (this._eventBrightnessIsLive()) {
+      this._paintLiveEventBrightness();
+      return;
+    }
     this._patchDialFromSession();
     this._syncThemePreviewSurfaces();
     this._saveSoon();
+  }
+
+  _eventBrightnessIsLive() {
+    return this._clockBrightDragging || this._brightnessScrubbing;
+  }
+
+  _beginBrightnessScrub() {
+    if (this._brightnessScrubbing) {
+      return;
+    }
+    this._brightnessScrubbing = true;
+    this._clockLegendEl?.classList.add("bright-scrubbing");
+    this._cancelClockBrightMotion();
+  }
+
+  _endBrightnessScrub() {
+    if (!this._brightnessScrubbing) {
+      return;
+    }
+    this._brightnessScrubbing = false;
+    this._clockLegendEl?.classList.remove("bright-scrubbing");
+    this._patchDialFromSession({
+      applyTheme: this._editingThemeLook() || this._view === "theme",
+    });
+    this._syncThemePreviewSurfaces();
+    this._saveSoon();
+  }
+
+  _paintLiveEventBrightness() {
+    const targets = {};
+    for (const event of this._sunPath?.events || []) {
+      if (this._eventButtonSeconds(event) == null) {
+        continue;
+      }
+      targets[event.id] = this._dialEventBrightness(event.id);
+    }
+    this._cancelClockBrightMotion();
+    this._clockBrightShown = targets;
+    this._clockBrightTarget = { ...targets };
+    this._clockBrightFrom = { ...targets };
+    this._placeClockBrightnessHandles();
+    this._layoutClockEventSpokes();
+    this._layoutClockBrightnessCurve();
+    const seconds =
+      this._clockSunDisplayedSeconds ??
+      this._clockStickySeconds ??
+      this._clockSunIdleSeconds();
+    this._updateLightNameBrightness(seconds);
   }
 
   _lightEventStoredState(light, eventId) {
@@ -6713,6 +6770,10 @@ class CircadianScenesPanel extends HTMLElement {
       for (const item of events) {
         this._writeThemeEventFromDraft(item.id, drafts.get(item.id));
       }
+      if (this._eventBrightnessIsLive()) {
+        this._paintLiveEventBrightness();
+        return;
+      }
       this._patchDialFromSession({ applyTheme: true });
       this._saveSoon();
     };
@@ -6757,6 +6818,7 @@ class CircadianScenesPanel extends HTMLElement {
         if (!draft) {
           return;
         }
+        this._beginBrightnessScrub();
         draft.brightness = brightness;
         if (brightness > 0) {
           draft.state = "on";
@@ -6765,6 +6827,7 @@ class CircadianScenesPanel extends HTMLElement {
         brightnessGraphCtl?.sync();
       },
       onDragEnd: () => {
+        this._endBrightnessScrub();
         wheelCtl?.sync();
       },
     });
@@ -11687,6 +11750,10 @@ class CircadianScenesPanel extends HTMLElement {
         this._writeLightEventOverride(light.entity_id, eventId, cleaned);
         entry.saved = lightDraftFingerprint(entry.draft);
       }
+      if (this._eventBrightnessIsLive()) {
+        this._paintLiveEventBrightness();
+        return;
+      }
       this._syncPreviewOverlay();
       this._patchDialFromSession();
       this._syncThemePreviewSurfaces();
@@ -12183,6 +12250,7 @@ class CircadianScenesPanel extends HTMLElement {
         if (!entry?.member || !entry.draft) {
           return;
         }
+        this._beginBrightnessScrub();
         entry.draft.brightness = brightness;
         if (brightness > 0) {
           entry.draft.state = "on";
@@ -12194,6 +12262,7 @@ class CircadianScenesPanel extends HTMLElement {
         await applyLive();
       },
       onDragEnd: () => {
+        this._endBrightnessScrub();
         wheelCtl?.sync();
       },
     });
@@ -12240,6 +12309,7 @@ class CircadianScenesPanel extends HTMLElement {
           if (!entry?.member || !entry.draft) {
             return;
           }
+          this._beginBrightnessScrub();
           setColorBrightnessOnDraft(entry.draft, brightness, whiteKind);
           applyToSession();
           brightnessGraphCtl?.sync();
@@ -12249,6 +12319,7 @@ class CircadianScenesPanel extends HTMLElement {
           await applyLive();
         },
         onDragEnd: () => {
+          this._endBrightnessScrub();
           wheelCtl?.sync();
         },
       });
@@ -12273,6 +12344,7 @@ class CircadianScenesPanel extends HTMLElement {
           if (!entry?.member || !entry.draft) {
             return;
           }
+          this._beginBrightnessScrub();
           setWhiteBrightnessOnDraft(entry.draft, brightness, whiteKind);
           applyToSession();
           brightnessGraphCtl?.sync();
@@ -12282,6 +12354,7 @@ class CircadianScenesPanel extends HTMLElement {
           await applyLive();
         },
         onDragEnd: () => {
+          this._endBrightnessScrub();
           wheelCtl?.sync();
         },
       });
@@ -16179,6 +16252,7 @@ class CircadianScenesPanel extends HTMLElement {
     const next = { ...targets };
     if (
       this._clockBrightDragging ||
+      this._brightnessScrubbing ||
       !Object.keys(this._clockBrightShown || {}).length
     ) {
       this._cancelClockBrightMotion();
@@ -16395,6 +16469,7 @@ class CircadianScenesPanel extends HTMLElement {
       if (!this._clockEventDragMoved) {
         this._clockEventDragMoved = true;
         this._clockBrightDragging = true;
+        this._beginBrightnessScrub();
         this._cancelClockBrightMotion();
         btn.classList.add("bright-dragging");
       }
@@ -16432,6 +16507,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._clockEventDragEventId = null;
       this._clockEventDragOrigin = null;
       this._clockBrightDragging = false;
+      this._endBrightnessScrub();
     };
     btn.addEventListener("pointerdown", onDown);
     btn.addEventListener("pointermove", onMove);
@@ -17629,10 +17705,8 @@ class CircadianScenesPanel extends HTMLElement {
     return wrap;
   }
 
-  _lightMembershipButton(light, { removed }) {
-    const btn = document.createElement("ha-icon-button");
-    btn.className = removed ? "light-add" : "light-remove";
-    btn.label = removed
+  _lightMembershipButton(light, { removed, tile = false }) {
+    const label = removed
       ? this._t("frontend.lights.add_named_to_scene", "Add {name} to the scene", {
           name: light.name,
         })
@@ -17641,7 +17715,18 @@ class CircadianScenesPanel extends HTMLElement {
           "Remove {name} from the scene",
           { name: light.name }
         );
-    btn.tabIndex = removed ? 0 : -1;
+    const btn = tile
+      ? document.createElement("button")
+      : document.createElement("ha-icon-button");
+    btn.className = removed ? "light-add" : "light-remove";
+    if (tile) {
+      btn.type = "button";
+      btn.setAttribute("aria-label", label);
+      btn.tabIndex = -1;
+    } else {
+      btn.label = label;
+      btn.tabIndex = removed ? 0 : -1;
+    }
     const icon = document.createElement("ha-icon");
     icon.setAttribute("icon", removed ? "mdi:plus" : "mdi:close");
     btn.appendChild(icon);
@@ -17767,11 +17852,13 @@ class CircadianScenesPanel extends HTMLElement {
           getBrightness: () =>
             this._dialEventBrightness(this._sidebarEventId, light.entity_id),
           setBrightness: (value, { history } = {}) => {
+            this._beginBrightnessScrub();
             this._writeDialEventBrightness(this._sidebarEventId, value, {
               history,
               lightId: light.entity_id,
             });
           },
+          onDragEnd: () => this._endBrightnessScrub(),
         });
       }
       const missingScenes = this._missingSceneRows(light);
@@ -17800,7 +17887,7 @@ class CircadianScenesPanel extends HTMLElement {
         selector.appendChild(warn);
       }
       if (!removed) {
-        selector.appendChild(this._lightMembershipButton(light, { removed: false }));
+        selector.appendChild(this._lightMembershipButton(light, { removed: false, tile: true }));
       }
     }
     return selector;
