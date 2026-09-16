@@ -750,6 +750,28 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Tiles were tap-only and kept stale `light.samples` after a dial patch, so they did not match the clock or take brightness edits.
 - **Do not reverse without user ask.**
 
+## Dial and simple-editor enter/exit
+
+- **Date:** 2026-09-16
+- **Supersedes in part:** clock enter plays once per editor visit (reset on list).
+- **Decision:** Clock enter (spin/fade/scale + sun arc) plays when arriving on a **dial** surface from a non-dial one (list, simple editor, table). Dial→dial (another circadian scene or theme) does not replay. Leaving a dial plays the reverse as exit before the next view mounts. Simple scenes, variables, and palettes use the same fade/scale without the spin. Reduced motion skips both.
+- **Why:** The enter was a one-shot per session in the editor, so returning from the list felt dead. Cross-dial navigation should not restart the sun.
+- **Do not reverse without user ask.**
+
+## Simple editors have no stage wash
+
+- **Date:** 2026-09-16
+- **Decision:** Horizon, clock bloom, and stage-bg wheel glow belong on dial views only. Simple scene / variable / palette wheels do not `attachGlow` onto `.stage-bg`.
+- **Why:** That wash is the sun-path language; a color wheel is not a sky.
+- **Do not reverse without user ask.**
+
+## New items are Untitled until named
+
+- **Date:** 2026-09-16
+- **Decision:** Create scene / variable / palette / theme stores **Untitled** (translated). Editors have no Name field. While the open item is still a placeholder name, a corner FAB (**Name scene/palette/variable/theme**) opens the rename dialog, prefilled with a logical name (`{Area} Circadian` for circadian scenes, area name for simple, Variable / Palette / Theme otherwise). Unnamed scene cards also show a rename control left of the overflow menu.
+- **Why:** Forcing a name at create blocked getting to the editor. The FAB is the prompt once you can see what you made.
+- **Do not reverse without user ask.**
+
 ## Add light is the last Lys tile; unavailable stays editable when caps are known
 
 - **Date:** 2026-09-16

@@ -126,6 +126,10 @@
       "dial_view": "Dial view",
       "preview_location": "Preview another location",
       "use_home_location": "Use home location",
+      "name_scene": "Name scene",
+      "name_palette": "Name palette",
+      "name_variable": "Name variable",
+      "name_theme": "Name theme",
       "reset_sun_now": "Reset sun to current time"
     },
     "save_warn": {
@@ -160,6 +164,13 @@
       "brightness_sub": "0–100% by solar event",
       "overridden_dusk": "{name} uses the dusk minimum ({solar_time} solar dusk)",
       "seasonal_fallback": "Seasonal fallback (no real solar event this day)"
+    },
+    "naming": {
+      "circadian_scene": "{area} Circadian",
+      "circadian_fallback": "Circadian",
+      "variable": "Variable",
+      "palette": "Palette",
+      "theme": "Theme"
     },
     "fields": {
       "scene_name": {

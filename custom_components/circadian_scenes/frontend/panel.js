@@ -311,6 +311,10 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockBrightAnimRaf = undefined;
     this._clockBrightDragging = false;
     this._clockStickySeconds = undefined;
+    this._clockEnterPlayed = false;
+    this._simpleEnterPlayed = false;
+    this._surfaceKind = "none";
+    this._motionFromKind = "none";
     this._layoutDialChromeFn = undefined;
     this._clockResizeObserver = undefined;
     this._sunPathHome = undefined;
@@ -1242,6 +1246,51 @@ class CircadianScenesPanel extends HTMLElement {
           }
           to {
             transform: translate(-50%, -50%) rotate(0deg);
+          }
+        }
+        .sun-light-clock-face.clock-face-exit {
+          animation:
+            clock-face-fade 500ms cubic-bezier(0.4, 0, 1, 1) both reverse,
+            clock-face-scale 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+        }
+        .sun-light-clock-face.clock-face-exit .sun-light-clock-overlay {
+          transform-origin: center center;
+          animation: clock-overlay-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+        }
+        .sun-light-clock-face.clock-face-exit .clock-sun-day-group {
+          transform-box: view-box;
+          transform-origin: center;
+          animation: clock-sun-counter-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+        }
+        .sun-light-clock-face.clock-face-exit .clock-event-layer {
+          transform-origin: center center;
+          animation: clock-overlay-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+        }
+        .sun-light-clock-face.clock-face-exit .clock-event-anchor {
+          animation: clock-event-counter-spin 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+        }
+        .simple-editor-host.simple-editor-enter,
+        .library-editor.simple-editor-enter {
+          transform-origin: center center;
+          animation:
+            clock-face-fade 750ms cubic-bezier(0.2, 0, 0, 1) both,
+            clock-face-scale 1500ms cubic-bezier(0.2, 0, 0, 1) both;
+        }
+        .simple-editor-host.simple-editor-exit,
+        .library-editor.simple-editor-exit {
+          transform-origin: center center;
+          animation:
+            clock-face-fade 500ms cubic-bezier(0.4, 0, 1, 1) both reverse,
+            clock-face-scale 750ms cubic-bezier(0.4, 0, 1, 1) both reverse;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .sun-light-clock-face.clock-face-enter,
+          .sun-light-clock-face.clock-face-exit,
+          .simple-editor-host.simple-editor-enter,
+          .simple-editor-host.simple-editor-exit,
+          .library-editor.simple-editor-enter,
+          .library-editor.simple-editor-exit {
+            animation-duration: 1ms !important;
           }
         }
         /* Registered via CSS.registerProperty (document), not @property here —
@@ -4425,6 +4474,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
     }
     this._leaveConfirmDone = false;
+    this._motionFromKind = this._surfaceKind || "none";
     if (hash === "new") {
       void this._createLibraryItem("scene");
       return;
@@ -4576,6 +4626,11 @@ class CircadianScenesPanel extends HTMLElement {
       this._themes = [];
       this._floors = [];
     }
+    if (!this._panelLoadIsCurrent(token)) {
+      return;
+    }
+    await this._transitionSurfaces(this._motionFromKind, "none");
+    this._motionFromKind = undefined;
     this._render();
   }
 
@@ -4658,6 +4713,9 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
+    const nextKind = this._error ? "none" : this._editorMotionKind();
+    await this._transitionSurfaces(this._motionFromKind, nextKind);
+    this._motionFromKind = undefined;
     this._resetSession();
     this._render();
   }
@@ -4685,6 +4743,297 @@ class CircadianScenesPanel extends HTMLElement {
     return String(raw).replace(/\{(\w+)\}/g, (match, key) =>
       vars[key] != null ? String(vars[key]) : match
     );
+  }
+
+  _editorMotionKind() {
+    if (this._view === "theme") {
+      return "dial";
+    }
+    if (this._view === "variable" || this._view === "palette") {
+      return "simple";
+    }
+    if (this._view === "edit") {
+      if (this._formData?.kind === "simple") {
+        return "simple";
+      }
+      if (this._lightView === "table") {
+        return "other";
+      }
+      return "dial";
+    }
+    return "none";
+  }
+
+  _prefersReducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  _waitForAnimation(el, name, fallbackMs) {
+    return new Promise((resolve) => {
+      if (!el) {
+        resolve();
+        return;
+      }
+      let done = false;
+      const finish = () => {
+        if (done) {
+          return;
+        }
+        done = true;
+        el.removeEventListener("animationend", onEnd);
+        resolve();
+      };
+      const onEnd = (ev) => {
+        if (ev.target !== el) {
+          return;
+        }
+        if (name && ev.animationName && ev.animationName !== name) {
+          return;
+        }
+        finish();
+      };
+      el.addEventListener("animationend", onEnd);
+      window.setTimeout(finish, fallbackMs);
+    });
+  }
+
+  async _playClockExitAnimation() {
+    const face = this._clockFaceEl;
+    if (!face?.isConnected || this._prefersReducedMotion()) {
+      return;
+    }
+    face.classList.remove("clock-face-enter");
+    void face.offsetWidth;
+    face.classList.add("clock-face-exit");
+    const idle =
+      this._clockSunDisplayedSeconds ?? this._clockSunIdleSeconds();
+    const to =
+      (((idle - 6 * 3600) % SECONDS_PER_DAY) + SECONDS_PER_DAY) %
+      SECONDS_PER_DAY;
+    this._animateClockSunArc(idle, to, 750, { forward: false });
+    await this._waitForAnimation(face, "clock-face-scale", 850);
+  }
+
+  async _playSimpleExitAnimation() {
+    const el =
+      this._simpleEditorHost ||
+      this._contentEl?.querySelector(".simple-editor-host, .library-editor");
+    if (!el?.isConnected || this._prefersReducedMotion()) {
+      return;
+    }
+    el.classList.remove("simple-editor-enter");
+    void el.offsetWidth;
+    el.classList.add("simple-editor-exit");
+    await this._waitForAnimation(el, "clock-face-scale", 850);
+  }
+
+  _playSimpleEnterIfNeeded(el) {
+    if (!el) {
+      return;
+    }
+    if (this._simpleEnterPlayed || this._prefersReducedMotion()) {
+      this._simpleEnterPlayed = true;
+      return;
+    }
+    this._simpleEnterPlayed = true;
+    el.classList.remove("simple-editor-exit");
+    void el.offsetWidth;
+    el.classList.add("simple-editor-enter");
+    const clear = (ev) => {
+      if (ev.animationName && ev.animationName !== "clock-face-scale") {
+        return;
+      }
+      el.classList.remove("simple-editor-enter");
+      el.removeEventListener("animationend", clear);
+    };
+    el.addEventListener("animationend", clear);
+  }
+
+  async _transitionSurfaces(fromKind, toKind) {
+    const from = fromKind || "none";
+    const to = toKind || "none";
+    if (from === "dial" && to !== "dial") {
+      await this._playClockExitAnimation();
+    }
+    if (from === "simple" && to !== "simple") {
+      await this._playSimpleExitAnimation();
+    }
+    if (to === "dial" && from === "dial") {
+      this._clockEnterPlayed = true;
+    } else if (to === "dial") {
+      this._clockEnterPlayed = false;
+    }
+    if (to === "simple" && from === "simple") {
+      this._simpleEnterPlayed = true;
+    } else if (to === "simple") {
+      this._simpleEnterPlayed = false;
+    }
+  }
+
+  _untitledLabel() {
+    return this._t("frontend.common.untitled", "Untitled");
+  }
+
+  _placeholderNames() {
+    return new Set([
+      this._untitledLabel(),
+      this._t("frontend.common.new_scene", "New scene"),
+      this._t("frontend.library.new_variable", "New variable"),
+      this._t("frontend.library.new_palette", "New palette"),
+      this._t("frontend.library.new_theme", "New theme"),
+    ]);
+  }
+
+  _nameIsPlaceholder(name) {
+    const trimmed = String(name || "").trim();
+    return !trimmed || this._placeholderNames().has(trimmed);
+  }
+
+  _areaDisplayName(areaId) {
+    if (!areaId) {
+      return "";
+    }
+    for (const floor of this._floors || []) {
+      for (const area of floor.areas || []) {
+        if (area.id === areaId) {
+          return area.name || "";
+        }
+      }
+    }
+    return "";
+  }
+
+  _suggestedSceneName(scene) {
+    const area = this._areaDisplayName(scene?.area);
+    if (scene?.kind === "simple") {
+      return area || this._untitledLabel();
+    }
+    return area
+      ? this._t("frontend.naming.circadian_scene", "{area} Circadian", { area })
+      : this._t("frontend.naming.circadian_fallback", "Circadian");
+  }
+
+  _suggestedLibraryName() {
+    if (this._view === "palette") {
+      return this._t("frontend.naming.palette", "Palette");
+    }
+    if (this._view === "theme") {
+      return this._t("frontend.naming.theme", "Theme");
+    }
+    return this._t("frontend.naming.variable", "Variable");
+  }
+
+  _currentItemIsUnnamed() {
+    if (this._view === "edit") {
+      return this._nameIsPlaceholder(this._formData?.scene_name);
+    }
+    if (this._view === "theme") {
+      return this._nameIsPlaceholder(this._themeDraft?.name);
+    }
+    if (this._view === "variable" || this._view === "palette") {
+      return this._nameIsPlaceholder(this._variableDraft?.name);
+    }
+    return false;
+  }
+
+  _nameFabLabel() {
+    if (this._view === "palette") {
+      return this._t("frontend.actions.name_palette", "Name palette");
+    }
+    if (this._view === "variable") {
+      return this._t("frontend.actions.name_variable", "Name variable");
+    }
+    if (this._view === "theme") {
+      return this._t("frontend.actions.name_theme", "Name theme");
+    }
+    return this._t("frontend.actions.name_scene", "Name scene");
+  }
+
+  _syncNameFab() {
+    if (!this._currentItemIsUnnamed()) {
+      this._setFab(null);
+      return;
+    }
+    this._setFab(
+      this._fabButton(this._nameFabLabel(), "mdi:pencil", () => {
+        void this._openNameItemDialog();
+      })
+    );
+  }
+
+  async _openNameItemDialog() {
+    if (this._view === "edit") {
+      await this._openSaveDialog({ rename: true });
+      return;
+    }
+    const isTheme = this._view === "theme";
+    const current = isTheme
+      ? this._themeDraft?.name
+      : this._variableDraft?.name;
+    const suggested = this._nameIsPlaceholder(current)
+      ? this._suggestedLibraryName()
+      : current;
+    await this._openLibraryRenameDialog({
+      title: this._nameFabLabel(),
+      value: suggested,
+      onSave: async (name) => {
+        if (isTheme) {
+          if (!this._themeDraft) {
+            return;
+          }
+          this._themeDraft.name = name;
+          await this._saveThemeQuiet();
+        } else if (this._variableDraft) {
+          this._variableDraft.name = name;
+          await this._saveVariableQuiet();
+        }
+        this._syncAppBarTitle();
+        this._syncNameFab();
+      },
+    });
+  }
+
+  async _openLibraryRenameDialog({ title, value, onSave }) {
+    this.shadowRoot.querySelector("ha-dialog.save-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "save-dialog";
+    dialog.setAttribute("header-title", title);
+    dialog.open = true;
+    const nameInput = this._haInput(
+      this._t("frontend.common.name", "Name"),
+      value || ""
+    );
+    nameInput.required = true;
+    nameInput.setAttribute("autofocus", "");
+    dialog.appendChild(nameInput);
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
+    const save = document.createElement("ha-button");
+    save.slot = "primaryAction";
+    save.variant = "brand";
+    save.textContent = this._t("frontend.common.save", "Save");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    save.addEventListener("click", async () => {
+      const name = (nameInput.value || "").trim();
+      if (!name) {
+        nameInput.reportValidity?.();
+        return;
+      }
+      dialog.open = false;
+      await onSave(name);
+    });
+    footer.append(cancel, save);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
   }
 
   _fieldLabel(name) {
@@ -4732,6 +5081,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._view === "edit" || this._view === "theme") {
       this._ensureSunPath();
     }
+    this._surfaceKind = this._editorMotionKind();
   }
 
   _parkSunPath() {
@@ -5161,9 +5511,7 @@ class CircadianScenesPanel extends HTMLElement {
           type: `${DOMAIN}/save`,
           data: {
             kind: "circadian",
-            scene_name: areaName
-              ? `${areaName} Circadian`
-              : this._t("frontend.common.new_scene", "New scene"),
+            scene_name: this._untitledLabel(),
             area: areaId || null,
             theme_id: "default",
             membership: { exclude: [], include: [] },
@@ -5192,7 +5540,7 @@ class CircadianScenesPanel extends HTMLElement {
         const saved = await this._hass.callWS({
           type: `${DOMAIN}/save_theme`,
           data: {
-            name: this._t("frontend.library.new_theme", "New theme"),
+            name: this._untitledLabel(),
             events: structuredClone(source.events),
           },
         });
@@ -5211,12 +5559,12 @@ class CircadianScenesPanel extends HTMLElement {
       this._pendingVariableFromDraft = null;
       const data = isPalette
         ? {
-            name: this._t("frontend.library.new_palette", "New palette"),
+            name: this._untitledLabel(),
             kind: "palette",
             slots: defaultPaletteSlots(),
           }
         : {
-            name: this._t("frontend.library.new_variable", "New variable"),
+            name: this._untitledLabel(),
             kind: "color",
             brightness: Number(from?.brightness) || 255,
             color: colorPayloadFromDraft(from || this._variableEditorDraft(null)),
@@ -5455,6 +5803,8 @@ class CircadianScenesPanel extends HTMLElement {
         this._variableId = null;
         this._variableDraft = this._variableWorkingCopy(null);
         this._error = null;
+        await this._transitionSurfaces(this._motionFromKind, "simple");
+        this._motionFromKind = undefined;
         this._render();
         return;
       }
@@ -5468,6 +5818,8 @@ class CircadianScenesPanel extends HTMLElement {
         this._view = "list";
         this._variableId = null;
         this._variableDraft = null;
+        await this._transitionSurfaces(this._motionFromKind, "none");
+        this._motionFromKind = undefined;
         this._render();
         return;
       }
@@ -5475,6 +5827,8 @@ class CircadianScenesPanel extends HTMLElement {
       this._alignLibraryView(variable);
       this._variableDraft = this._variableWorkingCopy(variable);
       this._error = null;
+      await this._transitionSurfaces(this._motionFromKind, "simple");
+      this._motionFromKind = undefined;
       this._render();
       return;
     } catch (err) {
@@ -5487,6 +5841,11 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
+    await this._transitionSurfaces(
+      this._motionFromKind,
+      this._variableDraft ? "simple" : "none"
+    );
+    this._motionFromKind = undefined;
     this._render();
   }
 
@@ -5590,10 +5949,10 @@ class CircadianScenesPanel extends HTMLElement {
         scroll?.replaceChildren(host);
         this._mountWorkspacePage(page);
         this._mountPageBanners(stage);
-        renderPaletteEditor(this, host, { glowHost: this._stageBgEl(stage) });
+        renderPaletteEditor(this, host, { glowHost: null });
       }
       this._syncWorkspaceScrollport();
-      requestAnimationFrame(() => this._simpleWheelGlowLayout?.());
+      this._playSimpleEnterIfNeeded(host);
       return;
     }
     this._fillVariableEditor(host);
@@ -5607,6 +5966,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._mountPageBanners(stage);
     }
     this._syncWorkspaceScrollport();
+    this._playSimpleEnterIfNeeded(host);
   }
 
   _fillVariableEditor(host) {
@@ -5619,17 +5979,7 @@ class CircadianScenesPanel extends HTMLElement {
       "frontend.library.variable_edit_hint",
       "Color and brightness are shared by every theme or light that still uses this variable."
     );
-    const nameInput = this._haInput(
-      this._t("frontend.common.name", "Name"),
-      working.name || this._t("frontend.library.new_variable", "New variable")
-    );
-    const bindName = () => {
-      working.name = (nameInput.value || "").trim();
-      this._saveSoon();
-    };
-    nameInput.addEventListener("value-changed", bindName);
-    nameInput.addEventListener("change", bindName);
-    host.append(hint, nameInput);
+    host.append(hint);
     const draft = working.colorDraft;
     const briInput = this._haInput(
       this._t("frontend.lights.brightness", "Brightness"),
@@ -5733,6 +6083,11 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
+    await this._transitionSurfaces(
+      this._motionFromKind,
+      this._themeDraft ? "dial" : "none"
+    );
+    this._motionFromKind = undefined;
     this._resetSession();
     this._render();
   }
@@ -5771,22 +6126,6 @@ class CircadianScenesPanel extends HTMLElement {
     } else {
       this._mountWorkspacePage(page);
       if (stage) {
-        const nameInput = this._haInput(
-          this._t("frontend.common.name", "Name"),
-          this._themeDraft?.name || ""
-        );
-        const bindThemeName = () => {
-          if (!this._themeDraft) {
-            return;
-          }
-          this._themeDraft.name = (nameInput.value || "").trim();
-          this._syncAppBarTitle();
-          this._saveSoon();
-        };
-        nameInput.addEventListener("value-changed", bindThemeName);
-        nameInput.addEventListener("change", bindThemeName);
-        nameInput.classList.add("library-name-field");
-        this._stageScrollEl(stage)?.prepend(nameInput);
         this._mountSunPath(stage);
       }
     }
@@ -7091,10 +7430,10 @@ class CircadianScenesPanel extends HTMLElement {
     });
   }
 
-  /** Save FAB removed — edits write immediately. */
+  /** Name FAB when the open item is still Untitled. */
   _syncSaveFab() {
     this._saveFabVisible = false;
-    this._setFab(null);
+    this._syncNameFab();
   }
 
   _fabButton(label, icon, onClick) {
@@ -9145,7 +9484,9 @@ class CircadianScenesPanel extends HTMLElement {
     const form = { ...(scene.form || {}) };
     this.shadowRoot.querySelector("ha-dialog.save-dialog")?.remove();
     const data = {
-      scene_name: form.scene_name || scene.scene_name || "Scene",
+      scene_name: this._nameIsPlaceholder(form.scene_name || scene.scene_name)
+        ? this._suggestedSceneName(scene)
+        : form.scene_name || scene.scene_name || this._suggestedSceneName(scene),
       area: form.area || scene.area || null,
       description: form.description || "",
       labels: [...(form.labels || scene.labels || [])],
@@ -9968,10 +10309,10 @@ class CircadianScenesPanel extends HTMLElement {
         ...areaLights.filter((id) => !exclude.has(id)),
         ...include.filter((id) => !areaLights.includes(id)),
       ];
-      const glowHost = this._narrow ? null : this._stageBgEl(stage);
+      const glowHost = null;
       renderSimpleEditor(this, host, { glowHost });
       this._syncWorkspaceScrollport();
-      requestAnimationFrame(() => this._simpleWheelGlowLayout?.());
+      this._playSimpleEnterIfNeeded(host);
       return;
     }
 
@@ -12059,7 +12400,9 @@ class CircadianScenesPanel extends HTMLElement {
   async _openSaveDialog({ rename = false, focus } = {}) {
     this.shadowRoot.querySelector("ha-dialog.save-dialog")?.remove();
     const data = {
-      scene_name: this._formData.scene_name || "Circadian",
+      scene_name: this._nameIsPlaceholder(this._formData.scene_name)
+        ? this._suggestedSceneName(this._formData)
+        : this._formData.scene_name || this._suggestedSceneName(this._formData),
       area: this._formData.area || null,
       description: this._formData.description || "",
       labels: [...(this._formData.labels || [])],
@@ -17231,8 +17574,7 @@ class CircadianScenesPanel extends HTMLElement {
     requestAnimationFrame(() => layoutDialChrome());
 
     this._bindClockSunDrag(face, [this._clockSunHitEl, this._clockHandleHitEl]);
-    // Enter once per editor visit (not on date/scene redraws). Cleared when
-    // returning to the list so list → edit plays again.
+    // Enter when arriving from a non-dial surface. Dial→dial skips it.
     // Optimistic paint from the list sun_path has no lights — do not consume
     // the enter flag there; preview rebuild (with rings) should still animate.
     const optimisticListCurve =

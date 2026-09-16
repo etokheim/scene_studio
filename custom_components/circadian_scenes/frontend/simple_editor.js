@@ -602,17 +602,6 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   }
   const wrap = document.createElement("div");
   wrap.className = "simple-editor";
-  const nameInput = panel._haInput(
-    panel._t("frontend.common.name", "Name"),
-    working.name || panel._t("frontend.library.new_palette", "New palette")
-  );
-  nameInput.classList.add("library-name-field");
-  const bindName = () => {
-    working.name = (nameInput.value || "").trim();
-    panel._saveSoon();
-  };
-  nameInput.addEventListener("value-changed", bindName);
-  nameInput.addEventListener("change", bindName);
 
   const wheels = document.createElement("div");
   wheels.className = "simple-wheels";
@@ -776,7 +765,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       tiles.appendChild(selector);
     });
   };
-  wrap.append(nameInput, wheels, scroller);
+  wrap.append(wheels, scroller);
   syncTiles();
   host.replaceChildren(wrap);
   wheel.sync();

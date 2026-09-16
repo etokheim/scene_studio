@@ -184,6 +184,8 @@ export const LANDING_CSS = `
     z-index: 2;
     margin-left: auto;
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
     color: #fff;
     --mdc-icon-button-size: 36px;
   }
@@ -657,7 +659,10 @@ function renderSceneCard(panel, scene) {
   body.className = "card-body";
   const name = document.createElement("div");
   name.className = "card-name";
-  name.textContent = scene.scene_name || scene.name || "Scene";
+  name.textContent =
+    scene.scene_name ||
+    scene.name ||
+    panel._t("frontend.common.untitled", "Untitled");
   const sub = document.createElement("div");
   sub.className = "card-sub";
   sub.textContent =
@@ -667,6 +672,18 @@ function renderSceneCard(panel, scene) {
   body.append(name, sub);
   const overflowSlot = document.createElement("div");
   overflowSlot.className = "card-overflow-slot";
+  if (panel._nameIsPlaceholder?.(scene.scene_name)) {
+    const rename = iconButton(
+      "mdi:pencil",
+      panel._t("frontend.common.rename", "Rename")
+    );
+    rename.classList.add("card-rename");
+    rename.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      void panel._openListSceneMetaDialog(scene);
+    });
+    overflowSlot.appendChild(rename);
+  }
   const overflow = panel._listSceneOverflowMenu(scene);
   overflow.classList.add("card-overflow");
   overflowSlot.appendChild(overflow);
