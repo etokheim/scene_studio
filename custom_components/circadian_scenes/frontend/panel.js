@@ -4230,6 +4230,8 @@ class CircadianScenesPanel extends HTMLElement {
     if (hadSun) {
       this._parkSunPath();
     }
+    // Incoming dial may have skipped horizon layout while the overlay existed.
+    this._layoutDialChromeFn?.();
   }
 
   _startOutgoingExitAnimation(layer) {
@@ -4268,7 +4270,12 @@ class CircadianScenesPanel extends HTMLElement {
     while (scroll?.firstChild) {
       layer.appendChild(scroll.firstChild);
     }
-    this._clockHorizonBackEl = undefined;
+    if (
+      this._clockHorizonBackEl &&
+      layer.contains(this._clockHorizonBackEl)
+    ) {
+      this._clockHorizonBackEl = undefined;
+    }
     this._outgoingStageLayer = layer;
     stage.appendChild(layer);
     this._startOutgoingExitAnimation(layer);
@@ -14144,12 +14151,18 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _layoutClockHorizonBack() {
-    if (this._outgoingStageLayer || this._editorMotionKind() !== "dial") {
+    if (this._editorMotionKind() !== "dial") {
       return;
     }
     const back = this._clockHorizonBackEl;
     const face = this._clockFaceEl;
     if (!back || !face) {
+      return;
+    }
+    const overlay = this._outgoingStageLayer;
+    // Do not steal the fading-out dial's sky. Incoming circadian still needs
+    // layout while a simple-editor overlay is exiting.
+    if (overlay && (overlay.contains(back) || overlay.contains(face))) {
       return;
     }
     const stage = this._contentEl?.querySelector(".stage-col");
