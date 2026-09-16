@@ -1263,8 +1263,8 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .stage-motion-layer.stage-motion-exit-active {
           animation:
-            stage-surface-fade-out 280ms cubic-bezier(0.4, 0, 1, 1) both,
-            stage-surface-exit-scale 400ms cubic-bezier(0.4, 0, 1, 1) both;
+            stage-surface-fade-out 280ms cubic-bezier(0.2, 0, 0, 1) both,
+            stage-surface-exit-scale 400ms cubic-bezier(0.2, 0, 0, 1) both;
         }
         @media (prefers-reduced-motion: reduce) {
           .sun-light-clock-face.clock-face-enter,
@@ -3866,6 +3866,11 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._leaveConfirmDone = false;
     this._motionFromKind = this._surfaceKind || "none";
+    void this._transitionSurfaces(
+      this._motionFromKind,
+      this._motionKindForHash(hash)
+    );
+    this._motionFromKind = undefined;
     if (hash === "new") {
       void this._createLibraryItem("scene");
       return;
@@ -3995,6 +4000,11 @@ class CircadianScenesPanel extends HTMLElement {
 
   async _loadList() {
     const token = this._startPanelLoad();
+    const hasCache =
+      Array.isArray(this._items) && (this._floors || []).length > 0;
+    if (hasCache) {
+      this._render();
+    }
     try {
       const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
       if (!this._panelLoadIsCurrent(token)) {
@@ -4020,8 +4030,9 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
-    await this._transitionSurfaces(this._motionFromKind, "none");
-    this._motionFromKind = undefined;
+    if (hasCache) {
+      return;
+    }
     this._render();
   }
 
@@ -4104,9 +4115,6 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
-    const nextKind = this._error ? "none" : this._editorMotionKind();
-    await this._transitionSurfaces(this._motionFromKind, nextKind);
-    this._motionFromKind = undefined;
     this._resetSession();
     this._render();
   }
@@ -4148,6 +4156,32 @@ class CircadianScenesPanel extends HTMLElement {
         return "simple";
       }
       return "dial";
+    }
+    return "none";
+  }
+
+  _motionKindForSceneId(sceneId) {
+    const item = (this._items || []).find((scene) => scene.id === sceneId);
+    if (item?.kind === "simple") {
+      return "simple";
+    }
+    if (item) {
+      return "dial";
+    }
+    return this._formData?.kind === "simple" ? "simple" : "dial";
+  }
+
+  _motionKindForHash(hash) {
+    const value = String(hash || "").replace(/^#/, "");
+    if (value.startsWith("theme/")) {
+      return "dial";
+    }
+    if (value.startsWith("variable/") || value.startsWith("palette/")) {
+      return "simple";
+    }
+    const edit = value.match(/^edit\/(.+)$/);
+    if (edit) {
+      return this._motionKindForSceneId(edit[1]);
     }
     return "none";
   }
@@ -4198,19 +4232,46 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
+  _startOutgoingExitAnimation(layer) {
+    if (!layer || layer.classList.contains("stage-motion-exit-active")) {
+      return;
+    }
+    void layer.offsetWidth;
+    layer.classList.add("stage-motion-exit-active");
+    void this._waitForAnimation(layer, "stage-surface-exit-scale", 480).then(
+      () => {
+        if (this._outgoingStageLayer === layer) {
+          this._disposeOutgoingStageLayer();
+        }
+      }
+    );
+  }
+
   _liftOutgoingStageLayer() {
-    this._disposeOutgoingStageLayer();
+    if (this._outgoingStageLayer) {
+      return;
+    }
     const stage = this._contentEl?.querySelector(".stage-col");
     const scroll = this._stageScrollEl(stage);
-    if (!scroll?.firstChild) {
+    const bg = this._stageBgEl(stage);
+    if (!scroll?.firstChild && !bg?.firstChild) {
       return;
     }
     const layer = document.createElement("div");
     layer.className = "stage-motion-layer";
-    while (scroll.firstChild) {
+    // Horizon/bloom live on .stage-bg, not in the scrollport. Lift them with
+    // the editor so they fade out instead of being re-parented onto the next
+    // surface.
+    while (bg?.firstChild) {
+      layer.appendChild(bg.firstChild);
+    }
+    while (scroll?.firstChild) {
       layer.appendChild(scroll.firstChild);
     }
+    this._clockHorizonBackEl = undefined;
     this._outgoingStageLayer = layer;
+    stage.appendChild(layer);
+    this._startOutgoingExitAnimation(layer);
   }
 
   _attachOutgoingStageLayer(stage) {
@@ -4222,16 +4283,10 @@ class CircadianScenesPanel extends HTMLElement {
       this._disposeOutgoingStageLayer();
       return;
     }
-    stage.appendChild(layer);
-    void layer.offsetWidth;
-    layer.classList.add("stage-motion-exit-active");
-    void this._waitForAnimation(layer, "stage-surface-exit-scale", 480).then(
-      () => {
-        if (this._outgoingStageLayer === layer) {
-          this._disposeOutgoingStageLayer();
-        }
-      }
-    );
+    if (layer.parentNode !== stage) {
+      stage.appendChild(layer);
+    }
+    this._startOutgoingExitAnimation(layer);
   }
 
   _playSimpleEnterIfNeeded(el) {
@@ -4282,7 +4337,10 @@ class CircadianScenesPanel extends HTMLElement {
     const to = toKind || "none";
     if (from !== to && !this._prefersReducedMotion()) {
       this._liftOutgoingStageLayer();
-    } else {
+      if (from === "dial") {
+        this._forgetClockDom({ keepOverlay: true });
+      }
+    } else if (!this._outgoingStageLayer) {
       this._disposeOutgoingStageLayer();
     }
     if (to === "dial" && from === "dial") {
@@ -4694,6 +4752,8 @@ class CircadianScenesPanel extends HTMLElement {
 
   _mountWorkspacePage(page, { resetStageScroll = true } = {}) {
     this._captureAreaRailScroll();
+    const overlay = this._outgoingStageLayer;
+    overlay?.remove();
     this._contentEl.replaceChildren(page);
     this._bindAreaRailScroll(page.querySelector(".area-rail"));
     if (resetStageScroll) {
@@ -4791,7 +4851,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._abortPreview();
     this._cancelClockSunArc();
     this._cancelSunPathMorph();
-    this._forgetClockDom();
+    this._forgetClockDom({
+      keepOverlay: Boolean(this._outgoingStageLayer),
+    });
     this._form = undefined;
     this._parkSunPath();
     this._sunPath = null;
@@ -5239,8 +5301,6 @@ class CircadianScenesPanel extends HTMLElement {
         this._variableId = null;
         this._variableDraft = this._variableWorkingCopy(null);
         this._error = null;
-        await this._transitionSurfaces(this._motionFromKind, "simple");
-        this._motionFromKind = undefined;
         this._render();
         return;
       }
@@ -5254,8 +5314,6 @@ class CircadianScenesPanel extends HTMLElement {
         this._view = "list";
         this._variableId = null;
         this._variableDraft = null;
-        await this._transitionSurfaces(this._motionFromKind, "none");
-        this._motionFromKind = undefined;
         this._render();
         return;
       }
@@ -5263,8 +5321,6 @@ class CircadianScenesPanel extends HTMLElement {
       this._alignLibraryView(variable);
       this._variableDraft = this._variableWorkingCopy(variable);
       this._error = null;
-      await this._transitionSurfaces(this._motionFromKind, "simple");
-      this._motionFromKind = undefined;
       this._render();
       return;
     } catch (err) {
@@ -5277,11 +5333,6 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
-    await this._transitionSurfaces(
-      this._motionFromKind,
-      this._variableDraft ? "simple" : "none"
-    );
-    this._motionFromKind = undefined;
     this._render();
   }
 
@@ -5519,11 +5570,6 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
-    await this._transitionSurfaces(
-      this._motionFromKind,
-      this._themeDraft ? "dial" : "none"
-    );
-    this._motionFromKind = undefined;
     this._resetSession();
     this._render();
   }
@@ -6700,51 +6746,6 @@ class CircadianScenesPanel extends HTMLElement {
       "These settings apply to every room. Changes take effect immediately."
     );
     body.appendChild(note);
-
-    const row = document.createElement("div");
-    row.className = "setup-link-row";
-    const labelWrap = document.createElement("div");
-    const label = document.createElement("div");
-    label.className = "name";
-    label.textContent = this._t(
-      "frontend.settings.hide_created",
-      "Hide created scenes in Home Assistant"
-    );
-    const helper = document.createElement("div");
-    helper.className = "sidebar-note";
-    helper.style.margin = "4px 0 0";
-    helper.textContent = this._t(
-      "frontend.settings.hide_created_helper",
-      "Marks native scenes created by this integration as hidden in the HA UI (entity registry). You can still manage them here."
-    );
-    labelWrap.append(label, helper);
-    const toggle = document.createElement("ha-switch");
-    toggle.checked = Boolean(this._settings?.hide_managed_native_scenes);
-    toggle.addEventListener("change", async () => {
-      const next = Boolean(toggle.checked);
-      toggle.disabled = true;
-      try {
-        const result = await this._hass.callWS({
-          type: `${DOMAIN}/update_settings`,
-          settings: { hide_managed_native_scenes: next },
-        });
-        this._adoptSettings(result?.settings);
-        this._managedScenes = await this._hass.callWS({
-          type: `${DOMAIN}/list_managed_native_scenes`,
-        });
-        // Refresh list badges without dismissing this settings sidebar.
-        if (this._view === "list") {
-          this._renderList({ keepSidebar: true });
-        }
-      } catch (err) {
-        toggle.checked = !next;
-        window.alert(err.message || String(err));
-      } finally {
-        toggle.disabled = false;
-      }
-    });
-    row.append(labelWrap, toggle);
-    body.appendChild(row);
 
     const intervalRow = document.createElement("div");
     intervalRow.className = "setup-link-row automatically-update-lights-interval-row";
@@ -14143,6 +14144,9 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _layoutClockHorizonBack() {
+    if (this._outgoingStageLayer || this._editorMotionKind() !== "dial") {
+      return;
+    }
     const back = this._clockHorizonBackEl;
     const face = this._clockFaceEl;
     if (!back || !face) {
@@ -15648,7 +15652,7 @@ class CircadianScenesPanel extends HTMLElement {
    * the body with the linear chart, those nodes are detached — patching them
    * would succeed and skip rebuilding the visible dial.
    */
-  _forgetClockDom() {
+  _forgetClockDom({ keepOverlay = false } = {}) {
     if (this._clockOutsideClick) {
       this.shadowRoot?.removeEventListener("click", this._clockOutsideClick);
       this._clockOutsideClick = null;
@@ -15659,10 +15663,12 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockOverlayEl = undefined;
     this._clockGlowLayer = undefined;
     this._layoutDialChromeFn = undefined;
-    this._clockHorizonBackEl?.remove();
+    if (!keepOverlay) {
+      this._clockHorizonBackEl?.remove();
+      this._clockLegendEl?.remove();
+    }
     this._clockHorizonBackEl = undefined;
     this._clockFaceEl = undefined;
-    this._clockLegendEl?.remove();
     this._clockLegendEl = undefined;
     this._clockBrightnessGradEl = undefined;
     this._clockBrightnessFillEl = undefined;

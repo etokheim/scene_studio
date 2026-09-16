@@ -72,8 +72,6 @@
     "settings": {
       "title": "Settings",
       "intro": "These settings apply to every room. Changes take effect immediately.",
-      "hide_created": "Hide created scenes in Home Assistant",
-      "hide_created_helper": "Marks native scenes created by this integration as hidden in the HA UI (entity registry). You can still manage them here.",
       "automatically_update_lights": "Automatically update lights",
       "automatically_update_lights_on_helper": "After you activate a scene, lights keep adjusting on the interval from Settings so the room follows the sun. Tap to turn this off for every room.",
       "automatically_update_lights_off_helper": "Automatic updates are off. Activating a scene applies lights once. Tap to turn updates back on for every room.",

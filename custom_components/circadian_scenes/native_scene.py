@@ -354,39 +354,10 @@ def _native_scene_entity_id(hass: HomeAssistant, config_id: str) -> str | None:
     return None
 
 
-async def _async_register_and_maybe_hide(
-    hass: HomeAssistant, config_id: str, entity_id: str
-) -> None:
-    """Track a created YAML scene and honor the hide-from-UI setting."""
+async def _async_register_managed(hass: HomeAssistant, config_id: str) -> None:
+    """Track a created YAML scene in the store."""
     store = hass.data[DOMAIN][DATA_STORE]
     await store.async_register_managed_native_scene(config_id)
-    if store.settings.get("hide_managed_native_scenes"):
-        er.async_get(hass).async_update_entity(
-            entity_id, hidden_by=er.RegistryEntryHider.INTEGRATION
-        )
-
-
-def apply_managed_native_scene_visibility(hass: HomeAssistant, *, hidden: bool) -> int:
-    """Hide or unhide all managed native scenes in the entity registry."""
-    store = hass.data[DOMAIN][DATA_STORE]
-    entity_reg = er.async_get(hass)
-    hide_value = er.RegistryEntryHider.INTEGRATION if hidden else None
-    updated = 0
-    for config_id in list(store.managed_native_scene_ids):
-        entity_id = _native_scene_entity_id(hass, config_id)
-        if not entity_id:
-            continue
-        entry = entity_reg.async_get(entity_id)
-        if entry is None:
-            continue
-        # Never override a user-hidden entity.
-        if entry.hidden_by == er.RegistryEntryHider.USER:
-            continue
-        if entry.hidden_by == hide_value:
-            continue
-        entity_reg.async_update_entity(entity_id, hidden_by=hide_value)
-        updated += 1
-    return updated
 
 
 def list_managed_native_scenes(hass: HomeAssistant) -> list[dict[str, Any]]:
@@ -639,7 +610,7 @@ async def async_apply_area_setup(
                     "did not register it"
                 )
             entity_reg.async_update_entity(entity_id, area_id=area_id)
-            await _async_register_and_maybe_hide(hass, planned["id"], entity_id)
+            await _async_register_managed(hass, planned["id"])
             created_by_slot[slot] = {
                 "entity_id": entity_id,
                 "name": planned["name"],
@@ -694,7 +665,7 @@ async def async_create_native_scene(
             f"Created scene {name!r} but Home Assistant did not register it"
         )
     er.async_get(hass).async_update_entity(entity_id, area_id=area_id)
-    await _async_register_and_maybe_hide(hass, planned["id"], entity_id)
+    await _async_register_managed(hass, planned["id"])
     return {
         **planned,
         "entity_id": entity_id,
@@ -800,7 +771,7 @@ async def async_apply_native_drafts(
             )
         if area_id:
             entity_reg.async_update_entity(entity_id, area_id=area_id)
-        await _async_register_and_maybe_hide(hass, config_id, entity_id)
+        await _async_register_managed(hass, config_id)
         created[draft_id] = entity_id
     return {"created": created}
 

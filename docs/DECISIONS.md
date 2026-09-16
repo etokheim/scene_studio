@@ -533,6 +533,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Global setting: hide created scenes in HA UI
 
 - **Date:** 2026-08-30
+- **Superseded:** 2026-09-16 — the setting and registry hide-on-create path are removed. Store still drops leftover `hide_managed_native_scenes` on load. Native scenes this integration creates are not hidden by us; a “Hidden in Home Assistant” badge remains if HA itself hid the entity.
 - **Decision:** Panel list settings sidebar exposes `hide_managed_native_scenes` (default **on** since 3.0 / Store v2+). When on, managed native scenes get `hidden_by=INTEGRATION` in the entity registry (and new creates honor it). Toggle off clears integration hides. Never override `hidden_by=USER`. Storage version bumps use a Store `migrate_func` (v3 maps preference/interval renames).
 - **Why:** HA has no per-integration “hide my entities” config entry option that covers dynamically created YAML scenes; registry `hidden_by` is the supported UI hide. Default on keeps knot scenes out of the main HA scene list.
 - **Do not reverse without user ask.**
@@ -756,8 +757,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-16
 - **Supersedes in part:** clock enter plays once per editor visit (reset on list); 2026-09-16 reverse-exit before mount.
-- **Decision:** Switching between the empty stage, the circadian dial, and simple/variable/palette editors **crossfades**: outgoing `.stage-scroll` content is lifted into a `.stage-motion-layer` overlay while the next view mounts underneath. Enter and exit **both scale up** (in 0.92→1, out 1→1.08) with a ~280ms fade / ~400ms scale. The dial still adds a short overlay spin and sun arc on enter only. Dial→dial and simple→simple skip the motion. Empty stage uses the same enter. Reduced motion skips both.
-- **Why:** Awaiting a reverse (scale-down) exit made the swap feel slow and like the animation played backward. Overlapping scale-up matches a single direction.
+- **Decision:** Switching between the empty stage, the circadian dial, and simple/variable/palette editors **crossfades**: outgoing `.stage-scroll` **and** `.stage-bg` (horizon/bloom) content is lifted into a `.stage-motion-layer` overlay while the next view mounts underneath. Motion starts on hash change, not after the list/item websocket. Enter and exit **both scale up** (in 0.92→1, out 1→1.08) with a ~280ms fade / ~400ms scale using **ease-out only** (`cubic-bezier(0.2, 0, 0, 1)` — never ease-in). The dial still adds a short overlay spin and sun arc on enter only. Dial→dial and simple→simple skip the motion. Empty stage uses the same enter. Reduced motion skips both. Deselecting a selected rail card navigates immediately (do not wait for the card-glow opacity transition).
+- **Why:** Awaiting a reverse (scale-down) exit, then the list websocket, then a 450ms glow fade made leaving a circadian editor feel idle for half a second. Ease-in on exit delayed the first visible motion. Horizon lived on `.stage-bg`, so lifting only the scrollport left sky graphics on the next surface.
 - **Do not reverse without user ask.**
 
 ## Stage empty copy matches HA empty states

@@ -36,8 +36,6 @@
     "settings": {
       "title": "Einstellungen",
       "intro": "Diese Einstellungen gelten für jeden Raum. Änderungen wirken sofort.",
-      "hide_created": "Erstellte Szenen in Home Assistant ausblenden",
-      "hide_created_helper": "Markiert von dieser Integration erstellte native Szenen in der HA-Oberfläche als ausgeblendet (Entitätsregistry). Du kannst sie hier weiter verwalten.",
       "automatically_update_lights": "Lichter automatisch aktualisieren",
       "automatically_update_lights_on_helper": "Nach dem Aktivieren einer Szene passen sich die Lichter im Intervall aus den Einstellungen weiter an, damit der Raum der Sonne folgt. Tippen, um das für alle Räume auszuschalten.",
       "automatically_update_lights_off_helper": "Automatische Updates sind aus. Das Aktivieren einer Szene setzt die Lichter einmal. Tippen, um Updates für alle Räume wieder einzuschalten.",

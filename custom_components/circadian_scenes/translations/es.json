@@ -36,8 +36,6 @@
     "settings": {
       "title": "Ajustes",
       "intro": "Estos ajustes se aplican a todas las habitaciones. Los cambios tienen efecto de inmediato.",
-      "hide_created": "Ocultar escenas creadas en Home Assistant",
-      "hide_created_helper": "Marca las escenas nativas creadas por esta integración como ocultas en la IU de HA (registro de entidades). Aún puedes gestionarlas aquí.",
       "automatically_update_lights": "Actualizar luces automáticamente",
       "automatically_update_lights_on_helper": "Tras activar una escena, las luces siguen ajustándose con el intervalo de Ajustes para que la habitación siga el sol. Toca para desactivarlo en todas las habitaciones.",
       "automatically_update_lights_off_helper": "Las actualizaciones automáticas están desactivadas. Activar una escena aplica las luces una vez. Toca para volver a activar las actualizaciones en todas las habitaciones.",

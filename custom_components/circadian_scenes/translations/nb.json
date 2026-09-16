@@ -36,8 +36,6 @@
     "settings": {
       "title": "Innstillinger",
       "intro": "Disse innstillingene gjelder for alle rom. Endringer trer i kraft med en gang.",
-      "hide_created": "Skjul opprettede scener i Home Assistant",
-      "hide_created_helper": "Markerer native scener opprettet av denne integrasjonen som skjulte i HA-grensesnittet (enhetsregisteret). Du kan fortsatt administrere dem her.",
       "automatically_update_lights": "Oppdater lys automatisk",
       "automatically_update_lights_on_helper": "Når du aktiverer en scene, fortsetter lysene å justeres med intervallet fra Innstillinger, slik at rommet følger solen. Trykk for å slå dette av for alle rom.",
       "automatically_update_lights_off_helper": "Automatiske oppdateringer er av. Aktivering av en scene setter lysene én gang. Trykk for å slå oppdateringer på igjen for alle rom.",

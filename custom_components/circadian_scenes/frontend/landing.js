@@ -154,7 +154,13 @@ export const LANDING_CSS = `
     filter: blur(16px);
     transform: scale(1.1);
     opacity: 0;
-    transition: opacity 0.35s ease-out;
+    transition: opacity 0.35s cubic-bezier(0.2, 0, 0, 1);
+  }
+  .scene-card-slot .card-glow.card-mesh {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
   }
   .scene-card-slot.glow-on .card-glow {
     opacity: 0.55;
@@ -658,8 +664,19 @@ function renderSceneCard(panel, scene) {
   overflow.classList.add("card-overflow");
   overflowSlot.appendChild(overflow);
   cardEl.append(bg, body, overflowSlot);
-  const glow = makeSceneCardBg(scene);
-  glow.classList.add("card-glow");
+  const glowArt = makeSceneCardBg(scene);
+  glowArt.classList.add("card-glow");
+  let glow = glowArt;
+  if (glowArt.tagName === "CANVAS") {
+    glow = document.createElement("div");
+    glow.className = "card-glow";
+    glowArt.classList.remove("card-glow");
+    glowArt.style.width = "100%";
+    glowArt.style.height = "100%";
+    glowArt.style.display = "block";
+    glowArt.style.objectFit = "fill";
+    glow.appendChild(glowArt);
+  }
   slot.append(glow, cardEl);
   if (selected) {
     cardEl.classList.add("selected");
@@ -676,24 +693,7 @@ function renderSceneCard(panel, scene) {
       leaving = true;
       slot.classList.remove("glow-on");
       cardEl.classList.remove("selected");
-      let done = false;
-      const finish = () => {
-        if (done) {
-          return;
-        }
-        done = true;
-        panel._go("");
-      };
-      glow.addEventListener(
-        "transitionend",
-        (ev) => {
-          if (ev.propertyName === "opacity") {
-            finish();
-          }
-        },
-        { once: true }
-      );
-      window.setTimeout(finish, 450);
+      panel._go("");
       return;
     }
     panel._go(`edit/${scene.id}`);

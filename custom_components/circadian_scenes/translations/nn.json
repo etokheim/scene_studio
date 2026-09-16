@@ -36,8 +36,6 @@
     "settings": {
       "title": "Innstillingar",
       "intro": "Desse innstillingane gjeld for alle rom. Endringar tek til med ein gong.",
-      "hide_created": "Gøym oppretta scener i Home Assistant",
-      "hide_created_helper": "Merkjer native scener oppretta av denne integrasjonen som gøymde i HA-grensesnittet (einingaregisteret). Du kan framleis administrere dei her.",
       "automatically_update_lights": "Oppdater lys automatisk",
       "automatically_update_lights_on_helper": "Når du aktiverer ei scene, held lysa fram med å justerast med intervallet frå Innstillingar, slik at rommet følgjer sola. Trykk for å slå dette av for alle rom.",
       "automatically_update_lights_off_helper": "Automatiske oppdateringar er av. Aktivering av ei scene set lysa éin gong. Trykk for å slå oppdateringar på att for alle rom.",
