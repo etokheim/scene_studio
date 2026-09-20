@@ -150,6 +150,12 @@ function resolveColor(color, variables) {
   return color || {};
 }
 
+function entityMdiIcon(panel, entityId) {
+  const state = panel._hass?.states?.[entityId];
+  const entry = panel._hass?.entities?.[entityId];
+  return state?.attributes?.icon || entry?.icon || "mdi:lightbulb";
+}
+
 function lightIcon(panel, entityId) {
   return panel._entityStateIcon
     ? panel._entityStateIcon(entityId, "mdi:lightbulb")
@@ -173,6 +179,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   wheels.className = "simple-wheels";
 
   let selectedIds = new Set(members[0] ? [members[0]] : []);
+  let pinClusters = [];
   const drafts = {};
   for (const eid of members) {
     const raw = lights[eid] || { state: "on", brightness: 200 };
@@ -229,6 +236,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       id,
       draft: drafts[id],
       label: id.replace(/^light\./, ""),
+      icon: entityMdiIcon(panel, id),
     })),
     activeId: [...selectedIds][0] || null,
     selectedIds: [...selectedIds],
@@ -238,6 +246,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     getState,
     showPath: false,
     groupNearby: true,
+    getPinIcon: (scene) => entityMdiIcon(panel, scene.id),
+    onClusters: (clusters) => {
+      pinClusters = clusters || [];
+      paintTileSelection();
+    },
     onSelect: (id) => {
       selectedIds = new Set(id ? [id] : []);
       syncTiles();
@@ -373,11 +386,39 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     return (bri / 255) * 100;
   };
 
+  const tileSelectedIds = () => {
+    const picked = new Set(selectedIds);
+    for (const group of pinClusters) {
+      if (group.some((id) => selectedIds.has(id))) {
+        group.forEach((id) => picked.add(id));
+      }
+    }
+    return picked;
+  };
+
+  const paintTileSelection = () => {
+    const picked = tileSelectedIds();
+    const allSelected =
+      members.length > 0 && members.every((id) => picked.has(id));
+    for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
+      const eid = selector.dataset.entityId;
+      if (eid === "__select_all__") {
+        selector.classList.toggle("active", allSelected);
+        continue;
+      }
+      if (eid === "__add_light__" || selector.classList.contains("removed")) {
+        selector.classList.toggle("active", false);
+        continue;
+      }
+      selector.classList.toggle("active", picked.has(eid));
+    }
+  };
+
   const paintSelector = (selector, eid, draft) => {
     paintLightTile(selector, {
       rgb: draftRgb(draft),
       fillPct: fillPercent(draft),
-      selected: selectedIds.has(eid),
+      selected: tileSelectedIds().has(eid),
     });
   };
 
@@ -397,7 +438,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     tiles.replaceChildren();
     hidePicker();
     const allSelected =
-      members.length > 0 && members.every((id) => selectedIds.has(id));
+      members.length > 0 && members.every((id) => tileSelectedIds().has(id));
     if (members.length > 1) {
       const { selector, tile } = createLightTile({
         entityId: "__select_all__",
@@ -497,12 +538,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         }
         selectedIds = new Set([eid]);
         wheel.sync();
-        for (const other of tiles.querySelectorAll(".simple-light-selector")) {
-          other.classList.toggle(
-            "active",
-            selectedIds.has(other.dataset.entityId)
-          );
-        }
+        paintTileSelection();
       };
 
       const onDocMove = (ev) => {

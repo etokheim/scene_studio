@@ -2382,6 +2382,16 @@ class CircadianScenesPanel extends HTMLElement {
           font-weight: bold;
           paint-order: stroke fill;
         }
+        .hue-wheel-svg .icon-fo {
+          pointer-events: none;
+          overflow: visible;
+        }
+        .hue-wheel-svg .icon-fo ha-icon,
+        .hue-wheel-svg .icon-fo ha-state-icon {
+          --mdc-icon-size: 20px;
+          color: inherit;
+          --icon-primary-color: currentColor;
+        }
         .hue-wheel-svg .gm.active .marker-outline,
         .hue-wheel-svg .gm.preview .marker-outline {
           display: none;
@@ -2390,7 +2400,8 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-svg .gm.preview .marker {
           filter: url(#se-active-shadow);
         }
-        .hue-wheel-svg .gm:not(.active) .icon {
+        .hue-wheel-svg .gm:not(.active) .icon,
+        .hue-wheel-svg .gm:not(.active) .icon-fo {
           display: none;
         }
         .hue-wheel-svg .gm.active.drag {
@@ -6451,6 +6462,7 @@ class CircadianScenesPanel extends HTMLElement {
           index: index + 1,
           draft: drafts.get(item.id),
           event: item,
+          icon: item.icon,
         })),
         sequence: events.map((item) => item.id),
         activeId: currentId,
@@ -11865,6 +11877,7 @@ class CircadianScenesPanel extends HTMLElement {
                 index: entry.index,
                 draft: entry.draft,
                 event: item,
+                icon: item.icon,
               };
             }),
           sequence: events

@@ -2040,6 +2040,8 @@ function createSceneColorWheel({
   onRandomizeSeed,
   showPath = true,
   groupNearby = false,
+  getPinIcon,
+  onClusters,
 }) {
   // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
   const stage = document.createElement("div");
@@ -2134,6 +2136,24 @@ function createSceneColorWheel({
       return state.selectedIds.filter(Boolean);
     }
     return state.activeId ? [state.activeId] : [];
+  };
+
+  const clusterMatesOf = (ids) => {
+    const picked = new Set(ids || []);
+    const out = new Set(picked);
+    for (const group of pinClusters) {
+      if (group.some((id) => picked.has(id))) {
+        group.forEach((id) => out.add(id));
+      }
+    }
+    return [...out];
+  };
+
+  const pinIconOf = (scene) => {
+    if (typeof getPinIcon === "function") {
+      return getPinIcon(scene);
+    }
+    return scene?.icon || null;
   };
 
   const emitChange = (meta = {}) => {
@@ -2528,11 +2548,23 @@ function createSceneColorWheel({
           sync();
           return;
         }
-        const wasPalette = variableIsPalette(paletteForDraft(item?.draft));
         uiMode = mode;
-        if (wasPalette && item?.draft) {
-          convertDraftTo(item.draft, mode, capsOf(item));
-          emitChange({ dragging: false });
+        const state = getState();
+        const targets = clusterMatesOf(selectedIdsOf(state));
+        const changed = [];
+        for (const id of targets) {
+          const row = state.scenes.find((scene) => scene.id === id);
+          if (!row?.draft) {
+            continue;
+          }
+          const caps = capsOf(row);
+          const current = draftWheelMode(row.draft, caps.hasColor, caps.hasTemp);
+          if (current !== mode && convertDraftTo(row.draft, mode, caps)) {
+            changed.push(id);
+          }
+        }
+        if (changed.length) {
+          emitChange({ dragging: false, ids: changed });
         }
         sync();
       });
@@ -2655,8 +2687,17 @@ function createSceneColorWheel({
         icon.setAttribute("y", "24");
         icon.setAttribute("text-anchor", "middle");
         icon.setAttribute("dominant-baseline", "middle");
-        g.append(outline, path, hit, icon);
-        marker = { g, path, outline, hit, icon, sceneId: scene.id };
+        const fo = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
+        fo.setAttribute("class", "icon-fo");
+        fo.setAttribute("x", "12");
+        fo.setAttribute("y", "12");
+        fo.setAttribute("width", "24");
+        fo.setAttribute("height", "24");
+        const haIcon = document.createElement("ha-icon");
+        haIcon.style.display = "block";
+        fo.appendChild(haIcon);
+        g.append(outline, path, hit, icon, fo);
+        marker = { g, path, outline, hit, icon, fo, haIcon, sceneId: scene.id };
         markers.set(scene.id, marker);
         g.addEventListener("pointerdown", (ev) => {
           ev.stopPropagation();
@@ -2688,9 +2729,20 @@ function createSceneColorWheel({
       const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.path.setAttribute("d", active ? HUE_PIN_PATH : HUE_DOT_PATH);
       marker.g.classList.toggle("active", active);
-      /* Simple scenes have no solar event index; do not stringify undefined. */
+      const mdi = pinIconOf(scene);
+      if (mdi && marker.haIcon) {
+        marker.haIcon.setAttribute("icon", mdi);
+        marker.fo.style.display = active ? "" : "none";
+      } else if (marker.fo) {
+        marker.fo.style.display = "none";
+      }
+      /* Count / event index on the pin; entity/event mdi lives in foreignObject. */
       marker.icon.textContent =
-        scene.index == null || scene.index === "" ? "" : String(scene.index);
+        mdi && active
+          ? ""
+          : scene.index == null || scene.index === ""
+            ? ""
+            : String(scene.index);
       marker.hit.style.display = active ? "none" : "";
       marker.g.style.display = "";
       marker.g.classList.remove("grouped");
@@ -2706,6 +2758,9 @@ function createSceneColorWheel({
       );
       marker.g.style.color = rgbCss(pos.rgb);
       marker.icon.style.fill = pinForeground(pos.rgb);
+      if (marker.haIcon) {
+        marker.haIcon.style.color = pinForeground(pos.rgb);
+      }
       placeMarker(marker, pos.x, pos.y, active);
       placed.push({
         id: scene.id,
@@ -2735,6 +2790,9 @@ function createSceneColorWheel({
         const leadMarker = markers.get(lead);
         if (leadMarker && group.length > 1) {
           leadMarker.icon.textContent = String(group.length);
+          if (leadMarker.fo) {
+            leadMarker.fo.style.display = "none";
+          }
           leadMarker.g.classList.add("grouped");
           leadMarker.g.classList.add("active");
           leadMarker.path.setAttribute("d", HUE_PIN_PATH);
@@ -2749,6 +2807,7 @@ function createSceneColorWheel({
         }
       }
     }
+    onClusters?.(pinClusters.map((group) => [...group]));
     for (const [id, marker] of markers) {
       if (!seen.has(id)) {
         marker.g.remove();
@@ -3050,14 +3109,22 @@ function createSceneColorWheel({
     }
     uiMode = next;
     if (convertDraft) {
-      const { scenes, activeId } = getState();
-      const item = scenes.find((row) => row.id === activeId);
-      if (item?.draft) {
-        const caps = capsOf(item);
-        const current = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
-        if (current !== next && convertDraftTo(item.draft, next, caps)) {
-          emitChange({ dragging: false });
+      const state = getState();
+      const targets = clusterMatesOf(selectedIdsOf(state));
+      const changed = [];
+      for (const id of targets) {
+        const row = state.scenes.find((scene) => scene.id === id);
+        if (!row?.draft) {
+          continue;
         }
+        const caps = capsOf(row);
+        const current = draftWheelMode(row.draft, caps.hasColor, caps.hasTemp);
+        if (current !== next && convertDraftTo(row.draft, next, caps)) {
+          changed.push(id);
+        }
+      }
+      if (changed.length) {
+        emitChange({ dragging: false, ids: changed });
       }
     }
     sync();
