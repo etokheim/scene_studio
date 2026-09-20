@@ -810,6 +810,13 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** The strip is the membership UI. An unavailable bulb we already know how to drive should still be tunable.
 - **Do not reverse without user ask.**
 
+## Simple-scene wheel groups nearby pins; no travel path
+
+- **Date:** 2026-09-20
+- **Decision:** The simple-scene color wheel does **not** draw the circadian travel/preview path (simple scenes do not interpolate). Pins within 10% of the wheel radius and the same mode merge like `huemane-light-card` (`tryMergeMarkers`); the stack shows a count and moves together. A **Select all** Lys tile selects every member so a drag writes every selected draft. Circadian wheels keep the solar-event path and ungrouped per-event pins. Membership add/remove tiles (hover X, leftover add-back tiles) are the same in both editors. Re-adding a removed light must not change strip scroll or the current selection.
+- **Why:** Simple scenes were using the circadian path by treating every lamp as a cycle. Huemane’s grouping and Select all are the right multi-light controls once animation is gone.
+- **Do not reverse without user ask.**
+
 ## Theme brightness ghost + snap-to-clear override
 
 - **Date:** 2026-09-20

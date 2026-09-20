@@ -229,6 +229,7 @@
       "override_brightness": "Brightness {percent}% · theme {theme}%",
       "override_color": "Color",
       "solar_events": "Solar events",
+      "select_all": "Select all",
       "add_light": "Add light",
       "add_named": "Add {name}",
       "add_named_to_scene": "Add {name} to the scene",

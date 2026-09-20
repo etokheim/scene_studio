@@ -8498,22 +8498,78 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._syncPreviewOverlay();
     const before = this._captureLightRowRects();
-    this._optimisticIncludeLight(entityId);
-    this._clearPreviewCache();
-    this._drawSunPath();
-    this._playLightRowFlip(before);
+    this._withPreservedTileScroll(() => {
+      this._optimisticIncludeLight(entityId);
+      this._clearPreviewCache();
+      this._drawSunPath();
+      this._playLightRowFlip(before);
+    });
     await this._ensureSunPath();
+  }
+
+  _simpleMembershipLists() {
+    const areaId = this._formData.area;
+    const floorAreas = (this._floors || []).flatMap((f) => f.areas || []);
+    const area = floorAreas.find((a) => a.id === areaId);
+    const exclude = new Set(this._formData.membership?.exclude || []);
+    const include = this._formData.membership?.include || [];
+    const areaLights = area?.lights || [];
+    const members = [
+      ...areaLights.filter((id) => !exclude.has(id)),
+      ...include.filter((id) => !areaLights.includes(id)),
+    ];
+    const removed = [
+      ...areaLights.filter((id) => exclude.has(id)),
+      ...(this._removedLights || [])
+        .map((row) => row.entity_id)
+        .filter((id) => id && !members.includes(id) && !areaLights.includes(id)),
+    ];
+    return { members, removed };
+  }
+
+  _withPreservedTileScroll(run) {
+    const scroller = this.shadowRoot?.querySelector(".light-tiles-scroller");
+    if (scroller) {
+      this._heldTileScroll = scroller.scrollLeft;
+    }
+    window.clearTimeout(this._heldTileScrollTimer);
+    this._heldTileScrollTimer = window.setTimeout(() => {
+      this._heldTileScroll = null;
+    }, 800);
+    const prev = this._suppressLightTileOpen;
+    this._suppressLightTileOpen = true;
+    try {
+      run();
+    } finally {
+      this._restoreHeldTileScroll();
+      this._suppressLightTileOpen = prev;
+    }
+  }
+
+  _restoreHeldTileScroll() {
+    if (this._heldTileScroll == null) {
+      return;
+    }
+    const apply = () => {
+      const next = this.shadowRoot?.querySelector(".light-tiles-scroller");
+      if (next && this._heldTileScroll != null) {
+        next.scrollLeft = this._heldTileScroll;
+      }
+    };
+    apply();
+    requestAnimationFrame(apply);
   }
 
   _addLightToSimpleMembers(entityId) {
     if (!entityId?.startsWith("light.")) {
       return;
     }
-    const members = this._simpleMembers || [];
+    const { members } = this._simpleMembershipLists();
     if (members.includes(entityId)) {
       return;
     }
     this._commitUndo();
+    this._forgetRemovedLight(entityId);
     const membership = {
       exclude: [...(this._formData.membership?.exclude || [])].filter(
         (id) => id !== entityId
@@ -8527,9 +8583,52 @@ class CircadianScenesPanel extends HTMLElement {
     if (!inArea && !membership.include.includes(entityId)) {
       membership.include.push(entityId);
     }
+    const nextLights = { ...(this._formData.lights || {}) };
+    if (!nextLights[entityId]) {
+      nextLights[entityId] = this._snapshotLight(entityId) || {
+        state: "on",
+        brightness: 200,
+      };
+    }
+    this._formData = { ...this._formData, membership, lights: nextLights };
+    this._saveSoon();
+    this._withPreservedTileScroll(() => this._simpleEditorRefresh?.());
+  }
+
+  _removeLightFromSimpleMembers(entityId) {
+    if (!entityId?.startsWith("light.")) {
+      return;
+    }
+    const { members } = this._simpleMembershipLists();
+    if (!members.includes(entityId)) {
+      return;
+    }
+    this._commitUndo();
+    const membership = {
+      exclude: [...(this._formData.membership?.exclude || [])],
+      include: [...(this._formData.membership?.include || [])].filter(
+        (id) => id !== entityId
+      ),
+    };
+    const areaId = this._formData.area;
+    const floorAreas = (this._floors || []).flatMap((f) => f.areas || []);
+    const area = floorAreas.find((a) => a.id === areaId);
+    const inArea = (area?.lights || []).includes(entityId);
+    if (inArea && !membership.exclude.includes(entityId)) {
+      membership.exclude.push(entityId);
+    }
+    if (!inArea) {
+      const name =
+        this._hass?.states?.[entityId]?.attributes?.friendly_name || entityId;
+      this._rememberRemovedLight({
+        entity_id: entityId,
+        name,
+        in_area: false,
+      });
+    }
     this._formData = { ...this._formData, membership };
     this._saveSoon();
-    this._renderEditor();
+    this._withPreservedTileScroll(() => this._simpleEditorRefresh?.());
   }
 
   async _openAddLightPicker(anchor, { simple = false } = {}) {
@@ -9689,16 +9788,8 @@ class CircadianScenesPanel extends HTMLElement {
         this._mountPageBanners(stage);
         this._simpleEditorHost = host;
       }
-      const areaId = this._formData.area;
-      const floorAreas = (this._floors || []).flatMap((f) => f.areas || []);
-      const area = floorAreas.find((a) => a.id === areaId);
-      const exclude = new Set(this._formData.membership?.exclude || []);
-      const include = this._formData.membership?.include || [];
-      const areaLights = area?.lights || [];
-      this._simpleMembers = [
-        ...areaLights.filter((id) => !exclude.has(id)),
-        ...include.filter((id) => !areaLights.includes(id)),
-      ];
+      const lists = this._simpleMembershipLists();
+      this._simpleMembers = lists.members;
       const glowHost = null;
       renderSimpleEditor(this, host, { glowHost });
       this._syncWorkspaceScrollport();
@@ -13856,6 +13947,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._syncYearScrubLayout();
     this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
     this._displayedSunPath = this._sunPath;
+    this._restoreHeldTileScroll();
   }
   _patchHoverReadoutClock(seconds) {
     this._updateLightNameBrightness(seconds);
@@ -16897,7 +16989,7 @@ class CircadianScenesPanel extends HTMLElement {
       if (canEdit) {
         tile.setAttribute("aria-label", `Edit ${light.name}`);
         const openClosest = (ev) => {
-          if (tile._lysSuppressTap) {
+          if (tile._lysSuppressTap || this._suppressLightTileOpen) {
             return;
           }
           ev.stopPropagation();

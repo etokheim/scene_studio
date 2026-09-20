@@ -738,6 +738,37 @@ function draftHs(draft) {
   return null;
 }
 
+const PIN_GROUP_FRAC = 0.1;
+
+function clusterNearbyPinIds(placed, radius) {
+  const range = Math.max(8, radius * PIN_GROUP_FRAC);
+  const used = new Set();
+  const clusters = [];
+  for (const item of placed) {
+    if (used.has(item.id)) {
+      continue;
+    }
+    if (item.off) {
+      used.add(item.id);
+      clusters.push([item.id]);
+      continue;
+    }
+    const group = [item.id];
+    used.add(item.id);
+    for (const other of placed) {
+      if (used.has(other.id) || other.off || other.mode !== item.mode) {
+        continue;
+      }
+      if (Math.hypot(other.x - item.x, other.y - item.y) <= range) {
+        group.push(other.id);
+        used.add(other.id);
+      }
+    }
+    clusters.push(group);
+  }
+  return clusters;
+}
+
 function collapseSceneCycle(sequence) {
   const ids = [];
   for (const id of sequence || []) {
@@ -2007,6 +2038,8 @@ function createSceneColorWheel({
   getAssignmentSeed,
   getAssignmentEntityId,
   onRandomizeSeed,
+  showPath = true,
+  groupNearby = false,
 }) {
   // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
   const stage = document.createElement("div");
@@ -2081,6 +2114,7 @@ function createSceneColorWheel({
   stage.append(canvasWrap, chrome);
 
   const markers = new Map();
+  let pinClusters = [];
   let drag = null;
   let glideTimer;
   let painted = { color: false, temp: false };
@@ -2095,12 +2129,22 @@ function createSceneColorWheel({
     };
   };
 
+  const selectedIdsOf = (state) => {
+    if (Array.isArray(state.selectedIds) && state.selectedIds.length) {
+      return state.selectedIds.filter(Boolean);
+    }
+    return state.activeId ? [state.activeId] : [];
+  };
+
   const emitChange = (meta = {}) => {
     onChange?.({
       dragging: Boolean(drag),
       ...meta,
     });
   };
+
+  const isOffDraft = (draft) =>
+    !draft || draft.state === "off" || Number(draft.brightness) <= 0;
 
   const showFloatReadout = (draft, x, y, wheelMode) => {
     floatReadout.hidden = false;
@@ -2574,7 +2618,9 @@ function createSceneColorWheel({
   const sync = () => {
     syncModePill();
     const radius = radiusPx();
-    const { scenes, activeId } = getState();
+    const state = getState();
+    const { scenes, activeId } = state;
+    const selectedIds = selectedIdsOf(state);
     const geom = radius
       ? currentGeom()
       : wheelStackGeom(
@@ -2586,6 +2632,7 @@ function createSceneColorWheel({
         );
     layoutLayers(geom);
     const seen = new Set();
+    const placed = [];
     for (const scene of scenes) {
       seen.add(scene.id);
       let marker = markers.get(scene.id);
@@ -2614,12 +2661,12 @@ function createSceneColorWheel({
         g.addEventListener("pointerdown", (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
-          const { scenes: now, activeId: current } = getState();
-          const item = now.find((row) => row.id === scene.id);
+          const now = getState();
+          const item = now.scenes.find((row) => row.id === scene.id);
           if (!item) {
             return;
           }
-          if (scene.id !== current) {
+          if (!selectedIdsOf(now).includes(scene.id)) {
             onSelect(scene.id);
           }
           const caps = capsOf(item);
@@ -2636,7 +2683,7 @@ function createSceneColorWheel({
         });
         svg.appendChild(g);
       }
-      const active = scene.id === activeId;
+      const active = selectedIds.includes(scene.id);
       const caps = capsOf(scene);
       const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.path.setAttribute("d", active ? HUE_PIN_PATH : HUE_DOT_PATH);
@@ -2645,6 +2692,8 @@ function createSceneColorWheel({
       marker.icon.textContent =
         scene.index == null || scene.index === "" ? "" : String(scene.index);
       marker.hit.style.display = active ? "none" : "";
+      marker.g.style.display = "";
+      marker.g.classList.remove("grouped");
       if (!radius) {
         continue;
       }
@@ -2658,8 +2707,46 @@ function createSceneColorWheel({
       marker.g.style.color = rgbCss(pos.rgb);
       marker.icon.style.fill = pinForeground(pos.rgb);
       placeMarker(marker, pos.x, pos.y, active);
+      placed.push({
+        id: scene.id,
+        x: pos.x,
+        y: pos.y,
+        mode: markerMode,
+        off: isOffDraft(scene.draft),
+      });
       if (active) {
         svg.appendChild(marker.g);
+      }
+    }
+    pinClusters =
+      groupNearby && radius
+        ? clusterNearbyPinIds(placed, radius)
+        : placed.map((item) => [item.id]);
+    if (groupNearby) {
+      const hidden = new Set();
+      for (const group of pinClusters) {
+        const lead =
+          group.find((id) => selectedIds.includes(id)) || group[0];
+        for (const id of group) {
+          if (id !== lead) {
+            hidden.add(id);
+          }
+        }
+        const leadMarker = markers.get(lead);
+        if (leadMarker && group.length > 1) {
+          leadMarker.icon.textContent = String(group.length);
+          leadMarker.g.classList.add("grouped");
+          leadMarker.g.classList.add("active");
+          leadMarker.path.setAttribute("d", HUE_PIN_PATH);
+          leadMarker.hit.style.display = "none";
+          svg.appendChild(leadMarker.g);
+        }
+      }
+      for (const id of hidden) {
+        const marker = markers.get(id);
+        if (marker) {
+          marker.g.style.display = "none";
+        }
       }
     }
     for (const [id, marker] of markers) {
@@ -2677,7 +2764,7 @@ function createSceneColorWheel({
 
   const syncPath = (geom, radius) => {
     pathLayer.replaceChildren();
-    if (!radius || showingPalette()) {
+    if (!showPath || !radius || showingPalette()) {
       return;
     }
     const { scenes, sequence } = getState();
@@ -2765,6 +2852,9 @@ function createSceneColorWheel({
       return;
     }
     const { scenes, activeId } = getState();
+    const moveIds = drag.ids?.length
+      ? drag.ids
+      : [drag.sceneId || activeId];
     const item = scenes.find((row) => row.id === (drag.sceneId || activeId));
     if (!item) {
       return;
@@ -2791,21 +2881,35 @@ function createSceneColorWheel({
       return;
     }
     const limited = applyAtBand(item.draft, x, y, radius, pinMode, band);
-    const marker = markers.get(item.id);
-    if (marker) {
-      marker.g.style.color = rgbCss(draftRgb(item.draft));
-      marker.icon.style.fill = pinForeground(draftRgb(item.draft));
-      placeMarker(marker, limited.x, limited.y, true);
+    const moved = new Set();
+    for (const id of moveIds) {
+      const row = scenes.find((scene) => scene.id === id);
+      if (!row?.draft) {
+        continue;
+      }
+      if (row !== item) {
+        applyAtBand(row.draft, x, y, radius, pinMode, band);
+      }
+      delete row.draft.variable_ref;
+      delete row.draft.palette_t;
+      delete row.draft.palette_r;
+      moved.add(id);
+      const pin = markers.get(id);
+      if (pin) {
+        pin.g.style.color = rgbCss(draftRgb(row.draft));
+        pin.icon.style.fill = pinForeground(draftRgb(row.draft));
+        placeMarker(pin, limited.x, limited.y, selectedIdsOf(getState()).includes(id));
+      }
     }
     showFloatReadout(item.draft, limited.x, limited.y, pinMode);
     const nextGeom = currentGeom();
     layoutLayers(nextGeom);
     for (const scene of scenes) {
-      if (scene.id === item.id) {
+      if (moved.has(scene.id)) {
         continue;
       }
       const other = markers.get(scene.id);
-      if (!other) {
+      if (!other || other.g.style.display === "none") {
         continue;
       }
       const caps = capsOf(scene);
@@ -2822,7 +2926,11 @@ function createSceneColorWheel({
       placeMarker(other, pos.x, pos.y, false);
     }
     syncPath(nextGeom, radius);
-    emitChange({ dragging: true, fromPalette: showingPalette() });
+    emitChange({
+      dragging: true,
+      fromPalette: showingPalette(),
+      ids: [...moved],
+    });
   };
 
   const onPointerUp = (ev) => {
@@ -2830,6 +2938,7 @@ function createSceneColorWheel({
       return;
     }
     const marker = markers.get(drag.sceneId);
+    const finishedIds = drag.ids?.length ? [...drag.ids] : [drag.sceneId];
     marker?.g.classList.remove("drag");
     marker?.g.classList.add("boing");
     setTimeout(() => marker?.g.classList.remove("boing"), 200);
@@ -2844,13 +2953,26 @@ function createSceneColorWheel({
         composed: true,
       })
     );
-    emitChange({ dragging: false, final: true });
+    emitChange({ dragging: false, final: true, ids: finishedIds });
     sync();
+  };
+
+  const dragIdsFor = (sceneId) => {
+    const selected = selectedIdsOf(getState());
+    if (selected.includes(sceneId) && selected.length > 1) {
+      return selected;
+    }
+    if (selected.length === 1 && selected[0] === sceneId) {
+      return [sceneId];
+    }
+    const group = pinClusters.find((row) => row.includes(sceneId));
+    return group?.length ? [...group] : [sceneId];
   };
 
   const startDrag = (ev, sceneId, grabX = 0, grabY = 0, mode = "color") => {
     drag = {
       sceneId,
+      ids: dragIdsFor(sceneId),
       pointerId: ev.pointerId,
       grabX,
       grabY,

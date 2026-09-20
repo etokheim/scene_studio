@@ -366,6 +366,23 @@ export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
   return { selector, tile, hit };
 }
 
+export function attachLightRemove(selector, { label, onRemove }) {
+  const btn = document.createElement("button");
+  btn.className = "light-remove";
+  btn.type = "button";
+  btn.setAttribute("aria-label", label);
+  btn.tabIndex = -1;
+  const icon = document.createElement("ha-icon");
+  icon.setAttribute("icon", "mdi:close");
+  btn.appendChild(icon);
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    onRemove?.();
+  });
+  selector.appendChild(btn);
+  return btn;
+}
+
 export function createAddLightTile({ label, onActivate }) {
   const { selector, tile } = createLightTile({
     entityId: "__add_light__",

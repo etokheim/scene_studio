@@ -11,6 +11,7 @@ import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
 import {
   LIGHT_TILES_CSS,
   TILE_BRIGHTNESS_WHEEL_STEP,
+  attachLightRemove,
   createAddLightTile,
   createLightTile,
   paintLightTile,
@@ -116,6 +117,9 @@ export const SIMPLE_EDITOR_CSS = `
   .simple-mode-picker .m-temp { right: 0; top: 46px; }
   .simple-mode-picker .m-color { left: 46px; bottom: 0; }
   .simple-mode-picker .m-var { left: 0; top: 46px; }
+  .simple-light-selector.select-all-tile .simple-light-tile {
+    cursor: pointer;
+  }
 `;
 
 function colorCss(color) {
@@ -159,7 +163,8 @@ function lightIcon(panel, entityId) {
 export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const scene = panel._formData || {};
   const lights = { ...(scene.lights || {}) };
-  const members = panel._simpleMembers || Object.keys(lights);
+  let members = panel._simpleMembers || Object.keys(lights);
+  let removedMembers = [];
   const variables = panel._variables || [];
   const wrap = document.createElement("div");
   wrap.className = "simple-editor";
@@ -167,7 +172,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const wheels = document.createElement("div");
   wheels.className = "simple-wheels";
 
-  let selectedId = members[0] || null;
+  let selectedIds = new Set(members[0] ? [members[0]] : []);
   const drafts = {};
   for (const eid of members) {
     const raw = lights[eid] || { state: "on", brightness: 200 };
@@ -225,31 +230,44 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       draft: drafts[id],
       label: id.replace(/^light\./, ""),
     })),
-    activeId: selectedId,
+    activeId: [...selectedIds][0] || null,
+    selectedIds: [...selectedIds],
   });
 
   const wheel = createSceneColorWheel({
     getState,
+    showPath: false,
+    groupNearby: true,
     onSelect: (id) => {
-      selectedId = id;
+      selectedIds = new Set(id ? [id] : []);
       syncTiles();
     },
-    onChange: ({ dragging, fromPalette } = {}) => {
-      if (!selectedId) {
+    onChange: ({ dragging, fromPalette, ids } = {}) => {
+      const write = ids?.length ? ids : [...selectedIds];
+      if (!write.length) {
         return;
       }
-      if (!fromPalette) {
-        delete drafts[selectedId].variable_ref;
-        delete drafts[selectedId].palette_t;
-        delete drafts[selectedId].palette_r;
+      for (const eid of write) {
+        if (!drafts[eid]) {
+          continue;
+        }
+        if (!fromPalette) {
+          delete drafts[eid].variable_ref;
+          delete drafts[eid].palette_t;
+          delete drafts[eid].palette_r;
+        }
+        persistLight(eid);
       }
-      persistLight(selectedId);
-      const sel = tiles.querySelector(
-        `.simple-light-selector[data-entity-id="${CSS.escape(selectedId)}"]`
-      );
-      if (dragging && sel && drafts[selectedId]) {
-        paintSelector(sel, selectedId, drafts[selectedId]);
-      } else if (!dragging) {
+      if (dragging) {
+        for (const eid of write) {
+          const sel = tiles.querySelector(
+            `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
+          );
+          if (sel && drafts[eid]) {
+            paintSelector(sel, eid, drafts[eid]);
+          }
+        }
+      } else {
         syncTiles();
       }
     },
@@ -323,24 +341,24 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       pickerEl.appendChild(btn);
     };
     add("m-bri", "mdi:brightness-6", () => {
-      selectedId = eid;
+      selectedIds = new Set([eid]);
       wheel.sync();
       syncTiles();
     });
     add("m-temp", "mdi:thermometer", () => {
-      selectedId = eid;
+      selectedIds = new Set([eid]);
       wheel.setMode("temp", { convertDraft: true });
       persistLight(eid);
       syncTiles();
     });
     add("m-color", "mdi:palette", () => {
-      selectedId = eid;
+      selectedIds = new Set([eid]);
       wheel.setMode("color", { convertDraft: true });
       persistLight(eid);
       syncTiles();
     });
     add("m-var", "mdi:variable", () => {
-      selectedId = eid;
+      selectedIds = new Set([eid]);
       wrap.querySelector(".var-palette button")?.focus();
       syncTiles();
     });
@@ -359,13 +377,53 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     paintLightTile(selector, {
       rgb: draftRgb(draft),
       fillPct: fillPercent(draft),
-      selected: eid === selectedId,
+      selected: selectedIds.has(eid),
     });
   };
 
+  const ensureDraft = (eid) => {
+    if (drafts[eid]) {
+      return drafts[eid];
+    }
+    const raw = lights[eid] || { state: "on", brightness: 200 };
+    const color = resolveColor(raw, variables);
+    drafts[eid] = { ...raw, ...color };
+    return drafts[eid];
+  };
+
   const syncTiles = () => {
+    const scroller = tiles.parentElement;
+    const keepLeft = scroller?.scrollLeft ?? 0;
     tiles.replaceChildren();
     hidePicker();
+    const allSelected =
+      members.length > 0 && members.every((id) => selectedIds.has(id));
+    if (members.length > 1) {
+      const { selector, tile } = createLightTile({
+        entityId: "__select_all__",
+        name: panel._t("frontend.lights.select_all", "Select all"),
+        tapOnly: true,
+        makeIcon: () => {
+          const icon = document.createElement("ha-icon");
+          icon.setAttribute("icon", "mdi:select-all");
+          return icon;
+        },
+      });
+      selector.classList.add("select-all-tile");
+      paintLightTile(selector, {
+        rgb: [64, 60, 58],
+        fillPct: allSelected ? 100 : 0,
+        selected: allSelected,
+      });
+      const pickAll = (ev) => {
+        ev.stopPropagation();
+        selectedIds = new Set(members);
+        wheel.sync();
+        syncTiles();
+      };
+      tile.addEventListener("click", pickAll);
+      tiles.appendChild(selector);
+    }
     const ordered = [...members].sort((a, b) => {
       const rank = (id) => {
         const st = panel._hass?.states?.[id];
@@ -437,12 +495,12 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         if (wasVertical || suppressTap || pickerEl) {
           return;
         }
-        selectedId = eid;
+        selectedIds = new Set([eid]);
         wheel.sync();
         for (const other of tiles.querySelectorAll(".simple-light-selector")) {
           other.classList.toggle(
             "active",
-            other.dataset.entityId === selectedId
+            selectedIds.has(other.dataset.entityId)
           );
         }
       };
@@ -542,6 +600,41 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         },
         { passive: false }
       );
+      attachLightRemove(selector, {
+        label: panel._t(
+          "frontend.lights.remove_named_from_scene",
+          "Remove {name} from the scene",
+          { name }
+        ),
+        onRemove: () => panel._removeLightFromSimpleMembers(eid),
+      });
+      tiles.appendChild(selector);
+    }
+    for (const eid of removedMembers) {
+      const state = panel._hass?.states?.[eid];
+      const name =
+        state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+      const { selector, tile } = createLightTile({
+        entityId: eid,
+        name: panel._t("frontend.lights.add_named", "Add {name}", { name }),
+        tapOnly: true,
+        makeIcon: () => {
+          const icon = document.createElement("ha-icon");
+          icon.setAttribute("icon", "mdi:plus");
+          return icon;
+        },
+      });
+      selector.classList.add("removed", "suggested");
+      paintLightTile(selector, {
+        rgb: [64, 60, 58],
+        fillPct: 0,
+        selected: false,
+      });
+      const addBack = (ev) => {
+        ev.stopPropagation();
+        panel._addLightToSimpleMembers(eid);
+      };
+      tile.addEventListener("click", addBack);
       tiles.appendChild(selector);
     }
     tiles.appendChild(
@@ -550,10 +643,25 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         onActivate: (anchor) => panel._openAddLightPicker(anchor, { simple: true }),
       })
     );
+    if (scroller) {
+      scroller.scrollLeft = keepLeft;
+    }
   };
-  syncTiles();
+  const refreshFromPanel = () => {
+    const lists = panel._simpleMembershipLists();
+    members = lists.members;
+    removedMembers = lists.removed;
+    panel._simpleMembers = members;
+    for (const eid of members) {
+      ensureDraft(eid);
+    }
+    selectedIds = new Set([...selectedIds].filter((id) => members.includes(id)));
+    syncTiles();
+    wheel.sync();
+  };
+  panel._simpleEditorRefresh = refreshFromPanel;
   host.replaceChildren(wrap);
-  wheel.sync();
+  refreshFromPanel();
   if (glowHost && typeof wheel.attachGlow === "function") {
     panel._simpleWheelGlowLayout = wheel.attachGlow(glowHost);
     requestAnimationFrame(() => panel._simpleWheelGlowLayout?.());
