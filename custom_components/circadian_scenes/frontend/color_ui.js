@@ -890,6 +890,8 @@ function polylinePathD(pts) {
 }
 
 const GRAPH_DAY_SECONDS = 24 * 3600;
+/** Brightness units (~2%) — drag back onto the theme knot clears that override. */
+export const THEME_BRIGHTNESS_SNAP = 5;
 
 function wrapDaySeconds(seconds) {
   return (
@@ -997,6 +999,21 @@ function linearGraphRuns(knots, { closed = true } = {}) {
   }
   flush();
   return runs;
+}
+
+function openGraphStrokeD(knots, xOfSec, yOfBri) {
+  const runs = linearGraphRuns(knots, { closed: false });
+  return runs
+    .map((pts) =>
+      pts
+        .map((pt, index) => {
+          const x = xOfSec(pt.sec).toFixed(1);
+          const y = yOfBri(pt.bri).toFixed(1);
+          return `${index ? "L" : "M"}${x} ${y}`;
+        })
+        .join(" ")
+    )
+    .join(" ");
 }
 
 function dayGraphPathD(knots, xOfSec, yOfBri, plotBottom) {
@@ -1509,10 +1526,19 @@ function createLightBrightnessGraph({
   const curve = document.createElementNS("http://www.w3.org/2000/svg", "path");
   curve.setAttribute("class", "curve");
 
+  const themeHalo = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  themeHalo.setAttribute("class", "theme-curve-halo");
+  themeHalo.setAttribute("fill", "none");
+  const themeCurve = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  themeCurve.setAttribute("class", "theme-curve");
+  themeCurve.setAttribute("fill", "none");
+  const themeDots = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  themeDots.setAttribute("class", "theme-dots");
+
   const handlesLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   handlesLayer.setAttribute("class", "handles");
 
-  svg.append(defs, frame, fillArea, curve, handlesLayer);
+  svg.append(defs, frame, fillArea, curve, themeHalo, themeCurve, themeDots, handlesLayer);
   // Plot wrapper: title keeps pan-y scroll; plot locks touch + HA sheet dismiss
   // (ha-bottom-sheet SWIPE_LOCKED_CLASSES includes volume-slider-container).
   const plot = document.createElement("div");
@@ -1644,12 +1670,77 @@ function createLightBrightnessGraph({
     gradient.appendChild(stop);
   };
 
+  const paintThemeGhost = (members) => {
+    themeDots.replaceChildren();
+    if (members.length < 2) {
+      themeHalo.setAttribute("d", "");
+      themeCurve.setAttribute("d", "");
+      return;
+    }
+    const strokeParts = [];
+    const n = members.length;
+    for (let i = 0; i < n; i += 1) {
+      const from = members[i];
+      const to = members[(i + 1) % n];
+      const fromTheme = Number(from.themeBrightness);
+      const toTheme = Number(to.themeBrightness);
+      const fromOver =
+        Number.isFinite(fromTheme) &&
+        Math.abs(from.brightness - fromTheme) > THEME_BRIGHTNESS_SNAP;
+      const toOver =
+        Number.isFinite(toTheme) &&
+        Math.abs(to.brightness - toTheme) > THEME_BRIGHTNESS_SNAP;
+      if (!fromOver && !toOver) {
+        continue;
+      }
+      const stroke = openGraphStrokeD(
+        [
+          {
+            seconds: from.seconds,
+            bri:
+              fromOver && Number.isFinite(fromTheme)
+                ? fromTheme
+                : from.brightness,
+          },
+          {
+            seconds: to.seconds,
+            bri: toOver && Number.isFinite(toTheme) ? toTheme : to.brightness,
+          },
+        ],
+        xOf,
+        yOf
+      );
+      if (stroke) {
+        strokeParts.push(stroke);
+      }
+    }
+    const stroke = strokeParts.join(" ");
+    themeHalo.setAttribute("d", stroke);
+    themeCurve.setAttribute("d", stroke);
+    for (const point of members) {
+      const themeBri = Number(point.themeBrightness);
+      if (
+        !Number.isFinite(themeBri) ||
+        Math.abs(point.brightness - themeBri) <= THEME_BRIGHTNESS_SNAP
+      ) {
+        continue;
+      }
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("class", "theme-dot");
+      dot.setAttribute("cx", String(xOf(point.seconds)));
+      dot.setAttribute("cy", String(yOf(themeBri)));
+      dot.setAttribute("r", "3.2");
+      themeDots.appendChild(dot);
+    }
+  };
+
   const paintGeometry = (points) => {
     gradient.replaceChildren();
     const members = points.filter((point) => point.member);
     if (!points.length) {
       fillArea.setAttribute("d", "");
       curve.setAttribute("d", "");
+      paintThemeGhost([]);
       return [];
     }
     const plotBottom = PAD_T + PLOT_H;
@@ -1707,6 +1798,7 @@ function createLightBrightnessGraph({
       fillArea.setAttribute("d", "");
       curve.setAttribute("d", "");
     }
+    paintThemeGhost(members);
     return points.map((point) => ({
       x: xOf(point.seconds),
       y: point.member ? yOf(point.brightness) : plotBottom,

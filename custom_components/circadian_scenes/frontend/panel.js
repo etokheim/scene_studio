@@ -15,6 +15,7 @@ import {
   createSceneColorWheel,
   polarEaseClosedPathD,
   lightDraftFingerprint,
+  THEME_BRIGHTNESS_SNAP,
   applyVariableToDraft,
   colorPayloadFromDraft,
   hexToRgb,
@@ -1667,6 +1668,12 @@ class CircadianScenesPanel extends HTMLElement {
           stroke: rgb(0 0 0 / 22%);
           opacity: 1;
         }
+        .clock-brightness-overlay .clock-theme-bright-dot {
+          fill: var(--card-background-color);
+          stroke: var(--primary-text-color);
+          stroke-width: 0.45;
+          pointer-events: none;
+        }
         .clock-brightness-overlay .clock-brightness-fill {
           pointer-events: none;
         }
@@ -2605,6 +2612,60 @@ class CircadianScenesPanel extends HTMLElement {
         .light-brightness-graph .handle.add .handle-dot {
           stroke: var(--primary-color);
           stroke-dasharray: 3 2;
+        }
+        .light-brightness-graph .theme-curve-halo {
+          stroke: var(--card-background-color);
+          stroke-width: 5;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .light-brightness-graph .theme-curve {
+          stroke: var(--primary-text-color);
+          stroke-width: 1.6;
+          stroke-dasharray: 5 3.5;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          opacity: 0.92;
+        }
+        .light-brightness-graph .theme-dot {
+          fill: var(--card-background-color);
+          stroke: var(--primary-text-color);
+          stroke-width: 1.6;
+          pointer-events: none;
+        }
+        .light-overrides {
+          margin-top: 14px;
+        }
+        .light-overrides-title {
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: var(--secondary-text-color);
+          margin-bottom: 6px;
+        }
+        .light-override-row {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 2px;
+          width: 100%;
+          padding: 8px 0;
+          border: 0;
+          border-bottom: 1px solid var(--divider-color);
+          background: none;
+          color: inherit;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .light-override-row:last-child {
+          border-bottom: 0;
+        }
+        .light-override-name {
+          font-weight: 500;
+        }
+        .light-override-meta {
+          font-size: 0.75rem;
+          color: var(--secondary-text-color);
         }
         .light-brightness-graph .handle-fill {
           stroke: none;
@@ -5834,6 +5895,41 @@ class CircadianScenesPanel extends HTMLElement {
     return seed ? seed[0] : 0;
   }
 
+  _lightDraftLookFingerprint(draft) {
+    return lightDraftFingerprint({
+      ...draft,
+      brightness: 0,
+      state: "on",
+    });
+  }
+
+  _themeEventBrightness(eventId) {
+    return Number(this._themeEventDraft(eventId).brightness) || 0;
+  }
+
+  _deleteLightEventOverride(lightId, eventId) {
+    const byLight = { ...(this._formData.overrides?.[lightId] || {}) };
+    if (!(eventId in byLight)) {
+      return;
+    }
+    delete byLight[eventId];
+    const next = { ...(this._formData.overrides || {}) };
+    if (Object.keys(byLight).length) {
+      next[lightId] = byLight;
+    } else {
+      delete next[lightId];
+    }
+    this._formData.overrides = next;
+  }
+
+  _snapLightEventBrightness(eventId, brightness) {
+    const themeBri = this._themeEventBrightness(eventId);
+    if (Math.abs(Number(brightness) - themeBri) <= THEME_BRIGHTNESS_SNAP) {
+      return themeBri;
+    }
+    return Number(brightness);
+  }
+
   _brightnessPayloadFromTheme(eventId, brightness) {
     const draft = this._themeEventDraft(eventId);
     const payload = {
@@ -5902,33 +5998,50 @@ class CircadianScenesPanel extends HTMLElement {
     if (history) {
       this._commitUndo({ type: "light", lightId, eventId });
     }
+    const theme = this._themeEventDraft(eventId);
+    const snapped = this._snapLightEventBrightness(eventId, value);
     if (!this._formData.overrides) {
       this._formData.overrides = {};
     }
     const byLight = { ...(this._formData.overrides[lightId] || {}) };
     const prev = byLight[eventId];
     const next = prev
-      ? { ...prev, brightness: value }
-      : this._brightnessPayloadFromTheme(eventId, value);
-    next.brightness = value;
-    if (value > 0) {
+      ? { ...prev, brightness: snapped }
+      : this._brightnessPayloadFromTheme(eventId, snapped);
+    next.brightness = snapped;
+    if (snapped > 0) {
       next.state = "on";
     }
     delete next.variable_ref;
-    byLight[eventId] = next;
-    this._formData.overrides = {
-      ...this._formData.overrides,
-      [lightId]: byLight,
-    };
+    const lookMatchesTheme =
+      this._lightDraftLookFingerprint(next) ===
+      this._lightDraftLookFingerprint(theme);
+    if (snapped === this._themeEventBrightness(eventId) && lookMatchesTheme) {
+      this._deleteLightEventOverride(lightId, eventId);
+    } else {
+      byLight[eventId] = next;
+      this._formData.overrides = {
+        ...this._formData.overrides,
+        [lightId]: byLight,
+      };
+    }
     const hook = this._dialBrightnessHook;
     if (hook?.kind === "light" && hook.lightId === lightId) {
       const entry = hook.drafts.get(eventId);
-      if (entry?.draft) {
-        entry.draft.brightness = value;
-        if (value > 0) {
-          entry.draft.state = "on";
+      if (entry) {
+        if (
+          snapped === this._themeEventBrightness(eventId) &&
+          lookMatchesTheme
+        ) {
+          entry.draft = { ...theme };
+          entry.saved = lightDraftFingerprint(entry.draft);
+        } else if (entry.draft) {
+          entry.draft.brightness = snapped;
+          if (snapped > 0) {
+            entry.draft.state = "on";
+          }
+          delete entry.draft.variable_ref;
         }
-        delete entry.draft.variable_ref;
       }
       hook.sync?.();
     }
@@ -10969,6 +11082,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._patchDialFromSession();
       this._syncThemePreviewSurfaces();
       this._saveSoon();
+      paintOverrides();
     };
     const restoreLive = async () => {
       if (!liveApplied) {
@@ -11135,6 +11249,7 @@ class CircadianScenesPanel extends HTMLElement {
     // handler clears a matching _sidebarLightId.
     this._setSidebarLight(light.entity_id);
     this._setSidebarEvent(event.id);
+    let paintOverrides = () => {};
     this._dialBrightnessHook = {
       kind: "light",
       lightId: light.entity_id,
@@ -11144,6 +11259,7 @@ class CircadianScenesPanel extends HTMLElement {
         colorBriGraphCtl?.sync();
         whiteBriGraphCtl?.sync();
         wheelCtl?.sync();
+        paintOverrides();
       },
     };
     const { host, header, body, footer } = opened;
@@ -11152,6 +11268,8 @@ class CircadianScenesPanel extends HTMLElement {
     const duskSlot = document.createElement("div");
     const chipsHost = document.createElement("div");
     const brightnessGraphMount = document.createElement("div");
+    const overridesMount = document.createElement("div");
+    overridesMount.className = "light-overrides";
     const colorBriMount = document.createElement("div");
     const whiteBriMount = document.createElement("div");
     const wheelMount = document.createElement("div");
@@ -11160,6 +11278,7 @@ class CircadianScenesPanel extends HTMLElement {
     body.append(
       chipsHost,
       brightnessGraphMount,
+      overridesMount,
       colorBriMount,
       whiteBriMount,
       wheelMount,
@@ -11286,6 +11405,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._syncDuskMinimumSlot(duskSlot, next.id);
       const entry = drafts.get(next.id);
       paintChips();
+      paintOverrides();
       brightnessGraphCtl?.sync();
       colorBriGraphCtl?.sync();
       whiteBriGraphCtl?.sync();
@@ -11300,6 +11420,81 @@ class CircadianScenesPanel extends HTMLElement {
       syncEffectControl();
       if (this._perLightLiveEditOn()) {
         await applyLive();
+      }
+    };
+
+    paintOverrides = () => {
+      const stored = this._formData.overrides?.[light.entity_id] || {};
+      const rows = events.filter((item) => {
+        const payload = stored[item.id];
+        if (!payload) {
+          return false;
+        }
+        const theme = this._themeEventDraft(item.id);
+        const bri = Number(payload.brightness);
+        const themeBri = this._themeEventBrightness(item.id);
+        const briOver =
+          Number.isFinite(bri) &&
+          Math.abs(bri - themeBri) > THEME_BRIGHTNESS_SNAP;
+        const colorOver =
+          this._lightDraftLookFingerprint(payload) !==
+          this._lightDraftLookFingerprint(theme);
+        return briOver || colorOver;
+      });
+      overridesMount.replaceChildren();
+      if (!rows.length) {
+        overridesMount.hidden = true;
+        return;
+      }
+      overridesMount.hidden = false;
+      const heading = document.createElement("div");
+      heading.className = "light-overrides-title";
+      heading.textContent = this._t("frontend.lights.overrides", "Overrides");
+      overridesMount.appendChild(heading);
+      for (const item of rows) {
+        const payload = stored[item.id];
+        const theme = this._themeEventDraft(item.id);
+        const bri = Number(payload?.brightness);
+        const themeBri = this._themeEventBrightness(item.id);
+        const briOver =
+          Number.isFinite(bri) &&
+          Math.abs(bri - themeBri) > THEME_BRIGHTNESS_SNAP;
+        const colorOver =
+          this._lightDraftLookFingerprint(payload) !==
+          this._lightDraftLookFingerprint(theme);
+        if (!briOver && !colorOver) {
+          continue;
+        }
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "light-override-row";
+        const name = document.createElement("span");
+        name.className = "light-override-name";
+        name.textContent = item.name;
+        const meta = document.createElement("span");
+        meta.className = "light-override-meta";
+        const bits = [];
+        if (briOver) {
+          bits.push(
+            this._t(
+              "frontend.lights.override_brightness",
+              "Brightness {percent}% · theme {theme}%",
+              {
+                percent: String(Math.round((bri / 255) * 100)),
+                theme: String(Math.round((themeBri / 255) * 100)),
+              }
+            )
+          );
+        }
+        if (colorOver) {
+          bits.push(this._t("frontend.lights.override_color", "Color"));
+        }
+        meta.textContent = bits.join(" · ");
+        btn.append(name, meta);
+        btn.addEventListener("click", () => {
+          void selectScene(item);
+        });
+        overridesMount.appendChild(btn);
       }
     };
 
@@ -11395,6 +11590,7 @@ class CircadianScenesPanel extends HTMLElement {
             icon: item.icon,
             member,
             brightness,
+            themeBrightness: this._themeEventBrightness(item.id),
             rgb: member ? draftRgb(draft) : [128, 128, 128],
             draft: member ? draft : null,
             active: member && item.id === currentEvent.id,
@@ -11413,14 +11609,32 @@ class CircadianScenesPanel extends HTMLElement {
           return;
         }
         this._beginBrightnessScrub();
-        entry.draft.brightness = brightness;
-        if (brightness > 0) {
+        const theme = this._themeEventDraft(sceneId);
+        const snapped = this._snapLightEventBrightness(sceneId, brightness);
+        entry.draft.brightness = snapped;
+        if (snapped > 0) {
           entry.draft.state = "on";
         }
+        delete entry.draft.variable_ref;
+        const lookMatchesTheme =
+          this._lightDraftLookFingerprint(entry.draft) ===
+          this._lightDraftLookFingerprint(theme);
+        if (
+          snapped === this._themeEventBrightness(sceneId) &&
+          lookMatchesTheme
+        ) {
+          entry.draft = { ...theme };
+          this._deleteLightEventOverride(light.entity_id, sceneId);
+          entry.saved = lightDraftFingerprint(entry.draft);
+        }
         applyToSession();
+        if (this._eventBrightnessIsLive()) {
+          this._paintLiveEventBrightness();
+        }
         brightnessGraphCtl?.sync();
         colorBriGraphCtl?.sync();
         whiteBriGraphCtl?.sync();
+        paintOverrides();
         await applyLive();
       },
       onDragEnd: () => {
@@ -11616,6 +11830,7 @@ class CircadianScenesPanel extends HTMLElement {
     };
 
     paintChips();
+    paintOverrides();
     brightnessGraphCtl?.sync();
     wheelCtl?.sync();
     this._syncRoomPreviewControl();
@@ -15212,6 +15427,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (knots.length < 2 || !(r1 > r0)) {
       fill.setAttribute("d", "");
       stroke.setAttribute("d", "");
+      this._layoutClockThemeBrightDots();
       return;
     }
     grad.setAttribute("r", String(r1));
@@ -15262,6 +15478,41 @@ class CircadianScenesPanel extends HTMLElement {
     stroke.setAttribute("d", strokeD);
     fill.setAttribute("fill-rule", "evenodd");
     fill.setAttribute("d", `${strokeD} ${innerCircle}`);
+    this._layoutClockThemeBrightDots();
+  }
+
+  _layoutClockThemeBrightDots() {
+    const host = this._clockThemeBrightDotsEl;
+    const r0 = this._clockBrightR0;
+    const r1 = this._clockBrightR1;
+    if (!host) {
+      return;
+    }
+    host.replaceChildren();
+    const lightId = this._dialBrightnessLightId();
+    if (!lightId || r0 == null || !(r1 > r0)) {
+      return;
+    }
+    for (const event of this._sunPath?.events || []) {
+      const seconds = this._eventButtonSeconds(event);
+      if (seconds == null) {
+        continue;
+      }
+      const themeBri = this._themeEventBrightness(event.id);
+      const shown = this._shownEventBrightness(event.id);
+      if (Math.abs(shown - themeBri) <= THEME_BRIGHTNESS_SNAP) {
+        continue;
+      }
+      const deg = this._clockAngleDeg(seconds);
+      const rad = ((deg - 90) * Math.PI) / 180;
+      const radius = r0 + (themeBri / 255) * (r1 - r0);
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("class", "clock-theme-bright-dot");
+      dot.setAttribute("cx", (50 + Math.cos(rad) * radius).toFixed(2));
+      dot.setAttribute("cy", (50 + Math.sin(rad) * radius).toFixed(2));
+      dot.setAttribute("r", "1.15");
+      host.appendChild(dot);
+    }
   }
 
   _bindClockEventBrightnessDrag(btn, event, anchor) {
@@ -15686,6 +15937,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockBrightnessGradEl = undefined;
     this._clockBrightnessFillEl = undefined;
     this._clockBrightnessArcEl = undefined;
+    this._clockThemeBrightDotsEl = undefined;
     this._cancelClockBrightMotion();
     this._clockBrightShown = {};
     this._clockBrightTarget = {};
@@ -16275,11 +16527,14 @@ class CircadianScenesPanel extends HTMLElement {
     );
     briArc.setAttribute("class", "clock-brightness-arc");
     briArc.setAttribute("vector-effect", "non-scaling-stroke");
-    briSvg.append(briDefs, briFill, briArc);
+    const briThemeDots = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    briThemeDots.setAttribute("class", "clock-theme-bright-dots");
+    briSvg.append(briDefs, briFill, briArc, briThemeDots);
     eventLayer.appendChild(briSvg);
     this._clockBrightnessGradEl = briGrad;
     this._clockBrightnessFillEl = briFill;
     this._clockBrightnessArcEl = briArc;
+    this._clockThemeBrightDotsEl = briThemeDots;
     const eventAnchors = [];
     const polarForSeconds = (seconds) => {
       const deg = this._clockAngleDeg(seconds);

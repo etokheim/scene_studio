@@ -10,6 +10,7 @@ import {
 import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
 import {
   LIGHT_TILES_CSS,
+  TILE_BRIGHTNESS_WHEEL_STEP,
   createAddLightTile,
   createLightTile,
   paintLightTile,
@@ -533,7 +534,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }, 180);
           ev.preventDefault();
           tile.classList.add("wheel-adjusting");
-          applyBri((draft.brightness ?? 200) - Math.sign(ev.deltaY) * 8);
+          applyBri(
+            (draft.brightness ?? 200) -
+              Math.sign(ev.deltaY) * TILE_BRIGHTNESS_WHEEL_STEP
+          );
           window.setTimeout(() => tile.classList.remove("wheel-adjusting"), 250);
         },
         { passive: false }

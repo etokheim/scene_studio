@@ -398,6 +398,9 @@ export function createAddLightTile({ label, onActivate }) {
   return selector;
 }
 
+/** Per notch; was 8. One-third so the Lys strip is usable with a mouse wheel. */
+export const TILE_BRIGHTNESS_WHEEL_STEP = 8 / 3;
+
 /** Vertical drag + wheel brightness (0–255). Horizontal pan stays strip scroll. */
 export function bindLightTileBrightness(tile, hit, {
   isEditable,
@@ -526,7 +529,10 @@ export function bindLightTileBrightness(tile, hit, {
       }, 180);
       ev.preventDefault();
       tile.classList.add("wheel-adjusting");
-      applyBri((Number(getBrightness()) || 0) - Math.sign(ev.deltaY) * 8);
+      applyBri(
+        (Number(getBrightness()) || 0) -
+          Math.sign(ev.deltaY) * TILE_BRIGHTNESS_WHEEL_STEP
+      );
       window.setTimeout(() => tile.classList.remove("wheel-adjusting"), 250);
     },
     { passive: false }

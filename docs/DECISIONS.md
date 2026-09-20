@@ -810,6 +810,13 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** The strip is the membership UI. An unavailable bulb we already know how to drive should still be tunable.
 - **Do not reverse without user ask.**
 
+## Theme brightness ghost + snap-to-clear override
+
+- **Date:** 2026-09-20
+- **Decision:** When a light’s event brightness differs from the theme (more than `THEME_BRIGHTNESS_SNAP`, ~2%), the sidebar brightness graph shows a small theme-brightness dot and a dashed high-contrast polyline to neighboring knots at the theme radius. The selected-light dial brightness loop shows the same dots on the polar wrap. Dragging brightness back onto the theme knot clears that event’s override if color/look still matches the theme; a remaining color override keeps the payload with theme brightness. The light sidebar lists current overrides (event name + brightness/color). Lys tile wheel uses `TILE_BRIGHTNESS_WHEEL_STEP` (8/3) — one-third the old per-notch step.
+- **Why:** Overrides were invisible except as a shifted handle. The ghost is the theme baseline; snap-to-clear avoids leftover “same as theme” overrides.
+- **Do not reverse without user ask.**
+
 ## Circadian edit is dial-only; graph plus does not add membership
 
 - **Date:** 2026-09-16
