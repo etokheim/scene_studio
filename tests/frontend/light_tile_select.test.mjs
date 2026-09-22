@@ -19,6 +19,12 @@ test("color mode buckets follow the strip order", () => {
   assert.equal(lightTileColorGroup({ color_mode: "white" }), "white");
   assert.equal(lightTileColorGroup({ color_mode: "brightness" }), "brightness");
   assert.equal(lightTileColorGroup({ color_mode: "onoff" }), "brightness");
+  assert.equal(lightTileColorGroup({ color_mode: "rgbw" }), "color");
+  assert.equal(lightTileColorGroup({ color_mode: "rgbww" }), "color");
+  assert.equal(
+    lightTileColorGroup({ color_mode: "hs", color_temp_kelvin: 2700 }),
+    "color"
+  );
   assert.equal(lightTileColorGroup({}), "brightness");
 });
 
@@ -78,4 +84,52 @@ test("shift click selects the inclusive range and keeps the anchor", () => {
   });
   assert.deepEqual(backward.selected, ["b", "c", "d"]);
   assert.equal(backward.anchorId, "d");
+});
+
+test("shift without an anchor does not invent a range", () => {
+  const plain = tileSelectionAfterClick({
+    ids,
+    selected: ["a", "b"],
+    anchorId: null,
+    entityId: "d",
+    shiftKey: true,
+    toggleKey: false,
+  });
+  assert.deepEqual(plain, { selected: ["d"], anchorId: "d" });
+  const toggled = tileSelectionAfterClick({
+    ids,
+    selected: ["a"],
+    anchorId: "missing",
+    entityId: "c",
+    shiftKey: true,
+    toggleKey: true,
+  });
+  assert.deepEqual(toggled.selected, ["a", "c"]);
+  assert.equal(toggled.anchorId, "c");
+});
+
+test("shift wins over cmd/ctrl when the anchor is in the strip", () => {
+  const next = tileSelectionAfterClick({
+    ids,
+    selected: ["a"],
+    anchorId: "a",
+    entityId: "c",
+    shiftKey: true,
+    toggleKey: true,
+  });
+  assert.deepEqual(next.selected, ["a", "b", "c"]);
+  assert.equal(next.anchorId, "a");
+});
+
+test("cmd/ctrl click can clear the last selected id", () => {
+  const next = tileSelectionAfterClick({
+    ids,
+    selected: ["b"],
+    anchorId: "b",
+    entityId: "b",
+    shiftKey: false,
+    toggleKey: true,
+  });
+  assert.deepEqual(next.selected, []);
+  assert.equal(next.anchorId, "b");
 });

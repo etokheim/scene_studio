@@ -4,7 +4,24 @@ import test from "node:test";
 import {
   meshColors,
   sampleMeshColor,
+  scaledCardRgb,
 } from "../../custom_components/circadian_scenes/frontend/card_mesh.js";
+
+test("card dots scale chromatic rgb by brightness", () => {
+  assert.deepEqual(
+    scaledCardRgb([200, 100, 0], { state: "on", brightness: 128 }),
+    [100, 50, 0]
+  );
+  assert.deepEqual(
+    scaledCardRgb([200, 100, 0], { state: "off", brightness: 255 }),
+    [0, 0, 0]
+  );
+  assert.deepEqual(
+    scaledCardRgb([200, 100, 0], { state: "on", brightness: 0 }),
+    [0, 0, 0]
+  );
+  assert.deepEqual(scaledCardRgb(null, { state: "on", brightness: 255 }), [0, 0, 0]);
+});
 
 test("mesh colors reject malformed values and deduplicate", () => {
   assert.deepEqual(

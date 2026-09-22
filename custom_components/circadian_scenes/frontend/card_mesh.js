@@ -18,6 +18,14 @@ function linearToSrgb(channel) {
   return Math.round(Math.max(0, Math.min(1, value)) * 255);
 }
 
+/** Chromatic RGB scaled by brightness. Off, or brightness at or below 0, is black. */
+export function scaledCardRgb(rgb, draft) {
+  const channels = Array.isArray(rgb) ? rgb : [0, 0, 0];
+  const off = (draft?.state || "on") === "off" || Number(draft?.brightness) <= 0;
+  const scale = off ? 0 : (Number(draft?.brightness) || 0) / 255;
+  return channels.map((channel) => Math.round(Number(channel) * scale));
+}
+
 export function meshColors(dots) {
   const colors = [];
   for (const dot of dots || []) {

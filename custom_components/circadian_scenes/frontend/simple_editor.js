@@ -7,6 +7,7 @@ import {
   draftRgb,
   lightWheelCaps,
 } from "./color_ui.js";
+import { scaledCardRgb } from "./card_mesh.js";
 import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
 import {
   LIGHT_TILES_CSS,
@@ -212,12 +213,9 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const cardDots = () =>
     members.map((eid) => {
       const draft = drafts[eid] || {};
-      const rgb = draftRgb(draft);
-      const off = (draft.state || "on") === "off" || Number(draft.brightness) <= 0;
-      const scale = off ? 0 : (Number(draft.brightness) || 0) / 255;
       return {
         entity_id: eid,
-        rgb: rgb.map((channel) => Math.round(Number(channel) * scale)),
+        rgb: scaledCardRgb(draftRgb(draft), draft),
       };
     });
 

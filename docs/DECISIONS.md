@@ -327,6 +327,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Save/rename dialog; area stays on the form
 
 - **Date:** 2026-08-26
+- **Superseded:** 2026-09-22 — rename does not offer an area picker. The scene stays on the area it was created in. Icon, category, and labels are the rename fields. See “Scene tiles, create menu, and rename”.
 - **Superseded:** 2026-08-26 — area is required in a dialog before create, then shown again on Save/Rename.
 - **Superseded in part:** 2026-08-30 — first Save on a new scene opens the dialog (name/area/metadata); later Saves write immediately. Rename/settings still open the dialog from the overflow menu.
 - **Decision:** Save (first create) and Rename open a `ha-dialog` patterned on `ha-dialog-automation-save`: required name, area, optional description / category / labels via assist chips. Name is not a form field. Persist description in the store; sync labels and the `scene` category through the entity registry.
@@ -336,6 +337,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Prompt for area before a new scene; area also on Save
 
 - **Date:** 2026-08-26
+- **Superseded:** 2026-09-22 — area is chosen by which area’s plus button created the scene. Rename does not change it. See “Scene tiles, create menu, and rename”.
 - **Superseded in part:** 2026-08-30 — area is still collected on first Save / Rename; subsequent Saves skip the dialog.
 - **Superseded in part:** 2026-08-30 — create dialog is a wizard: area + Automatic / Manual cards; Manual adds a second step with solar-event scene pickers (linked dawn/sunrise/sunset on by default; empty slots = Automatic). Areas with no lights are rejected with an error. See “Create wizard sets up native scenes”.
 - **Decision:** **New extrapolation scene** opens an area dialog first. Continue navigates to `#new` with that area already set (refresh of `#new` with no area prompts again; cancel returns to the list). First Save and Rename show the area selector, prefilled. Area is not on `ha-form`. Native scene pickers still filter by the working area.
@@ -680,6 +682,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-16
 - **Superseded in part:** 2026-09-16 — the same light-tile strip is the circadian dial light list (under the face), not only simple scenes.
+- **Superseded in part:** 2026-09-22 — the simple-scene strip has no long-press mode picker. Grouping, multiselect, and the settings dialog are in “Scene tiles, create menu, and rename”. Circadian tiles still open the light sidebar on tap.
 - **Decision:** Simple-scene members and the circadian dial list are huemane light tiles (content-box **85×135**, 5px pad, radius 24 — switch slot reserved even when unused). Fill-from-bottom `--hue-light-fill`, dual clipped label layers, 2px selected ring. Tile chrome uses huemane transitions (`all 0.3s ease-out`, fill/clip 0.3s, wheel scrub 25ms, press scale 0.95). They sit in a full-column `overflow-x` strip with `flex: 0 0 auto` so the wheel cannot collapse it; the inner row is `width: max-content; margin-inline: auto` so a short list centers and an overflowing list scrolls from the start. Vertical drag/wheel owns brightness after an 8px axis lock; horizontal pan stays native strip scroll. Do not use circular tiles or 85×90 squat cards.
 - **Why:** The circular strip only shared wheel-to-brightness; the cards are the house language for lights.
 - **Do not reverse without user ask.**
@@ -694,6 +697,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## light tiles under the circadian dial
 
 - **Date:** 2026-09-16
+- **Superseded in part:** 2026-09-22 — that settings-dialog click is the simple-scene editor only. A circadian tile tap still opens the closest-event light sidebar.
 - **Decision:** Circadian scene edit (`#edit/<id>` dial) lists area lights as the same light tiles as simple scenes: horizontal strip, centered when the row fits, overflow-x when it does not. Fill/color follow the interpolated sample at the clock. Tap still opens the closest-event light editor; add/remove stay on the tile. Theme-look (`#theme`) has no member strip.
 - **Why:** One light language in both editors. Stacked HA-style legend rows read as a different product.
 - **Do not reverse without user ask.**
@@ -736,6 +740,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Create persists immediately; undo deletes
 
 - **Date:** 2026-09-16
+- **Superseded in part:** 2026-09-22 — an area plus (or empty area) opens “Create circadian scene” and “Create scene”, then saves that kind immediately. Undo still deletes the new record.
 - **Decision:** Add scene / variable / palette / theme saves a named record at once and opens the editor. The undo stack stores a `created` entry so Undo deletes that record and Redo recreates it. Do not leave an unsaved `#…/new` draft as the create path.
 - **Why:** The rail is the source of truth; a draft that is not in the list looks like a failed add. Session snapshots do not include the library list, so create needs its own undo record.
 - **Do not reverse without user ask.**
@@ -822,8 +827,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Frontend checks are node:test plus the sandbox, not Playwright
 
 - **Date:** 2026-09-22
-- **Decision:** Wheel grouping rules live as pure functions in `frontend/color_ui.js` (`clusterNearbyPinIds`, `dragIdsForPin`, `splitIdsByWheelMode`, `detachedAfterDrag`, `pinPressAction`) and run in CI with `node --test tests/frontend/*.test.mjs`. Layout and pointer behavior are checked against the local Docker sandbox with Chrome DevTools MCP. Do not add Playwright (or another browser runner) to CI.
-- **Why:** The grouping bugs were rules about who moves and who drops out. Those lock in unit tests without Home Assistant. The panel is a custom element inside HA’s shadow DOM, behind login, with a versioned asset URL. A Playwright job would need Docker, sandbox credentials, and a full HA boot, and it would still miss the rules tests. Chrome MCP stays the layout check because it already drives that sandbox.
+- **Decision:** Rules that do not need Home Assistant live as pure functions and run in CI with `node --test tests/frontend/*.test.mjs`: wheel grouping (`color_ui.js`), light-tile color groups and modifier selection (`light_tiles.js`), and the simple-scene card dot (`scaledCardRgb` in `card_mesh.js`). Layout and pointer behavior are checked against the local Docker sandbox with Chrome DevTools MCP. Do not add Playwright, or another browser runner, to CI or as a local suite.
+- **Why:** Those bugs were rules about who moves, who is selected, and what color the card paints. Unit tests lock that in without Home Assistant. The panel is a custom element inside HA’s shadow DOM, behind login, with a versioned asset URL. Playwright would need Docker, sandbox credentials, and a full HA boot, and it would still miss the rule tests. A component harness would also have to fake `ha-icon`, dialogs, and `hass`. Chrome MCP already drives the real sandbox, so it stays the layout check.
 - **Do not reverse without user ask.**
 
 ## Theme brightness ghost + snap-to-clear override
@@ -843,7 +848,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Scene tiles, create menu, and rename
 
 - **Date:** 2026-09-22
-- **Decision:** In the simple-scene editor, light tiles are grouped by the color mode they are in now (color, temperature, white, brightness). The group label selects that group. Cmd/Ctrl-click toggles one tile, Shift-click selects the range in that visual order, and Cmd/Ctrl+A selects every member. Arrow keys move the selection; Shift+arrow extends it; Enter opens settings. A plain click selects only that light, peels its pin, and opens the same light settings dialog as the sidebar info icon. Modifier clicks do not open the dialog. The long-press mode picker is gone. The area-rail card mesh repaints from the live drafts while the wheel or brightness changes. Each area’s plus (and empty-area) button opens “Create circadian scene” and “Create scene”. User-facing copy says “Scene”; the stored kind stays `simple`. Rename (editor and card) does not offer an area picker — the scene stays on its area. It does offer Icon (always visible), plus Category and Labels as chips until filled, matching native scene rename. The icon is stored on the scene and written to the entity registry. The Home Assistant sidebar icon for this panel is `mdi:palette`.
+- **Decision:** In the simple-scene editor, light tiles are grouped by the color mode they are in now (color, temperature, white, brightness). The group label selects that group. Cmd/Ctrl-click toggles one tile, Shift-click selects the range in that visual order, and Cmd/Ctrl+A selects every member. Arrow keys move the selection; Shift+arrow extends it; Enter opens settings. A plain click selects only that light, peels its pin, and opens the same light settings dialog as the sidebar info icon. Modifier clicks do not open the dialog. The long-press mode picker is gone. The area-rail card mesh repaints from the live drafts while the wheel or brightness changes. Each dot is `scaledCardRgb`: chromatic RGB times brightness/255; off or brightness at or below 0 is black. Each area’s plus (and empty-area) button opens “Create circadian scene” and “Create scene”. User-facing copy says “Scene”; the stored kind stays `simple`. Rename (editor and card) does not offer an area picker — the scene stays on its area. It does offer Icon (always visible), plus Category and Labels as chips until filled, matching native scene rename. The icon is stored on the scene and written to the entity registry. The Home Assistant sidebar icon for this panel is `mdi:palette`.
 - **Why:** Multiselect and mode groups are how a room of mixed bulbs is edited. The long-press picker duplicated the wheel. The card has to follow the drag, not the save. “Simple” is not a useful distinction in the UI. Area is chosen by where the scene was created; icon, category, and labels are the native rename fields.
 - **Do not reverse without user ask.**
 

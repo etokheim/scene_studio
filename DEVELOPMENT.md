@@ -68,7 +68,7 @@ Frontend (no Home Assistant, no browser). CI runs the same command:
 node --test tests/frontend/*.test.mjs
 ```
 
-Wheel grouping, who a drag writes, and which lights drop out of a color mode are covered there (`tests/frontend/pin_groups.test.mjs`). Layout and pointer behavior of the panel are checked in the sandbox with Chrome DevTools MCP, not Playwright. The panel sits in Home Assistant’s shadow DOM behind login; a browser runner in CI would need Docker and sandbox credentials and would not replace the rule tests. See [`docs/DECISIONS.md`](docs/DECISIONS.md) (“Frontend checks are node:test plus the sandbox, not Playwright”).
+That suite covers wheel grouping (`tests/frontend/pin_groups.test.mjs`), light-tile color groups and modifier selection (`tests/frontend/light_tile_select.test.mjs`), and the simple-scene card dot (`tests/frontend/card_mesh.test.mjs`). Scene icon round-trip is in `tests/test_store_v4.py`. Layout and pointer behavior of the panel are checked in the sandbox with Chrome DevTools MCP. Do not add Playwright. The panel sits in Home Assistant’s shadow DOM behind login; a browser runner would need Docker and sandbox credentials and would not replace these rule tests. See [`docs/DECISIONS.md`](docs/DECISIONS.md) (“Frontend checks are node:test plus the sandbox, not Playwright”).
 
 CI runs the same suite (see `.github/workflows/ci.yml`).
 

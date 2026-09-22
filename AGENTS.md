@@ -16,7 +16,7 @@ Custom Home Assistant integration in `custom_components/circadian_scenes/`. This
 - **Translations** — during development, add keys to `en.json` only. nb/nn/de/es are one pass in the release PR — [`.cursor/skills/panel-translations/SKILL.md`](.cursor/skills/panel-translations/SKILL.md).
 - **Changelog** — do not maintain `CHANGELOG.md` Unreleased during feature work; the release skill fills it from the diff.
 - **Secrets** — never dump tokens, `.env`, or HA `.storage` credentials; disclose any accidental secret read immediately. See [`.cursor/rules/secrets-handling.mdc`](.cursor/rules/secrets-handling.mdc).
-- **Tests** — `pytest tests/` and `node --test tests/frontend/*.test.mjs`. Do not add Playwright; panel layout stays on Chrome DevTools MCP. See [`DEVELOPMENT.md`](DEVELOPMENT.md).
+- **Tests** — `pytest tests/` and `node --test tests/frontend/*.test.mjs` (pin grouping, tile selection, card dots). Do not add Playwright; panel layout stays on Chrome DevTools MCP. See [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ## Local sandbox
 
