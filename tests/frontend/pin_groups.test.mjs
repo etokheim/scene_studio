@@ -11,6 +11,8 @@ import {
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
   wheelPillModes,
+  wheelStandIn,
+  kelvinTrackDragPoint,
 } from "../../custom_components/circadian_scenes/frontend/color_ui.js";
 
 const supports =
@@ -143,6 +145,96 @@ test("the mode pill lists only modes the selected lights support", () => {
   assert.deepEqual(
     wheelPillModes([], { hasColor: true, hasTemp: true, palette: false }),
     ["color", "temp"]
+  );
+});
+
+test("brightness and on/off selections replace the disks", () => {
+  assert.equal(wheelStandIn([]), "disks");
+  assert.equal(
+    wheelStandIn([{ hasColor: true, hasTemp: false, onOffOnly: false }]),
+    "disks"
+  );
+  assert.equal(
+    wheelStandIn([{ hasColor: false, hasTemp: false, onOffOnly: false }]),
+    "slider"
+  );
+  assert.equal(
+    wheelStandIn([{ hasColor: false, hasTemp: false, onOffOnly: true }]),
+    "switch"
+  );
+  assert.equal(
+    wheelStandIn([
+      { hasColor: false, hasTemp: false, onOffOnly: true },
+      { hasColor: false, hasTemp: false, onOffOnly: false },
+    ]),
+    "both"
+  );
+});
+
+test("an outer kelvin drag stays on the track and resists the color disk", () => {
+  const radius = 200;
+  const inner = 160;
+  const outer = 200;
+  const mid = (inner + outer) / 2;
+  const onTrack = kelvinTrackDragPoint({
+    x: radius + mid,
+    y: radius,
+    radius,
+    inner,
+    outer,
+    colorOuter: inner,
+    colorLive: true,
+    tempMin: 2000,
+    tempMax: 6500,
+    canColor: true,
+    hyst: 8,
+  });
+  assert.ok(onTrack);
+  assert.ok(Math.abs(Math.hypot(onTrack.x - radius, onTrack.y - radius) - mid) < 1.5);
+
+  const pulled = kelvinTrackDragPoint({
+    x: radius + 168,
+    y: radius,
+    radius,
+    inner,
+    outer,
+    colorOuter: inner,
+    colorLive: true,
+    tempMin: 2000,
+    tempMax: 6500,
+    canColor: true,
+    hyst: 8,
+  });
+  const pulledR = Math.hypot(pulled.x - radius, pulled.y - radius);
+  assert.ok(pulledR < mid - 0.5);
+  assert.ok(pulledR > 168);
+
+  const blocked = kelvinTrackDragPoint({
+    x: radius + 168,
+    y: radius,
+    radius,
+    inner,
+    outer,
+    colorOuter: inner,
+    colorLive: true,
+    tempMin: 2000,
+    tempMax: 6500,
+    canColor: false,
+    hyst: 8,
+  });
+  assert.ok(Math.abs(Math.hypot(blocked.x - radius, blocked.y - radius) - mid) < 1.5);
+  assert.equal(
+    kelvinTrackDragPoint({
+      x: radius,
+      y: radius,
+      radius,
+      inner: 0,
+      outer: radius,
+      colorLive: false,
+      tempMin: 2000,
+      tempMax: 6500,
+    }),
+    null
   );
 });
 

@@ -6,6 +6,7 @@ import {
   createSceneColorWheel,
   draftRgb,
   lightWheelCaps,
+  wheelStandIn,
 } from "./color_ui.js";
 import { scaledCardRgb } from "./card_mesh.js";
 import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
@@ -74,6 +75,28 @@ export const SIMPLE_EDITOR_CSS = `
     margin: 0;
     flex: 1 1 auto;
     container-type: size;
+  }
+  .simple-level-host {
+    width: min(100%, 420px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 28px;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .simple-level-host[hidden] {
+    display: none;
+  }
+  .simple-level-host ha-slider {
+    width: 100%;
+  }
+  .simple-onoff {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 16px;
   }
   .simple-editor .library-name-field {
     width: min(100%, 650px);
@@ -232,6 +255,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   );
   const hasColor = memberCaps.some((caps) => caps.hasColor);
   const hasTemp = memberCaps.some((caps) => caps.hasTemp);
+  let stripGroupSignature = "";
 
   const getState = () => ({
     scenes: members.map((id) => ({
@@ -285,6 +309,13 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         persistLight(eid);
       }
       if (dragging) {
+        const nextGroups = members
+          .map((id) => `${id}:${lightTileColorGroup(drafts[id])}`)
+          .join("|");
+        if (nextGroups !== stripGroupSignature) {
+          syncTiles();
+          return;
+        }
         for (const eid of write) {
           const sel = tiles.querySelector(
             `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
@@ -330,6 +361,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     ...panel._wheelPalette(),
   });
   wheels.appendChild(wheel.el);
+  const levelHost = document.createElement("div");
+  levelHost.className = "simple-level-host";
+  levelHost.hidden = true;
+  wheels.appendChild(levelHost);
   wrap.appendChild(wheels);
 
   const scroller = document.createElement("div");
@@ -378,6 +413,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       wheel.detach?.(next);
       paintTileSelection();
       wheel.sync();
+      syncLevelHost();
     }
     scroller.querySelector(
       `.simple-light-selector[data-entity-id="${CSS.escape(next)}"]`
@@ -405,6 +441,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     paintTileSelection();
     wheel.sync();
+    syncLevelHost();
   };
 
   const fillPercent = (draft) => {
@@ -735,7 +772,125 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       scroller.scrollLeft = keepLeft;
     }
     playLightStripLayout(tiles, beforeLayout);
+    stripGroupSignature = members
+      .map((id) => `${id}:${lightTileColorGroup(drafts[id])}`)
+      .join("|");
+    syncLevelHost();
   };
+  let levelStand = "";
+
+  function lightLevelOf(entityId) {
+    const attrs = panel._hass?.states?.[entityId]?.attributes || {};
+    const caps = lightWheelCaps(attrs);
+    const modes = attrs.supported_color_modes || [];
+    return {
+      hasColor: caps.hasColor,
+      hasTemp: caps.hasTemp,
+      onOffOnly: modes.length > 0 && modes.every((mode) => mode === "onoff"),
+    };
+  }
+
+  function syncLevelHost() {
+    const ids = [...selectedIds].filter((id) => members.includes(id));
+    const stand = wheelStandIn(ids.map(lightLevelOf));
+    wheel.el.hidden = stand !== "disks";
+    levelHost.hidden = stand === "disks";
+    if (stand === "disks") {
+      levelStand = "";
+      levelHost.replaceChildren();
+      return;
+    }
+    const selectedNow = () =>
+      [...selectedIds].filter((id) => members.includes(id));
+    const brightnessTargets = () =>
+      selectedNow().filter((id) => {
+        const row = lightLevelOf(id);
+        return !row.onOffOnly && !row.hasColor && !row.hasTemp;
+      });
+    const onOffTargets = () =>
+      selectedNow().filter((id) => lightLevelOf(id).onOffOnly);
+    const paintTargets = (targets) => {
+      for (const id of targets) {
+        const sel = tiles.querySelector(
+          `.simple-light-selector[data-entity-id="${CSS.escape(id)}"]`
+        );
+        if (sel && drafts[id]) {
+          paintSelector(sel, id, drafts[id]);
+        }
+      }
+    };
+    if (levelStand !== stand) {
+      levelStand = stand;
+      levelHost.replaceChildren();
+      if (stand === "switch" || stand === "both") {
+        const row = document.createElement("div");
+        row.className = "simple-onoff";
+        const label = document.createElement("span");
+        label.textContent = panel._t("frontend.lights.power", "On");
+        const toggle = document.createElement("ha-switch");
+        toggle.checked = onOffTargets().every(
+          (id) => (drafts[id]?.state || "on") !== "off"
+        );
+        toggle.addEventListener("change", () => {
+          const on = Boolean(toggle.checked);
+          const targets = onOffTargets();
+          for (const id of targets) {
+            const draft = ensureDraft(id);
+            draft.state = on ? "on" : "off";
+            persistLight(id);
+          }
+          paintTargets(targets);
+        });
+        row.append(label, toggle);
+        levelHost.appendChild(row);
+      }
+      if (stand === "slider" || stand === "both") {
+        const label = document.createElement("span");
+        label.textContent = panel._t("frontend.lights.brightness", "Brightness");
+        const slider = document.createElement("ha-slider");
+        slider.labeled = true;
+        slider.min = 0;
+        slider.max = 100;
+        slider.step = 1;
+        const first = brightnessTargets()[0];
+        const bri = Number(drafts[first]?.brightness);
+        slider.value = Number.isFinite(bri)
+          ? Math.max(0, Math.min(100, Math.round((bri / 255) * 100)))
+          : 80;
+        const apply = () => {
+          const pct = Number(slider.value);
+          const next = Math.max(0, Math.min(255, Math.round((pct / 100) * 255)));
+          const targets = brightnessTargets();
+          for (const id of targets) {
+            const draft = ensureDraft(id);
+            draft.brightness = next;
+            draft.state = next > 0 ? "on" : "off";
+            persistLight(id);
+          }
+          paintTargets(targets);
+        };
+        slider.addEventListener("input", apply);
+        slider.addEventListener("change", apply);
+        levelHost.append(label, slider);
+      }
+      return;
+    }
+    const slider = levelHost.querySelector("ha-slider");
+    if (slider && document.activeElement !== slider) {
+      const first = brightnessTargets()[0];
+      const bri = Number(drafts[first]?.brightness);
+      if (Number.isFinite(bri)) {
+        slider.value = Math.max(0, Math.min(100, Math.round((bri / 255) * 100)));
+      }
+    }
+    const toggle = levelHost.querySelector("ha-switch");
+    if (toggle && document.activeElement !== toggle && onOffTargets().length) {
+      toggle.checked = onOffTargets().every(
+        (id) => (drafts[id]?.state || "on") !== "off"
+      );
+    }
+  }
+
   const refreshFromPanel = () => {
     const lists = panel._simpleMembershipLists();
     members = lists.members;

@@ -821,6 +821,25 @@ function wheelPillModes(lights, fallback = {}) {
   return modes;
 }
 
+/**
+ * What replaces the color disks for the current selection.
+ * Brightness- and on/off-only lights are not wheel pins. An empty selection,
+ * or any selected light that can use color or kelvin, keeps the disks.
+ */
+function wheelStandIn(lights) {
+  const rows = lights || [];
+  if (!rows.length || rows.some((row) => row?.hasColor || row?.hasTemp)) {
+    return "disks";
+  }
+  if (rows.every((row) => row?.onOffOnly)) {
+    return "switch";
+  }
+  if (rows.some((row) => row?.onOffOnly)) {
+    return "both";
+  }
+  return "slider";
+}
+
 /** Disks to fade while dragging: a visible mode none of the dragged lights can use. */
 function disksUnsupportedByDrag(ids, capsOf) {
   const list = ids || [];
@@ -1329,6 +1348,9 @@ function pinStackKind(scenes, hasColor, hasTemp, capsOf) {
       continue;
     }
     const caps = capsOf(scene);
+    if (!caps.hasColor && !caps.hasTemp) {
+      continue;
+    }
     const mode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
     if (mode === "temp") {
       temp += 1;
@@ -1423,14 +1445,72 @@ function placeTempInAnnulus(kelvin, inner, outer, tempMin, tempMax) {
   if (!(inner > 0)) {
     return { x: coords.x, y: coords.y };
   }
-  // Resting pins sit on the band centerline (not the inner rim). Drag still
-  // samples the full annulus via limitToAnnulus.
+  // Resting pins sit on the band centerline (not the inner rim). An outer-ring
+  // drag uses the same centerline; a full disk still follows the pointer.
   const mid = (inner + outer) / 2;
   let y = coords.y;
   const maxY = Math.max(0, mid - 0.5);
   y = Math.max(-maxY, Math.min(maxY, y));
   const x = Math.sqrt(Math.max(0, mid * mid - y * y));
   return { x, y };
+}
+
+/**
+ * Pin position while dragging on an outer kelvin ring.
+ * The pin stays on the track centerline (the release position). Pulling inward
+ * toward a supported color disk eases it slightly off that line until the
+ * convert threshold; the caller then animates to the cursor.
+ * Returns null when kelvin is not an outer ring.
+ */
+function kelvinTrackDragPoint({
+  x,
+  y,
+  radius,
+  inner,
+  outer,
+  colorOuter = 0,
+  colorLive = false,
+  tempMin,
+  tempMax,
+  canColor = false,
+  hyst = 0,
+}) {
+  const kelvinIsOuterRing =
+    inner > 0 &&
+    outer > inner + 1 &&
+    (!colorLive || inner + 1 >= colorOuter);
+  if (!kelvinIsOuterRing) {
+    return null;
+  }
+  const relX = x - radius;
+  const relY = y - radius;
+  let sample = hueTempAt(relX, relY, outer, tempMin, tempMax);
+  if (!sample) {
+    const clampedY = Math.max(-outer, Math.min(outer, relY));
+    sample = hueTempAt(0, clampedY, outer, tempMin, tempMax);
+  }
+  if (!sample) {
+    return null;
+  }
+  const rel = placeTempInAnnulus(sample.kelvin, inner, outer, tempMin, tempMax);
+  let px = rel.x;
+  let py = rel.y;
+  if (canColor && colorLive && colorOuter <= inner + 1) {
+    const pointerR = Math.hypot(relX, relY);
+    const mid = (inner + outer) / 2;
+    const threshold = Math.max(0, inner - hyst);
+    if (pointerR < mid) {
+      const span = Math.max(1, mid - threshold);
+      const pull = Math.max(0, Math.min(1, (mid - pointerR) / span));
+      const pinR = Math.hypot(px, py) || mid;
+      const maxDrift = (mid - inner) * 0.4;
+      const nextR = Math.max(inner, pinR - pull * maxDrift);
+      const scale = nextR / pinR;
+      px *= scale;
+      py *= scale;
+    }
+  }
+  return { x: radius + px, y: radius + py, kelvin: sample.kelvin };
 }
 
 function limitToAnnulus(x, y, cx, inner, outer) {
@@ -2869,6 +2949,10 @@ function createSceneColorWheel({
       }
       const active = selectedIds.includes(scene.id);
       const caps = capsOf(scene);
+      if (!caps.hasColor && !caps.hasTemp) {
+        marker.g.style.display = "none";
+        continue;
+      }
       const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.path.setAttribute("d", active ? HUE_PIN_PATH : HUE_DOT_PATH);
       marker.g.classList.toggle("active", active);
@@ -3120,12 +3204,14 @@ function createSceneColorWheel({
     const y = pt.y - drag.grabY;
     const r = Math.hypot(x - radius, y - radius);
     let pinMode = drag.mode;
+    let converted = false;
     if (drag.mustEnterHome && pointerInModeInterior(r, geom, pinMode)) {
       drag.mustEnterHome = false;
     }
     if (!drag.mustEnterHome && !showingPalette()) {
       const nextMode = maybeConvertDrag(item, x, y, geom, radius, pinMode);
       if (nextMode !== pinMode) {
+        converted = true;
         pinMode = nextMode;
         drag.mode = nextMode;
         drag.mustEnterHome = true;
@@ -3143,26 +3229,59 @@ function createSceneColorWheel({
     if (!bandLive(band)) {
       return;
     }
-    const limited = applyAtBand(item.draft, x, y, radius, pinMode, band);
+    const hyst = Math.max(
+      6,
+      radius * cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC) * 0.45
+    );
+    const tracked =
+      pinMode === "temp" && !showingPalette()
+        ? kelvinTrackDragPoint({
+            x,
+            y,
+            radius,
+            inner: band.inner,
+            outer: band.outer,
+            colorOuter: geom.color.outer,
+            colorLive: bandLive(geom.color),
+            tempMin,
+            tempMax,
+            canColor: capsOf(item).hasColor,
+            hyst,
+          })
+        : null;
+    const limited = tracked
+      ? { x: tracked.x, y: tracked.y }
+      : applyAtBand(item.draft, x, y, radius, pinMode, band);
     const moved = new Set();
+    const placeDragPin = (row) => {
+      const pin = markers.get(row.id);
+      if (!pin) {
+        return;
+      }
+      if (converted) {
+        pin.g.classList.add("glide");
+        void pin.g.getBoundingClientRect();
+        window.setTimeout(() => pin.g.classList.remove("glide"), 420);
+      }
+      pin.g.style.color = rgbCss(draftRgb(row.draft));
+      pin.icon.style.fill = pinForeground(draftRgb(row.draft));
+      placeMarker(pin, limited.x, limited.y, selectedIdsOf(getState()).includes(row.id));
+    };
     for (const id of moveIds) {
       const row = scenes.find((scene) => scene.id === id);
       if (!row?.draft) {
         continue;
       }
-      if (row !== item) {
+      if (tracked) {
+        applyTempToDraft(row.draft, tracked.kelvin);
+      } else if (row !== item) {
         applyAtBand(row.draft, x, y, radius, pinMode, band);
       }
       delete row.draft.variable_ref;
       delete row.draft.palette_t;
       delete row.draft.palette_r;
       moved.add(id);
-      const pin = markers.get(id);
-      if (pin) {
-        pin.g.style.color = rgbCss(draftRgb(row.draft));
-        pin.icon.style.fill = pinForeground(draftRgb(row.draft));
-        placeMarker(pin, limited.x, limited.y, selectedIdsOf(getState()).includes(id));
-      }
+      placeDragPin(row);
     }
     showFloatReadout(item.draft, limited.x, limited.y, pinMode);
     const nextGeom = currentGeom();
@@ -3556,6 +3675,8 @@ export {
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
   wheelPillModes,
+  wheelStandIn,
+  kelvinTrackDragPoint,
   detachedAfterDrag,
   pinPressAction,
 };

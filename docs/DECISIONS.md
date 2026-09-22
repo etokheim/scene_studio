@@ -860,3 +860,10 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Grouping moves tiles between buckets, and that jump read as a glitch. The pill was offering disks the selected bulbs cannot use. The legend node stayed on the sun path after its reference was cleared, so the next editor appended another strip.
 - **Do not reverse without user ask.**
 
+## Kelvin track drag, live groups, and level-only lights
+
+- **Date:** 2026-09-22
+- **Decision:** While a pin is in kelvin mode on an outer ring, it sits on the track centerline — the same place it rests when released. Pulling inward toward a color disk the light supports eases the pin slightly off that line until the convert threshold, then the pin glides to the cursor. A mode change during the drag moves that light’s tile into the new group immediately. Lights that can only do brightness or on/off are not drawn on the color or kelvin disks. Selecting only those lights replaces the disks with Home Assistant’s `ha-slider`, an `ha-switch`, or both when the selection mixes the two. The sandbox bedroom includes two on/off virtual lights (`light.soverom_leselys`, `light.soverom_nattlys`) for that case.
+- **Why:** The kelvin ring is a track, not a filled disk, so the pointer’s radius was a false position. Waiting until pointer-up to regroup hid the mode change. A brightness bulb has nothing to do on a color wheel.
+- **Do not reverse without user ask.**
+

@@ -11836,6 +11836,7 @@ class CircadianScenesPanel extends HTMLElement {
       colorBriGraphCtl?.sync();
       whiteBriGraphCtl?.sync();
       syncEffectControl();
+      this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
       await scheduleLive({ dragging: Boolean(meta.dragging) });
     };
 

@@ -14,3 +14,13 @@ light:
     support_brightness: true
     initial_brightness: 80
     persistent: false
+  - platform: virtual
+    name: "!Soverom leselys"
+    initial_value: "off"
+    support_brightness: false
+    persistent: false
+  - platform: virtual
+    name: "!Soverom nattlys"
+    initial_value: "on"
+    support_brightness: false
+    persistent: false
