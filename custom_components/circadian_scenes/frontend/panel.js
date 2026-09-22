@@ -58,7 +58,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, paintLightTile, playLightStripLayout } from "./light_tiles.js";
+import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -9711,6 +9711,19 @@ class CircadianScenesPanel extends HTMLElement {
     );
   }
 
+  _lightTileValueLabel(entityId, fillPct) {
+    const modes =
+      this._hass?.states?.[entityId]?.attributes?.supported_color_modes || [];
+    if (!modes.length || !modes.every((mode) => mode === "onoff")) {
+      return undefined;
+    }
+    return lightTileValueLabel(fillPct, {
+      onOff: true,
+      onText: this._t("frontend.lights.power", "On"),
+      offText: this._t("frontend.lights.off", "Off"),
+    });
+  }
+
   _clockLegendTileLook(light, seconds) {
     const eventId = this._sidebarEventId;
     if (
@@ -14355,6 +14368,7 @@ class CircadianScenesPanel extends HTMLElement {
           rgb: look.rgb,
           fillPct: look.fillPct,
           selected: this._legendTileSelected(light.entity_id),
+          brightnessLabel: this._lightTileValueLabel(light.entity_id, look.fillPct),
         });
         continue;
       }
@@ -17375,6 +17389,10 @@ class CircadianScenesPanel extends HTMLElement {
       rgb: look.rgb,
       fillPct: removed ? 0 : look.fillPct,
       selected: !removed && this._legendTileSelected(light.entity_id),
+      brightnessLabel: this._lightTileValueLabel(
+        light.entity_id,
+        removed ? 0 : look.fillPct
+      ),
     });
     if (!removed && (!unavailable || capsKnown)) {
       this._lightNameLabels.push({ light, selector });

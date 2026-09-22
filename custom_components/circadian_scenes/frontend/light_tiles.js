@@ -51,8 +51,9 @@ export const LIGHT_TILES_CSS = `
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     align-self: stretch;
+    gap: 8px;
     box-sizing: border-box;
     width: 28px;
     min-width: 28px;
@@ -68,6 +69,12 @@ export const LIGHT_TILES_CSS = `
     text-transform: uppercase;
     cursor: pointer;
   }
+  /* Larger touch target. The extra area is invisible and does not change layout. */
+  .light-mode-label::after {
+    content: "";
+    position: absolute;
+    inset: -18px -16px;
+  }
   .light-mode-name {
     writing-mode: vertical-rl;
     text-orientation: mixed;
@@ -81,10 +88,11 @@ export const LIGHT_TILES_CSS = `
     align-items: center;
     justify-content: center;
     writing-mode: horizontal-tb;
-    color: var(--secondary-text-color);
+    color: inherit;
   }
   .light-mode-select ha-icon {
     --mdc-icon-size: 18px;
+    color: inherit;
     pointer-events: none;
   }
   .light-mode-row {
@@ -401,6 +409,14 @@ export function lightTileOnTextCss(rgb) {
   return luma > 0.45 ? "rgba(0, 0, 0, 0.7)" : "#fff";
 }
 
+/** Second line on a light tile. On/off lights say On or Off; the rest say a percent. */
+export function lightTileValueLabel(fillPct, { onOff = false, onText = "On", offText = "Off" } = {}) {
+  if (onOff) {
+    return Number(fillPct) > 0 ? onText : offText;
+  }
+  return `${Math.round(Number(fillPct) || 0)}%`;
+}
+
 export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLabel }) {
   const channels = rgb || [0, 0, 0];
   const onBg = `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
@@ -568,16 +584,16 @@ export function createLightModeGroup({
     button.dataset.stripKey = `group:${groupKey}`;
   }
   button.setAttribute("aria-label", `${label}. ${selectAllLabel}`);
-  const name = document.createElement("span");
-  name.className = "light-mode-name";
-  name.textContent = label;
   const select = document.createElement("span");
   select.className = "light-mode-select";
   const selectIcon = document.createElement("ha-icon");
   selectIcon.setAttribute("icon", "mdi:select-all");
   selectIcon.setAttribute("aria-hidden", "true");
   select.appendChild(selectIcon);
-  button.append(name, select);
+  const name = document.createElement("span");
+  name.className = "light-mode-name";
+  name.textContent = label;
+  button.append(select, name);
   button.addEventListener("click", (ev) => {
     ev.stopPropagation();
     onSelectAll?.();
@@ -767,7 +783,9 @@ export function bindLightTileBrightness(tile, hit, {
     const clamped = Math.max(0, Math.min(100, pct));
     tile.style.setProperty("--hue-light-fill", `${clamped}%`);
     tile.classList.toggle("is-off", clamped <= 0);
-    const label = `${Math.round(clamped)}%`;
+    const label = isBinary?.()
+      ? lightTileValueLabel(currentFill(), { onOff: true })
+      : lightTileValueLabel(clamped);
     for (const el of tile.querySelectorAll(".simple-light-bri")) {
       el.textContent = label;
     }

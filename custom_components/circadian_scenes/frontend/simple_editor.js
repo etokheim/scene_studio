@@ -25,6 +25,7 @@ import {
   playLightTileJelly,
   lightTileColorGroup,
   lightTileGroupOrder,
+  lightTileValueLabel,
   paintLightTile,
   tileSelectionAfterClick,
   wheelDeltaToPercent,
@@ -124,27 +125,47 @@ export const SIMPLE_EDITOR_CSS = `
     align-items: center;
     gap: 16px;
   }
+  .simple-level-glow {
+    position: relative;
+    display: flex;
+    justify-content: center;
+  }
+  .simple-level-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--ha-border-radius-6xl, 36px);
+    background: var(--simple-level-color, #ffc107);
+    filter: blur(54px) saturate(1.45);
+    opacity: 0.55;
+    transform: scale(1.1);
+    transform-origin: center center;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .simple-level-glow > * {
+    position: relative;
+    z-index: 1;
+  }
   .simple-level-host ha-control-slider,
   .simple-level-host ha-control-switch {
-    height: min(45vh, 320px);
+    height: 45vh;
     min-height: 200px;
-    width: 130px;
+    max-height: 320px;
     --control-slider-thickness: 130px;
-    --control-slider-border-radius: 36px;
+    --control-slider-border-radius: var(--ha-border-radius-6xl, 36px);
     --control-slider-color: var(--simple-level-color, #ffc107);
-    --control-slider-background: color-mix(
-      in srgb,
-      var(--simple-level-color, #ffc107) 28%,
-      #1c1a12
-    );
     --control-switch-thickness: 130px;
-    --control-switch-border-radius: 36px;
+    --control-switch-border-radius: var(--ha-border-radius-6xl, 36px);
+    --control-switch-padding: 6px;
+    --mdc-icon-size: 24px;
     --control-switch-on-color: var(--simple-level-color, #ffc107);
-    --control-switch-off-color: color-mix(
-      in srgb,
-      var(--simple-level-color, #ffc107) 28%,
-      #1c1a12
-    );
+  }
+  .simple-level-host ha-control-switch {
+    width: var(--control-switch-thickness);
+  }
+  .simple-level-host ha-control-slider {
+    width: var(--control-slider-thickness);
   }
   .simple-level-host ha-control-button {
     width: 48px;
@@ -352,7 +373,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     onSelect: (id) => {
       selectedIds = new Set(id ? [id] : []);
       peeledId = id || null;
-      syncTiles();
+      paintTileSelection();
+      syncLevelHost();
       wheel.sync();
     },
     onChange: ({ dragging, fromPalette, ids, deselected } = {}) => {
@@ -380,24 +402,23 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         }
         persistLight(eid);
       }
-      if (dragging) {
-        const nextGroups = members
-          .map((id) => `${id}:${groupOf(id)}`)
-          .join("|");
-        if (nextGroups !== stripGroupSignature) {
-          syncTiles();
-          return;
-        }
-        for (const eid of write) {
-          const sel = tiles.querySelector(
-            `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
-          );
-          if (sel && drafts[eid]) {
-            paintSelector(sel, eid, drafts[eid]);
-          }
-        }
-      } else {
+      const nextGroups = members
+        .map((id) => `${id}:${groupOf(id)}`)
+        .join("|");
+      if (nextGroups !== stripGroupSignature) {
         syncTiles();
+        return;
+      }
+      for (const eid of write) {
+        const sel = tiles.querySelector(
+          `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
+        );
+        if (sel && drafts[eid]) {
+          paintSelector(sel, eid, drafts[eid]);
+        }
+      }
+      if (!dragging) {
+        paintSelectAll();
       }
     },
     hasColor,
@@ -544,11 +565,20 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
   };
 
+  const onOffLabel = (draft) =>
+    lightTileValueLabel((draft?.state || "on") === "off" ? 0 : 100, {
+      onOff: true,
+      onText: panel._t("frontend.lights.power", "On"),
+      offText: panel._t("frontend.lights.off", "Off"),
+    });
+
   const paintSelector = (selector, eid, draft) => {
+    const onOff = isOnOffLight(eid);
     paintLightTile(selector, {
       rgb: draftRgb(draft),
       fillPct: fillPercent(draft, eid),
       selected: selectedIds.has(eid),
+      brightnessLabel: onOff ? onOffLabel(draft) : undefined,
     });
   };
 
@@ -598,9 +628,17 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         },
       });
       selector.classList.add("select-all-tile");
+      let averageFill = 0;
+      if (members.length) {
+        let sum = 0;
+        for (const id of members) {
+          sum += fillPercent(ensureDraft(id), id);
+        }
+        averageFill = sum / members.length;
+      }
       paintLightTile(selector, {
         rgb: [64, 60, 58],
-        fillPct: 0,
+        fillPct: averageFill,
         selected: allSelected,
       });
       const pickAll = (ev) => {
@@ -671,6 +709,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
                   rgb: draftRgb(draft),
                   fillPct: step.preview,
                   selected: selectedIds.has(id),
+                  brightnessLabel: onOffLabel(draft),
                 });
               }
             }
@@ -836,6 +875,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
                     rgb: draftRgb(draft),
                     fillPct: step.preview,
                     selected: selectedIds.has(id),
+                    brightnessLabel: onOffLabel(draft),
                   });
                 }
               }
@@ -975,6 +1015,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           rgb: draftRgb(draft),
           fillPct: pct,
           selected: selectedIds.has(eid),
+          brightnessLabel: onOffOnly ? onOffLabel(draft) : undefined,
         });
       };
 
@@ -1369,6 +1410,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         col.className = "simple-level-col";
         const slider = document.createElement("ha-control-slider");
         slider.vertical = true;
+        slider.toggleAttribute("vertical", true);
         slider.min = 0;
         slider.max = 100;
         slider.step = 1;
@@ -1406,7 +1448,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         power.addEventListener("click", () => {
           writePower(!allOn(brightnessTargets()));
         });
-        col.append(slider, power);
+        const glow = document.createElement("div");
+        glow.className = "simple-level-glow";
+        glow.appendChild(slider);
+        col.append(glow, power);
         controls.appendChild(col);
       }
       if (stand === "switch" || stand === "both") {
@@ -1415,6 +1460,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         const sw = document.createElement("ha-control-switch");
         sw.vertical = true;
         sw.reversed = true;
+        sw.toggleAttribute("vertical", true);
+        sw.toggleAttribute("reversed", true);
         sw.checked = allOn(onOffTargets());
         const bulbOn = document.createElement("ha-icon");
         bulbOn.setAttribute("icon", "mdi:lightbulb");
@@ -1426,7 +1473,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         sw.addEventListener("change", () => {
           writeSwitch(Boolean(sw.checked));
         });
-        col.appendChild(sw);
+        const glow = document.createElement("div");
+        glow.className = "simple-level-glow";
+        glow.appendChild(sw);
+        col.appendChild(glow);
         controls.appendChild(col);
       }
       levelHost.append(readout, controls);

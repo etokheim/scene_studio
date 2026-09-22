@@ -878,7 +878,14 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Empty disk click, group label, and drag readout
 
 - **Date:** 2026-09-22
-- **Decision:** In the scene editor, a click on the color or kelvin disk that is not on a pin clears the selection. It does not move the selected light. Variable, palette, and light-sidebar wheels still place color from an empty-disk click. The group label is a 28px column: the mode name at the top, the select-all icon (`mdi:select-all`) at the bottom. Select all and Add light sit on the same baseline as tiles inside a group. The HS/kelvin readout while dragging is anchored above the pin body, not on the tip.
-- **Why:** Clicking the disk was a second way to throw the selected bulb to the cursor. The hover “Select all” sat on top of the name; the icon belongs at the other end of the label. The readout was drawn from the pin tip, so it covered the pin.
+- **Decision:** In the scene editor, a click on the color or kelvin disk that is not on a pin clears the selection. It does not move the selected light. Variable, palette, and light-sidebar wheels still place color from an empty-disk click. Select all and Add light sit on the same baseline as tiles inside a group. The HS/kelvin readout while dragging is anchored above the pin body, not on the tip. The group-label layout in the next entry replaces the earlier top-name / bottom-icon column.
+- **Why:** Clicking the disk was a second way to throw the selected bulb to the cursor. The readout was drawn from the pin tip, so it covered the pin.
+- **Do not reverse without user ask.**
+
+## On/off tiles, native switch, and group labels
+
+- **Date:** 2026-09-22
+- **Decision:** On/off light tiles say On or Off. Select all still shows the average percent. The on/off stand-in is `ha-control-switch` with the `vertical` and `reversed` attributes set (the properties do not reflect, and the component’s layout is attribute CSS). Brightness and on/off stand-ins sit on the same blurred glow as the color wheel. The group label is a centered column: the select-all icon, then 8px, then the vertical name. Both share the label color, including hover. An invisible inset on the label enlarges the touch target. Selecting a pin or clicking the empty disk updates selection in place; the strip rebuilds only when a light changes group. Select all is painted at its average fill the first time, so a rebuild does not animate up from empty.
+- **Why:** Forcing a horizontal switch to 130×320 drew the thumb as a full-height column on the right. Rebuilding the strip on every disk click replayed the Select all fill transition.
 - **Do not reverse without user ask.**
 
