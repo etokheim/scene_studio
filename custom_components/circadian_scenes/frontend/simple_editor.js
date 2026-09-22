@@ -286,6 +286,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     panel._formData = { ...panel._formData, lights };
     panel._noteSimpleDirty();
     paintCard();
+    panel._scheduleScenePreviewApply?.({ transition: 1 });
   };
 
   const isOnOffLight = (eid) => {
@@ -343,6 +344,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     showPath: false,
     groupNearby: true,
     getPinIcon: (scene) => entityMdiIcon(panel, scene.id),
+    moveOnEmptyDisk: false,
     onClusters: (clusters) => {
       pinClusters = clusters || [];
       paintTileSelection();
@@ -351,6 +353,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       selectedIds = new Set(id ? [id] : []);
       peeledId = id || null;
       syncTiles();
+      wheel.sync();
     },
     onChange: ({ dragging, fromPalette, ids, deselected } = {}) => {
       if (deselected?.length) {

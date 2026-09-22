@@ -22,7 +22,7 @@ import {
   lightWheelCaps,
   variableSwatchCss,
 } from "./color_ui.js";
-import { defaultPaletteSlots, variableIsPalette } from "./palette.js";
+import { defaultPaletteSlots, samplePaletteWheel, variableIsPalette } from "./palette.js";
 import {
   isoYear,
   daysInYear,
@@ -2452,7 +2452,7 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-float-readout {
           position: absolute;
           z-index: 4;
-          transform: translate(-50%, calc(-100% - 14px));
+          transform: translate(-50%, calc(-100% - 6px));
           padding: 4px 8px;
           border-radius: 8px;
           background: color-mix(
@@ -10786,9 +10786,71 @@ class CircadianScenesPanel extends HTMLElement {
     return Boolean(this._scenePlay);
   }
 
+  _simplePreviewEntityIds() {
+    if (this._view !== "edit" || this._formData?.kind !== "simple") {
+      return [];
+    }
+    const members = this._simpleMembershipLists().members;
+    return members.filter((id) => this._isPhysicalLightEntityId(id));
+  }
+
+  _storedForSimplePreview(entityId) {
+    const stored = {
+      ...(this._formData?.lights?.[entityId] || { state: "on", brightness: 200 }),
+    };
+    if (!stored.variable_ref) {
+      return stored;
+    }
+    const variable = (this._variables || []).find(
+      (item) => item.id === stored.variable_ref
+    );
+    if (!variable) {
+      return stored;
+    }
+    const brightness = stored.brightness;
+    const state = stored.state;
+    const paletteT = stored.palette_t;
+    const paletteR = stored.palette_r;
+    applyVariableToDraft(stored, variable, {
+      entityId,
+      seed:
+        Number(stored.assignment_seed) ||
+        Number(this._formData?.assignment_seed) ||
+        0,
+      catalog: this._variables,
+    });
+    if (brightness != null) {
+      stored.brightness = brightness;
+    }
+    if (state) {
+      stored.state = state;
+    }
+    if (
+      paletteT != null &&
+      paletteR != null &&
+      variableIsPalette(variable)
+    ) {
+      const sampled = samplePaletteWheel(
+        variable,
+        paletteT,
+        paletteR,
+        this._variables,
+        draftRgb
+      );
+      stored.rgb_color = sampled.rgb;
+      stored.color_mode = "rgb";
+    }
+    return stored;
+  }
+
   _scenePreviewWantsApply() {
+    if (this._view !== "edit") {
+      return false;
+    }
+    if (this._formData?.kind === "simple") {
+      return this._roomPreview && this._simplePreviewEntityIds().length > 0;
+    }
     return (
-      this._view === "edit" &&
       Boolean(this._sunPath?.lights?.length) &&
       (this._roomPreview || this._scenePlayActive())
     );
@@ -10807,11 +10869,14 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     const snaps = {};
-    for (const light of this._sunPath?.lights || []) {
-      if (!this._isScenePreviewLight(light)) {
-        continue;
-      }
-      snaps[light.entity_id] = this._snapshotLight(light.entity_id);
+    const ids =
+      this._formData?.kind === "simple"
+        ? this._simplePreviewEntityIds()
+        : (this._sunPath?.lights || [])
+            .filter((light) => this._isScenePreviewLight(light))
+            .map((light) => light.entity_id);
+    for (const entityId of ids) {
+      snaps[entityId] = this._snapshotLight(entityId);
     }
     this._roomPreviewSnapshots = snaps;
     this._scenePreviewOwnerId = this._editId;
@@ -10910,7 +10975,15 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   async _startRoomPreview() {
-    if (this._view !== "edit" || !this._sunPath?.lights?.length) {
+    if (this._view !== "edit") {
+      return;
+    }
+    const simple = this._formData?.kind === "simple";
+    if (simple) {
+      if (!this._simplePreviewEntityIds().length) {
+        return;
+      }
+    } else if (!this._sunPath?.lights?.length) {
       return;
     }
     this._captureScenePreviewSnapshots();
@@ -10940,6 +11013,22 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     const epoch = this._scenePreviewEpoch;
+    if (this._formData?.kind === "simple") {
+      const opts = transition > 0 ? { transition } : {};
+      await Promise.all(
+        this._simplePreviewEntityIds().map(async (entityId) => {
+          if (epoch !== this._scenePreviewEpoch) {
+            return;
+          }
+          await this._applyLightState(
+            entityId,
+            this._storedForSimplePreview(entityId),
+            opts
+          );
+        })
+      );
+      return;
+    }
     const seconds = this._clockSunIdleSeconds();
     const jobs = [];
     const opts =

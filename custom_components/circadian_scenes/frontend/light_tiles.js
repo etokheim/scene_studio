@@ -27,6 +27,11 @@ export const LIGHT_TILES_CSS = `
     flex: 0 0 auto;
     position: relative;
   }
+  /* Group padding insets member tiles. Lift the loose tiles by that same pad. */
+  .light-tiles:has(.light-mode-group) > .select-all-tile,
+  .light-tiles:has(.light-mode-group) > .add-light-tile {
+    margin-bottom: 8px;
+  }
   .light-mode-group {
     display: flex;
     flex-direction: row;
@@ -34,7 +39,7 @@ export const LIGHT_TILES_CSS = `
     gap: 8px;
     flex: 0 0 auto;
     /* Same chrome as the color-mode pill: surface, shadow, padding. No fixed
-       height, and no overflow clip — the hover "Select all" sits above the label. */
+       height, and no overflow clip — the select-all icon sits inside the label. */
     box-sizing: border-box;
     padding: 8px;
     border-radius: 24px;
@@ -43,12 +48,16 @@ export const LIGHT_TILES_CSS = `
   }
   .light-mode-label {
     position: relative;
-    display: inline-flex;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     align-self: stretch;
+    box-sizing: border-box;
+    width: 28px;
+    min-width: 28px;
     margin: 0;
-    padding: 0 2px;
+    padding: 2px 0;
     border: 0;
     background: transparent;
     color: var(--secondary-text-color);
@@ -57,28 +66,26 @@ export const LIGHT_TILES_CSS = `
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    writing-mode: vertical-rl;
     cursor: pointer;
+  }
+  .light-mode-name {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
   }
   .light-mode-label:hover,
   .light-mode-label:focus-visible {
     color: var(--primary-text-color);
   }
   .light-mode-select {
-    display: none;
-    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     writing-mode: horizontal-tb;
-    letter-spacing: 0.04em;
-    font-weight: 500;
-    font-size: 10px;
-    white-space: nowrap;
-    left: 50%;
-    bottom: calc(100% + 4px);
-    transform: translateX(-50%);
+    color: var(--secondary-text-color);
   }
-  .light-mode-label:hover .light-mode-select,
-  .light-mode-label:focus-visible .light-mode-select {
-    display: inline;
+  .light-mode-select ha-icon {
+    --mdc-icon-size: 18px;
+    pointer-events: none;
   }
   .light-mode-row {
     display: flex;
@@ -566,7 +573,10 @@ export function createLightModeGroup({
   name.textContent = label;
   const select = document.createElement("span");
   select.className = "light-mode-select";
-  select.textContent = selectAllLabel;
+  const selectIcon = document.createElement("ha-icon");
+  selectIcon.setAttribute("icon", "mdi:select-all");
+  selectIcon.setAttribute("aria-hidden", "true");
+  select.appendChild(selectIcon);
   button.append(name, select);
   button.addEventListener("click", (ev) => {
     ev.stopPropagation();

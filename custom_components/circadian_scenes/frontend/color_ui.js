@@ -23,6 +23,8 @@ const HUE_COLOR_PRESETS = [
 const HUE_TEMP_PRESETS = [2200, 2700, 3000, 4000, 5000, 6500];
 const HUE_PIN_PATH =
   "M 24,0 C 10.745166,0 0,10.575951 0,23.622046 0,39.566928 21,57.578739 22.05,58.346457 L 24,60 25.95,58.346457 C 27,57.578739 48,39.566928 48,23.622046 48,10.575951 37.254834,0 24,0 Z";
+/** Active pin graphic height. The tip sits on the color; the body extends upward. */
+const ACTIVE_PIN_BODY = 60;
 const HUE_DOT_PATH = "M6 0A6 6 0 006 12 6 6 0 006 0Z";
 const HUE_DOT_OUTLINE_PATH = "M8 0A8 8 0 008 16 8 8 0 008 0Z";
 /* Cosmetic path density only — lerp math is unchanged (same samples as runtime). */
@@ -2220,6 +2222,7 @@ function createSceneColorWheel({
   groupNearby = false,
   getPinIcon,
   onClusters,
+  moveOnEmptyDisk = true,
 }) {
   // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
   const stage = document.createElement("div");
@@ -2370,7 +2373,8 @@ function createSceneColorWheel({
     floatReadout.hidden = false;
     floatReadout.textContent = formatWheelReadout(draft, wheelMode);
     floatReadout.style.left = `${x}px`;
-    floatReadout.style.top = `${y}px`;
+    // Anchor at the top of the pin body so the label sits above it.
+    floatReadout.style.top = `${y - ACTIVE_PIN_BODY}px`;
   };
 
   const hideFloatReadout = () => {
@@ -3446,6 +3450,10 @@ function createSceneColorWheel({
     const pt = pointFromEvent(ev);
     const dist = Math.hypot(pt.x - radius, pt.y - radius);
     if (dist > radius) {
+      return;
+    }
+    if (!moveOnEmptyDisk) {
+      onSelect?.(null);
       return;
     }
     const { scenes, activeId } = getState();
