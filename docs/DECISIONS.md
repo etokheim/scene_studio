@@ -892,7 +892,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Landscape wheel chrome
 
 - **Date:** 2026-09-23
-- **Decision:** When the wheel stage is wider than it is tall, the color-mode toggles and the variable list stack from the top-right of the disk. Variable names stay visible. A square or portrait stage keeps the horizontal row under the disk, with names only in the tooltip.
+- **Decision:** When the wheel stage is wider than it is tall, the color-mode toggles and the variable list stack from the top-right of the disk. Variable names stay visible, and that list has no capsule background. A square or portrait stage keeps the horizontal row under the disk, with names only in the tooltip. When a scene card is selected, the rest of the area rail fades until the pointer is over the rail. The first time the rail is shown, it scrolls so that selected card is in view.
 - **Why:** The horizontal row spent the leftover width beside a landscape disk. The side column is wide enough for the names.
 - **Do not reverse without user ask.**
 

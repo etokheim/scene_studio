@@ -3489,6 +3489,8 @@ class CircadianScenesPanel extends HTMLElement {
             min-height: 0;
             flex: 0 1 auto;
             border-radius: 16px;
+            background: none;
+            box-shadow: none;
           }
           .hue-presets-track {
             flex-direction: column;
@@ -4933,17 +4935,48 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
+  _revealSelectedSceneInRail(rail) {
+    const card = rail.querySelector(".scene-card.selected");
+    if (!card || rail.clientHeight < 40) {
+      return false;
+    }
+    const railTop = rail.getBoundingClientRect().top;
+    const cardRect = card.getBoundingClientRect();
+    const pad = 12;
+    const inView =
+      cardRect.top >= railTop + pad &&
+      cardRect.bottom <= railTop + rail.clientHeight - pad;
+    if (!inView) {
+      const target =
+        rail.scrollTop +
+        (cardRect.top - railTop) -
+        Math.max(pad, (rail.clientHeight - cardRect.height) / 2);
+      rail.scrollTop = Math.max(0, target);
+    }
+    this._areaRailScrollTop = rail.scrollTop;
+    this._areaRailDidReveal = true;
+    return true;
+  }
+
   _restoreAreaRailScroll(rail) {
     if (!rail) {
       return;
     }
-    const top = this._areaRailScrollTop || 0;
+    const apply = () => {
+      if (!this._areaRailUserScrolled) {
+        this._revealSelectedSceneInRail(rail);
+        return;
+      }
+      if (this._areaRailScrollTop != null) {
+        rail.scrollTop = this._areaRailScrollTop;
+      }
+    };
     this._areaRailRestoring = true;
-    rail.scrollTop = top;
+    apply();
     requestAnimationFrame(() => {
-      rail.scrollTop = top;
+      apply();
       requestAnimationFrame(() => {
-        rail.scrollTop = top;
+        apply();
         this._areaRailRestoring = false;
       });
     });
@@ -4961,9 +4994,10 @@ class CircadianScenesPanel extends HTMLElement {
       this._areaRailBound.removeEventListener("scroll", this._onAreaRailScroll);
     }
     this._onAreaRailScroll = () => {
-      if (this._areaRailRestoring) {
+      if (this._areaRailRestoring || !this._areaRailDidReveal) {
         return;
       }
+      this._areaRailUserScrolled = true;
       this._areaRailScrollTop = rail.scrollTop;
     };
     this._areaRailBound = rail;

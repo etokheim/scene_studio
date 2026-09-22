@@ -49,6 +49,32 @@ export const LANDING_CSS = `
     position: relative;
     z-index: 1;
   }
+  .area-rail :is(
+    .floor-label,
+    .area-head,
+    .area-empty,
+    .var-row,
+    .theme-row,
+    .library-hint,
+    .scene-card
+  ) {
+    transition: opacity 160ms ease;
+  }
+  /* Selected scene stays put. The rest of the column fades until the pointer
+     is over the column, so the open scene is easy to find. */
+  @media (hover: hover) and (pointer: fine) {
+    .area-rail:has(.scene-card.selected):not(:hover) :is(
+      .floor-label,
+      .area-head,
+      .area-empty,
+      .var-row,
+      .theme-row,
+      .library-hint,
+      .scene-card:not(.selected)
+    ) {
+      opacity: 0.38;
+    }
+  }
   .stage-col {
     flex: 1 1 auto;
     min-width: 0;
