@@ -70,6 +70,8 @@ def _form_payload(item: dict[str, Any], entry=None) -> dict[str, Any]:
     if entry:
         form["labels"] = list(entry.labels)
         form["category"] = (entry.categories or {}).get("scene")
+        if entry.icon:
+            form["icon"] = entry.icon
     return form
 
 

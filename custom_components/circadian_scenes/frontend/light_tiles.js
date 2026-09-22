@@ -1,4 +1,4 @@
-/** Shared Lys light tiles (huemane-inspired). Used by simple scenes and the circadian dial. */
+/** Shared light tiles (huemane-inspired). Used by simple scenes and the circadian dial. */
 
 export const LIGHT_TILES_CSS = `
   .light-tiles-scroller {
@@ -21,11 +21,40 @@ export const LIGHT_TILES_CSS = `
     display: flex;
     flex-flow: row nowrap;
     align-items: flex-end;
-    gap: 10px;
+    gap: 18px;
     width: max-content;
     margin-inline: auto;
     flex: 0 0 auto;
     position: relative;
+  }
+  .light-mode-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+  .light-mode-label {
+    margin: 0;
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    color: var(--secondary-text-color);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .light-mode-label:hover {
+    color: var(--primary-text-color);
+  }
+  .light-mode-row {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: flex-end;
+    gap: 10px;
   }
   .simple-light-selector {
     box-sizing: border-box;
@@ -98,7 +127,7 @@ export const LIGHT_TILES_CSS = `
     --hue-light-off-text-color: var(--hue-light-on-text-color, rgba(0, 0, 0, 0.7));
     box-sizing: content-box;
     position: relative;
-    /* Huemane Lys: 85×(90+45 switch slot), 5px pad, radius 24. No switch painted. */
+    /* Huemane light tile: 85×(90+45 switch slot), 5px pad, radius 24. No switch painted. */
     width: 85px;
     height: 135px;
     padding: 5px;
@@ -415,8 +444,74 @@ export function createAddLightTile({ label, onActivate }) {
   return selector;
 }
 
-/** Per notch; was 8. One-third so the Lys strip is usable with a mouse wheel. */
+/** Per notch; was 8. One-third so the light-tile strip is usable with a mouse wheel. */
 export const TILE_BRIGHTNESS_WHEEL_STEP = 8 / 3;
+
+const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness"];
+
+/** Bucket a stored light draft by the color mode it is in now. */
+export function lightTileColorGroup(draft) {
+  const mode = draft?.color_mode;
+  if (mode === "color_temp") {
+    return "temp";
+  }
+  if (mode === "white") {
+    return "white";
+  }
+  if (mode === "brightness" || mode === "onoff") {
+    return "brightness";
+  }
+  if (mode === "hs" || mode === "rgb" || mode === "rgbw" || mode === "rgbww" || mode === "xy") {
+    return "color";
+  }
+  if (draft?.hs_color || draft?.rgb_color || draft?.rgbw_color || draft?.rgbww_color) {
+    return "color";
+  }
+  if (draft?.color_temp_kelvin != null) {
+    return "temp";
+  }
+  return "brightness";
+}
+
+export function lightTileGroupOrder() {
+  return [...COLOR_GROUP_ORDER];
+}
+
+/**
+ * Plain click replaces the selection. Cmd/Ctrl toggles one id.
+ * Shift selects the inclusive range from the anchor through the clicked id.
+ */
+export function tileSelectionAfterClick({
+  ids,
+  selected,
+  anchorId,
+  entityId,
+  shiftKey,
+  toggleKey,
+}) {
+  const order = ids || [];
+  if (
+    shiftKey &&
+    anchorId &&
+    order.includes(anchorId) &&
+    order.includes(entityId)
+  ) {
+    const start = order.indexOf(anchorId);
+    const end = order.indexOf(entityId);
+    const [from, to] = start < end ? [start, end] : [end, start];
+    return { selected: order.slice(from, to + 1), anchorId };
+  }
+  if (toggleKey) {
+    const next = new Set(selected || []);
+    if (next.has(entityId)) {
+      next.delete(entityId);
+    } else {
+      next.add(entityId);
+    }
+    return { selected: order.filter((id) => next.has(id)), anchorId: entityId };
+  }
+  return { selected: [entityId], anchorId: entityId };
+}
 
 /** Vertical drag + wheel brightness (0–255). Horizontal pan stays strip scroll. */
 export function bindLightTileBrightness(tile, hit, {
@@ -449,9 +544,9 @@ export function bindLightTileBrightness(tile, hit, {
       /* already released */
     }
     if (drag.suppressTap) {
-      tile._lysSuppressTap = true;
+      tile._lightTileSuppressTap = true;
       window.setTimeout(() => {
-        tile._lysSuppressTap = false;
+        tile._lightTileSuppressTap = false;
       }, 0);
     }
     const wasY = drag.axis === "y";

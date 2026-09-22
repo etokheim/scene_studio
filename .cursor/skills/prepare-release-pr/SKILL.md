@@ -120,13 +120,14 @@ source .venv/bin/activate
 # Install once if missing: pip install pylint black isort pytest homeassistant
 pylint custom_components/circadian_scenes/
 PYTHONPATH=. pytest tests/ -q
+node --test tests/frontend/*.test.mjs
 black --check custom_components/circadian_scenes/ tests/
 isort --check-only custom_components/circadian_scenes/ tests/
 ```
 
 If black/isort fail: apply `black` / `isort` (no `--check`), commit the
-formatting, re-run the checks. Stop on pylint or pytest failures — fix and
-re-run; do not open a red PR and “let CI catch it.”
+formatting, re-run the checks. Stop on pylint, pytest, or frontend `node --test`
+failures — fix and re-run; do not open a red PR and “let CI catch it.”
 
 ## 4. Open the PR
 

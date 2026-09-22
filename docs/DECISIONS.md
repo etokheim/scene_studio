@@ -36,8 +36,9 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-09-08
 - **Supersedes in part:** “Desktop drawer overlays backgrounds” (horizon reach) and “Use HA’s top app bar” (workspace scrollport).
 - **Superseded in part:** 2026-09-15 — simple-scene stage uses the same `.sun-light-clock` padding (40px 0 16px, no extra 16px inset) so the workspace grid lines up with circadian. Color/kelvin wheels (and the tile/palette column under them) cap at **650px** (`max-width` + `min-width: 0` so flex cannot grow to `--dial-face-max`). Stage wheel glow stays near the disk (scale 1.2), not a stage-filling wash.
-- **Superseded in part:** 2026-09-16 — simple-scene and library wheels use the same stage face budget as the circadian dial (`min(100%, 86vh, var(--dial-face-max, 86vh))`). Do not cap them at 650px; the Lys strip is already full-column.
-- **Superseded in part:** 2026-09-16 — `.page` is full-width whenever a `.workspace` is shown (same shell as `.page.dial-wide`), not only for circadian dial. Color wheels cap at **650px** and shrink with `--dial-face-max` so they stay above the Lys tiles (floor **400px**, then the stage scrolls). The circadian dial uses the same fit (floor **600px** on `.sun-light-clock-face`) so tiles are on-screen without a 32px peek. `.stage-col` stays full remaining width; max-width lives on the wheel/dial, not the column. Simple/palette wheels are in-flow (`flex: 0 0 auto`); do not `max-height: 100%` them over the tiles. `.simple-editor-host` sizes to content (`min-height: 100%`) so `.stage-scroll` grows a scrollbar at the floor.
+- **Superseded in part:** 2026-09-16 — simple-scene and library wheels use the same stage face budget as the circadian dial (`min(100%, 86vh, var(--dial-face-max, 86vh))`). Do not cap them at 650px; the light-tile strip is already full-column.
+- **Superseded in part:** 2026-09-16 — `.page` is full-width whenever a `.workspace` is shown (same shell as `.page.dial-wide`), not only for circadian dial. Color wheels cap at **650px** and shrink with `--dial-face-max` so they stay above the light tiles (floor **400px**, then the stage scrolls). The circadian dial uses the same fit (floor **600px** on `.sun-light-clock-face`) so tiles are on-screen without a 32px peek. `.stage-col` stays full remaining width; max-width lives on the wheel/dial, not the column. Simple/palette wheels are in-flow (`flex: 0 0 auto`); do not `max-height: 100%` them over the tiles. `.simple-editor-host` sizes to content (`min-height: 100%`) so `.stage-scroll` grows a scrollbar at the floor.
+- **Superseded in part:** 2026-09-22 — simple and palette editors fill the stage scrollport. `.simple-editor-host` and `.simple-editor` are `height: 100%`; the wheel region is `flex: 1`. The disk is the leftover above the light-tile strip (`max(400px, min(container, 650px))`, mode row subtracted). The stage scrolls only after that 400px floor. Do not size the host to content (`min-height: 100%` alone); that let the disk push the strip off screen before the floor.
 - **Decision:** Workspace `.content` has no top padding. `.stage-col` stays `overflow: visible` and splits into `.stage-bg` (pointer-events none; clock horizon and simple-scene wheel glow) plus `.stage-scroll` (`overflow-y: auto`, `overflow-x: clip`) for the face and light list. Horizon/glow are laid out from the face/wheel center and may paint under the frosted area rail. The app-bar scroller stays `overflow: hidden` while a workspace is shown. Simple-scene and variable/palette wheels share the circadian dial diameter. Circadian themes open `#theme/<id>` on that dial; each solar event stores color **and** brightness on the shared theme (wheel-pin detaches a `variable_ref` on that event only). Theme and scene dial chrome share `_isDialView()` so the landscape year rail, date morph, and sticky “now” reset land in the same places. Editing a theme from a circadian scene keeps that scene’s light rings and list; only `#theme/<id>` uses the single theme-ring preview. Sidebar brightness/color drags still patch the open scene’s lights from the theme draft (per-light overrides keep their stops), paint matching circadian scene cards, and `sync()` the graph handle — do not wait for `_saveSoon` / WS list ramps for those visuals.
 - **Why:** Padding plus `overflow: visible` on the stage left a header gap and no middle-column scroll. Putting glow in the same box as `overflow-y: auto` clips bleed (CSS overflow axis quirk). A sibling background layer keeps graphics full-bleed while the list can scroll.
 - **Do not reverse without user ask.**
@@ -154,7 +155,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-26
 - **Superseded in part:** 2026-08-27 — still one full-width row per light with the name on the plot, but Y is not brightness (see “Light brightness darkens the band”).
-- **Superseded:** 2026-09-16 — per-event “Add to …” / light-warn on Lys tiles and table rows is gone. Membership is whole-scene (tile / sidebar). Sidebar graph `+` can still seed a missing event from peers.
+- **Superseded:** 2026-09-16 — per-event “Add to …” / light-warn on light tiles and table rows is gone. Membership is whole-scene (tile / sidebar). Sidebar graph `+` can still seed a missing event from peers.
 - **Superseded in part:** 2026-08-29 — with an area selected, lights in that area that are in none of the assigned scenes appear as compact suggested rows (`Add to scenes`). Lights that are in the scenes but not in the area keep their graphs and use the warning color on the name. No area → no suggestions and no out-of-area mark. Preview `area` uses `lights_in_area` (entity area, else device).
 - **Superseded in part:** 2026-08-29 — a toolbar toggle can wrap the same light samples into concentric 24-hour rings. See “Light graphs: stacked bands or a 24-hour clock”.
 - **Superseded in part:** 2026-08-29 — an unassigned solar event is an off-knot in the preview: every lamp is off there (graphs go dark), not skipped so neighbors interpolate across it.
@@ -407,7 +408,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-29
 - **Superseded in part:** 2026-08-29 — the light-edit sidebar includes a horizontal brightness graph above the color wheel: one point per assigned solar event (Y = brightness, fill = that lamp’s color along the day). Non-members show `+` (click to add); members drag. Linked dawn/sunrise/sunset share a draft, so those points stay synced. See “Edit a light at a solar event; write the native scene”.
-- **Superseded in part:** 2026-09-16 — brightness-graph `+` (peer-typical add) is gone. A missing event is a dashed handle; click selects that event. Membership is Lys tiles / sidebar Remove.
+- **Superseded in part:** 2026-09-16 — brightness-graph `+` (peer-typical add) is gone. A missing event is a dashed handle; click selects that event. Membership is light tiles / sidebar Remove.
 - **Superseded in part:** 2026-08-29 — clock glow is sky-from-elevation (not outer-ring conic); sun marker is a CSS disc+flare (not `mdi:weather-sunny`); hover scrubs sun position, sky glow, and the time/elevation readout while light rings stay the full-day preview.
 - **Superseded in part:** 2026-08-29 — no dashed horizon circle on the clock; the outer ring edge remains the geometric horizon for the sun path.
 - **Superseded in part:** 2026-08-29 — sun path strokes are 0.5px day / 0.25px night with `vector-effect: non-scaling-stroke` (viewBox units were scaling thicker than CSS px); hour labels sit outside the ticks at 8px.
@@ -483,9 +484,9 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-08-30
 - **Superseded in part:** 2026-09-01 — `--dial-face-max` now reserves ~32px so the first light-list row peeks under the face (discoverability). List still flows under the face; do not move it into the landscape left gutter.
-- **Superseded in part:** 2026-09-16 — the dial shrinks so the **full** Lys strip fits in the stage scrollport (floor 600px, then scroll). Do not reserve only a 32px peek.
+- **Superseded in part:** 2026-09-16 — the dial shrinks so the **full** light-tile strip fits in the stage scrollport (floor 600px, then scroll). Do not reserve only a 32px peek.
 - **Superseded in part:** 2026-09-01 — draft/location `.page-banners` reduce `--dial-face-max` by their measured reach so the list still peeks above the fold; dial vignette `top` extends by `--dial-banner-h` (path→host) so it matches `.clock-horizon-back` under the banners.
-- **Superseded in part:** 2026-09-16 — the under-face list is the Lys tile strip (full **stage** width, centered when it fits, overflow-x when it does not), not stacked `clock-legend-row` cards. It is a sibling of `.sun-path-stage` in `.sun-path` (the stage scroll), not a child of `.sun-path-body`, so the landscape year-rail grid cannot clip it. Do not move it into the landscape left gutter.
+- **Superseded in part:** 2026-09-16 — the under-face list is the light tile strip (full **stage** width, centered when it fits, overflow-x when it does not), not stacked `clock-legend-row` cards. It is a sibling of `.sun-path-stage` in `.sun-path` (the stage scroll), not a child of `.sun-path-body`, so the landscape year-rail grid cannot clip it. Do not move it into the landscape left gutter.
 - **Decision:** The dial light list always flows **under** the clock face (portrait and landscape) at **stage-column** width. Time/sun readout and date chips live in `.sun-toolbar` in that same scroll. The landscape 3-column grid on `.sun-path-stage` is only face + year scrub (empty left gutter optically centers the dial). Do **not** put readout/tiles in `.sun-path-body` (that forced `left: calc(-1 * var(--scrub-rail-width))` and clipped the strip). Ring hover name sits flush above the outer light ring (`top` = rings inset inside the core), not above `--clock-chrome` / face chrome. Legend actions order: Add to …, then remove (X), then chevron.
 - **Why:** Parking the list in the left gutter left-aligned/truncated names and broke parity with portrait. Under-face flow matches mobile. A small peek of the first row is enough to hint scroll without returning to the “shrink the dial for the whole legend” approach.
 - **Do not reverse without user ask.**
@@ -675,25 +676,25 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Dialogs hid the workspace and split create vs edit. One column keeps the same place for every kind of edit.
 - **Do not reverse without user ask.**
 
-## Simple-scene lights are huemane Lys tiles
+## Simple-scene lights are huemane light tiles
 
 - **Date:** 2026-09-16
-- **Superseded in part:** 2026-09-16 — the same Lys strip is the circadian dial light list (under the face), not only simple scenes.
-- **Decision:** Simple-scene members and the circadian dial list are huemane Lys cards (content-box **85×135**, 5px pad, radius 24 — switch slot reserved even when unused). Fill-from-bottom `--hue-light-fill`, dual clipped label layers, 2px selected ring. Tile chrome uses huemane transitions (`all 0.3s ease-out`, fill/clip 0.3s, wheel scrub 25ms, press scale 0.95). They sit in a full-column `overflow-x` strip with `flex: 0 0 auto` so the wheel cannot collapse it; the inner row is `width: max-content; margin-inline: auto` so a short list centers and an overflowing list scrolls from the start. Vertical drag/wheel owns brightness after an 8px axis lock; horizontal pan stays native strip scroll. Do not use circular tiles or 85×90 squat cards.
+- **Superseded in part:** 2026-09-16 — the same light-tile strip is the circadian dial light list (under the face), not only simple scenes.
+- **Decision:** Simple-scene members and the circadian dial list are huemane light tiles (content-box **85×135**, 5px pad, radius 24 — switch slot reserved even when unused). Fill-from-bottom `--hue-light-fill`, dual clipped label layers, 2px selected ring. Tile chrome uses huemane transitions (`all 0.3s ease-out`, fill/clip 0.3s, wheel scrub 25ms, press scale 0.95). They sit in a full-column `overflow-x` strip with `flex: 0 0 auto` so the wheel cannot collapse it; the inner row is `width: max-content; margin-inline: auto` so a short list centers and an overflowing list scrolls from the start. Vertical drag/wheel owns brightness after an 8px axis lock; horizontal pan stays native strip scroll. Do not use circular tiles or 85×90 squat cards.
 - **Why:** The circular strip only shared wheel-to-brightness; the cards are the house language for lights.
 - **Do not reverse without user ask.**
 
 ## Lighting chrome is ours, launched from huemane-light-card
 
 - **Date:** 2026-09-16
-- **Decision:** Mode pill, Lys tiles, and related wheel chrome in this panel are **our** components (`frontend/light_tiles.js`, `hue_mode_icons.js`, color-wheel chrome). They were built to match `etokheim/huemane-light-card` as a launchpad. Future lighting UI should reuse and extend these, not re-clone huemane or invent a third card language. Improve in place when the product needs it.
+- **Decision:** Mode pill, light tiles, and related wheel chrome in this panel are **our** components (`frontend/light_tiles.js`, `hue_mode_icons.js`, color-wheel chrome). They were built to match `etokheim/huemane-light-card` as a launchpad. Future lighting UI should reuse and extend these, not re-clone huemane or invent a third card language. Improve in place when the product needs it.
 - **Why:** Matching huemane got the house language in the door; Circadian Scenes owns the next steps (circadian fill at the clock, membership, palettes).
 - **Do not reverse without user ask.**
 
-## Lys tiles under the circadian dial
+## light tiles under the circadian dial
 
 - **Date:** 2026-09-16
-- **Decision:** Circadian scene edit (`#edit/<id>` dial) lists area lights as the same Lys tiles as simple scenes: horizontal strip, centered when the row fits, overflow-x when it does not. Fill/color follow the interpolated sample at the clock. Tap still opens the closest-event light editor; add/remove stay on the tile. Theme-look (`#theme`) has no member strip.
+- **Decision:** Circadian scene edit (`#edit/<id>` dial) lists area lights as the same light tiles as simple scenes: horizontal strip, centered when the row fits, overflow-x when it does not. Fill/color follow the interpolated sample at the clock. Tap still opens the closest-event light editor; add/remove stay on the tile. Theme-look (`#theme`) has no member strip.
 - **Why:** One light language in both editors. Stacked HA-style legend rows read as a different product.
 - **Do not reverse without user ask.**
 
@@ -725,10 +726,10 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** `renderLanding` / `_renderEditor` branch on `_narrow`. Resize without a remount left the desktop tree until a full reload.
 - **Do not reverse without user ask.**
 
-## Palette editor is wheel + Lys slots
+## Palette editor is wheel + light-tile slots
 
 - **Date:** 2026-09-16
-- **Decision:** Palette edit (`#palette/<id>`) uses the simple-scene chrome: color wheel plus five Lys tiles (`slot:0`…`slot:4`). There is no slot color list. Slot brightness is the same vertical drag/wheel as lights.
+- **Decision:** Palette edit (`#palette/<id>`) uses the simple-scene chrome: color wheel plus five light tiles (`slot:0`…`slot:4`). There is no slot color list. Slot brightness is the same vertical drag/wheel as lights.
 - **Why:** Palettes are the same color language as lights; a numbered swatch list was a second editor.
 - **Do not reverse without user ask.**
 
@@ -746,10 +747,10 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** They sat too tight on the planet.
 - **Do not reverse without user ask.**
 
-## Dial Lys tiles follow clock time; brightness when an event is selected
+## Dial light tiles follow clock time; brightness when an event is selected
 
 - **Date:** 2026-09-16
-- **Decision:** Circadian Lys fills interpolate at the displayed clock time. While a solar event is selected (and the sun is not sticky-scrubbed), fills use that event’s stored/override color and brightness. Vertical drag and wheel write `overrides[light][event]` brightness (0–255). Add-light tiles use a **dashed** 2px border, not a solid inset ring.
+- **Decision:** Circadian light-tile fills interpolate at the displayed clock time. While a solar event is selected (and the sun is not sticky-scrubbed), fills use that event’s stored/override color and brightness. Vertical drag and wheel write `overrides[light][event]` brightness (0–255). Add-light tiles use a **dashed** 2px border, not a solid inset ring.
 - **Why:** Tiles were tap-only and kept stale `light.samples` after a dial patch, so they did not match the clock or take brightness edits.
 - **Do not reverse without user ask.**
 
@@ -782,52 +783,67 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Forcing a name at create blocked getting to the editor. The FAB is the prompt once you can see what you made.
 - **Do not reverse without user ask.**
 
-## Lys tile X is mouse-hover only; touch removes from the sidebar
+## light tile X is mouse-hover only; touch removes from the sidebar
 
 - **Date:** 2026-09-16
-- **Decision:** The close control on a member Lys tile is visible only under `(hover: hover) and (pointer: fine)` while the tile is hovered. Coarse pointers get no hit target. Touch (and mouse) can remove from the light sidebar (**Remove light from scene**). Removed/suggested tiles have no corner plus; the bulb icon becomes plus and the label is **Add {name}**, and tapping the tile restores membership. The X is a native 40px disc (not `ha-icon-button`, whose MDC hit stays 48px) whose center sits on the tile’s top-right corner; the strip pads so overflow-x scroll does not clip it.
+- **Decision:** The close control on a member light tile is visible only under `(hover: hover) and (pointer: fine)` while the tile is hovered. Coarse pointers get no hit target. Touch (and mouse) can remove from the light sidebar (**Remove light from scene**). Removed/suggested tiles have no corner plus; the bulb icon becomes plus and the label is **Add {name}**, and tapping the tile restores membership. The X is a native 40px disc (not `ha-icon-button`, whose MDC hit stays 48px) whose center sits on the tile’s top-right corner; the strip pads so overflow-x scroll does not clip it.
 - **Why:** A 32px corner control is a fat-finger trap on the brightness tile, and overflow-x auto would otherwise clip a corner-centered control.
 - **Do not reverse without user ask.**
 
 ## Brightness drags skip dial resample and event-button easing
 
 - **Date:** 2026-09-16
-- **Decision:** While a brightness scrub is in progress (Lys tile, sidebar graph, or radial event handle), write the override and paint handles/tiles immediately. Do not resample the sun path, ease event-button radii (`CLOCK_BRIGHT_MOVE_MS`), or autosave until pointerup. Tile fill CSS transitions are off during that scrub.
+- **Decision:** While a brightness scrub is in progress (light tile, sidebar graph, or radial event handle), write the override and paint handles/tiles immediately. Do not resample the sun path, ease event-button radii (`CLOCK_BRIGHT_MOVE_MS`), or autosave until pointerup. Tile fill CSS transitions are off during that scrub.
 - **Why:** Full `_patchDialFromSession` plus a 400ms ease made the dial buttons lag and reverse while the pointer was still moving.
 - **Do not reverse without user ask.**
 
-## Lys fill ramp shrinks as brightness approaches 100%
+## light-tile fill ramp shrinks as brightness approaches 100%
 
 - **Date:** 2026-09-16
-- **Decision:** The fade at the top of a Lys fill is at most 20px, and no taller than the unfilled remainder of the tile. At 100% there is no ramp.
+- **Decision:** The fade at the top of a light-tile fill is at most 20px, and no taller than the unfilled remainder of the tile. At 100% there is no ramp.
 - **Why:** A fixed 20px wash made a full tile look partly dim.
 - **Do not reverse without user ask.**
 
-## Add light is the last Lys tile; unavailable stays editable when caps are known
+## Add light is the last light tile; unavailable stays editable when caps are known
 
 - **Date:** 2026-09-16
-- **Decision:** “Add light” is the last card in the Lys strip (same 85×135 chrome, dashed/plus), not a separate `ha-button`. Unavailable lights sort after available ones (still before suggested/removed). If Home Assistant still reports color modes or kelvin range, the tile stays editable (`caps-known`); only unknown-capability unavailable lights are inert and grayscale.
+- **Decision:** “Add light” is the last card in the light-tile strip (same 85×135 chrome, dashed/plus), not a separate `ha-button`. Unavailable lights sort after available ones (still before suggested/removed). If Home Assistant still reports color modes or kelvin range, the tile stays editable (`caps-known`); only unknown-capability unavailable lights are inert and grayscale.
 - **Why:** The strip is the membership UI. An unavailable bulb we already know how to drive should still be tunable.
 - **Do not reverse without user ask.**
 
 ## Simple-scene wheel groups nearby pins; no travel path
 
 - **Date:** 2026-09-20
-- **Decision:** The simple-scene color wheel does **not** draw the circadian travel/preview path (simple scenes do not interpolate). Pins within 10% of the wheel radius and the same mode merge like `huemane-light-card` (`tryMergeMarkers`); the stack shows a count and moves together. Lys tiles for every member of a stack that includes the selection show as selected. The color/kelvin pill converts every selected (and grouped) draft onto the other disk. A single selected pin shows the light’s `mdi` icon (simple) or the solar-event icon (circadian); a stack still shows the count. A **Select all** Lys tile selects every member so a drag writes every selected draft. Circadian wheels keep the solar-event path and ungrouped per-event pins. Membership add/remove tiles (hover X, leftover add-back tiles) are the same in both editors. Re-adding a removed light must not change strip scroll or the current selection.
+- **Superseded in part:** 2026-09-22 — a stacked pin drag writes every member; clicking the stack fans the pins; the mode pill converts the selection. A plain light-tile click still selects only that light and peels its pin, and also opens the light settings dialog. Cmd/Ctrl-click and Shift-click multiselect instead of opening the dialog (see “Scene tiles, create menu, and rename”).
+- **Decision:** The simple-scene color wheel does **not** draw the circadian travel/preview path (simple scenes do not interpolate). Pins within 10% of the wheel radius and the same mode merge like `huemane-light-card` (`tryMergeMarkers`); the stack shows a count and moves together. A light-tile click selects only that light and pulls its pin out of the stack. Clicking the stack (without dragging) fans the pins. The color/kelvin pill converts every selected draft that supports the mode and glides those pins; the rest stay and leave the selection. A single selected pin shows the light’s `mdi` icon (simple) or the solar-event icon (circadian); a stack still shows the count. **Select all** selects every member; a drag writes every selected draft that supports the disk under the pointer. Circadian wheels keep the solar-event path and ungrouped per-event pins. Membership add/remove tiles (hover X, leftover add-back tiles) are the same in both editors. Re-adding a removed light must not change strip scroll or the current selection. The simple-scene disk is the leftover height in the stage scrollport above the light-tile strip (mode row included), down to 400px, then the stage scrolls.
 - **Why:** Simple scenes were using the circadian path by treating every lamp as a cycle. Huemane’s grouping and Select all are the right multi-light controls once animation is gone.
+- **Do not reverse without user ask.**
+
+## Frontend checks are node:test plus the sandbox, not Playwright
+
+- **Date:** 2026-09-22
+- **Decision:** Wheel grouping rules live as pure functions in `frontend/color_ui.js` (`clusterNearbyPinIds`, `dragIdsForPin`, `splitIdsByWheelMode`, `detachedAfterDrag`, `pinPressAction`) and run in CI with `node --test tests/frontend/*.test.mjs`. Layout and pointer behavior are checked against the local Docker sandbox with Chrome DevTools MCP. Do not add Playwright (or another browser runner) to CI.
+- **Why:** The grouping bugs were rules about who moves and who drops out. Those lock in unit tests without Home Assistant. The panel is a custom element inside HA’s shadow DOM, behind login, with a versioned asset URL. A Playwright job would need Docker, sandbox credentials, and a full HA boot, and it would still miss the rules tests. Chrome MCP stays the layout check because it already drives that sandbox.
 - **Do not reverse without user ask.**
 
 ## Theme brightness ghost + snap-to-clear override
 
 - **Date:** 2026-09-20
-- **Decision:** When a light’s event brightness differs from the theme (more than `THEME_BRIGHTNESS_SNAP`, ~2%), the sidebar brightness graph shows a small theme-brightness dot and a dashed high-contrast polyline to neighboring knots at the theme radius. The selected-light dial brightness loop shows the same dots on the polar wrap. Dragging brightness back onto the theme knot clears that event’s override if color/look still matches the theme; a remaining color override keeps the payload with theme brightness. The light sidebar lists current overrides (event name + brightness/color). Lys tile wheel uses `TILE_BRIGHTNESS_WHEEL_STEP` (8/3) — one-third the old per-notch step.
+- **Decision:** When a light’s event brightness differs from the theme (more than `THEME_BRIGHTNESS_SNAP`, ~2%), the sidebar brightness graph shows a small theme-brightness dot and a dashed high-contrast polyline to neighboring knots at the theme radius. The selected-light dial brightness loop shows the same dots on the polar wrap. Dragging brightness back onto the theme knot clears that event’s override if color/look still matches the theme; a remaining color override keeps the payload with theme brightness. The light sidebar lists current overrides (event name + brightness/color). light tile wheel uses `TILE_BRIGHTNESS_WHEEL_STEP` (8/3) — one-third the old per-notch step.
 - **Why:** Overrides were invisible except as a shifted handle. The ghost is the theme baseline; snap-to-clear avoids leftover “same as theme” overrides.
 - **Do not reverse without user ask.**
 
 ## Circadian edit is dial-only; graph plus does not add membership
 
 - **Date:** 2026-09-16
-- **Decision:** Circadian scene edit always uses the 24-hour dial (no stacked light-bar table, no Table/Dial overflow toggle). Sidebar brightness handles for events the lamp is not in have no `+`; click selects that solar event. Adding the light is the Lys tile / Add light path, not a typical-peer seed from the graph.
+- **Decision:** Circadian scene edit always uses the 24-hour dial (no stacked light-bar table, no Table/Dial overflow toggle). Sidebar brightness handles for events the lamp is not in have no `+`; click selects that solar event. Adding the light is the light tile / Add light path, not a typical-peer seed from the graph.
 - **Why:** Table view duplicated membership chrome. Graph `+` looked like per-event add while scene membership is per-lamp.
+- **Do not reverse without user ask.**
+
+## Scene tiles, create menu, and rename
+
+- **Date:** 2026-09-22
+- **Decision:** In the simple-scene editor, light tiles are grouped by the color mode they are in now (color, temperature, white, brightness). The group label selects that group. Cmd/Ctrl-click toggles one tile, Shift-click selects the range in that visual order, and Cmd/Ctrl+A selects every member. Arrow keys move the selection; Shift+arrow extends it; Enter opens settings. A plain click selects only that light, peels its pin, and opens the same light settings dialog as the sidebar info icon. Modifier clicks do not open the dialog. The long-press mode picker is gone. The area-rail card mesh repaints from the live drafts while the wheel or brightness changes. Each area’s plus (and empty-area) button opens “Create circadian scene” and “Create scene”. User-facing copy says “Scene”; the stored kind stays `simple`. Rename (editor and card) does not offer an area picker — the scene stays on its area. It does offer Icon (always visible), plus Category and Labels as chips until filled, matching native scene rename. The icon is stored on the scene and written to the entity registry. The Home Assistant sidebar icon for this panel is `mdi:palette`.
+- **Why:** Multiselect and mode groups are how a room of mixed bulbs is edited. The long-press picker duplicated the wheel. The card has to follow the drag, not the save. “Simple” is not a useful distinction in the UI. Area is chosen by where the scene was created; icon, category, and labels are the native rename fields.
 - **Do not reverse without user ask.**
 

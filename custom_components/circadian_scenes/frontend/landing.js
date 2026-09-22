@@ -351,6 +351,29 @@ export const LANDING_CSS = `
   .auto-configure {
     margin-top: 16px;
   }
+  .create-scene-menu {
+    z-index: 30;
+    min-width: 220px;
+    padding: 6px;
+    border-radius: 12px;
+    background: var(--card-background-color);
+    box-shadow: var(--ha-card-box-shadow, 0 4px 16px rgba(0,0,0,0.4));
+    display: flex;
+    flex-direction: column;
+  }
+  .create-scene-menu button {
+    text-align: left;
+    padding: 10px 12px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .create-scene-menu button:hover {
+    background: var(--secondary-background-color);
+  }
   @media (max-width: 870px) {
     .workspace { flex-direction: column; }
     .area-rail {
@@ -586,7 +609,7 @@ function renderAreaBlock(panel, area, scenes) {
   );
   add.addEventListener("click", (ev) => {
     ev.stopPropagation();
-    panel._openCreateDialog({ areaId: area.id, areaName: area.name });
+    panel._openAreaCreateMenu(add, { areaId: area.id, areaName: area.name });
   });
   head.append(title, add);
   block.appendChild(head);
@@ -599,7 +622,7 @@ function renderAreaBlock(panel, area, scenes) {
       "No scenes yet — create one for this area"
     );
     empty.addEventListener("click", () => {
-      panel._openCreateDialog({ areaId: area.id, areaName: area.name });
+      panel._openAreaCreateMenu(empty, { areaId: area.id, areaName: area.name });
     });
     block.appendChild(empty);
     return block;
@@ -643,7 +666,7 @@ function renderSceneCard(panel, scene) {
   sub.className = "card-sub";
   sub.textContent =
     scene.kind === "simple"
-      ? panel._t("frontend.kinds.simple", "Simple scene")
+      ? panel._t("frontend.kinds.simple", "Scene")
       : panel._t("frontend.kinds.circadian", "Circadian scene");
   body.append(name, sub);
   const overflowSlot = document.createElement("div");

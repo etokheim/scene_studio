@@ -739,6 +739,7 @@ function draftHs(draft) {
 }
 
 const PIN_GROUP_FRAC = 0.1;
+const PIN_DRAG_THRESHOLD_PX = 8;
 
 function clusterNearbyPinIds(placed, radius) {
   const range = Math.max(8, radius * PIN_GROUP_FRAC);
@@ -767,6 +768,51 @@ function clusterNearbyPinIds(placed, radius) {
     clusters.push(group);
   }
   return clusters;
+}
+
+/** Which drafts a pin drag writes. Peeled/detached pins move alone; a multi-selection moves together; otherwise a spatial cluster moves together. */
+function dragIdsForPin({ sceneId, cluster, detached, peeledId, selected }) {
+  const group = cluster?.length ? [...cluster] : [sceneId];
+  const pulled =
+    (detached instanceof Set && detached.has(sceneId)) || peeledId === sceneId;
+  if (pulled) {
+    return [sceneId];
+  }
+  const picked = selected || [];
+  if (picked.length > 1 && picked.includes(sceneId)) {
+    return [...picked];
+  }
+  if (group.length > 1) {
+    return [...group];
+  }
+  return [sceneId];
+}
+
+function splitIdsByWheelMode(ids, mode, supports) {
+  const keep = [];
+  const drop = [];
+  for (const id of ids || []) {
+    if (supports(id, mode)) {
+      keep.push(id);
+    } else {
+      drop.push(id);
+    }
+  }
+  return { keep, drop };
+}
+
+/** After a real drag, only lights that could not follow the disk stay pulled out of clusters. */
+function detachedAfterDrag(detachedIds, finishedIds) {
+  const finished = new Set(finishedIds || []);
+  return [...detachedIds].filter((id) => !finished.has(id));
+}
+
+/** A short press on a stack fans the pins. Movement past the threshold is a drag. */
+function pinPressAction({ moved, travel, stacked }) {
+  if (!moved && travel < PIN_DRAG_THRESHOLD_PX && stacked) {
+    return "fan";
+  }
+  return "commit";
 }
 
 function collapseSceneCycle(sequence) {
@@ -1953,7 +1999,7 @@ function createLightBrightnessGraph({
       group.append(hit, dot, fill);
       if (!c.point.member) {
         group.setAttribute("aria-label", c.point.name);
-        // Missing-event handles select only; add/remove lives on Lys tiles.
+        // Missing-event handles select only; add/remove lives on light tiles.
         group.addEventListener("click", (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
@@ -2117,6 +2163,8 @@ function createSceneColorWheel({
 
   const markers = new Map();
   let pinClusters = [];
+  /** Pins pulled out of a stack so each can be grabbed on its own. */
+  const detached = new Set();
   let drag = null;
   let glideTimer;
   let painted = { color: false, temp: false };
@@ -2165,6 +2213,26 @@ function createSceneColorWheel({
 
   const isOffDraft = (draft) =>
     !draft || draft.state === "off" || Number(draft.brightness) <= 0;
+
+  const supportsMode = (scene, mode) => {
+    if (!scene) {
+      return false;
+    }
+    const caps = capsOf(scene);
+    if (mode === "color") {
+      return Boolean(caps.hasColor);
+    }
+    if (mode === "temp") {
+      return Boolean(caps.hasTemp);
+    }
+    return true;
+  };
+
+  const splitCompatible = (ids, mode) =>
+    splitIdsByWheelMode(ids, mode, (id) => {
+      const row = getState().scenes.find((scene) => scene.id === id);
+      return supportsMode(row, mode);
+    });
 
   const showFloatReadout = (draft, x, y, wheelMode) => {
     floatReadout.hidden = false;
@@ -2541,7 +2609,7 @@ function createSceneColorWheel({
         );
       }
       wrap.appendChild(face);
-      wrap.addEventListener("click", (ev) => {
+        wrap.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if (mode === "palette") {
           uiMode = "palette";
@@ -2551,8 +2619,9 @@ function createSceneColorWheel({
         uiMode = mode;
         const state = getState();
         const targets = clusterMatesOf(selectedIdsOf(state));
+        const { keep, drop } = splitCompatible(targets, mode);
         const changed = [];
-        for (const id of targets) {
+        for (const id of keep) {
           const row = state.scenes.find((scene) => scene.id === id);
           if (!row?.draft) {
             continue;
@@ -2560,13 +2629,22 @@ function createSceneColorWheel({
           const caps = capsOf(row);
           const current = draftWheelMode(row.draft, caps.hasColor, caps.hasTemp);
           if (current !== mode && convertDraftTo(row.draft, mode, caps)) {
+            markers.get(id)?.g.classList.add("glide");
             changed.push(id);
           }
         }
-        if (changed.length) {
-          emitChange({ dragging: false, ids: changed });
+        if (changed.length || drop.length) {
+          for (const id of changed) {
+            markers.get(id)?.g.getBoundingClientRect();
+          }
+          emitChange({ dragging: false, ids: changed, deselected: drop });
         }
         sync();
+        window.setTimeout(() => {
+          for (const id of changed) {
+            markers.get(id)?.g.classList.remove("glide");
+          }
+        }, 450);
       });
       modePill.appendChild(wrap);
     }
@@ -2689,13 +2767,17 @@ function createSceneColorWheel({
         icon.setAttribute("dominant-baseline", "middle");
         const fo = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
         fo.setAttribute("class", "icon-fo");
-        fo.setAttribute("x", "12");
-        fo.setAttribute("y", "12");
-        fo.setAttribute("width", "24");
-        fo.setAttribute("height", "24");
+        fo.setAttribute("x", "8");
+        fo.setAttribute("y", "10");
+        fo.setAttribute("width", "32");
+        fo.setAttribute("height", "32");
+        const iconHost = document.createElement("div");
+        iconHost.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+        iconHost.className = "pin-icon-host";
         const haIcon = document.createElement("ha-icon");
-        haIcon.style.display = "block";
-        fo.appendChild(haIcon);
+        haIcon.style.setProperty("--mdc-icon-size", "32px");
+        iconHost.appendChild(haIcon);
+        fo.appendChild(iconHost);
         g.append(outline, path, hit, icon, fo);
         marker = { g, path, outline, hit, icon, fo, haIcon, sceneId: scene.id };
         markers.set(scene.id, marker);
@@ -2707,7 +2789,10 @@ function createSceneColorWheel({
           if (!item) {
             return;
           }
-          if (!selectedIdsOf(now).includes(scene.id)) {
+          const cluster =
+            pinClusters.find((row) => row.includes(scene.id)) || [scene.id];
+          const stacked = cluster.length > 1 && !detached.has(scene.id);
+          if (!stacked && !selectedIdsOf(now).includes(scene.id)) {
             onSelect(scene.id);
           }
           const caps = capsOf(item);
@@ -2718,7 +2803,8 @@ function createSceneColorWheel({
             scene.id,
             pt.x - (marker.x ?? radiusPx()),
             pt.y - (marker.y ?? radiusPx()),
-            markerMode
+            markerMode,
+            cluster
           );
           g.classList.add("drag");
         });
@@ -2773,10 +2859,16 @@ function createSceneColorWheel({
         svg.appendChild(marker.g);
       }
     }
+    const clusterInput = placed.filter((item) => !detached.has(item.id));
     pinClusters =
       groupNearby && radius
-        ? clusterNearbyPinIds(placed, radius)
-        : placed.map((item) => [item.id]);
+        ? clusterNearbyPinIds(clusterInput, radius)
+        : clusterInput.map((item) => [item.id]);
+    for (const id of detached) {
+      if (placed.some((item) => item.id === id)) {
+        pinClusters.push([id]);
+      }
+    }
     if (groupNearby) {
       const hidden = new Set();
       for (const group of pinClusters) {
@@ -2806,6 +2898,38 @@ function createSceneColorWheel({
           marker.g.style.display = "none";
         }
       }
+    }
+    const fans = [];
+    for (const item of placed) {
+      if (!detached.has(item.id)) {
+        continue;
+      }
+      let fan = fans.find(
+        (group) => Math.hypot(group.x - item.x, group.y - item.y) < 12
+      );
+      if (!fan) {
+        fan = { x: item.x, y: item.y, ids: [] };
+        fans.push(fan);
+      }
+      fan.ids.push(item.id);
+    }
+    for (const fan of fans) {
+      fan.ids.forEach((id, index) => {
+        const marker = markers.get(id);
+        if (!marker) {
+          return;
+        }
+        const count = fan.ids.length;
+        const ang = (index / count) * Math.PI * 2 - Math.PI / 2;
+        const dist = count > 1 ? 56 : 48;
+        placeMarker(
+          marker,
+          fan.x + Math.cos(ang) * dist,
+          fan.y + Math.sin(ang) * dist,
+          selectedIds.includes(id)
+        );
+        marker.g.style.display = "";
+      });
     }
     onClusters?.(pinClusters.map((group) => [...group]));
     for (const [id, marker] of markers) {
@@ -2910,6 +3034,21 @@ function createSceneColorWheel({
     if (!radius) {
       return;
     }
+    const travel = Math.hypot(ev.clientX - drag.startX, ev.clientY - drag.startY);
+    if (!drag.moved) {
+      if (travel < PIN_DRAG_THRESHOLD_PX) {
+        return;
+      }
+      drag.moved = true;
+      const { keep, drop } = splitCompatible(drag.ids, drag.mode);
+      drag.ids = keep.length ? keep : drag.ids;
+      if (drop.length) {
+        for (const id of drop) {
+          detached.add(id);
+        }
+        emitChange({ dragging: true, deselected: drop, ids: drag.ids });
+      }
+    }
     const { scenes, activeId } = getState();
     const moveIds = drag.ids?.length
       ? drag.ids
@@ -2933,6 +3072,14 @@ function createSceneColorWheel({
         pinMode = nextMode;
         drag.mode = nextMode;
         drag.mustEnterHome = true;
+        const { keep, drop } = splitCompatible(drag.ids, pinMode);
+        if (drop.length) {
+          drag.ids = keep;
+          for (const id of drop) {
+            detached.add(id);
+          }
+          emitChange({ dragging: true, deselected: drop, ids: keep });
+        }
       }
     }
     const band = pinMode === "color" ? geom.color : geom.temp;
@@ -2998,9 +3145,42 @@ function createSceneColorWheel({
     }
     const marker = markers.get(drag.sceneId);
     const finishedIds = drag.ids?.length ? [...drag.ids] : [drag.sceneId];
+    const travel = Math.hypot(ev.clientX - drag.startX, ev.clientY - drag.startY);
+    const stacked = (drag.cluster || []).length > 1 && !detached.has(drag.sceneId);
     marker?.g.classList.remove("drag");
+    if (
+      pinPressAction({
+        moved: drag.moved,
+        travel,
+        stacked,
+      }) === "fan"
+    ) {
+      for (const id of drag.cluster) {
+        detached.add(id);
+      }
+      drag = null;
+      hideFloatReadout();
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      stage.dispatchEvent(
+        new CustomEvent("slider-interaction-stop", {
+          bubbles: true,
+          composed: true,
+        })
+      );
+      sync();
+      return;
+    }
     marker?.g.classList.add("boing");
     setTimeout(() => marker?.g.classList.remove("boing"), 200);
+    if (drag.moved) {
+      const staySplit = detachedAfterDrag(detached, finishedIds);
+      detached.clear();
+      for (const id of staySplit) {
+        detached.add(id);
+      }
+    }
     drag = null;
     hideFloatReadout();
     window.removeEventListener("pointermove", onPointerMove);
@@ -3016,27 +3196,33 @@ function createSceneColorWheel({
     sync();
   };
 
-  const dragIdsFor = (sceneId) => {
-    const selected = selectedIdsOf(getState());
-    if (selected.includes(sceneId) && selected.length > 1) {
-      return selected;
-    }
-    if (selected.length === 1 && selected[0] === sceneId) {
-      return [sceneId];
-    }
-    const group = pinClusters.find((row) => row.includes(sceneId));
-    return group?.length ? [...group] : [sceneId];
+  const dragIdsFor = (sceneId, cluster) => {
+    const state = getState();
+    const group = cluster?.length
+      ? cluster
+      : pinClusters.find((row) => row.includes(sceneId)) || [sceneId];
+    return dragIdsForPin({
+      sceneId,
+      cluster: group,
+      detached,
+      peeledId: state.peeledId,
+      selected: selectedIdsOf(state),
+    });
   };
 
-  const startDrag = (ev, sceneId, grabX = 0, grabY = 0, mode = "color") => {
+  const startDrag = (ev, sceneId, grabX = 0, grabY = 0, mode = "color", cluster = null) => {
     drag = {
       sceneId,
-      ids: dragIdsFor(sceneId),
+      ids: dragIdsFor(sceneId, cluster),
+      cluster: cluster || [sceneId],
       pointerId: ev.pointerId,
       grabX,
       grabY,
       mode,
       mustEnterHome: false,
+      moved: false,
+      startX: ev.clientX,
+      startY: ev.clientY,
     };
     stage.dispatchEvent(
       new CustomEvent("slider-interaction-start", {
@@ -3111,8 +3297,9 @@ function createSceneColorWheel({
     if (convertDraft) {
       const state = getState();
       const targets = clusterMatesOf(selectedIdsOf(state));
+      const { keep, drop } = splitCompatible(targets, next);
       const changed = [];
-      for (const id of targets) {
+      for (const id of keep) {
         const row = state.scenes.find((scene) => scene.id === id);
         if (!row?.draft) {
           continue;
@@ -3120,12 +3307,18 @@ function createSceneColorWheel({
         const caps = capsOf(row);
         const current = draftWheelMode(row.draft, caps.hasColor, caps.hasTemp);
         if (current !== next && convertDraftTo(row.draft, next, caps)) {
+          markers.get(id)?.g.classList.add("glide");
           changed.push(id);
         }
       }
-      if (changed.length) {
-        emitChange({ dragging: false, ids: changed });
+      if (changed.length || drop.length) {
+        emitChange({ dragging: false, ids: changed, deselected: drop });
       }
+      window.setTimeout(() => {
+        for (const id of changed) {
+          markers.get(id)?.g.classList.remove("glide");
+        }
+      }, 450);
     }
     sync();
   };
@@ -3186,7 +3379,29 @@ function createSceneColorWheel({
     }
   };
 
-  return { el: stage, setMode, sync, syncPresets, attachGlow, disconnect };
+  const detach = (id) => {
+    if (!id) {
+      return;
+    }
+    detached.add(id);
+    sync();
+  };
+
+  const clearDetached = () => {
+    detached.clear();
+    sync();
+  };
+
+  return {
+    el: stage,
+    setMode,
+    sync,
+    syncPresets,
+    attachGlow,
+    disconnect,
+    detach,
+    clearDetached,
+  };
 }
 
 function lightDraftFingerprint(draft) {
@@ -3277,4 +3492,11 @@ export {
   HUE_DOT_PATH,
   HUE_DOT_OUTLINE_PATH,
   HUE_PATH_STEPS,
+  PIN_GROUP_FRAC,
+  PIN_DRAG_THRESHOLD_PX,
+  clusterNearbyPinIds,
+  dragIdsForPin,
+  splitIdsByWheelMode,
+  detachedAfterDrag,
+  pinPressAction,
 };

@@ -112,6 +112,16 @@ class TestNormalizeSimpleScene:
         assert item[SCENE_NAME] == "Movie"
         assert item["membership"] == {"exclude": [], "include": []}
         assert item["lights"] == {}
+        assert item["icon"] is None
+
+    def test_icon_round_trip(self):
+        blank = normalize_simple_scene({SCENE_NAME: "Movie", "icon": "  "})
+        assert blank["icon"] is None
+        kept = normalize_circadian_scene(
+            {SCENE_NAME: "Day", "icon": "mdi:weather-sunny"}
+        )
+        assert kept["icon"] == "mdi:weather-sunny"
+        assert to_form_data(kept)["icon"] == "mdi:weather-sunny"
 
     def test_lights_preserved(self):
         lights = {

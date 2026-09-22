@@ -59,12 +59,14 @@
     },
     "kinds": {
       "circadian": "Circadian scene",
-      "simple": "Simple scene"
+      "simple": "Scene"
     },
     "create": {
       "title": "Create scene",
       "kind": "Scene type",
-      "theme": "Theme"
+      "theme": "Theme",
+      "circadian": "Create circadian scene",
+      "scene": "Create scene"
     },
     "list": {
       "column_name": "Name"
@@ -103,6 +105,10 @@
       "description": "Description",
       "category": "Category",
       "labels": "Labels",
+      "icon": "Icon",
+      "add_description": "Add description",
+      "add_category": "Add category",
+      "add_labels": "Add labels",
       "date": "Date",
       "scene": "Scene",
       "location": "Location",
@@ -230,6 +236,10 @@
       "override_color": "Color",
       "solar_events": "Solar events",
       "select_all": "Select all",
+      "group_color": "Color",
+      "group_temp": "Temperature",
+      "group_white": "White",
+      "group_brightness": "Brightness",
       "add_light": "Add light",
       "add_named": "Add {name}",
       "add_named_to_scene": "Add {name} to the scene",

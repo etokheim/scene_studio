@@ -14,17 +14,20 @@ import {
   attachLightRemove,
   createAddLightTile,
   createLightTile,
+  lightTileColorGroup,
+  lightTileGroupOrder,
   paintLightTile,
+  tileSelectionAfterClick,
 } from "./light_tiles.js";
 
 export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
   .simple-editor-host {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     min-width: 0;
+    min-height: 0;
     width: 100%;
-    height: auto;
-    min-height: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
   }
@@ -35,7 +38,9 @@ export const SIMPLE_EDITOR_CSS = `
     position: relative;
     width: 100%;
     min-width: 0;
-    flex: 0 0 auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    height: 100%;
     padding: 40px 0 16px;
     box-sizing: border-box;
     gap: 16px;
@@ -44,21 +49,26 @@ export const SIMPLE_EDITOR_CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     width: 100%;
     max-width: none;
     min-width: 0;
     box-sizing: border-box;
-    /* Keep .hue-wheel-chrome (mode pill + presets) off the Lys strip. */
+    /* WHEEL_FACE_MIN_PX plus mode row (48), stage gap (16), and this padding.
+       The scrollport scrolls once the disk cannot shrink further. */
+    min-height: calc(400px + 48px + 16px + 24px);
     padding-bottom: 24px;
   }
   .simple-wheels .hue-wheel-stage {
-    width: min(100%, 650px, var(--dial-face-max, 650px));
-    max-width: min(100%, 650px, var(--dial-face-max, 650px));
+    width: min(100%, 650px);
+    max-width: min(100%, 650px);
+    height: 100%;
+    max-height: 100%;
     min-width: 0;
+    min-height: 0;
     margin: 0;
-    aspect-ratio: 1;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    container-type: size;
   }
   .simple-editor .library-name-field {
     width: min(100%, 650px);
@@ -87,36 +97,6 @@ export const SIMPLE_EDITOR_CSS = `
     padding: 0;
   }
   ${LIGHT_TILES_CSS}
-  .simple-mode-picker {
-    position: absolute;
-    z-index: 6;
-    width: 132px;
-    height: 132px;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-  }
-  .simple-mode-picker button {
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    border: 0;
-    pointer-events: auto;
-    cursor: pointer;
-    color: #fff;
-    background: color-mix(in srgb, var(--card-background-color, #222) 88%, transparent);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .simple-mode-picker button ha-icon {
-    --mdc-icon-size: 22px;
-  }
-  .simple-mode-picker .m-bri { left: 46px; top: 0; }
-  .simple-mode-picker .m-temp { right: 0; top: 46px; }
-  .simple-mode-picker .m-color { left: 46px; bottom: 0; }
-  .simple-mode-picker .m-var { left: 0; top: 46px; }
   .simple-light-selector.select-all-tile .simple-light-tile {
     cursor: pointer;
   }
@@ -179,6 +159,9 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   wheels.className = "simple-wheels";
 
   let selectedIds = new Set(members[0] ? [members[0]] : []);
+  let peeledId = null;
+  let anchorId = members[0] || null;
+  let stripOrderIds = [];
   let pinClusters = [];
   const drafts = {};
   for (const eid of members) {
@@ -223,6 +206,23 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     panel._formData = { ...panel._formData, lights };
     panel._noteSimpleDirty();
+    paintCard();
+  };
+
+  const cardDots = () =>
+    members.map((eid) => {
+      const draft = drafts[eid] || {};
+      const rgb = draftRgb(draft);
+      const off = (draft.state || "on") === "off" || Number(draft.brightness) <= 0;
+      const scale = off ? 0 : (Number(draft.brightness) || 0) / 255;
+      return {
+        entity_id: eid,
+        rgb: rgb.map((channel) => Math.round(Number(channel) * scale)),
+      };
+    });
+
+  const paintCard = () => {
+    panel._paintSimpleSceneCard?.(cardDots());
   };
 
   const memberCaps = members.map((id) =>
@@ -240,6 +240,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     })),
     activeId: [...selectedIds][0] || null,
     selectedIds: [...selectedIds],
+    peeledId,
   });
 
   const wheel = createSceneColorWheel({
@@ -253,10 +254,20 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     },
     onSelect: (id) => {
       selectedIds = new Set(id ? [id] : []);
+      peeledId = id || null;
       syncTiles();
     },
-    onChange: ({ dragging, fromPalette, ids } = {}) => {
-      const write = ids?.length ? ids : [...selectedIds];
+    onChange: ({ dragging, fromPalette, ids, deselected } = {}) => {
+      if (deselected?.length) {
+        for (const id of deselected) {
+          selectedIds.delete(id);
+          if (peeledId === id) {
+            peeledId = null;
+          }
+        }
+        paintTileSelection();
+      }
+      const write = ids?.length ? ids : deselected?.length ? [] : [...selectedIds];
       if (!write.length) {
         return;
       }
@@ -325,57 +336,76 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   tiles.className = "light-tiles";
   scroller.appendChild(tiles);
   wrap.appendChild(scroller);
-
-  let pickerEl = null;
-  const hidePicker = () => {
-    pickerEl?.remove();
-    pickerEl = null;
-  };
-
-  const showModePicker = (eid, clientX, clientY) => {
-    hidePicker();
-    pickerEl = document.createElement("div");
-    pickerEl.className = "simple-mode-picker";
-    const hostRect = wrap.getBoundingClientRect();
-    pickerEl.style.left = `${clientX - hostRect.left}px`;
-    pickerEl.style.top = `${clientY - hostRect.top}px`;
-    const add = (cls, icon, onPick) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = cls;
-      const haIcon = document.createElement("ha-icon");
-      haIcon.setAttribute("icon", icon);
-      btn.appendChild(haIcon);
-      btn.addEventListener("pointerup", (ev) => {
-        ev.stopPropagation();
-        onPick();
-        hidePicker();
-      });
-      pickerEl.appendChild(btn);
-    };
-    add("m-bri", "mdi:brightness-6", () => {
-      selectedIds = new Set([eid]);
+  scroller.addEventListener("keydown", (ev) => {
+    const meta = ev.metaKey || ev.ctrlKey;
+    if (meta && ev.key.toLowerCase() === "a") {
+      ev.preventDefault();
+      selectedIds = new Set(members);
+      peeledId = null;
+      anchorId = stripOrderIds[0] || members[0] || null;
+      wheel.clearDetached?.();
       wheel.sync();
-      syncTiles();
+      paintTileSelection();
+      return;
+    }
+    const current = ev.target.closest?.(".simple-light-selector");
+    const eid = current?.dataset?.entityId;
+    if (!eid || eid === "__select_all__" || !stripOrderIds.includes(eid)) {
+      return;
+    }
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      applyTileClick(eid, ev);
+      return;
+    }
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") {
+      return;
+    }
+    const index = stripOrderIds.indexOf(eid);
+    const next = stripOrderIds[index + (ev.key === "ArrowRight" ? 1 : -1)];
+    if (!next) {
+      return;
+    }
+    ev.preventDefault();
+    if (ev.shiftKey) {
+      applyTileClick(next, ev);
+    } else {
+      selectedIds = new Set([next]);
+      anchorId = next;
+      peeledId = next;
+      wheel.detach?.(next);
+      paintTileSelection();
+      wheel.sync();
+    }
+    scroller.querySelector(
+      `.simple-light-selector[data-entity-id="${CSS.escape(next)}"]`
+    )?.focus();
+  });
+
+  const applyTileClick = (eid, ev) => {
+    const result = tileSelectionAfterClick({
+      ids: stripOrderIds.length ? stripOrderIds : members,
+      selected: [...selectedIds],
+      anchorId,
+      entityId: eid,
+      shiftKey: Boolean(ev?.shiftKey),
+      toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey),
     });
-    add("m-temp", "mdi:thermometer", () => {
-      selectedIds = new Set([eid]);
-      wheel.setMode("temp", { convertDraft: true });
-      persistLight(eid);
-      syncTiles();
-    });
-    add("m-color", "mdi:palette", () => {
-      selectedIds = new Set([eid]);
-      wheel.setMode("color", { convertDraft: true });
-      persistLight(eid);
-      syncTiles();
-    });
-    add("m-var", "mdi:variable", () => {
-      selectedIds = new Set([eid]);
-      wrap.querySelector(".var-palette button")?.focus();
-      syncTiles();
-    });
-    wrap.appendChild(pickerEl);
+    selectedIds = new Set(result.selected);
+    anchorId = result.anchorId;
+    const plain = !ev?.shiftKey && !ev?.metaKey && !ev?.ctrlKey;
+    if (plain) {
+      peeledId = eid;
+      wheel.detach?.(eid);
+    } else {
+      peeledId = null;
+      wheel.clearDetached?.();
+    }
+    paintTileSelection();
+    wheel.sync();
+    if (plain) {
+      panel._showEntityMoreInfo(eid, "settings");
+    }
   };
 
   const fillPercent = (draft) => {
@@ -386,20 +416,9 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     return (bri / 255) * 100;
   };
 
-  const tileSelectedIds = () => {
-    const picked = new Set(selectedIds);
-    for (const group of pinClusters) {
-      if (group.some((id) => selectedIds.has(id))) {
-        group.forEach((id) => picked.add(id));
-      }
-    }
-    return picked;
-  };
-
   const paintTileSelection = () => {
-    const picked = tileSelectedIds();
     const allSelected =
-      members.length > 0 && members.every((id) => picked.has(id));
+      members.length > 0 && members.every((id) => selectedIds.has(id));
     for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
       const eid = selector.dataset.entityId;
       if (eid === "__select_all__") {
@@ -410,7 +429,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         selector.classList.toggle("active", false);
         continue;
       }
-      selector.classList.toggle("active", picked.has(eid));
+      selector.classList.toggle("active", selectedIds.has(eid));
     }
   };
 
@@ -418,7 +437,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     paintLightTile(selector, {
       rgb: draftRgb(draft),
       fillPct: fillPercent(draft),
-      selected: tileSelectedIds().has(eid),
+      selected: selectedIds.has(eid),
     });
   };
 
@@ -436,9 +455,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const scroller = tiles.parentElement;
     const keepLeft = scroller?.scrollLeft ?? 0;
     tiles.replaceChildren();
-    hidePicker();
     const allSelected =
-      members.length > 0 && members.every((id) => tileSelectedIds().has(id));
+      members.length > 0 && members.every((id) => selectedIds.has(id));
     if (members.length > 1) {
       const { selector, tile } = createLightTile({
         entityId: "__select_all__",
@@ -459,6 +477,9 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const pickAll = (ev) => {
         ev.stopPropagation();
         selectedIds = new Set(members);
+        peeledId = null;
+        anchorId = stripOrderIds[0] || members[0] || null;
+        wheel.clearDetached?.();
         wheel.sync();
         syncTiles();
       };
@@ -478,7 +499,49 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       };
       return rank(a) - rank(b);
     });
+    const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
     for (const eid of ordered) {
+      const key = lightTileColorGroup(drafts[eid]);
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push(eid);
+    }
+    stripOrderIds = lightTileGroupOrder().flatMap((key) => grouped.get(key) || []);
+    const groupLabels = {
+      color: panel._t("frontend.lights.group_color", "Color"),
+      temp: panel._t("frontend.lights.group_temp", "Temperature"),
+      white: panel._t("frontend.lights.group_white", "White"),
+      brightness: panel._t("frontend.lights.group_brightness", "Brightness"),
+    };
+    const groupRows = new Map();
+    for (const key of lightTileGroupOrder()) {
+      const ids = grouped.get(key) || [];
+      if (!ids.length) {
+        continue;
+      }
+      const group = document.createElement("div");
+      group.className = "light-mode-group";
+      const label = document.createElement("button");
+      label.type = "button";
+      label.className = "light-mode-label";
+      label.textContent = groupLabels[key] || key;
+      label.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        selectedIds = new Set(ids);
+        anchorId = ids[0] || null;
+        peeledId = null;
+        wheel.clearDetached?.();
+        wheel.sync();
+        syncTiles();
+      });
+      const row = document.createElement("div");
+      row.className = "light-mode-row";
+      group.append(label, row);
+      groupRows.set(key, row);
+      tiles.appendChild(group);
+    }
+    for (const eid of stripOrderIds) {
       const draft = drafts[eid] || {};
       const state = panel._hass?.states?.[eid];
       const name =
@@ -501,8 +564,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         }
       }
       const editable = !unavailable || capsKnown;
+      selector.tabIndex = 0;
 
-      let pressTimer = null;
       let drag = null;
       let wheelAxis = null;
       let wheelAxisTimer = null;
@@ -517,10 +580,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         if (!drag || (ev && ev.pointerId !== drag.pointerId)) {
           return;
         }
-        if (pressTimer) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
-        }
         document.removeEventListener("pointermove", onDocMove);
         document.removeEventListener("pointerup", endDrag);
         document.removeEventListener("pointercancel", endDrag);
@@ -533,12 +592,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         const suppressTap = drag.suppressTap;
         drag = null;
         window.setTimeout(() => tile.classList.remove("dragging"), 250);
-        if (wasVertical || suppressTap || pickerEl) {
+        if (wasVertical || suppressTap) {
           return;
         }
-        selectedIds = new Set([eid]);
-        wheel.sync();
-        paintTileSelection();
+        applyTileClick(eid, ev);
       };
 
       const onDocMove = (ev) => {
@@ -551,11 +608,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           if (Math.hypot(dx, dy) < 8) {
             return;
           }
-          if (pressTimer) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
-          }
-          hidePicker();
           if (Math.abs(dx) > Math.abs(dy)) {
             drag.axis = "x";
             drag.suppressTap = true;
@@ -591,11 +643,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           axis: null,
           suppressTap: false,
         };
-        pressTimer = window.setTimeout(() => {
-          pressTimer = null;
-          drag.suppressTap = true;
-          showModePicker(eid, ev.clientX, ev.clientY);
-        }, 420);
         document.addEventListener("pointermove", onDocMove);
         document.addEventListener("pointerup", endDrag);
         document.addEventListener("pointercancel", endDrag);
@@ -644,7 +691,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         ),
         onRemove: () => panel._removeLightFromSimpleMembers(eid),
       });
-      tiles.appendChild(selector);
+      const row = groupRows.get(lightTileColorGroup(draft));
+      (row || tiles).appendChild(selector);
     }
     for (const eid of removedMembers) {
       const state = panel._hass?.states?.[eid];

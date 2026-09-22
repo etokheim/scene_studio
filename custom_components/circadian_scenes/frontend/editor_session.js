@@ -75,6 +75,7 @@ function emptyFormData() {
     labels: [],
     category: null,
     area: null,
+    icon: "",
     theme_id: "default",
     membership: { exclude: [], include: [] },
     overrides: {},

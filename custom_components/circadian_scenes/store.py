@@ -188,6 +188,15 @@ def dusk_minimum_seconds(hass: HomeAssistant, override: int | None = None) -> in
 # ---------------------------------------------------------------------------
 
 
+def _optional_icon(raw: dict[str, Any]) -> str | None:
+    """Keep a non-blank icon; drop empty strings so the entity default applies."""
+    icon = raw.get("icon")
+    if not isinstance(icon, str):
+        return None
+    icon = icon.strip()
+    return icon or None
+
+
 def normalize_circadian_scene(
     raw: dict[str, Any],
     scene_id: str | None = None,
@@ -215,6 +224,7 @@ def normalize_circadian_scene(
         LABELS: [str(label) for label in labels if label],
         CATEGORY: raw.get(CATEGORY) or None,
         AREA: raw.get(AREA) or None,
+        "icon": _optional_icon(raw),
         "theme_id": raw.get("theme_id") or "default",
         "membership": {
             "exclude": list(membership.get("exclude") or []),
@@ -248,6 +258,7 @@ def normalize_simple_scene(
         LABELS: [str(label) for label in labels if label],
         CATEGORY: raw.get(CATEGORY) or None,
         AREA: raw.get(AREA) or None,
+        "icon": _optional_icon(raw),
         "membership": {
             "exclude": list(membership.get("exclude") or []),
             "include": list(membership.get("include") or []),
@@ -463,6 +474,7 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
         LABELS: list(item.get(LABELS) or []),
         CATEGORY: item.get(CATEGORY),
         AREA: item.get(AREA),
+        "icon": item.get("icon") or "",
         "membership": item.get("membership") or {"exclude": [], "include": []},
     }
     if kind == KIND_CIRCADIAN:

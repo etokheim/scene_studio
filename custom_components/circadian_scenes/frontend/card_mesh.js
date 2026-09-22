@@ -91,17 +91,11 @@ export function sampleMeshColor(colors, x, y) {
   );
 }
 
-export function createSimpleCardMesh(dots, { width = 192, height = 64 } = {}) {
+function paintMeshPixels(canvas, dots) {
   const colors = meshColors(dots);
-  const canvas = document.createElement("canvas");
-  canvas.className = "card-bg card-mesh";
-  canvas.setAttribute("aria-hidden", "true");
-  const dpr = Math.min(2, Math.max(1, globalThis.devicePixelRatio || 1));
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
   const context = canvas.getContext("2d", { alpha: false });
-  if (!context) {
-    return canvas;
+  if (!context || canvas.width < 1 || canvas.height < 1) {
+    return;
   }
   const image = context.createImageData(canvas.width, canvas.height);
   for (let py = 0; py < canvas.height; py += 1) {
@@ -121,5 +115,19 @@ export function createSimpleCardMesh(dots, { width = 192, height = 64 } = {}) {
     }
   }
   context.putImageData(image, 0, 0);
+}
+
+export function paintSimpleCardMesh(canvas, dots) {
+  paintMeshPixels(canvas, dots);
+}
+
+export function createSimpleCardMesh(dots, { width = 192, height = 64 } = {}) {
+  const canvas = document.createElement("canvas");
+  canvas.className = "card-bg card-mesh";
+  canvas.setAttribute("aria-hidden", "true");
+  const dpr = Math.min(2, Math.max(1, globalThis.devicePixelRatio || 1));
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  paintMeshPixels(canvas, dots);
   return canvas;
 }

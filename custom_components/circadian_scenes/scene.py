@@ -131,6 +131,14 @@ async def async_remove_entity(entities: dict, scene_id: str) -> None:
         await entity.async_remove(force_remove=True)
 
 
+def _configured_icon(scene_config: dict, default: str) -> str:
+    """Entity icon from the scene config, or the kind default."""
+    icon = scene_config.get("icon")
+    if isinstance(icon, str) and icon.strip():
+        return icon.strip()
+    return default
+
+
 class CircadianScene(Scene):
     """Representation the CircadianScene."""
 
@@ -147,7 +155,7 @@ class CircadianScene(Scene):
         self.config_entry = config_entry
         self._scene_config = scene_config
 
-        self._attr_icon = "mdi:auto-fix"
+        self._attr_icon = _configured_icon(scene_config, "mdi:auto-fix")
         self._attr_name = name
         self._attr_unique_id = scene_config["id"]
         self._attr_integration = "circadian_scenes"
@@ -230,6 +238,7 @@ class CircadianScene(Scene):
             self._automatically_update_lights_armed,
             tuple(sorted(self._overridden)),
             tuple(sorted(self._interrupted)),
+            self._attr_icon,
         )
 
     def _write_ha_state_if_attrs_changed(self) -> None:
@@ -245,6 +254,7 @@ class CircadianScene(Scene):
         self._scene_config = scene_config
         self._attr_name = scene_config.get(SCENE_NAME) or self._attr_name
         self._area_id = scene_config.get(AREA)
+        self._attr_icon = _configured_icon(scene_config, "mdi:auto-fix")
         await self._async_sync_registry()
         # Global interval 0 (or disabled) stops a running loop.
         if (
@@ -261,7 +271,7 @@ class CircadianScene(Scene):
         entry = entity_reg.async_get(self.entity_id)
         if not entry:
             return
-        updates: dict[str, Any] = {"area_id": self._area_id}
+        updates: dict[str, Any] = {"area_id": self._area_id, "icon": self._attr_icon}
         labels = self._scene_config.get(LABELS)
         if labels is not None:
             updates["labels"] = set(labels)
@@ -997,7 +1007,7 @@ class SimpleScene(Scene):
         self.hass = hass
         self.config_entry = config_entry
         self._scene_config = scene_config
-        self._attr_icon = "mdi:palette"
+        self._attr_icon = _configured_icon(scene_config, "mdi:palette")
         self._attr_name = name
         self._attr_unique_id = scene_config["id"]
         self._attr_integration = "circadian_scenes"
@@ -1028,6 +1038,7 @@ class SimpleScene(Scene):
         self._scene_config = scene_config
         self._attr_name = scene_config.get(SCENE_NAME) or self._attr_name
         self._area_id = scene_config.get(AREA)
+        self._attr_icon = _configured_icon(scene_config, "mdi:palette")
         await self._async_sync_registry()
         self.async_write_ha_state()
 
@@ -1037,7 +1048,7 @@ class SimpleScene(Scene):
         entry = entity_reg.async_get(self.entity_id)
         if not entry:
             return
-        updates: dict[str, Any] = {"area_id": self._area_id}
+        updates: dict[str, Any] = {"area_id": self._area_id, "icon": self._attr_icon}
         labels = self._scene_config.get(LABELS)
         if labels is not None:
             updates["labels"] = set(labels)

@@ -55,6 +55,7 @@ import {
   themeConic,
 } from "./landing.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
+import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
 import { bindLightTileBrightness, createAddLightTile, createLightTile, paintLightTile } from "./light_tiles.js";
 
@@ -1035,7 +1036,7 @@ class CircadianScenesPanel extends HTMLElement {
              horizon bleed instead (overflow-x:hidden+visible Y → auto). */
           overflow: visible;
           /* Fallback until _syncStageFaceMax measures: fill below the header,
-             keep event-label pad + gap, leave room for the Lys strip. */
+             keep event-label pad + gap, leave room for the light-tile strip. */
           --dial-face-max: calc(
             100vh - var(--header-height, 64px) - 40px - 16px - 180px
           );
@@ -1054,7 +1055,7 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .sun-path.dial-view .sun-light-clock {
           position: relative;
-          /* Face size comes from --dial-face-max (fits Lys tiles above the
+          /* Face size comes from --dial-face-max (fits light tiles above the
              fold when it can; min-height 600px otherwise scrolls). */
           min-height: 0;
           gap: 16px;
@@ -2386,9 +2387,21 @@ class CircadianScenesPanel extends HTMLElement {
           pointer-events: none;
           overflow: visible;
         }
-        .hue-wheel-svg .icon-fo ha-icon,
-        .hue-wheel-svg .icon-fo ha-state-icon {
-          --mdc-icon-size: 20px;
+        .hue-wheel-svg .pin-icon-host {
+          box-sizing: border-box;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        }
+        .hue-wheel-svg .pin-icon-host ha-icon,
+        .hue-wheel-svg .pin-icon-host ha-state-icon {
+          display: flex;
+          width: 32px;
+          height: 32px;
+          --mdc-icon-size: 32px;
           color: inherit;
           --icon-primary-color: currentColor;
         }
@@ -3361,7 +3374,7 @@ class CircadianScenesPanel extends HTMLElement {
           padding: 0;
         }
         /* Color wheels cap at WHEEL_FACE_MAX; --dial-face-max shrinks them to
-           fit above Lys tiles. The stage column itself stays full width. */
+           fit above light tiles. The stage column itself stays full width. */
         .stage-col .hue-wheel-stage {
           width: min(100%, ${WHEEL_FACE_MAX_PX}px, var(--dial-face-max, ${WHEEL_FACE_MAX_PX}px));
           max-width: min(100%, ${WHEEL_FACE_MAX_PX}px, var(--dial-face-max, ${WHEEL_FACE_MAX_PX}px));
@@ -3369,14 +3382,30 @@ class CircadianScenesPanel extends HTMLElement {
           padding: 40px 0 16px;
           box-sizing: border-box;
         }
-        .stage-col .simple-editor .hue-wheel-stage {
-          min-width: 0;
-          padding: 0;
-        }
-        .stage-col .simple-editor .hue-wheel-canvas,
         .stage-col .hue-wheel-canvas {
           width: 100%;
           max-width: none;
+        }
+        /* Simple-scene disk is the leftover above the light tiles, not the
+           dial budget. 64px is the mode row (48) plus the stage gap (16).
+           Floor matches WHEEL_FACE_MIN_PX; the wheels box min-height makes
+           the scrollport scroll before the disk goes smaller. */
+        .stage-col .simple-editor .hue-wheel-stage {
+          min-width: 0;
+          padding: 0;
+          width: min(100%, ${WHEEL_FACE_MAX_PX}px);
+          max-width: min(100%, ${WHEEL_FACE_MAX_PX}px);
+          height: 100%;
+          max-height: 100%;
+          container-type: size;
+        }
+        .stage-col .simple-editor .hue-wheel-canvas {
+          width: max(
+            ${WHEEL_FACE_MIN_PX}px,
+            min(100cqi, calc(100cqb - 64px), ${WHEEL_FACE_MAX_PX}px)
+          );
+          max-width: min(100%, ${WHEEL_FACE_MAX_PX}px, calc(100cqb - 64px));
+          height: auto;
         }
         .stage-bg .hue-wheel-glow {
           position: absolute;
@@ -3680,6 +3709,7 @@ class CircadianScenesPanel extends HTMLElement {
         .save-dialog ha-textarea,
         .save-dialog ha-labels-picker,
         .save-dialog ha-category-picker,
+        .save-dialog ha-icon-picker,
         .save-dialog ha-selector,
         .area-dialog ha-selector,
         .confirm-dialog p {
@@ -4845,6 +4875,11 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _syncStageFaceMax() {
+    if (this._faceSyncing) {
+      return;
+    }
+    this._faceSyncing = true;
+    try {
     const stage = this._contentEl?.querySelector(".stage-col");
     if (!stage) {
       return;
@@ -4856,6 +4891,14 @@ class CircadianScenesPanel extends HTMLElement {
     if (scrollH < 1 || scrollW < 1) {
       return;
     }
+    const boxTop = box.getBoundingClientRect().top;
+    const visibleBottom = Math.min(
+      this.getBoundingClientRect().bottom,
+      this._contentEl.getBoundingClientRect().bottom
+    );
+    const visibleH = Math.floor(
+      Math.min(scrollH, Math.max(0, visibleBottom - boxTop))
+    );
     const isDial = this._isDialView();
     const minPx = isDial ? DIAL_FACE_MIN_PX : WHEEL_FACE_MIN_PX;
     const widthCap = isDial ? scrollW : Math.min(scrollW, WHEEL_FACE_MAX_PX);
@@ -4875,6 +4918,18 @@ class CircadianScenesPanel extends HTMLElement {
     let overhead = 40 + 16;
     const clock = box.querySelector(".sun-light-clock");
     const editor = box.querySelector(".simple-editor, .library-editor");
+    if (editor && this._faceObserved !== editor) {
+      this._faceObserved = editor;
+      this._faceObserver?.disconnect();
+      this._faceObserver = new ResizeObserver(() => {
+        if (this._faceSyncing) {
+          this._faceResync = true;
+          return;
+        }
+        this._syncStageFaceMax();
+      });
+      this._faceObserver.observe(editor);
+    }
     if (clock) {
       const cs = getComputedStyle(clock);
       const padTop = parseFloat(cs.paddingTop);
@@ -4885,36 +4940,86 @@ class CircadianScenesPanel extends HTMLElement {
         (Number.isFinite(padBottom) ? padBottom : 16) +
         (Number.isFinite(gap) ? gap : 16);
     } else if (editor) {
-      const cs = getComputedStyle(editor);
-      const padTop = parseFloat(cs.paddingTop);
-      const padBottom = parseFloat(cs.paddingBottom);
-      const gap = parseFloat(cs.rowGap || cs.gap);
-      overhead =
-        (Number.isFinite(padTop) ? padTop : 40) +
-        (Number.isFinite(padBottom) ? padBottom : 16) +
-        (Number.isFinite(gap) ? gap : 16);
-      const wheels = box.querySelector(".simple-wheels");
-      if (wheels) {
-        const wheelPad = parseFloat(getComputedStyle(wheels).paddingBottom);
-        overhead += Number.isFinite(wheelPad) ? wheelPad : 0;
-      }
-      const nameField = box.querySelector(".library-name-field");
-      if (nameField) {
-        overhead += Math.ceil(nameField.getBoundingClientRect().height) || 0;
+      const disk = editor.querySelector(".hue-wheel-canvas");
+      const diskH = disk?.getBoundingClientRect().height || 0;
+      const around = editor.getBoundingClientRect().height - diskH;
+      if (around > 8 && diskH > 8) {
+        // Tiles, mode row, and editor padding are whatever is not the disk.
+        // Estimating those pieces left the disk too tall and pushed the tiles
+        // out of the visible scrollport before the 400px floor.
+        overhead = around;
+        stripH = 0;
+      } else {
+        const cs = getComputedStyle(editor);
+        const padTop = parseFloat(cs.paddingTop);
+        const padBottom = parseFloat(cs.paddingBottom);
+        const gap = parseFloat(cs.rowGap || cs.gap);
+        overhead =
+          (Number.isFinite(padTop) ? padTop : 40) +
+          (Number.isFinite(padBottom) ? padBottom : 16) +
+          (Number.isFinite(gap) ? gap : 16);
+        const wheels = box.querySelector(".simple-wheels");
+        if (wheels) {
+          const wheelPad = parseFloat(getComputedStyle(wheels).paddingBottom);
+          overhead += Number.isFinite(wheelPad) ? wheelPad : 0;
+        }
+        const chrome = editor.querySelector(".hue-wheel-chrome");
+        const chromeH = chrome
+          ? Math.ceil(chrome.getBoundingClientRect().height)
+          : 0;
+        const wheelStage = editor.querySelector(".hue-wheel-stage");
+        const stageGap = wheelStage
+          ? parseFloat(
+              getComputedStyle(wheelStage).rowGap ||
+                getComputedStyle(wheelStage).gap
+            )
+          : 16;
+        overhead += (chromeH || 64) + (Number.isFinite(stageGap) ? stageGap : 16);
+        const nameField = box.querySelector(".library-name-field");
+        if (nameField) {
+          overhead += Math.ceil(nameField.getBoundingClientRect().height) || 0;
+        }
       }
     }
     let toolbarH = 0;
     if (isDial && this._dateToolbar?.isConnected) {
       toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
     }
-    const available = scrollH - stripH - overhead - toolbarH;
+    const budgetH = editor && !clock ? visibleH : scrollH;
+    const available = budgetH - stripH - overhead - toolbarH;
     const size = Math.max(
       1,
       Math.floor(Math.min(widthCap, Math.max(minPx, available)))
     );
-    stage.style.setProperty("--dial-face-max", `${size}px`);
+    const nextFace = `${size}px`;
+    const prevFace = stage.style.getPropertyValue("--dial-face-max");
+    stage.style.setProperty("--dial-face-max", nextFace);
     if (this._sunPathEl?.classList.contains("dial-view")) {
-      this._sunPathEl.style.setProperty("--dial-face-max", `${size}px`);
+      this._sunPathEl.style.setProperty("--dial-face-max", nextFace);
+    }
+    if (editor && !clock && prevFace !== nextFace) {
+      const pass = (this._faceMaxPass || 0) + 1;
+      if (pass <= 3) {
+        this._faceMaxPass = pass;
+        requestAnimationFrame(() => {
+          if (this.isConnected) {
+            this._syncStageFaceMax();
+          }
+        });
+      }
+    } else {
+      this._faceMaxPass = 0;
+    }
+    } finally {
+      this._faceSyncing = false;
+      if (this._faceResync) {
+        this._faceResync = false;
+        requestAnimationFrame(() => {
+          if (this.isConnected) {
+            this._syncStageFaceMax();
+          }
+        });
+      }
     }
   }
 
@@ -4995,6 +5100,65 @@ class CircadianScenesPanel extends HTMLElement {
       onChange(ev.detail?.value);
     });
     return field;
+  }
+
+  _paintSimpleSceneCard(dots) {
+    const id = this._editId;
+    if (!id) {
+      return;
+    }
+    const item = (this._items || []).find((scene) => scene.id === id);
+    if (item) {
+      item.card = { ...(item.card || {}), kind: "simple", dots };
+    }
+    const mesh = this.shadowRoot?.querySelector(
+      `.scene-card[data-scene-id="${CSS.escape(id)}"] canvas.card-mesh`
+    );
+    if (mesh) {
+      paintSimpleCardMesh(mesh, dots);
+    }
+  }
+
+  _openAreaCreateMenu(anchor, { areaId, areaName } = {}) {
+    this.shadowRoot.querySelector(".create-scene-menu")?.remove();
+    const menu = document.createElement("div");
+    menu.className = "create-scene-menu";
+    menu.setAttribute("role", "menu");
+    const addItem = (label, kind) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("role", "menuitem");
+      btn.textContent = label;
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        menu.remove();
+        void this._createLibraryItem(kind, { areaId, areaName });
+      });
+      menu.appendChild(btn);
+    };
+    addItem(
+      this._t("frontend.create.circadian", "Create circadian scene"),
+      "scene"
+    );
+    addItem(this._t("frontend.create.scene", "Create scene"), "simple");
+    const rect = anchor?.getBoundingClientRect?.();
+    menu.style.position = "fixed";
+    if (rect) {
+      const left = Math.min(rect.left, window.innerWidth - 240);
+      menu.style.left = `${Math.max(8, left)}px`;
+      menu.style.top = `${rect.bottom + 4}px`;
+    }
+    this.shadowRoot.appendChild(menu);
+    const close = (ev) => {
+      if (menu.contains(ev.composedPath?.()[0] || ev.target)) {
+        return;
+      }
+      menu.remove();
+      this.shadowRoot.removeEventListener("pointerdown", close, true);
+    };
+    requestAnimationFrame(() => {
+      this.shadowRoot.addEventListener("pointerdown", close, true);
+    });
   }
 
   _openCreateDialog({ areaId, areaName } = {}) {
@@ -5093,6 +5257,28 @@ class CircadianScenesPanel extends HTMLElement {
             theme_id: "default",
             membership: { exclude: [], include: [] },
             overrides: {},
+            lights: {},
+          },
+        });
+        this._upsertSceneInList(saved);
+        this._commitCreatedUndo({
+          kind: "scene",
+          id: saved.id,
+          record: saved,
+          beforeTarget,
+        });
+        this._refreshVisibleSceneList();
+        this._go(`edit/${saved.id}`);
+        return;
+      }
+      if (kind === "simple") {
+        const saved = await this._hass.callWS({
+          type: `${DOMAIN}/save`,
+          data: {
+            kind: "simple",
+            scene_name: this._untitledLabel(),
+            area: areaId || null,
+            membership: { exclude: [], include: [] },
             lights: {},
           },
         });
@@ -7426,8 +7612,15 @@ class CircadianScenesPanel extends HTMLElement {
       if (!card) {
         continue;
       }
+      if (scene.kind === "simple") {
+        const mesh = card.querySelector("canvas.card-mesh");
+        if (mesh) {
+          paintSimpleCardMesh(mesh, scene.card?.dots);
+        }
+        continue;
+      }
       const bg = card.querySelector(".card-bg");
-      if (!bg || scene.kind === "simple") {
+      if (!bg) {
         continue;
       }
       applyRampBackground(bg, scene.card?.ramps);
@@ -9001,10 +9194,14 @@ class CircadianScenesPanel extends HTMLElement {
       scene_name: this._nameIsPlaceholder(form.scene_name || scene.scene_name)
         ? this._suggestedSceneName(scene)
         : form.scene_name || scene.scene_name || this._suggestedSceneName(scene),
-      area: form.area || scene.area || null,
       description: form.description || "",
       labels: [...(form.labels || scene.labels || [])],
       category: form.category || scene.category || "",
+      icon:
+        form.icon ||
+        scene.icon ||
+        this._hass?.entities?.[scene.entity_id]?.icon ||
+        "",
     };
     const dialog = document.createElement("ha-dialog");
     dialog.className = "save-dialog";
@@ -9013,51 +9210,9 @@ class CircadianScenesPanel extends HTMLElement {
       this._loc("ui.panel.config.scene.editor.rename", "Rename")
     );
     dialog.open = true;
-    const bindValue = (el, onValue) => {
-      el.addEventListener("value-changed", (ev) => {
-        ev.stopPropagation();
-        onValue(ev.detail?.value);
-      });
-      el.addEventListener("input", () => onValue(el.value));
-    };
-    const nameInput = customElements.get("ha-input")
-      ? document.createElement("ha-input")
-      : document.createElement("ha-selector");
-    nameInput.label = this._t("frontend.common.name", "Name");
-    nameInput.required = true;
-    nameInput.value = data.scene_name;
-    if (nameInput.localName === "ha-selector") {
-      nameInput.hass = this._hass;
-      nameInput.selector = { text: {} };
-    }
-    bindValue(nameInput, (value) => {
-      data.scene_name = value ?? "";
+    const nameInput = await this._appendSceneRenameFields(dialog, data, {
+      focus,
     });
-    const areaPicker = document.createElement("ha-selector");
-    areaPicker.hass = this._hass;
-    areaPicker.label = this._fieldLabel("area");
-    areaPicker.required = true;
-    areaPicker.value = data.area;
-    areaPicker.selector = { area: {} };
-    bindValue(areaPicker, (value) => {
-      data.area = value || null;
-    });
-    dialog.append(nameInput, areaPicker);
-    if (focus === "category") {
-      const cat = customElements.get("ha-input")
-        ? document.createElement("ha-input")
-        : document.createElement("ha-selector");
-      cat.label = this._t("frontend.common.category", "Category");
-      cat.value = data.category || "";
-      if (cat.localName === "ha-selector") {
-        cat.hass = this._hass;
-        cat.selector = { text: {} };
-      }
-      bindValue(cat, (value) => {
-        data.category = value ?? "";
-      });
-      dialog.appendChild(cat);
-    }
     const footer = customElements.get("ha-dialog-footer")
       ? document.createElement("ha-dialog-footer")
       : document.createElement("div");
@@ -9079,10 +9234,6 @@ class CircadianScenesPanel extends HTMLElement {
         nameInput.reportValidity?.();
         return;
       }
-      if (!data.area) {
-        areaPicker.reportValidity?.();
-        return;
-      }
       try {
         await this._hass.callWS({
           type: `${DOMAIN}/save`,
@@ -9090,20 +9241,28 @@ class CircadianScenesPanel extends HTMLElement {
           data: {
             ...form,
             scene_name: name,
-            area: data.area,
             description: data.description,
             labels: data.labels,
             category: data.category || null,
+            icon: data.icon || null,
           },
         });
         dialog.open = false;
         this._upsertSceneInList({
           ...scene,
           scene_name: name,
-          area: data.area,
           description: data.description,
           labels: data.labels,
           category: data.category || null,
+          icon: data.icon || null,
+          form: {
+            ...form,
+            scene_name: name,
+            description: data.description,
+            labels: data.labels,
+            category: data.category || null,
+            icon: data.icon || null,
+          },
         });
         this._refreshVisibleSceneList();
         await this._loadList();
@@ -11943,17 +12102,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
-  async _openSaveDialog({ rename = false, focus } = {}) {
-    this.shadowRoot.querySelector("ha-dialog.save-dialog")?.remove();
-    const data = {
-      scene_name: this._nameIsPlaceholder(this._formData.scene_name)
-        ? this._suggestedSceneName(this._formData)
-        : this._formData.scene_name || this._suggestedSceneName(this._formData),
-      area: this._formData.area || null,
-      description: this._formData.description || "",
-      labels: [...(this._formData.labels || [])],
-      category: this._formData.category || "",
-    };
+  async _appendSceneRenameFields(dialog, data, { focus } = {}) {
     const chipsAvailable = Boolean(customElements.get("ha-assist-chip"));
     const visible = new Set();
     if (focus === "category") {
@@ -11965,10 +12114,9 @@ class CircadianScenesPanel extends HTMLElement {
     if (!chipsAvailable || data.category) {
       visible.add("category");
     }
-    if (!chipsAvailable || data.labels.length) {
+    if (!chipsAvailable || (data.labels || []).length) {
       visible.add("labels");
     }
-
     let categories = [];
     try {
       categories = await this._hass.callWS({
@@ -11978,12 +12126,6 @@ class CircadianScenesPanel extends HTMLElement {
     } catch (_err) {
       categories = [];
     }
-
-    const dialog = document.createElement("ha-dialog");
-    dialog.className = "save-dialog";
-    dialog.setAttribute("header-title", rename ? "Rename" : "Save");
-    dialog.open = true;
-
     const bindValue = (el, onValue) => {
       el.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
@@ -11991,11 +12133,10 @@ class CircadianScenesPanel extends HTMLElement {
       });
       el.addEventListener("input", () => onValue(el.value));
     };
-
     const nameInput = customElements.get("ha-input")
       ? document.createElement("ha-input")
       : document.createElement("ha-selector");
-    nameInput.label = "Name";
+    nameInput.label = this._t("frontend.common.name", "Name");
     nameInput.required = true;
     nameInput.value = data.scene_name;
     if (nameInput.localName === "ha-selector") {
@@ -12006,19 +12147,19 @@ class CircadianScenesPanel extends HTMLElement {
     bindValue(nameInput, (value) => {
       data.scene_name = value ?? "";
     });
-    dialog.appendChild(nameInput);
-
-    const areaPicker = document.createElement("ha-selector");
-    areaPicker.hass = this._hass;
-    areaPicker.label = this._fieldLabel("area");
-    areaPicker.helper = this._fieldHelper("area");
-    areaPicker.required = true;
-    areaPicker.value = data.area;
-    areaPicker.selector = { area: {} };
-    bindValue(areaPicker, (value) => {
-      data.area = value || null;
+    const iconPicker = customElements.get("ha-icon-picker")
+      ? document.createElement("ha-icon-picker")
+      : document.createElement("ha-selector");
+    iconPicker.hass = this._hass;
+    iconPicker.label = this._t("frontend.common.icon", "Icon");
+    iconPicker.value = data.icon || "";
+    if (iconPicker.localName === "ha-selector") {
+      iconPicker.selector = { icon: {} };
+    }
+    bindValue(iconPicker, (value) => {
+      data.icon = value || "";
     });
-    dialog.appendChild(areaPicker);
+    dialog.append(nameInput, iconPicker);
 
     const optional = document.createElement("div");
     const chips = document.createElement(
@@ -12043,60 +12184,67 @@ class CircadianScenesPanel extends HTMLElement {
       });
       chips.appendChild(chip);
     };
-
-    addChip("description", "Add description", () => {
-      const field = customElements.get("ha-textarea")
-        ? document.createElement("ha-textarea")
-        : document.createElement("ha-selector");
-      field.label = "Description";
-      field.value = data.description;
-      if (field.localName === "ha-selector") {
-        field.hass = this._hass;
-        field.selector = { text: { multiline: true } };
+    addChip(
+      "description",
+      this._t("frontend.common.add_description", "Add description"),
+      () => {
+        const field = customElements.get("ha-textarea")
+          ? document.createElement("ha-textarea")
+          : document.createElement("ha-selector");
+        field.label = this._t("frontend.common.description", "Description");
+        field.value = data.description;
+        if (field.localName === "ha-selector") {
+          field.hass = this._hass;
+          field.selector = { text: { multiline: true } };
+        }
+        bindValue(field, (value) => {
+          data.description = value ?? "";
+        });
+        return field;
       }
-      bindValue(field, (value) => {
-        data.description = value ?? "";
-      });
-      return field;
-    });
-    addChip("category", "Add category", () => {
-      if (customElements.get("ha-category-picker")) {
-        const picker = document.createElement("ha-category-picker");
+    );
+    addChip(
+      "category",
+      this._t("frontend.common.add_category", "Add category"),
+      () => {
+        if (customElements.get("ha-category-picker")) {
+          const picker = document.createElement("ha-category-picker");
+          picker.hass = this._hass;
+          picker.scope = "scene";
+          picker.label = this._t("frontend.common.category", "Category");
+          picker.value = data.category || "";
+          bindValue(picker, (value) => {
+            data.category = value || "";
+          });
+          return picker;
+        }
+        const picker = document.createElement("ha-selector");
         picker.hass = this._hass;
-        picker.scope = "scene";
-        picker.label = "Category";
+        picker.label = this._t("frontend.common.category", "Category");
         picker.value = data.category || "";
+        picker.selector = {
+          select: {
+            mode: "dropdown",
+            options: categories.map((item) => ({
+              value: item.category_id,
+              label: item.name,
+            })),
+          },
+        };
         bindValue(picker, (value) => {
           data.category = value || "";
         });
         return picker;
       }
-      const picker = document.createElement("ha-selector");
-      picker.hass = this._hass;
-      picker.label = "Category";
-      picker.value = data.category || "";
-      picker.selector = {
-        select: {
-          mode: "dropdown",
-          options: categories.map((item) => ({
-            value: item.category_id,
-            label: item.name,
-          })),
-        },
-      };
-      bindValue(picker, (value) => {
-        data.category = value || "";
-      });
-      return picker;
-    });
-    addChip("labels", "Add labels", () => {
+    );
+    addChip("labels", this._t("frontend.common.add_labels", "Add labels"), () => {
       const picker = customElements.get("ha-labels-picker")
         ? document.createElement("ha-labels-picker")
         : document.createElement("ha-selector");
       picker.hass = this._hass;
       picker.value = data.labels;
       if (picker.localName === "ha-selector") {
-        picker.label = "Labels";
+        picker.label = this._t("frontend.common.labels", "Labels");
         picker.selector = { label: { multiple: true } };
       }
       bindValue(picker, (value) => {
@@ -12105,6 +12253,35 @@ class CircadianScenesPanel extends HTMLElement {
       return picker;
     });
     dialog.append(optional, chips);
+    return nameInput;
+  }
+
+  async _openSaveDialog({ rename = false, focus } = {}) {
+    this.shadowRoot.querySelector("ha-dialog.save-dialog")?.remove();
+    const data = {
+      scene_name: this._nameIsPlaceholder(this._formData.scene_name)
+        ? this._suggestedSceneName(this._formData)
+        : this._formData.scene_name || this._suggestedSceneName(this._formData),
+      description: this._formData.description || "",
+      labels: [...(this._formData.labels || [])],
+      category: this._formData.category || "",
+      icon:
+        this._formData.icon ||
+        this._hass?.entities?.[this._entityId]?.icon ||
+        "",
+    };
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "save-dialog";
+    dialog.setAttribute(
+      "header-title",
+      rename
+        ? this._t("frontend.common.rename", "Rename")
+        : this._t("frontend.common.save", "Save")
+    );
+    dialog.open = true;
+    const nameInput = await this._appendSceneRenameFields(dialog, data, {
+      focus,
+    });
 
     const footer = customElements.get("ha-dialog-footer")
       ? document.createElement("ha-dialog-footer")
@@ -12128,15 +12305,11 @@ class CircadianScenesPanel extends HTMLElement {
         nameInput.reportValidity?.();
         return;
       }
-      if (!data.area) {
-        areaPicker.reportValidity?.();
-        return;
-      }
       this._formData.scene_name = name;
-      this._formData.area = data.area;
       this._formData.description = data.description;
       this._formData.labels = data.labels;
       this._formData.category = data.category || null;
+      this._formData.icon = data.icon || null;
       this._syncEditorSceneTitle();
       dialog.open = false;
       await this._save();
@@ -13850,7 +14023,7 @@ class CircadianScenesPanel extends HTMLElement {
     path.style.setProperty("--dial-timeline-h", `${toolbarH}px`);
 
     // Draft/location banners live in .stage-col above the scrollport.
-    // Face size (fits Lys tiles, min 600px) is _syncStageFaceMax.
+    // Face size (fits light tiles, min 600px) is _syncStageFaceMax.
     const hostRect = this.getBoundingClientRect();
     const pathTop = path.getBoundingClientRect().top;
     const vignetteReach = Math.max(0, Math.round(pathTop - hostRect.top));
@@ -14086,7 +14259,7 @@ class CircadianScenesPanel extends HTMLElement {
         });
         continue;
       }
-      // Table bars: single name span (dial uses Lys tiles + selector).
+      // Table bars: single name span (dial uses light tiles + selector).
       if (titleEl) {
         titleEl.textContent = light.name;
         if (!subEl) {
@@ -17002,7 +17175,7 @@ class CircadianScenesPanel extends HTMLElement {
       if (canEdit) {
         tile.setAttribute("aria-label", `Edit ${light.name}`);
         const openClosest = (ev) => {
-          if (tile._lysSuppressTap || this._suppressLightTileOpen) {
+          if (tile._lightTileSuppressTap || this._suppressLightTileOpen) {
             return;
           }
           ev.stopPropagation();

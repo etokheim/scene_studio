@@ -23,7 +23,7 @@ PANEL_VERSION = json.loads(
     (Path(__file__).parent / "manifest.json").read_text(encoding="utf-8")
 ).get("version", "0")
 # Increment when panel.js changes without a manifest version bump.
-PANEL_ASSET_REV = "93"
+PANEL_ASSET_REV = "99"
 
 
 async def async_setup_panel(hass: HomeAssistant) -> None:
@@ -51,7 +51,7 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
         hass,
         component_name="custom",
         sidebar_title="Circadian Scenes",
-        sidebar_icon="mdi:auto-fix",
+        sidebar_icon="mdi:palette",
         frontend_url_path=PANEL_URL_PATH,
         require_admin=True,
         config={
