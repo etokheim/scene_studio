@@ -57,7 +57,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, createAddLightTile, createLightTile, paintLightTile } from "./light_tiles.js";
+import { bindLightTileBrightness, createAddLightTile, createLightModeGroup, createLightTile, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, paintLightTile } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -2318,6 +2318,7 @@ class CircadianScenesPanel extends HTMLElement {
             transform 280ms cubic-bezier(0.2, 0, 0, 1),
             box-shadow 280ms cubic-bezier(0.2, 0, 0, 1),
             filter 280ms cubic-bezier(0.2, 0, 0, 1),
+            opacity 180ms ease,
             mask-image 280ms cubic-bezier(0.2, 0, 0, 1),
             -webkit-mask-image 280ms cubic-bezier(0.2, 0, 0, 1);
         }
@@ -2333,6 +2334,9 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .hue-wheel-layer.is-back {
           z-index: 1;
+        }
+        .hue-wheel-layer.is-drag-unavailable {
+          opacity: 0.18;
         }
         .hue-wheel-svg {
           position: absolute;
@@ -5119,46 +5123,39 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
-  _openAreaCreateMenu(anchor, { areaId, areaName } = {}) {
-    this.shadowRoot.querySelector(".create-scene-menu")?.remove();
-    const menu = document.createElement("div");
-    menu.className = "create-scene-menu";
-    menu.setAttribute("role", "menu");
-    const addItem = (label, kind) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.setAttribute("role", "menuitem");
-      btn.textContent = label;
-      btn.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        menu.remove();
-        void this._createLibraryItem(kind, { areaId, areaName });
-      });
-      menu.appendChild(btn);
+  _areaCreateDropdown(trigger, { areaId, areaName } = {}) {
+    const menu = document.createElement("ha-dropdown");
+    menu.className = "area-create-menu";
+    menu.activatable = true;
+    trigger.slot = "trigger";
+    menu.appendChild(trigger);
+    const addItem = (value, label, iconName) => {
+      const item = document.createElement("ha-dropdown-item");
+      item.value = value;
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", iconName);
+      icon.slot = "icon";
+      item.append(icon, document.createTextNode(label));
+      menu.appendChild(item);
     };
     addItem(
+      "scene",
       this._t("frontend.create.circadian", "Create circadian scene"),
-      "scene"
+      "mdi:sun-clock"
     );
-    addItem(this._t("frontend.create.scene", "Create scene"), "simple");
-    const rect = anchor?.getBoundingClientRect?.();
-    menu.style.position = "fixed";
-    if (rect) {
-      const left = Math.min(rect.left, window.innerWidth - 240);
-      menu.style.left = `${Math.max(8, left)}px`;
-      menu.style.top = `${rect.bottom + 4}px`;
-    }
-    this.shadowRoot.appendChild(menu);
-    const close = (ev) => {
-      if (menu.contains(ev.composedPath?.()[0] || ev.target)) {
-        return;
+    addItem(
+      "simple",
+      this._t("frontend.create.scene", "Create scene"),
+      "mdi:palette"
+    );
+    menu.addEventListener("wa-select", (ev) => {
+      ev.stopPropagation();
+      const kind = ev.detail?.item?.value;
+      if (kind) {
+        void this._createLibraryItem(kind, { areaId, areaName });
       }
-      menu.remove();
-      this.shadowRoot.removeEventListener("pointerdown", close, true);
-    };
-    requestAnimationFrame(() => {
-      this.shadowRoot.addEventListener("pointerdown", close, true);
     });
+    return menu;
   }
 
   _openCreateDialog({ areaId, areaName } = {}) {
@@ -9627,6 +9624,11 @@ class CircadianScenesPanel extends HTMLElement {
 
   _setSidebarLight(entityId) {
     this._sidebarLightId = entityId || null;
+    if (!entityId || !String(entityId).startsWith("light.")) {
+      this._legendSelectedIds = new Set();
+    } else {
+      this._legendSelectedIds = new Set([entityId]);
+    }
     this._syncClockLightSelection();
     this._layoutDialChromeFn?.();
   }
@@ -9662,10 +9664,13 @@ class CircadianScenesPanel extends HTMLElement {
         ring.removeAttribute("aria-current");
       }
     }
+    const picked = this._legendSelectedIds;
     for (const row of root.querySelectorAll(
       ".simple-light-selector[data-entity-id]"
     )) {
-      const on = row.dataset.entityId === selected;
+      const on = picked
+        ? picked.has(row.dataset.entityId)
+        : row.dataset.entityId === selected;
       row.classList.toggle("active", on);
       row.classList.toggle("selected", on);
       if (on) {
@@ -14255,7 +14260,7 @@ class CircadianScenesPanel extends HTMLElement {
         paintLightTile(selector, {
           rgb: look.rgb,
           fillPct: look.fillPct,
-          selected: light.entity_id === this._sidebarLightId,
+          selected: this._legendTileSelected(light.entity_id),
         });
         continue;
       }
@@ -14288,6 +14293,7 @@ class CircadianScenesPanel extends HTMLElement {
       pct.textContent = `${Math.round(sample.brightness)}%`;
       el.appendChild(pct);
     }
+    this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
   }
 
   _secondsFromClockPointer(ev, face) {
@@ -17055,6 +17061,7 @@ class CircadianScenesPanel extends HTMLElement {
         })
       );
     }
+    this._placeLegendModeGroups(tiles);
     if (tiles.childElementCount) {
       scroller.appendChild(tiles);
       legend.appendChild(scroller);
@@ -17064,6 +17071,98 @@ class CircadianScenesPanel extends HTMLElement {
       this._clockLegendEl = null;
     }
     return wrap;
+  }
+
+  _legendTileSelected(entityId) {
+    const picked = this._legendSelectedIds;
+    if (picked) {
+      return picked.has(entityId);
+    }
+    return entityId === this._sidebarLightId;
+  }
+
+  _legendGroupDraft(light) {
+    const events = this._sunPath?.events || [];
+    const eventId = this._sidebarEventId;
+    if (
+      eventId &&
+      this._clockStickySeconds == null &&
+      events.some((item) => item.id === eventId)
+    ) {
+      return this._lightEventStoredState(light, eventId);
+    }
+    const seconds =
+      this._clockSunDisplayedSeconds ??
+      this._clockStickySeconds ??
+      this._clockSunIdleSeconds();
+    const closest = seconds == null ? null : this._closestEvent(events, seconds);
+    if (closest) {
+      return this._lightEventStoredState(light, closest.id);
+    }
+    return {};
+  }
+
+  _placeLegendModeGroups(tilesEl) {
+    if (!tilesEl) {
+      return;
+    }
+    const entries = (this._lightNameLabels || []).filter(
+      (entry) => entry.selector && entry.light && !entry.light.removed && !entry.light.suggested
+    );
+    const signature = entries
+      .map(
+        (entry) =>
+          `${entry.light.entity_id}:${lightTileColorGroup(this._legendGroupDraft(entry.light))}`
+      )
+      .join("|");
+    if (signature === this._legendGroupSignature) {
+      return;
+    }
+    this._legendGroupSignature = signature;
+    const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
+    for (const entry of entries) {
+      const key = lightTileColorGroup(this._legendGroupDraft(entry.light));
+      grouped.get(key).push(entry);
+    }
+    const labels = {
+      color: this._t("frontend.lights.group_color", "Color"),
+      temp: this._t("frontend.lights.group_temp", "Temperature"),
+      white: this._t("frontend.lights.group_white", "White"),
+      brightness: this._t("frontend.lights.group_brightness", "Brightness"),
+    };
+    const selectAllLabel = this._t("frontend.lights.select_all", "Select all");
+    const add = tilesEl.querySelector(".add-light-tile");
+    const leftovers = [
+      ...tilesEl.querySelectorAll(
+        ".simple-light-selector.removed, .simple-light-selector.suggested"
+      ),
+    ];
+    tilesEl.replaceChildren();
+    for (const key of lightTileGroupOrder()) {
+      const rows = grouped.get(key) || [];
+      if (!rows.length) {
+        continue;
+      }
+      const ids = rows.map((entry) => entry.light.entity_id);
+      const { group, row } = createLightModeGroup({
+        label: labels[key] || key,
+        selectAllLabel,
+        onSelectAll: () => {
+          this._legendSelectedIds = new Set(ids);
+          this._syncClockLightSelection();
+        },
+      });
+      for (const entry of rows) {
+        row.appendChild(entry.selector);
+      }
+      tilesEl.appendChild(group);
+    }
+    for (const node of leftovers) {
+      tilesEl.appendChild(node);
+    }
+    if (add) {
+      tilesEl.appendChild(add);
+    }
   }
 
   _lightMembershipButton(light, { removed }) {
@@ -17077,7 +17176,7 @@ class CircadianScenesPanel extends HTMLElement {
           { name: light.name }
         );
     const btn = document.createElement("button");
-    btn.className = removed ? "light-add" : "light-remove";
+    btn.className = removed ? "light-add" : "light-corner-btn light-remove";
     btn.type = "button";
     btn.setAttribute("aria-label", label);
     btn.tabIndex = -1;
@@ -17143,7 +17242,7 @@ class CircadianScenesPanel extends HTMLElement {
     paintLightTile(selector, {
       rgb: look.rgb,
       fillPct: removed ? 0 : look.fillPct,
-      selected: !removed && light.entity_id === this._sidebarLightId,
+      selected: !removed && this._legendTileSelected(light.entity_id),
     });
     if (!removed && (!unavailable || capsKnown)) {
       this._lightNameLabels.push({ light, selector });
@@ -17217,6 +17316,12 @@ class CircadianScenesPanel extends HTMLElement {
       }
       if (!removed) {
         selector.appendChild(this._lightMembershipButton(light, { removed: false }));
+        attachLightSettings(selector, {
+          label: this._t("frontend.lights.settings_named", "Settings for {name}", {
+            name: light.name,
+          }),
+          onOpen: () => this._showEntityMoreInfo(light.entity_id, "settings"),
+        });
       }
     }
     return selector;

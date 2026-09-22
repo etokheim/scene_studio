@@ -13,7 +13,9 @@ import {
   LIGHT_TILES_CSS,
   TILE_BRIGHTNESS_WHEEL_STEP,
   attachLightRemove,
+  attachLightSettings,
   createAddLightTile,
+  createLightModeGroup,
   createLightTile,
   lightTileColorGroup,
   lightTileGroupOrder,
@@ -401,9 +403,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     paintTileSelection();
     wheel.sync();
-    if (plain) {
-      panel._showEntityMoreInfo(eid, "settings");
-    }
   };
 
   const fillPercent = (draft) => {
@@ -512,30 +511,25 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       white: panel._t("frontend.lights.group_white", "White"),
       brightness: panel._t("frontend.lights.group_brightness", "Brightness"),
     };
+    const selectAllLabel = panel._t("frontend.lights.select_all", "Select all");
     const groupRows = new Map();
     for (const key of lightTileGroupOrder()) {
       const ids = grouped.get(key) || [];
       if (!ids.length) {
         continue;
       }
-      const group = document.createElement("div");
-      group.className = "light-mode-group";
-      const label = document.createElement("button");
-      label.type = "button";
-      label.className = "light-mode-label";
-      label.textContent = groupLabels[key] || key;
-      label.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        selectedIds = new Set(ids);
-        anchorId = ids[0] || null;
-        peeledId = null;
-        wheel.clearDetached?.();
-        wheel.sync();
-        syncTiles();
+      const { group, row } = createLightModeGroup({
+        label: groupLabels[key] || key,
+        selectAllLabel,
+        onSelectAll: () => {
+          selectedIds = new Set(ids);
+          anchorId = ids[0] || null;
+          peeledId = null;
+          wheel.clearDetached?.();
+          wheel.sync();
+          syncTiles();
+        },
       });
-      const row = document.createElement("div");
-      row.className = "light-mode-row";
-      group.append(label, row);
       groupRows.set(key, row);
       tiles.appendChild(group);
     }
@@ -688,6 +682,14 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           { name }
         ),
         onRemove: () => panel._removeLightFromSimpleMembers(eid),
+      });
+      attachLightSettings(selector, {
+        label: panel._t(
+          "frontend.lights.settings_named",
+          "Settings for {name}",
+          { name }
+        ),
+        onOpen: () => panel._showEntityMoreInfo(eid, "settings"),
       });
       const row = groupRows.get(lightTileColorGroup(draft));
       (row || tiles).appendChild(selector);

@@ -117,6 +117,12 @@ export const LANDING_CSS = `
     flex: 1;
     margin: 0;
   }
+  .area-head > ha-dropdown {
+    flex: 0 0 auto;
+  }
+  .area-block > ha-dropdown {
+    display: block;
+  }
   .area-add {
     --mdc-icon-button-size: 32px;
     --mdc-icon-size: 22px;
@@ -351,29 +357,6 @@ export const LANDING_CSS = `
   .auto-configure {
     margin-top: 16px;
   }
-  .create-scene-menu {
-    z-index: 30;
-    min-width: 220px;
-    padding: 6px;
-    border-radius: 12px;
-    background: var(--card-background-color);
-    box-shadow: var(--ha-card-box-shadow, 0 4px 16px rgba(0,0,0,0.4));
-    display: flex;
-    flex-direction: column;
-  }
-  .create-scene-menu button {
-    text-align: left;
-    padding: 10px 12px;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-  .create-scene-menu button:hover {
-    background: var(--secondary-background-color);
-  }
   @media (max-width: 870px) {
     .workspace { flex-direction: column; }
     .area-rail {
@@ -607,11 +590,10 @@ function renderAreaBlock(panel, area, scenes) {
     "mdi:plus",
     panel._t("frontend.actions.add_scene", "Add scene")
   );
-  add.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    panel._openAreaCreateMenu(add, { areaId: area.id, areaName: area.name });
-  });
-  head.append(title, add);
+  head.append(
+    title,
+    panel._areaCreateDropdown(add, { areaId: area.id, areaName: area.name })
+  );
   block.appendChild(head);
   if (!scenes.length) {
     const empty = document.createElement("button");
@@ -621,10 +603,9 @@ function renderAreaBlock(panel, area, scenes) {
       "frontend.empty.area_no_scenes",
       "No scenes yet — create one for this area"
     );
-    empty.addEventListener("click", () => {
-      panel._openAreaCreateMenu(empty, { areaId: area.id, areaName: area.name });
-    });
-    block.appendChild(empty);
+    block.appendChild(
+      panel._areaCreateDropdown(empty, { areaId: area.id, areaName: area.name })
+    );
     return block;
   }
   for (const scene of scenes) {

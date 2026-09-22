@@ -9,6 +9,7 @@ import {
   dragIdsForPin,
   pinPressAction,
   splitIdsByWheelMode,
+  disksUnsupportedByDrag,
 } from "../../custom_components/circadian_scenes/frontend/color_ui.js";
 
 const supports =
@@ -116,4 +117,17 @@ test("after a drag, only lights that left the selection stay detached", () => {
     detachedAfterDrag(["temp-1", "color-1", "color-2"], ["color-1", "color-2"]),
     ["temp-1"]
   );
+});
+
+test("a drag fades a disk none of the dragged lights can use", () => {
+  const caps = {
+    a: { hasColor: true, hasTemp: false },
+    b: { hasColor: true, hasTemp: false },
+    c: { hasColor: false, hasTemp: true },
+  };
+  const of = (id) => caps[id];
+  assert.deepEqual(disksUnsupportedByDrag([], of), { color: false, temp: false });
+  assert.deepEqual(disksUnsupportedByDrag(["a", "b"], of), { color: false, temp: true });
+  assert.deepEqual(disksUnsupportedByDrag(["a", "c"], of), { color: false, temp: false });
+  assert.deepEqual(disksUnsupportedByDrag(["c"], of), { color: true, temp: false });
 });

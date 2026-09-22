@@ -801,6 +801,26 @@ function splitIdsByWheelMode(ids, mode, supports) {
   return { keep, drop };
 }
 
+/** Disks to fade while dragging: a visible mode none of the dragged lights can use. */
+function disksUnsupportedByDrag(ids, capsOf) {
+  const list = ids || [];
+  if (!list.length) {
+    return { color: false, temp: false };
+  }
+  let anyColor = false;
+  let anyTemp = false;
+  for (const id of list) {
+    const caps = capsOf(id) || {};
+    if (caps.hasColor) {
+      anyColor = true;
+    }
+    if (caps.hasTemp) {
+      anyTemp = true;
+    }
+  }
+  return { color: !anyColor, temp: !anyTemp };
+}
+
 /** After a real drag, only lights that could not follow the disk stay pulled out of clusters. */
 function detachedAfterDrag(detachedIds, finishedIds) {
   const finished = new Set(finishedIds || []);
@@ -2383,6 +2403,19 @@ function createSceneColorWheel({
         paintGlow(geom.front);
       }
     }
+    const dragging = Boolean(drag?.moved && !pal);
+    const fade = disksUnsupportedByDrag(dragging ? drag.ids : [], (id) => {
+      const scene = (getState().scenes || []).find((row) => row.id === id);
+      return scene ? capsOf(scene) : {};
+    });
+    bgColor.classList.toggle(
+      "is-drag-unavailable",
+      dragging && hasColor && !bgColor.hidden && fade.color
+    );
+    bgTemp.classList.toggle(
+      "is-drag-unavailable",
+      dragging && hasTemp && !bgTemp.hidden && fade.temp
+    );
   };
 
   const markerOffset = (active) =>
@@ -3497,6 +3530,7 @@ export {
   clusterNearbyPinIds,
   dragIdsForPin,
   splitIdsByWheelMode,
+  disksUnsupportedByDrag,
   detachedAfterDrag,
   pinPressAction,
 };

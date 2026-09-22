@@ -29,26 +29,49 @@ export const LIGHT_TILES_CSS = `
   }
   .light-mode-group {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 2px;
     flex: 0 0 auto;
   }
   .light-mode-label {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
     margin: 0;
-    padding: 0 6px;
+    padding: 0 2px;
     border: 0;
     background: transparent;
     color: var(--secondary-text-color);
     font: inherit;
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    writing-mode: vertical-rl;
     cursor: pointer;
   }
-  .light-mode-label:hover {
+  .light-mode-label:hover,
+  .light-mode-label:focus-visible {
     color: var(--primary-text-color);
+  }
+  .light-mode-select {
+    display: none;
+    position: absolute;
+    writing-mode: horizontal-tb;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+    font-size: 10px;
+    white-space: nowrap;
+    left: 50%;
+    bottom: calc(100% + 4px);
+    transform: translateX(-50%);
+  }
+  .light-mode-label:hover .light-mode-select,
+  .light-mode-label:focus-visible .light-mode-select {
+    display: inline;
   }
   .light-mode-row {
     display: flex;
@@ -66,7 +89,7 @@ export const LIGHT_TILES_CSS = `
     overflow: visible;
   }
   /* Native button: ha-icon-button keeps a 48px MDC hit even when the host is smaller. */
-  .simple-light-selector .light-remove {
+  .simple-light-selector .light-corner-btn {
     position: absolute;
     top: 2px;
     right: 2px;
@@ -92,19 +115,25 @@ export const LIGHT_TILES_CSS = `
     overflow: hidden;
     pointer-events: none;
   }
-  .simple-light-selector .light-remove ha-icon {
+  .simple-light-selector .light-remove {
+    right: 2px;
+  }
+  .simple-light-selector .light-settings {
+    right: 46px;
+  }
+  .simple-light-selector .light-corner-btn ha-icon {
     --mdc-icon-size: 22px;
     pointer-events: none;
   }
   @media (hover: hover) and (pointer: fine) {
-    .simple-light-selector .light-remove {
+    .simple-light-selector .light-corner-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       opacity: 0;
     }
-    .simple-light-selector:hover .light-remove,
-    .simple-light-selector .light-remove:focus-visible {
+    .simple-light-selector:hover .light-corner-btn,
+    .simple-light-selector .light-corner-btn:focus-visible {
       opacity: 1;
       pointer-events: auto;
     }
@@ -395,21 +424,53 @@ export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
   return { selector, tile, hit };
 }
 
-export function attachLightRemove(selector, { label, onRemove }) {
+function cornerButton(selector, className, iconName, label, onClick) {
   const btn = document.createElement("button");
-  btn.className = "light-remove";
+  btn.className = `light-corner-btn ${className}`;
   btn.type = "button";
   btn.setAttribute("aria-label", label);
   btn.tabIndex = -1;
   const icon = document.createElement("ha-icon");
-  icon.setAttribute("icon", "mdi:close");
+  icon.setAttribute("icon", iconName);
   btn.appendChild(icon);
   btn.addEventListener("click", (ev) => {
     ev.stopPropagation();
-    onRemove?.();
+    onClick?.();
   });
   selector.appendChild(btn);
   return btn;
+}
+
+export function attachLightRemove(selector, { label, onRemove }) {
+  return cornerButton(selector, "light-remove", "mdi:close", label, onRemove);
+}
+
+export function attachLightSettings(selector, { label, onOpen }) {
+  return cornerButton(selector, "light-settings", "mdi:cog", label, onOpen);
+}
+
+export function createLightModeGroup({ label, selectAllLabel, onSelectAll }) {
+  const group = document.createElement("div");
+  group.className = "light-mode-group";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "light-mode-label";
+  button.setAttribute("aria-label", `${label}. ${selectAllLabel}`);
+  const name = document.createElement("span");
+  name.className = "light-mode-name";
+  name.textContent = label;
+  const select = document.createElement("span");
+  select.className = "light-mode-select";
+  select.textContent = selectAllLabel;
+  button.append(name, select);
+  button.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    onSelectAll?.();
+  });
+  const row = document.createElement("div");
+  row.className = "light-mode-row";
+  group.append(button, row);
+  return { group, row };
 }
 
 export function createAddLightTile({ label, onActivate }) {
