@@ -853,3 +853,10 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Multiselect and mode groups are how a room of mixed bulbs is edited. The long-press picker duplicated the wheel. The card has to follow the drag, not the save. “Simple” is not a useful distinction in the UI. Area is chosen by where the scene was created; icon, category, and labels are the native rename fields.
 - **Do not reverse without user ask.**
 
+## Light strip motion, mode pill, and one legend
+
+- **Date:** 2026-09-22
+- **Decision:** Reordering the light strip (simple editor and circadian dial) animates tiles and group labels from their previous positions. The mode pill lists a color or kelvin mode only when at least one selected light supports it; with nothing selected it still lists every mode the scene’s lights support. The dial legend is removed from the sun path whenever the clock is rebuilt. Switching between a scene and a circadian scene must leave one strip.
+- **Why:** Grouping moves tiles between buckets, and that jump read as a glitch. The pill was offering disks the selected bulbs cannot use. The legend node stayed on the sun path after its reference was cleared, so the next editor appended another strip.
+- **Do not reverse without user ask.**
+

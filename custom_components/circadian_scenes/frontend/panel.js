@@ -57,7 +57,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, createAddLightTile, createLightModeGroup, createLightTile, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, paintLightTile } from "./light_tiles.js";
+import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, paintLightTile, playLightStripLayout } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -4335,6 +4335,9 @@ class CircadianScenesPanel extends HTMLElement {
     layer.remove();
     if (hadSun) {
       this._parkSunPath();
+    }
+    if (this._editorMotionKind() !== "dial") {
+      this._dropClockLegends();
     }
     // Incoming dial may have skipped horizon layout while the overlay existed.
     this._layoutDialChromeFn?.();
@@ -16213,7 +16216,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._layoutDialChromeFn = undefined;
     if (!keepOverlay) {
       this._clockHorizonBackEl?.remove();
-      this._clockLegendEl?.remove();
+      this._dropClockLegends();
     }
     this._clockHorizonBackEl = undefined;
     this._clockFaceEl = undefined;
@@ -16252,19 +16255,23 @@ class CircadianScenesPanel extends HTMLElement {
     if (legendRows.length !== legendLights.length) {
       return false;
     }
-    for (let index = 0; index < legendRows.length; index += 1) {
-      if (legendRows[index].dataset.entityId !== legendLights[index].entity_id) {
+    const legendById = new Map(
+      legendRows.map((row) => [row.dataset.entityId, row])
+    );
+    if (legendById.size !== legendLights.length) {
+      return false;
+    }
+    for (const light of legendLights) {
+      const row = legendById.get(light.entity_id);
+      if (!row) {
+        return false;
+      }
+      if (row.classList.contains("suggested") !== Boolean(light.suggested)) {
         return false;
       }
       if (
-        legendRows[index].classList.contains("suggested") !==
-        Boolean(legendLights[index].suggested)
-      ) {
-        return false;
-      }
-      if (
-        legendRows[index].classList.contains("removed") !==
-        Boolean(legendLights[index].removed || legendLights[index].suggested)
+        row.classList.contains("removed") !==
+        Boolean(light.removed || light.suggested)
       ) {
         return false;
       }
@@ -16436,9 +16443,24 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
-  _buildLightClock(events) {
-    this._clockLegendEl?.remove();
+  _dropClockLegends() {
+    // The dial legend is appended beside the face, not inside the clock node.
+    // Leaving the editor nulls `_clockLegendEl` while the node stays on the sun
+    // path, so the next visit used to append a second strip.
+    const nodes = new Set(this._clockLegendEl ? [this._clockLegendEl] : []);
+    for (const el of this._sunPathEl?.querySelectorAll(
+      ":scope > .sun-light-clock-legend"
+    ) || []) {
+      nodes.add(el);
+    }
+    for (const el of nodes) {
+      el.remove();
+    }
     this._clockLegendEl = null;
+  }
+
+  _buildLightClock(events) {
+    this._dropClockLegends();
     this._lightNameLabels = [];
     const lights = this._sunPath.lights || [];
     const ringLights = this._clockRingLights(lights);
@@ -17119,6 +17141,7 @@ class CircadianScenesPanel extends HTMLElement {
       return;
     }
     this._legendGroupSignature = signature;
+    const beforeLayout = captureLightStripLayout(tilesEl);
     const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
     for (const entry of entries) {
       const key = lightTileColorGroup(this._legendGroupDraft(entry.light));
@@ -17147,6 +17170,7 @@ class CircadianScenesPanel extends HTMLElement {
       const { group, row } = createLightModeGroup({
         label: labels[key] || key,
         selectAllLabel,
+        groupKey: key,
         onSelectAll: () => {
           this._legendSelectedIds = new Set(ids);
           this._syncClockLightSelection();
@@ -17163,6 +17187,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (add) {
       tilesEl.appendChild(add);
     }
+    playLightStripLayout(tilesEl, beforeLayout);
   }
 
   _lightMembershipButton(light, { removed }) {

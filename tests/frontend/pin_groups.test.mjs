@@ -10,6 +10,7 @@ import {
   pinPressAction,
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
+  wheelPillModes,
 } from "../../custom_components/circadian_scenes/frontend/color_ui.js";
 
 const supports =
@@ -116,6 +117,32 @@ test("after a drag, only lights that left the selection stay detached", () => {
   assert.deepEqual(
     detachedAfterDrag(["temp-1", "color-1", "color-2"], ["color-1", "color-2"]),
     ["temp-1"]
+  );
+});
+
+test("the mode pill lists only modes the selected lights support", () => {
+  assert.deepEqual(
+    wheelPillModes(
+      [
+        { hasColor: true, hasTemp: false },
+        { hasColor: false, hasTemp: false },
+      ],
+      { hasColor: true, hasTemp: true }
+    ),
+    ["color"]
+  );
+  assert.deepEqual(
+    wheelPillModes(
+      [
+        { hasColor: true, hasTemp: false },
+        { hasColor: false, hasTemp: true, palette: true },
+      ]
+    ),
+    ["color", "temp", "palette"]
+  );
+  assert.deepEqual(
+    wheelPillModes([], { hasColor: true, hasTemp: true, palette: false }),
+    ["color", "temp"]
   );
 });
 

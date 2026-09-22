@@ -801,6 +801,26 @@ function splitIdsByWheelMode(ids, mode, supports) {
   return { keep, drop };
 }
 
+/**
+ * Mode-pill entries. A mode is listed when at least one selected light can use it.
+ * An empty selection uses the wheel-level fallback (every member).
+ */
+function wheelPillModes(lights, fallback = {}) {
+  const rows = lights || [];
+  const modes = [];
+  const source = rows.length ? rows : [fallback];
+  if (source.some((row) => row?.hasColor)) {
+    modes.push("color");
+  }
+  if (source.some((row) => row?.hasTemp)) {
+    modes.push("temp");
+  }
+  if (source.some((row) => row?.palette)) {
+    modes.push("palette");
+  }
+  return modes;
+}
+
 /** Disks to fade while dragging: a visible mode none of the dragged lights can use. */
 function disksUnsupportedByDrag(ids, capsOf) {
   const list = ids || [];
@@ -2593,21 +2613,25 @@ function createSceneColorWheel({
 
   const syncModePill = () => {
     modePill.replaceChildren();
-    const { scenes, activeId } = getState();
+    const state = getState();
+    const { scenes, activeId } = state;
     const item = scenes.find((row) => row.id === activeId);
     const draft = item?.draft;
     const palVar = paletteForDraft(draft);
     const pal = variableIsPalette(palVar);
-    const modes = [];
-    if (hasColor) {
-      modes.push("color");
-    }
-    if (hasTemp) {
-      modes.push("temp");
-    }
-    if (pal) {
-      modes.push("palette");
-    }
+    const selected = selectedIdsOf(state)
+      .map((id) => scenes.find((row) => row.id === id))
+      .filter(Boolean)
+      .map((row) => ({
+        hasColor: capsOf(row).hasColor,
+        hasTemp: capsOf(row).hasTemp,
+        palette: variableIsPalette(paletteForDraft(row.draft)),
+      }));
+    const modes = wheelPillModes(selected, {
+      hasColor,
+      hasTemp,
+      palette: pal,
+    });
     modePill.hidden = modes.length < 2;
     randomizeBtn.hidden = !pal || typeof onRandomizeSeed !== "function";
     if (modePill.hidden) {
@@ -3531,6 +3555,7 @@ export {
   dragIdsForPin,
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
+  wheelPillModes,
   detachedAfterDrag,
   pinPressAction,
 };

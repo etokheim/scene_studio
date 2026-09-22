@@ -14,9 +14,11 @@ import {
   TILE_BRIGHTNESS_WHEEL_STEP,
   attachLightRemove,
   attachLightSettings,
+  captureLightStripLayout,
   createAddLightTile,
   createLightModeGroup,
   createLightTile,
+  playLightStripLayout,
   lightTileColorGroup,
   lightTileGroupOrder,
   paintLightTile,
@@ -451,6 +453,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const syncTiles = () => {
     const scroller = tiles.parentElement;
     const keepLeft = scroller?.scrollLeft ?? 0;
+    const beforeLayout = captureLightStripLayout(tiles);
     tiles.replaceChildren();
     const allSelected =
       members.length > 0 && members.every((id) => selectedIds.has(id));
@@ -521,6 +524,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const { group, row } = createLightModeGroup({
         label: groupLabels[key] || key,
         selectAllLabel,
+        groupKey: key,
         onSelectAll: () => {
           selectedIds = new Set(ids);
           anchorId = ids[0] || null;
@@ -730,6 +734,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     if (scroller) {
       scroller.scrollLeft = keepLeft;
     }
+    playLightStripLayout(tiles, beforeLayout);
   };
   const refreshFromPanel = () => {
     const lists = panel._simpleMembershipLists();

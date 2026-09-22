@@ -399,10 +399,64 @@ function makeLabels(layer, name, makeIcon) {
   return labels;
 }
 
+/**
+ * Viewport rects for tiles and group labels, keyed by `data-strip-key`.
+ * Call before the strip is rebuilt, then `playLightStripLayout` after.
+ */
+export function captureLightStripLayout(root) {
+  const rects = new Map();
+  if (!root?.isConnected) {
+    return rects;
+  }
+  for (const el of root.querySelectorAll("[data-strip-key]")) {
+    const key = el.dataset.stripKey;
+    if (!key) {
+      continue;
+    }
+    rects.set(key, el.getBoundingClientRect());
+  }
+  return rects;
+}
+
+/** FLIP tiles and group labels into their new strip positions. */
+export function playLightStripLayout(root, before) {
+  if (!root || !before?.size) {
+    return;
+  }
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return;
+  }
+  for (const el of root.querySelectorAll("[data-strip-key]")) {
+    const key = el.dataset.stripKey;
+    const prev = key ? before.get(key) : null;
+    if (!prev || prev.width < 1) {
+      el.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 180,
+        easing: "ease-out",
+      });
+      continue;
+    }
+    const next = el.getBoundingClientRect();
+    const dx = prev.left - next.left;
+    const dy = prev.top - next.top;
+    if (Math.hypot(dx, dy) < 1) {
+      continue;
+    }
+    el.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px)` },
+        { transform: "translate(0px, 0px)" },
+      ],
+      { duration: 280, easing: "cubic-bezier(0.2, 0, 0, 1)" }
+    );
+  }
+}
+
 export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
   const selector = document.createElement("div");
   selector.className = "simple-light-selector";
   selector.dataset.entityId = entityId;
+  selector.dataset.stripKey = entityId;
   const tile = document.createElement("div");
   tile.className = "simple-light-tile";
   if (tapOnly) {
@@ -449,12 +503,23 @@ export function attachLightSettings(selector, { label, onOpen }) {
   return cornerButton(selector, "light-settings", "mdi:cog", label, onOpen);
 }
 
-export function createLightModeGroup({ label, selectAllLabel, onSelectAll }) {
+export function createLightModeGroup({
+  label,
+  selectAllLabel,
+  onSelectAll,
+  groupKey,
+}) {
   const group = document.createElement("div");
   group.className = "light-mode-group";
+  if (groupKey) {
+    group.dataset.group = groupKey;
+  }
   const button = document.createElement("button");
   button.type = "button";
   button.className = "light-mode-label";
+  if (groupKey) {
+    button.dataset.stripKey = `group:${groupKey}`;
+  }
   button.setAttribute("aria-label", `${label}. ${selectAllLabel}`);
   const name = document.createElement("span");
   name.className = "light-mode-name";
