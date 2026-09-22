@@ -593,7 +593,7 @@ export function createLightModeGroup({
   const name = document.createElement("span");
   name.className = "light-mode-name";
   name.textContent = label;
-  button.append(select, name);
+  button.append(name, select);
   button.addEventListener("click", (ev) => {
     ev.stopPropagation();
     onSelectAll?.();

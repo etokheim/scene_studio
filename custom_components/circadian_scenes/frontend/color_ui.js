@@ -2301,6 +2301,11 @@ function createSceneColorWheel({
   /** Pins pulled out of a stack so each can be grabbed on its own. */
   const detached = new Set();
   let drag = null;
+  /** Dot under the pointer. Not a selection — leaving it restores the selected pin. */
+  let hoverId = null;
+  let hoverCursor = null;
+  let suppressHover = false;
+  let hoverCheckQueued = false;
   let glideTimer;
   let painted = { color: false, temp: false };
   let lastGeomKey = "";
@@ -2882,6 +2887,35 @@ function createSceneColorWheel({
     requestAnimationFrame(updatePresetOverflow);
   };
 
+  const stillOverHover = () => {
+    if (!hoverId || !hoverCursor) {
+      return false;
+    }
+    const marker = markers.get(hoverId);
+    if (!marker) {
+      return false;
+    }
+    const root = svg.getRootNode();
+    const el = root.elementFromPoint?.(hoverCursor.x, hoverCursor.y);
+    return Boolean(el && marker.g.contains(el));
+  };
+
+  const queueHoverCheck = () => {
+    if (hoverCheckQueued) {
+      return;
+    }
+    hoverCheckQueued = true;
+    requestAnimationFrame(() => {
+      hoverCheckQueued = false;
+      suppressHover = false;
+      if (!hoverId || stillOverHover()) {
+        return;
+      }
+      hoverId = null;
+      sync();
+    });
+  };
+
   const sync = () => {
     syncModePill();
     const radius = radiusPx();
@@ -2938,9 +2972,45 @@ function createSceneColorWheel({
         g.append(outline, path, hit, icon, fo);
         marker = { g, path, outline, hit, icon, fo, haIcon, sceneId: scene.id };
         markers.set(scene.id, marker);
+        g.addEventListener("pointerenter", (ev) => {
+          if (drag || suppressHover) {
+            return;
+          }
+          if (g.style.display === "none" || g.classList.contains("grouped")) {
+            return;
+          }
+          if (g.classList.contains("active")) {
+            return;
+          }
+          const now = getState();
+          if (selectedIdsOf(now).includes(scene.id) || hoverId === scene.id) {
+            return;
+          }
+          hoverCursor = { x: ev.clientX, y: ev.clientY };
+          hoverId = scene.id;
+          sync();
+        });
+        g.addEventListener("pointerleave", (ev) => {
+          if (hoverId !== scene.id) {
+            return;
+          }
+          if (ev.relatedTarget && g.contains(ev.relatedTarget)) {
+            return;
+          }
+          hoverCursor = { x: ev.clientX, y: ev.clientY };
+          if (suppressHover) {
+            return;
+          }
+          if (stillOverHover()) {
+            return;
+          }
+          hoverId = null;
+          sync();
+        });
         g.addEventListener("pointerdown", (ev) => {
           ev.stopPropagation();
           ev.preventDefault();
+          hoverId = null;
           const now = getState();
           const item = now.scenes.find((row) => row.id === scene.id);
           if (!item) {
@@ -2968,29 +3038,44 @@ function createSceneColorWheel({
         svg.appendChild(g);
       }
       const active = selectedIds.includes(scene.id);
+      const preview = hoverId === scene.id && !active;
+      const expanded = preview || (active && !hoverId);
       const caps = capsOf(scene);
       if (!caps.hasColor && !caps.hasTemp) {
         marker.g.style.display = "none";
         continue;
       }
       const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
-      marker.path.setAttribute("d", active ? HUE_PIN_PATH : HUE_DOT_PATH);
-      marker.g.classList.toggle("active", active);
+      marker.path.setAttribute("d", expanded ? HUE_PIN_PATH : HUE_DOT_PATH);
+      marker.g.classList.toggle("active", active && expanded);
+      marker.g.classList.toggle("preview", preview);
       const mdi = pinIconOf(scene);
       if (mdi && marker.haIcon) {
         marker.haIcon.setAttribute("icon", mdi);
-        marker.fo.style.display = active ? "" : "none";
+        marker.fo.style.display = expanded ? "" : "none";
       } else if (marker.fo) {
         marker.fo.style.display = "none";
       }
       /* Count / event index on the pin; entity/event mdi lives in foreignObject. */
       marker.icon.textContent =
-        mdi && active
+        mdi && expanded
           ? ""
           : scene.index == null || scene.index === ""
             ? ""
             : String(scene.index);
-      marker.hit.style.display = active ? "none" : "";
+      if (preview) {
+        // Keep a hit on the tip. The pin body sits above the dot, so the
+        // cursor would otherwise leave the marker the moment it opens.
+        marker.hit.setAttribute("cx", "24");
+        marker.hit.setAttribute("cy", "60");
+        marker.hit.setAttribute("r", "18");
+        marker.hit.style.display = "";
+      } else {
+        marker.hit.setAttribute("cx", "6");
+        marker.hit.setAttribute("cy", "6");
+        marker.hit.setAttribute("r", "12");
+        marker.hit.style.display = expanded ? "none" : "";
+      }
       marker.g.style.display = "";
       marker.g.classList.remove("grouped");
       if (!radius) {
@@ -3008,7 +3093,7 @@ function createSceneColorWheel({
       if (marker.haIcon) {
         marker.haIcon.style.color = pinForeground(pos.rgb);
       }
-      placeMarker(marker, pos.x, pos.y, active);
+      placeMarker(marker, pos.x, pos.y, expanded);
       placed.push({
         id: scene.id,
         x: pos.x,
@@ -3016,7 +3101,10 @@ function createSceneColorWheel({
         mode: markerMode,
         off: isOffDraft(scene.draft),
       });
-      if (active) {
+      if (expanded) {
+        if (preview) {
+          suppressHover = true;
+        }
         svg.appendChild(marker.g);
       }
     }
@@ -3041,7 +3129,19 @@ function createSceneColorWheel({
           }
         }
         const leadMarker = markers.get(lead);
-        if (leadMarker && group.length > 1) {
+        if (leadMarker && group.length > 1 && hoverId && selectedIds.includes(lead)) {
+          leadMarker.g.classList.remove("active", "grouped", "preview");
+          leadMarker.path.setAttribute("d", HUE_DOT_PATH);
+          leadMarker.icon.textContent = "";
+          if (leadMarker.fo) {
+            leadMarker.fo.style.display = "none";
+          }
+          leadMarker.hit.setAttribute("cx", "6");
+          leadMarker.hit.setAttribute("cy", "6");
+          leadMarker.hit.setAttribute("r", "12");
+          leadMarker.hit.style.display = "";
+          placeMarker(leadMarker, leadMarker.x, leadMarker.y, false);
+        } else if (leadMarker && group.length > 1) {
           leadMarker.icon.textContent = String(group.length);
           if (leadMarker.fo) {
             leadMarker.fo.style.display = "none";
@@ -3083,11 +3183,12 @@ function createSceneColorWheel({
         const count = fan.ids.length;
         const ang = (index / count) * Math.PI * 2 - Math.PI / 2;
         const dist = count > 1 ? 56 : 48;
+        const fanExpanded = id === hoverId || (selectedIds.includes(id) && !hoverId);
         placeMarker(
           marker,
           fan.x + Math.cos(ang) * dist,
           fan.y + Math.sin(ang) * dist,
-          selectedIds.includes(id)
+          fanExpanded
         );
         marker.g.style.display = "";
       });
@@ -3103,6 +3204,17 @@ function createSceneColorWheel({
     syncPresets();
     if (!drag) {
       hideFloatReadout();
+    }
+    if (hoverId && !markers.has(hoverId)) {
+      hoverId = null;
+    }
+    if (hoverId) {
+      const hovered = markers.get(hoverId);
+      if (hovered && hovered.g.style.display !== "none") {
+        suppressHover = true;
+        svg.appendChild(hovered.g);
+      }
+      queueHoverCheck();
     }
   };
 

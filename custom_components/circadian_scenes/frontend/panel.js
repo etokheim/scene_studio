@@ -2418,8 +2418,8 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-svg .gm.preview .marker {
           filter: url(#se-active-shadow);
         }
-        .hue-wheel-svg .gm:not(.active) .icon,
-        .hue-wheel-svg .gm:not(.active) .icon-fo {
+        .hue-wheel-svg .gm:not(.active):not(.preview) .icon,
+        .hue-wheel-svg .gm:not(.active):not(.preview) .icon-fo {
           display: none;
         }
         .hue-wheel-svg .gm.active.drag {
