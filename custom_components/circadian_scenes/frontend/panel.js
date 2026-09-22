@@ -2174,6 +2174,16 @@ class CircadianScenesPanel extends HTMLElement {
           --wheel-mixed-inner: 81%;
           --wheel-mixed-gap: 0%;
         }
+        .hue-wheel-face {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 16px;
+          width: 100%;
+          min-width: 0;
+          min-height: 0;
+          flex: 1 1 auto;
+        }
         .hue-wheel-canvas {
           position: relative;
           width: 100%;
@@ -2524,6 +2534,9 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .hue-preset {
           box-sizing: border-box;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           flex-shrink: 0;
           width: 32px;
           height: 32px;
@@ -2535,6 +2548,24 @@ class CircadianScenesPanel extends HTMLElement {
           cursor: pointer;
           appearance: none;
           -webkit-appearance: none;
+        }
+        .hue-preset-swatch {
+          display: block;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          flex: 0 0 auto;
+        }
+        .hue-preset-name {
+          display: none;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 13px;
+          line-height: 1.2;
+          color: var(--primary-text-color);
+          text-align: start;
         }
         .hue-preset:hover {
           border-color: rgba(255, 255, 255, 0.45);
@@ -3398,8 +3429,8 @@ class CircadianScenesPanel extends HTMLElement {
         .stage-col .simple-editor .hue-wheel-stage {
           min-width: 0;
           padding: 0;
-          width: min(100%, ${WHEEL_FACE_MAX_PX}px);
-          max-width: min(100%, ${WHEEL_FACE_MAX_PX}px);
+          width: 100%;
+          max-width: none;
           height: 100%;
           max-height: 100%;
           container-type: size;
@@ -3411,6 +3442,79 @@ class CircadianScenesPanel extends HTMLElement {
           );
           max-width: min(100%, ${WHEEL_FACE_MAX_PX}px, calc(100cqb - 64px));
           height: auto;
+        }
+        /* Landscape wheel container: mode toggles and variables stack from the
+           disk's top-right. 200px column + 16px gap. Square and portrait keep
+           the horizontal row under the disk. */
+        @container (aspect-ratio > 1 / 1) {
+          .hue-wheel-face {
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: center;
+          }
+          .stage-col .simple-editor .hue-wheel-canvas {
+            width: auto;
+            height: min(100cqb, ${WHEEL_FACE_MAX_PX}px, calc(100cqi - 216px));
+            max-width: min(${WHEEL_FACE_MAX_PX}px, calc(100cqi - 216px));
+            max-height: 100%;
+            aspect-ratio: 1;
+            flex: 0 0 auto;
+            margin: 0;
+          }
+          .hue-wheel-chrome {
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            align-self: stretch;
+            width: 200px;
+            max-width: 200px;
+            max-height: 100%;
+            min-height: 0;
+            overflow: hidden;
+            gap: 8px;
+          }
+          .wheel-mode-pill {
+            flex-direction: column;
+            width: 48px;
+            height: auto;
+          }
+          .hue-presets {
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            width: 100%;
+            max-width: 200px;
+            height: auto;
+            max-height: 100%;
+            min-height: 0;
+            flex: 0 1 auto;
+            border-radius: 16px;
+          }
+          .hue-presets-track {
+            flex-direction: column;
+            align-items: stretch;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden;
+            overflow-y: auto;
+          }
+          .hue-presets::after {
+            display: none;
+          }
+          .hue-preset:not(.add) {
+            width: 100%;
+            height: 36px;
+            border-radius: 18px;
+            justify-content: flex-start;
+            gap: 8px;
+            padding: 2px 10px 2px 2px;
+          }
+          .hue-preset.add {
+            align-self: flex-start;
+          }
+          .hue-preset-name {
+            display: block;
+          }
         }
         .stage-bg .hue-wheel-glow {
           position: absolute;

@@ -2268,6 +2268,8 @@ function createSceneColorWheel({
   pathLayer.setAttribute("class", "hue-wheel-paths");
   svg.appendChild(pathLayer);
   canvasWrap.append(glow, bgTemp, bgColor, bgPalette, svg);
+  const face = document.createElement("div");
+  face.className = "hue-wheel-face";
   const floatReadout = document.createElement("div");
   floatReadout.className = "hue-wheel-float-readout";
   floatReadout.hidden = true;
@@ -2294,7 +2296,8 @@ function createSceneColorWheel({
   modeCluster.className = "hue-wheel-mode-cluster";
   modeCluster.append(modePill, randomizeBtn);
   chrome.prepend(modeCluster);
-  stage.append(canvasWrap, chrome);
+  face.append(canvasWrap, chrome);
+  stage.appendChild(face);
 
   const markers = new Map();
   let pinClusters = [];
@@ -2832,7 +2835,13 @@ function createSceneColorWheel({
       btn.className = "hue-preset";
       btn.setAttribute("role", "listitem");
       btn.title = variable.name;
-      btn.style.background = variableSwatchCss(variable, palette);
+      const swatch = document.createElement("span");
+      swatch.className = "hue-preset-swatch";
+      swatch.style.background = variableSwatchCss(variable, palette);
+      const name = document.createElement("span");
+      name.className = "hue-preset-name";
+      name.textContent = variable.name || "";
+      btn.append(swatch, name);
       if (active?.draft?.variable_ref === variable.id) {
         btn.classList.add("active");
       }

@@ -889,6 +889,13 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Forcing a horizontal switch to 130×320 drew the thumb as a full-height column on the right. Rebuilding the strip on every disk click replayed the Select all fill transition.
 - **Do not reverse without user ask.**
 
+## Landscape wheel chrome
+
+- **Date:** 2026-09-23
+- **Decision:** When the wheel stage is wider than it is tall, the color-mode toggles and the variable list stack from the top-right of the disk. Variable names stay visible. A square or portrait stage keeps the horizontal row under the disk, with names only in the tooltip.
+- **Why:** The horizontal row spent the leftover width beside a landscape disk. The side column is wide enough for the names.
+- **Do not reverse without user ask.**
+
 ## Dot hover and group-label icon
 
 - **Date:** 2026-09-22

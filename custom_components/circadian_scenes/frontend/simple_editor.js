@@ -71,8 +71,8 @@ export const SIMPLE_EDITOR_CSS = `
     padding-bottom: 24px;
   }
   .simple-wheels .hue-wheel-stage {
-    width: min(100%, 650px);
-    max-width: min(100%, 650px);
+    width: 100%;
+    max-width: none;
     height: 100%;
     max-height: 100%;
     min-width: 0;
