@@ -236,6 +236,21 @@ test("an outer kelvin drag stays on the track and resists the color disk", () =>
     }),
     null
   );
+  const left = kelvinTrackDragPoint({
+    x: radius - mid,
+    y: radius,
+    radius,
+    inner,
+    outer,
+    colorOuter: inner,
+    colorLive: true,
+    tempMin: 2000,
+    tempMax: 6500,
+    canColor: false,
+    hyst: 8,
+  });
+  assert.ok(left.x < radius);
+  assert.ok(Math.abs(Math.hypot(left.x - radius, left.y - radius) - mid) < 1.5);
 });
 
 test("a drag fades a disk none of the dragged lights can use", () => {

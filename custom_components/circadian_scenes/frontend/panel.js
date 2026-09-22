@@ -19,6 +19,7 @@ import {
   applyVariableToDraft,
   colorPayloadFromDraft,
   hexToRgb,
+  lightWheelCaps,
   variableSwatchCss,
 } from "./color_ui.js";
 import { defaultPaletteSlots, variableIsPalette } from "./palette.js";
@@ -17125,6 +17126,16 @@ class CircadianScenesPanel extends HTMLElement {
     return {};
   }
 
+  _legendTileCaps(entityId) {
+    const attrs = this._hass?.states?.[entityId]?.attributes || {};
+    const modes = attrs.supported_color_modes || [];
+    if (!modes.length) {
+      return undefined;
+    }
+    const caps = lightWheelCaps(attrs);
+    return { known: true, hasColor: caps.hasColor, hasTemp: caps.hasTemp };
+  }
+
   _placeLegendModeGroups(tilesEl) {
     if (!tilesEl) {
       return;
@@ -17135,7 +17146,10 @@ class CircadianScenesPanel extends HTMLElement {
     const signature = entries
       .map(
         (entry) =>
-          `${entry.light.entity_id}:${lightTileColorGroup(this._legendGroupDraft(entry.light))}`
+          `${entry.light.entity_id}:${lightTileColorGroup(
+            this._legendGroupDraft(entry.light),
+            this._legendTileCaps(entry.light.entity_id)
+          )}`
       )
       .join("|");
     if (signature === this._legendGroupSignature) {
@@ -17145,7 +17159,10 @@ class CircadianScenesPanel extends HTMLElement {
     const beforeLayout = captureLightStripLayout(tilesEl);
     const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
     for (const entry of entries) {
-      const key = lightTileColorGroup(this._legendGroupDraft(entry.light));
+      const key = lightTileColorGroup(
+        this._legendGroupDraft(entry.light),
+        this._legendTileCaps(entry.light.entity_id)
+      );
       grouped.get(key).push(entry);
     }
     const labels = {
@@ -17328,6 +17345,12 @@ class CircadianScenesPanel extends HTMLElement {
           isEditable: () =>
             Boolean(this._sidebarEventId) &&
             assigned.some((item) => item.id === this._sidebarEventId),
+          isBinary: () => {
+            const modes =
+              this._hass?.states?.[light.entity_id]?.attributes
+                ?.supported_color_modes || [];
+            return modes.length > 0 && modes.every((mode) => mode === "onoff");
+          },
           getBrightness: () =>
             this._dialEventBrightness(this._sidebarEventId, light.entity_id),
           setBrightness: (value, { history } = {}) => {

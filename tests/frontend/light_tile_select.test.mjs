@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  binaryDragPreview,
+  binaryWheelPreview,
   lightTileColorGroup,
   lightTileGroupOrder,
   tileSelectionAfterClick,
@@ -26,6 +28,27 @@ test("color mode buckets follow the strip order", () => {
     "color"
   );
   assert.equal(lightTileColorGroup({}), "brightness");
+  assert.equal(
+    lightTileColorGroup(
+      { color_mode: "color_temp", color_temp_kelvin: 2286 },
+      { known: true, hasColor: false, hasTemp: false }
+    ),
+    "brightness"
+  );
+  assert.equal(
+    lightTileColorGroup(
+      { color_mode: "white" },
+      { known: true, hasColor: false, hasTemp: false }
+    ),
+    "white"
+  );
+  assert.equal(
+    lightTileColorGroup(
+      { color_mode: "color_temp", color_temp_kelvin: 2180 },
+      { known: true, hasColor: true, hasTemp: true }
+    ),
+    "temp"
+  );
 });
 
 test("plain click replaces the selection and moves the anchor", () => {
@@ -132,4 +155,19 @@ test("cmd/ctrl click can clear the last selected id", () => {
   });
   assert.deepEqual(next.selected, []);
   assert.equal(next.anchorId, "b");
+});
+
+test("on/off drag resists and snaps across halfway", () => {
+  const held = binaryDragPreview({ startFill: 0, deltaPct: 40 });
+  assert.equal(held.snapOn, false);
+  assert.equal(held.snapOff, false);
+  assert.ok(held.preview < 50);
+  const on = binaryDragPreview({ startFill: 0, deltaPct: 100 });
+  assert.equal(on.snapOn, true);
+  const off = binaryDragPreview({ startFill: 100, deltaPct: -100 });
+  assert.equal(off.snapOff, true);
+  const wheeled = binaryWheelPreview({ startFill: 0, stepPct: 40 });
+  assert.equal(wheeled.snapOn, true);
+  const shortWheel = binaryWheelPreview({ startFill: 0, stepPct: 10 });
+  assert.equal(shortWheel.snapOn, false);
 });

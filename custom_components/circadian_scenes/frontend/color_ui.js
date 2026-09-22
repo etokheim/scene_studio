@@ -1440,18 +1440,21 @@ function placeColorInAnnulus(hue, saturation, inner, outer) {
   return clampRelToAnnulus(coords.x, coords.y, inner, outer);
 }
 
-function placeTempInAnnulus(kelvin, inner, outer, tempMin, tempMax) {
+function placeTempInAnnulus(kelvin, inner, outer, tempMin, tempMax, side = 1) {
   const coords = coordinatesForTemp(kelvin, outer, tempMin, tempMax);
   if (!(inner > 0)) {
     return { x: coords.x, y: coords.y };
   }
   // Resting pins sit on the band centerline (not the inner rim). An outer-ring
   // drag uses the same centerline; a full disk still follows the pointer.
+  // `side` is session-only: left of the wheel stays left until the wheel is
+  // recreated. A refresh has no remembered side and uses the right half.
   const mid = (inner + outer) / 2;
   let y = coords.y;
   const maxY = Math.max(0, mid - 0.5);
   y = Math.max(-maxY, Math.min(maxY, y));
-  const x = Math.sqrt(Math.max(0, mid * mid - y * y));
+  const sign = side < 0 ? -1 : 1;
+  const x = sign * Math.sqrt(Math.max(0, mid * mid - y * y));
   return { x, y };
 }
 
@@ -1474,6 +1477,7 @@ function kelvinTrackDragPoint({
   tempMax,
   canColor = false,
   hyst = 0,
+  side,
 }) {
   const kelvinIsOuterRing =
     inner > 0 &&
@@ -1492,7 +1496,15 @@ function kelvinTrackDragPoint({
   if (!sample) {
     return null;
   }
-  const rel = placeTempInAnnulus(sample.kelvin, inner, outer, tempMin, tempMax);
+  const resolvedSide = side == null ? (relX < 0 ? -1 : 1) : side;
+  const rel = placeTempInAnnulus(
+    sample.kelvin,
+    inner,
+    outer,
+    tempMin,
+    tempMax,
+    resolvedSide
+  );
   let px = rel.x;
   let py = rel.y;
   if (canColor && colorLive && colorOuter <= inner + 1) {
@@ -2518,6 +2530,9 @@ function createSceneColorWheel({
     );
   };
 
+  // Kelvin left/right is not part of the draft. Cleared when this wheel is rebuilt.
+  const tempSides = new Map();
+
   const markerOffset = (active) =>
     active ? { x: 24, y: 60 } : { x: 6, y: 6 };
 
@@ -2564,7 +2579,8 @@ function createSceneColorWheel({
       geom.temp.inner,
       geom.temp.outer,
       tempMin,
-      tempMax
+      tempMax,
+      tempSides.get(entityId) ?? 1
     );
     return { x: cx + rel.x, y: cx + rel.y, rgb: hueTempToRgb(kelvin) };
   };
@@ -3249,6 +3265,17 @@ function createSceneColorWheel({
             hyst,
           })
         : null;
+    if (tracked) {
+      const side = tracked.x < radius ? -1 : 1;
+      for (const id of moveIds) {
+        tempSides.set(id, side);
+        const row = scenes.find((scene) => scene.id === id);
+        const eid = row ? entityIdOf(row) : null;
+        if (eid) {
+          tempSides.set(eid, side);
+        }
+      }
+    }
     const limited = tracked
       ? { x: tracked.x, y: tracked.y }
       : applyAtBand(item.draft, x, y, radius, pinMode, band);

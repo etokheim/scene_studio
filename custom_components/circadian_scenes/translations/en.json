@@ -242,6 +242,8 @@
       "group_white": "White",
       "group_brightness": "Brightness",
       "power": "On",
+      "off": "Off",
+      "toggle_power": "Toggle",
       "add_light": "Add light",
       "add_named": "Add {name}",
       "add_named_to_scene": "Add {name} to the scene",

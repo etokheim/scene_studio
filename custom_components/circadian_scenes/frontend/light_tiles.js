@@ -31,8 +31,15 @@ export const LIGHT_TILES_CSS = `
     display: flex;
     flex-direction: row;
     align-items: stretch;
-    gap: 2px;
+    gap: 8px;
     flex: 0 0 auto;
+    /* Same chrome as the color-mode pill: surface, shadow, padding. No fixed
+       height, and no overflow clip — the hover "Select all" sits above the label. */
+    box-sizing: border-box;
+    padding: 8px;
+    border-radius: 24px;
+    box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
+    background: var(--surface-2, var(--secondary-background-color, #242022));
   }
   .light-mode-label {
     position: relative;
@@ -196,6 +203,22 @@ export const LIGHT_TILES_CSS = `
     touch-action: none;
     transform: none;
   }
+  .simple-light-tile.jelly-snap {
+    animation: light-tile-jelly 480ms cubic-bezier(0.22, 1.55, 0.36, 1);
+  }
+  .simple-light-tile.jelly-snap .simple-light-fill,
+  .simple-light-tile.jelly-snap .simple-light-labels {
+    transition:
+      height 520ms cubic-bezier(0.22, 1.85, 0.36, 1),
+      clip-path 520ms cubic-bezier(0.22, 1.85, 0.36, 1);
+  }
+  @keyframes light-tile-jelly {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.03, 1.08); }
+    55% { transform: scale(0.98, 0.94); }
+    75% { transform: scale(1.01, 1.03); }
+    100% { transform: scale(1); }
+  }
   @media (hover: hover) {
     .simple-light-tile:hover:not(.is-off):not(.dragging):not(.wheel-adjusting) {
       --hue-unfilled-mix: 25%;
@@ -297,22 +320,30 @@ export const LIGHT_TILES_CSS = `
   }
   .simple-light-title {
     color: inherit;
-    padding: 0 2px 10px;
+    padding: 0 2px 6px;
     font-size: 12px;
     line-height: 15px;
     font-weight: 500;
-    height: 35px;
+    min-height: 35px;
     text-align: center;
     display: flex;
     flex-flow: column;
-    justify-content: center;
+    justify-content: flex-end;
   }
-  .simple-light-title span {
+  .simple-light-title .simple-light-name {
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
+  }
+  .simple-light-title .simple-light-bri {
+    display: block;
+    margin-top: 1px;
+    font-size: 10px;
+    font-weight: 450;
+    line-height: 12px;
+    opacity: 0.72;
   }
   .simple-light-hit {
     position: absolute;
@@ -363,7 +394,7 @@ export function lightTileOnTextCss(rgb) {
   return luma > 0.45 ? "rgba(0, 0, 0, 0.7)" : "#fff";
 }
 
-export function paintLightTile(selector, { rgb, fillPct, selected }) {
+export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLabel }) {
   const channels = rgb || [0, 0, 0];
   const onBg = `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
   selector.style.setProperty("--hue-light-on-background", onBg);
@@ -379,6 +410,12 @@ export function paintLightTile(selector, { rgb, fillPct, selected }) {
   tile.style.setProperty("--hue-light-ramp", `${rampPx}px`);
   tile.classList.toggle("is-off", pct <= 0);
   selector.classList.toggle("active", Boolean(selected));
+  const label =
+    brightnessLabel === undefined ? `${Math.round(pct)}%` : brightnessLabel;
+  for (const el of selector.querySelectorAll(".simple-light-bri")) {
+    el.textContent = label;
+    el.hidden = label === "";
+  }
 }
 
 function makeLabels(layer, name, makeIcon) {
@@ -392,8 +429,11 @@ function makeLabels(layer, name, makeIcon) {
   const title = document.createElement("div");
   title.className = "simple-light-title";
   const span = document.createElement("span");
+  span.className = "simple-light-name";
   span.textContent = name;
-  title.appendChild(span);
+  const bri = document.createElement("span");
+  bri.className = "simple-light-bri";
+  title.append(span, bri);
   tap.append(iconSlot, title);
   labels.appendChild(tap);
   return labels;
@@ -554,6 +594,7 @@ export function createAddLightTile({ label, onActivate }) {
     rgb: [64, 60, 58],
     fillPct: 0,
     selected: false,
+    brightnessLabel: "",
   });
   const activate = (ev) => {
     ev.stopPropagation();
@@ -573,10 +614,66 @@ export function createAddLightTile({ label, onActivate }) {
 /** Per notch; was 8. One-third so the light-tile strip is usable with a mouse wheel. */
 export const TILE_BRIGHTNESS_WHEEL_STEP = 8 / 3;
 
+/** On/off tiles resist, then snap once the fill crosses halfway. Matches huemane. */
+export const BINARY_DRAG_RESISTANCE = 0.56;
+
+export function binaryDragPreview({ startFill, deltaPct }) {
+  const resistant = startFill + deltaPct * BINARY_DRAG_RESISTANCE;
+  const preview = Math.max(0, Math.min(100, resistant));
+  return {
+    preview,
+    snapOn: startFill < 50 && resistant >= 50,
+    snapOff: startFill > 50 && resistant <= 50,
+  };
+}
+
+/** Wheel delta in percent. Mouse notch ≈ 3.6; trackpad follows pixels. */
+export function wheelDeltaToPercent(ev) {
+  if (ev.deltaMode === 1) {
+    return (ev.deltaY > 0 ? -1 : 1) * 1.2 * 3;
+  }
+  if (ev.deltaMode === 2) {
+    return (ev.deltaY > 0 ? -1 : 1) * 1.2 * 8;
+  }
+  return (-ev.deltaY / 13.333) * 1.2;
+}
+
+export function binaryWheelPreview({ startFill, stepPct }) {
+  const next = Math.max(
+    0,
+    Math.min(100, startFill + stepPct * BINARY_DRAG_RESISTANCE * 3)
+  );
+  return {
+    preview: next,
+    snapOn: startFill < 50 && next >= 50,
+    snapOff: startFill > 50 && next <= 50,
+  };
+}
+
+export function playLightTileJelly(tile) {
+  if (!tile) {
+    return;
+  }
+  tile.classList.remove("jelly-snap");
+  void tile.offsetWidth;
+  tile.classList.add("jelly-snap");
+  window.setTimeout(() => tile.classList.remove("jelly-snap"), 520);
+}
+
 const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness"];
 
-/** Bucket a stored light draft by the color mode it is in now. */
-export function lightTileColorGroup(draft) {
+/**
+ * Bucket a stored light draft by the color mode it is in now.
+ * When caps are known and the bulb cannot do color or kelvin, a stale
+ * color_temp draft still belongs in the brightness group.
+ */
+export function lightTileColorGroup(draft, caps) {
+  if (caps?.known && !caps.hasColor && !caps.hasTemp) {
+    if (draft?.color_mode === "white") {
+      return "white";
+    }
+    return "brightness";
+  }
   const mode = draft?.color_mode;
   if (mode === "color_temp") {
     return "temp";
@@ -645,16 +742,37 @@ export function bindLightTileBrightness(tile, hit, {
   getBrightness,
   setBrightness,
   onDragEnd,
+  isBinary,
 }) {
   let drag = null;
   let wheelAxis = null;
   let wheelAxisTimer = null;
   let historyPending = false;
+  let binaryPreview = null;
+  let wheelRevert = null;
+
+  const currentFill = () => ((Number(getBrightness()) || 0) / 255) * 100;
+
+  const paintPreview = (pct) => {
+    const clamped = Math.max(0, Math.min(100, pct));
+    tile.style.setProperty("--hue-light-fill", `${clamped}%`);
+    tile.classList.toggle("is-off", clamped <= 0);
+    const label = `${Math.round(clamped)}%`;
+    for (const el of tile.querySelectorAll(".simple-light-bri")) {
+      el.textContent = label;
+    }
+  };
 
   const applyBri = (next) => {
     const value = Math.max(0, Math.min(255, Math.round(Number(next) || 0)));
     setBrightness(value, { history: historyPending });
     historyPending = false;
+  };
+
+  const commitBinary = (on) => {
+    binaryPreview = null;
+    applyBri(on ? 255 : 0);
+    playLightTileJelly(tile);
   };
 
   const endDrag = (ev) => {
@@ -676,7 +794,12 @@ export function bindLightTileBrightness(tile, hit, {
       }, 0);
     }
     const wasY = drag.axis === "y";
+    const revertPreview = wasY && isBinary?.() && binaryPreview != null;
     drag = null;
+    if (revertPreview) {
+      binaryPreview = null;
+      paintPreview(currentFill());
+    }
     window.setTimeout(() => tile.classList.remove("dragging"), 250);
     if (wasY) {
       onDragEnd?.();
@@ -714,6 +837,20 @@ export function bindLightTileBrightness(tile, hit, {
     }
     ev.preventDefault();
     const rect = tile.getBoundingClientRect();
+    if (isBinary?.()) {
+      const deltaPct = -((ev.clientY - drag.startY) / Math.max(1, rect.height)) * 100;
+      const step = binaryDragPreview({ startFill: drag.startFill, deltaPct });
+      if (step.snapOn || step.snapOff) {
+        commitBinary(Boolean(step.snapOn));
+        drag.startFill = step.snapOn ? 100 : 0;
+        drag.startY = ev.clientY;
+        paintPreview(drag.startFill);
+      } else {
+        binaryPreview = step.preview;
+        paintPreview(step.preview);
+      }
+      return;
+    }
     const fromBottom = rect.bottom - ev.clientY;
     applyBri(
       (Math.max(0, Math.min(100, (fromBottom / rect.height) * 100)) / 100) * 255
@@ -725,10 +862,12 @@ export function bindLightTileBrightness(tile, hit, {
       return;
     }
     historyPending = true;
+    binaryPreview = null;
     drag = {
       pointerId: ev.pointerId,
       startX: ev.clientX,
       startY: ev.clientY,
+      startFill: currentFill(),
       axis: null,
       suppressTap: false,
     };
@@ -767,10 +906,32 @@ export function bindLightTileBrightness(tile, hit, {
       }, 180);
       ev.preventDefault();
       tile.classList.add("wheel-adjusting");
-      applyBri(
-        (Number(getBrightness()) || 0) -
-          Math.sign(ev.deltaY) * TILE_BRIGHTNESS_WHEEL_STEP
-      );
+      if (isBinary?.()) {
+        const start = binaryPreview ?? currentFill();
+        const step = binaryWheelPreview({
+          startFill: start,
+          stepPct: wheelDeltaToPercent(ev),
+        });
+        if (step.snapOn || step.snapOff) {
+          window.clearTimeout(wheelRevert);
+          commitBinary(Boolean(step.snapOn));
+          paintPreview(step.snapOn ? 100 : 0);
+        } else {
+          binaryPreview = step.preview;
+          paintPreview(step.preview);
+          window.clearTimeout(wheelRevert);
+          wheelRevert = window.setTimeout(() => {
+            wheelRevert = null;
+            binaryPreview = null;
+            paintPreview(currentFill());
+          }, 280);
+        }
+      } else {
+        applyBri(
+          (Number(getBrightness()) || 0) -
+            Math.sign(ev.deltaY) * TILE_BRIGHTNESS_WHEEL_STEP
+        );
+      }
       window.setTimeout(() => tile.classList.remove("wheel-adjusting"), 250);
     },
     { passive: false }
