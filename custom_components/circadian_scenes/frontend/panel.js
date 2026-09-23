@@ -3472,11 +3472,10 @@ class CircadianScenesPanel extends HTMLElement {
            the horizontal row under the disk. */
         @container (aspect-ratio > 1 / 1) {
           .hue-wheel-face {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 200px;
+            position: relative;
+            display: flex;
             align-items: center;
-            justify-items: center;
-            gap: 16px;
+            justify-content: center;
           }
           .stage-col .simple-editor .hue-wheel-canvas {
             width: min(100%, 100cqb, ${WHEEL_FACE_MAX_PX}px);
@@ -3484,18 +3483,20 @@ class CircadianScenesPanel extends HTMLElement {
             max-width: 100%;
             max-height: 100%;
             aspect-ratio: 1;
-            margin: 0;
-            justify-self: center;
+            margin: 0 auto;
           }
           .hue-wheel-chrome {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 4;
             flex-direction: column;
             align-items: flex-end;
             justify-content: flex-start;
-            align-self: stretch;
-            justify-self: end;
             width: 200px;
             max-width: 200px;
-            height: 100%;
+            height: auto;
             max-height: 100%;
             min-height: 0;
             overflow-x: hidden;
@@ -3561,9 +3562,17 @@ class CircadianScenesPanel extends HTMLElement {
             gap: 8px;
             padding: 0;
             border-color: transparent;
+            opacity: 0.75;
+          }
+          .wheel-mode-pill .wheel-wrapper.active {
+            border-color: transparent;
+            opacity: 1;
           }
           .wheel-mode-pill .wheel-wrapper.active .wheel {
             box-shadow: 0 0 0 2px #fff;
+          }
+          .wheel-mode-pill .wheel-wrapper.active .wheel-mode-name {
+            font-weight: 700;
           }
           .wheel-mode-name {
             display: block;
@@ -3604,6 +3613,18 @@ class CircadianScenesPanel extends HTMLElement {
             justify-content: flex-start;
             gap: 8px;
             padding: 2px 2px 2px 10px;
+            border-color: transparent;
+            opacity: 0.75;
+          }
+          .hue-preset.active {
+            border-color: transparent;
+            opacity: 1;
+          }
+          .hue-preset.active .hue-preset-swatch {
+            box-shadow: 0 0 0 2px #fff;
+          }
+          .hue-preset.active .hue-preset-name {
+            font-weight: 700;
           }
           .hue-preset.add {
             align-self: flex-end;

@@ -32,6 +32,22 @@ export const LIGHT_TILES_CSS = `
   .light-tiles:has(.light-mode-group) > .add-light-tile {
     margin-bottom: 8px;
   }
+  .light-tiles > .select-all-tile {
+    position: sticky;
+    left: 0;
+    z-index: 6;
+  }
+  .light-tiles > .select-all-tile::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: -20px;
+    bottom: -12px;
+    left: -24px;
+    right: -12px;
+    background: var(--primary-background-color, #111);
+    pointer-events: none;
+  }
   .light-mode-group {
     display: flex;
     flex-direction: row;

@@ -3458,8 +3458,13 @@ function createSceneColorWheel({
         void pin.g.getBoundingClientRect();
         window.setTimeout(() => pin.g.classList.remove("glide"), 420);
       }
-      pin.g.style.color = rgbCss(draftRgb(row.draft));
-      pin.icon.style.fill = pinForeground(draftRgb(row.draft));
+      const ink = draftRgb(row.draft);
+      const fg = pinForeground(ink);
+      pin.g.style.color = rgbCss(ink);
+      pin.icon.style.fill = fg;
+      if (pin.haIcon) {
+        pin.haIcon.style.color = fg;
+      }
       placeMarker(pin, limited.x, limited.y, selectedIdsOf(getState()).includes(row.id));
     };
     for (const id of moveIds) {

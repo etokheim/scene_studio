@@ -28,7 +28,6 @@ import {
   lightTileValueLabel,
   paintLightTile,
   relativeFillPercent,
-  selectAllTileAction,
   tileSelectionAfterClick,
   wheelDeltaToPercent,
 } from "./light_tiles.js";
@@ -261,10 +260,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   wheels.className = "simple-wheels";
 
   let selectedIds = new Set(members[0] ? [members[0]] : []);
+  let touchSelectMode = false;
   let peeledId = null;
   let anchorId = members[0] || null;
   let stripOrderIds = [];
   let pinClusters = [];
+  const selectedMemberIds = () => members.filter((id) => selectedIds.has(id));
+  const inSelectMode = () =>
+    touchSelectMode || selectedMemberIds().length > 1;
+  const scrubTargets = () => (inSelectMode() ? selectedMemberIds() : members);
   const drafts = {};
   for (const eid of members) {
     const raw = lights[eid] || { state: "on", brightness: 200 };
@@ -387,7 +391,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         anchorId = result.anchorId;
         peeledId = null;
         wheel.clearDetached?.();
+        if (selectedIds.size === 0) {
+          touchSelectMode = false;
+        }
       } else {
+        touchSelectMode = false;
         selectedIds = new Set(id ? [id] : []);
         peeledId = id || null;
         if (id) {
@@ -521,6 +529,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     if (ev.shiftKey) {
       applyTileClick(next, ev);
     } else {
+      touchSelectMode = false;
       selectedIds = new Set([next]);
       anchorId = next;
       peeledId = next;
@@ -535,18 +544,23 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   });
 
   const applyTileClick = (eid, ev) => {
+    const plain = !ev?.shiftKey && !ev?.metaKey && !ev?.ctrlKey;
+    const wasSelectMode = inSelectMode();
     const result = tileSelectionAfterClick({
       ids: stripOrderIds.length ? stripOrderIds : members,
       selected: [...selectedIds],
       anchorId,
       entityId: eid,
-      shiftKey: Boolean(ev?.shiftKey),
-      toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey),
+      shiftKey: Boolean(ev?.shiftKey) && !wasSelectMode,
+      toggleKey:
+        Boolean(ev?.metaKey || ev?.ctrlKey) || (plain && wasSelectMode),
     });
     selectedIds = new Set(result.selected);
     anchorId = result.anchorId;
-    const plain = !ev?.shiftKey && !ev?.metaKey && !ev?.ctrlKey;
-    if (plain) {
+    if (selectedIds.size === 0) {
+      touchSelectMode = false;
+    }
+    if (plain && !wasSelectMode) {
       peeledId = eid;
       wheel.detach?.(eid);
     } else {
@@ -569,8 +583,31 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     return (bri / 255) * 100;
   };
 
-  const selectedMemberIds = () =>
-    members.filter((id) => selectedIds.has(id));
+  const accentRgb = (host) => {
+    const raw = getComputedStyle(host).getPropertyValue("--primary-color").trim();
+    if (raw.startsWith("#")) {
+      const hex = raw.slice(1);
+      const n =
+        hex.length === 3
+          ? hex
+              .split("")
+              .map((ch) => ch + ch)
+              .join("")
+          : hex;
+      if (n.length >= 6) {
+        return [
+          parseInt(n.slice(0, 2), 16),
+          parseInt(n.slice(2, 4), 16),
+          parseInt(n.slice(4, 6), 16),
+        ];
+      }
+    }
+    const match = raw.match(/(\d+),\s*(\d+),\s*(\d+)/);
+    if (match) {
+      return [Number(match[1]), Number(match[2]), Number(match[3])];
+    }
+    return [3, 169, 244];
+  };
 
   const paintSelectAll = () => {
     const selector = tiles.querySelector(
@@ -579,21 +616,22 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     if (!selector || !members.length) {
       return;
     }
-    const ids = selectedMemberIds();
+    const mode = inSelectMode();
+    const ids = mode ? selectedMemberIds() : members;
     let sum = 0;
     for (const id of ids) {
       sum += fillPercent(drafts[id] || {}, id);
     }
-    const count = ids.length;
+    const count = selectedMemberIds().length;
+    selector.classList.toggle("select-mode", mode);
     paintLightTile(selector, {
-      rgb: [64, 60, 58],
-      fillPct: count ? sum / count : 0,
-      selected: count > 1,
+      rgb: mode ? accentRgb(selector) : [64, 60, 58],
+      fillPct: ids.length ? sum / ids.length : 0,
+      selected: mode,
     });
-    const caption =
-      count > 1
-        ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
-        : panel._t("frontend.lights.select_all", "Select all");
+    const caption = mode
+      ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
+      : panel._t("frontend.lights.select_all", "Select all");
     const name = selector.querySelector(".simple-light-name");
     if (name) {
       name.textContent = caption;
@@ -664,8 +702,9 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         if (tile._lightTileSuppressTap) {
           return;
         }
-        if (selectAllTileAction(selectedMemberIds().length) === "clear") {
+        if (inSelectMode() && selectedMemberIds().length > 1) {
           selectedIds = new Set();
+          touchSelectMode = false;
           peeledId = null;
           anchorId = null;
         } else {
@@ -678,7 +717,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         paintTileSelection();
         syncLevelHost();
       };
-      tile.addEventListener("click", pickAll);
       tile.addEventListener("keydown", (ev) => {
         if (ev.key !== "Enter" && ev.key !== " ") {
           return;
@@ -701,7 +739,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
 
       const applyRelative = (deltaPct) => {
         let snapped = false;
-        for (const id of selectedMemberIds()) {
+        for (const id of scrubTargets()) {
           const draft = ensureDraft(id);
           if (isOnOffLight(id)) {
             const step = binaryDragPreview({
@@ -743,7 +781,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }
         }
         if (snapped && drag) {
-          for (const id of selectedMemberIds()) {
+          for (const id of scrubTargets()) {
             if (isOnOffLight(id)) {
               continue;
             }
@@ -776,7 +814,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }, 0);
         }
         if (wasVertical) {
-          for (const id of selectedMemberIds()) {
+          for (const id of scrubTargets()) {
             const sel = memberSelector(id);
             if (sel && drafts[id]) {
               paintSelector(sel, id, drafts[id]);
@@ -833,7 +871,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         }
         dragStarts.clear();
         binaryStarts.clear();
-        for (const id of selectedMemberIds()) {
+        for (const id of scrubTargets()) {
           const fill = fillPercent(ensureDraft(id), id);
           dragStarts.set(id, fill);
           if (isOnOffLight(id)) {
@@ -875,7 +913,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           wheelAxisTimer = window.setTimeout(() => {
             wheelAxis = null;
           }, 180);
-          const scrubIds = selectedMemberIds();
+          const scrubIds = scrubTargets();
           if (!scrubIds.length) {
             return;
           }
@@ -928,7 +966,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           wheelRevert = window.setTimeout(() => {
             wheelRevert = null;
             tile.classList.remove("wheel-adjusting");
-            for (const id of selectedMemberIds()) {
+            for (const id of scrubTargets()) {
               if (!isOnOffLight(id)) {
                 continue;
               }
@@ -937,7 +975,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
                 binaryStarts.delete(id);
               }
             }
-            for (const id of selectedMemberIds()) {
+            for (const id of scrubTargets()) {
               const sel = memberSelector(id);
               if (sel && drafts[id]) {
                 paintSelector(sel, id, drafts[id]);
@@ -1065,6 +1103,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         }
         const wasVertical = drag.axis === "y";
         const suppressTap = drag.suppressTap;
+        window.clearTimeout(drag.holdTimer);
         const revertPreview = wasVertical && onOffOnly && binaryPreview != null;
         drag = null;
         if (revertPreview) {
@@ -1089,6 +1128,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           if (Math.hypot(dx, dy) < 8) {
             return;
           }
+          window.clearTimeout(drag.holdTimer);
           if (Math.abs(dx) > Math.abs(dy)) {
             drag.axis = "x";
             drag.suppressTap = true;
@@ -1144,7 +1184,28 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           startFill: fillPercent(draft, eid),
           axis: null,
           suppressTap: false,
+          holdTimer: null,
         };
+        if (ev.pointerType === "touch") {
+          drag.holdTimer = window.setTimeout(() => {
+            if (!drag || drag.pointerId !== ev.pointerId) {
+              return;
+            }
+            touchSelectMode = true;
+            selectedIds = new Set([eid]);
+            anchorId = eid;
+            peeledId = eid;
+            drag.suppressTap = true;
+            tile._lightTileSuppressTap = true;
+            window.setTimeout(() => {
+              tile._lightTileSuppressTap = false;
+            }, 400);
+            wheel.detach?.(eid);
+            paintTileSelection();
+            wheel.sync();
+            syncLevelHost();
+          }, 480);
+        }
         document.addEventListener("pointermove", onDocMove);
         document.addEventListener("pointerup", endDrag);
         document.addEventListener("pointercancel", endDrag);
