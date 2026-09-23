@@ -412,6 +412,21 @@ export function lightTileOnTextCss(rgb) {
   return luma > 0.45 ? "rgba(0, 0, 0, 0.7)" : "#fff";
 }
 
+/** Shared drag delta, clamped. Each light keeps its own starting level. */
+export function relativeFillPercent(startPct, deltaPct) {
+  const start = Number(startPct);
+  const delta = Number(deltaPct);
+  if (!Number.isFinite(start) || !Number.isFinite(delta)) {
+    throw new Error("relative fill expects finite percents");
+  }
+  return Math.max(0, Math.min(100, start + delta));
+}
+
+/** More than one selected light: the select-all tile clears. Otherwise it selects every member. */
+export function selectAllTileAction(selectedCount) {
+  return selectedCount > 1 ? "clear" : "all";
+}
+
 /** Second line on a light tile. On/off lights say On or Off; the rest say a percent. */
 export function lightTileValueLabel(fillPct, { onOff = false, onText = "On", offText = "Off" } = {}) {
   if (onOff) {

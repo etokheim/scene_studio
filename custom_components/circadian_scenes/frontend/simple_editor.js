@@ -27,6 +27,8 @@ import {
   lightTileGroupOrder,
   lightTileValueLabel,
   paintLightTile,
+  relativeFillPercent,
+  selectAllTileAction,
   tileSelectionAfterClick,
   wheelDeltaToPercent,
 } from "./light_tiles.js";
@@ -371,9 +373,27 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       pinClusters = clusters || [];
       paintTileSelection();
     },
-    onSelect: (id) => {
-      selectedIds = new Set(id ? [id] : []);
-      peeledId = id || null;
+    onSelect: (id, mods) => {
+      if (id && (mods?.shiftKey || mods?.toggleKey)) {
+        const result = tileSelectionAfterClick({
+          ids: stripOrderIds.length ? stripOrderIds : members,
+          selected: [...selectedIds],
+          anchorId,
+          entityId: id,
+          shiftKey: Boolean(mods.shiftKey),
+          toggleKey: Boolean(mods.toggleKey),
+        });
+        selectedIds = new Set(result.selected);
+        anchorId = result.anchorId;
+        peeledId = null;
+        wheel.clearDetached?.();
+      } else {
+        selectedIds = new Set(id ? [id] : []);
+        peeledId = id || null;
+        if (id) {
+          anchorId = id;
+        }
+      }
       paintTileSelection();
       syncLevelHost();
       wheel.sync();
@@ -549,13 +569,42 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     return (bri / 255) * 100;
   };
 
+  const selectedMemberIds = () =>
+    members.filter((id) => selectedIds.has(id));
+
+  const paintSelectAll = () => {
+    const selector = tiles.querySelector(
+      '.simple-light-selector[data-entity-id="__select_all__"]'
+    );
+    if (!selector || !members.length) {
+      return;
+    }
+    const ids = selectedMemberIds();
+    let sum = 0;
+    for (const id of ids) {
+      sum += fillPercent(drafts[id] || {}, id);
+    }
+    const count = ids.length;
+    paintLightTile(selector, {
+      rgb: [64, 60, 58],
+      fillPct: count ? sum / count : 0,
+      selected: count > 1,
+    });
+    const caption =
+      count > 1
+        ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
+        : panel._t("frontend.lights.select_all", "Select all");
+    const name = selector.querySelector(".simple-light-name");
+    if (name) {
+      name.textContent = caption;
+    }
+    selector.setAttribute("aria-label", caption);
+  };
+
   const paintTileSelection = () => {
-    const allSelected =
-      members.length > 0 && members.every((id) => selectedIds.has(id));
     for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
       const eid = selector.dataset.entityId;
       if (eid === "__select_all__") {
-        selector.classList.toggle("active", allSelected);
         continue;
       }
       if (eid === "__add_light__" || selector.classList.contains("removed")) {
@@ -564,6 +613,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       }
       selector.classList.toggle("active", selectedIds.has(eid));
     }
+    paintSelectAll();
   };
 
   const onOffLabel = (draft) =>
@@ -583,24 +633,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     });
   };
 
-  const paintSelectAll = () => {
-    const selector = tiles.querySelector(
-      '.simple-light-selector[data-entity-id="__select_all__"]'
-    );
-    if (!selector || !members.length) {
-      return;
-    }
-    let sum = 0;
-    for (const id of members) {
-      sum += fillPercent(drafts[id] || {}, id);
-    }
-    paintLightTile(selector, {
-      rgb: [64, 60, 58],
-      fillPct: sum / members.length,
-      selected: members.every((id) => selectedIds.has(id)),
-    });
-  };
-
   const ensureDraft = (eid) => {
     if (drafts[eid]) {
       return drafts[eid];
@@ -616,8 +648,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const keepLeft = scroller?.scrollLeft ?? 0;
     const beforeLayout = captureLightStripLayout(tiles);
     tiles.replaceChildren();
-    const allSelected =
-      members.length > 0 && members.every((id) => selectedIds.has(id));
     if (members.length > 1) {
       const { selector, tile, hit } = createLightTile({
         entityId: "__select_all__",
@@ -629,30 +659,24 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         },
       });
       selector.classList.add("select-all-tile");
-      let averageFill = 0;
-      if (members.length) {
-        let sum = 0;
-        for (const id of members) {
-          sum += fillPercent(ensureDraft(id), id);
-        }
-        averageFill = sum / members.length;
-      }
-      paintLightTile(selector, {
-        rgb: [64, 60, 58],
-        fillPct: averageFill,
-        selected: allSelected,
-      });
       const pickAll = (ev) => {
         ev.stopPropagation();
         if (tile._lightTileSuppressTap) {
           return;
         }
-        selectedIds = new Set(members);
-        peeledId = null;
-        anchorId = stripOrderIds[0] || members[0] || null;
+        if (selectAllTileAction(selectedMemberIds().length) === "clear") {
+          selectedIds = new Set();
+          peeledId = null;
+          anchorId = null;
+        } else {
+          selectedIds = new Set(members);
+          peeledId = null;
+          anchorId = stripOrderIds[0] || members[0] || null;
+        }
         wheel.clearDetached?.();
         wheel.sync();
-        syncTiles();
+        paintTileSelection();
+        syncLevelHost();
       };
       tile.addEventListener("click", pickAll);
       tile.addEventListener("keydown", (ev) => {
@@ -667,6 +691,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       let wheelAxis = null;
       let wheelAxisTimer = null;
       let wheelRevert = null;
+      const dragStarts = new Map();
       const binaryStarts = new Map();
 
       const memberSelector = (id) =>
@@ -674,33 +699,21 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           `.simple-light-selector[data-entity-id="${CSS.escape(id)}"]`
         );
 
-      const paintFinger = (pct) => {
-        paintLightTile(selector, {
-          rgb: [64, 60, 58],
-          fillPct: pct,
-          selected: members.every((id) => selectedIds.has(id)),
-        });
-      };
-
-      const applyAll = (pct, { binaryDelta = null } = {}) => {
-        const next = Math.max(0, Math.min(255, Math.round((pct / 100) * 255)));
-        for (const id of members) {
+      const applyRelative = (deltaPct) => {
+        let snapped = false;
+        for (const id of selectedMemberIds()) {
           const draft = ensureDraft(id);
           if (isOnOffLight(id)) {
-            if (binaryDelta == null) {
-              continue;
-            }
             const step = binaryDragPreview({
               startFill: binaryStarts.get(id) ?? fillPercent(draft, id),
-              deltaPct: binaryDelta,
+              deltaPct,
             });
             if (step.snapOn || step.snapOff) {
               draft.state = step.snapOn ? "on" : "off";
               persistLight(id);
               binaryStarts.set(id, step.snapOn ? 100 : 0);
-              if (drag) {
-                drag.startY = drag.lastY;
-              }
+              dragStarts.set(id, step.snapOn ? 100 : 0);
+              snapped = true;
               playLightTileJelly(memberSelector(id)?.querySelector(".simple-light-tile"));
               paintSelector(memberSelector(id), id, draft);
             } else {
@@ -716,15 +729,29 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
             }
             continue;
           }
-          draft.brightness = next;
-          draft.state = next > 0 ? "on" : "off";
+          const start = dragStarts.get(id);
+          if (start == null) {
+            continue;
+          }
+          const pct = relativeFillPercent(start, deltaPct);
+          draft.brightness = Math.round((pct / 100) * 255);
+          draft.state = draft.brightness > 0 ? "on" : "off";
           persistLight(id);
           const sel = memberSelector(id);
           if (sel) {
             paintSelector(sel, id, draft);
           }
         }
-        paintFinger(pct);
+        if (snapped && drag) {
+          for (const id of selectedMemberIds()) {
+            if (isOnOffLight(id)) {
+              continue;
+            }
+            dragStarts.set(id, fillPercent(ensureDraft(id), id));
+          }
+          drag.startY = drag.lastY;
+        }
+        paintSelectAll();
       };
 
       const endDrag = (ev) => {
@@ -749,7 +776,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }, 0);
         }
         if (wasVertical) {
-          for (const id of members) {
+          for (const id of selectedMemberIds()) {
             const sel = memberSelector(id);
             if (sel && drafts[id]) {
               paintSelector(sel, id, drafts[id]);
@@ -795,20 +822,22 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         }
         ev.preventDefault();
         const rect = tile.getBoundingClientRect();
-        const fromBottom = rect.bottom - ev.clientY;
-        const pct = Math.max(0, Math.min(100, (fromBottom / rect.height) * 100));
-        const deltaPct = -((ev.clientY - drag.startY) / Math.max(1, rect.height)) * 100;
-        applyAll(pct, { binaryDelta: deltaPct });
+        const deltaPct =
+          -((ev.clientY - drag.startY) / Math.max(1, rect.height)) * 100;
+        applyRelative(deltaPct);
       };
 
       hit.addEventListener("pointerdown", (ev) => {
         if (ev.button && ev.button !== 0) {
           return;
         }
+        dragStarts.clear();
         binaryStarts.clear();
-        for (const id of members) {
+        for (const id of selectedMemberIds()) {
+          const fill = fillPercent(ensureDraft(id), id);
+          dragStarts.set(id, fill);
           if (isOnOffLight(id)) {
-            binaryStarts.set(id, fillPercent(ensureDraft(id), id));
+            binaryStarts.set(id, fill);
           }
         }
         drag = {
@@ -846,11 +875,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           wheelAxisTimer = window.setTimeout(() => {
             wheelAxis = null;
           }, 180);
+          const scrubIds = selectedMemberIds();
+          if (!scrubIds.length) {
+            return;
+          }
           ev.preventDefault();
           tile.classList.add("wheel-adjusting");
           const dimStep =
             (-Math.sign(ev.deltaY) * TILE_BRIGHTNESS_WHEEL_STEP / 255) * 100;
-          for (const id of members) {
+          for (const id of scrubIds) {
             const draft = ensureDraft(id);
             const sel = memberSelector(id);
             if (isOnOffLight(id)) {
@@ -881,10 +914,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
                 }
               }
             } else {
-              const pct = Math.max(
-                0,
-                Math.min(100, fillPercent(draft, id) + dimStep)
-              );
+              const pct = relativeFillPercent(fillPercent(draft, id), dimStep);
               draft.brightness = Math.round((pct / 100) * 255);
               draft.state = draft.brightness > 0 ? "on" : "off";
               persistLight(id);
@@ -898,7 +928,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           wheelRevert = window.setTimeout(() => {
             wheelRevert = null;
             tile.classList.remove("wheel-adjusting");
-            for (const id of members) {
+            for (const id of selectedMemberIds()) {
               if (!isOnOffLight(id)) {
                 continue;
               }
@@ -907,7 +937,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
                 binaryStarts.delete(id);
               }
             }
-            for (const id of members) {
+            for (const id of selectedMemberIds()) {
               const sel = memberSelector(id);
               if (sel && drafts[id]) {
                 paintSelector(sel, id, drafts[id]);
@@ -919,6 +949,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         { passive: false }
       );
       tiles.appendChild(selector);
+      paintSelectAll();
     }
     const ordered = [...members].sort((a, b) => {
       const rank = (id) => {

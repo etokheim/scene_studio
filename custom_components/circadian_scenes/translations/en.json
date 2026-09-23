@@ -236,6 +236,7 @@
       "override_color": "Color",
       "solar_events": "Solar events",
       "select_all": "Select all",
+      "n_selected": "{count} selected",
       "settings_named": "Settings for {name}",
       "group_color": "Color",
       "group_temp": "Temperature",

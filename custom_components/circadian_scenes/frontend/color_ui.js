@@ -2305,8 +2305,9 @@ function createSceneColorWheel({
   /** Pins pulled out of a stack so each can be grabbed on its own. */
   const detached = new Set();
   let drag = null;
-  /** Dot under the pointer. Not a selection — leaving it restores the selected pin. */
+  /** Dot under the pointer. Not a selection — leaving it closes only this pin. */
   let hoverId = null;
+  let modifyPress = null;
   let hoverCursor = null;
   let suppressHover = false;
   let hoverCheckQueued = false;
@@ -3041,6 +3042,38 @@ function createSceneColorWheel({
           ev.stopPropagation();
           ev.preventDefault();
           hoverId = null;
+          if (ev.shiftKey || ev.metaKey || ev.ctrlKey) {
+            const startX = ev.clientX;
+            const startY = ev.clientY;
+            const pointerId = ev.pointerId;
+            const shiftKey = ev.shiftKey;
+            const toggleKey = Boolean(ev.metaKey || ev.ctrlKey);
+            const sceneId = scene.id;
+            const onUp = (up) => {
+              if (up.pointerId !== pointerId) {
+                return;
+              }
+              window.removeEventListener("pointerup", onUp);
+              window.removeEventListener("pointercancel", onUp);
+              if (modifyPress?.onUp === onUp) {
+                modifyPress = null;
+              }
+              const travel = Math.hypot(up.clientX - startX, up.clientY - startY);
+              if (travel >= PIN_DRAG_THRESHOLD_PX) {
+                sync();
+                return;
+              }
+              onSelect?.(sceneId, { shiftKey, toggleKey });
+            };
+            if (modifyPress) {
+              window.removeEventListener("pointerup", modifyPress.onUp);
+              window.removeEventListener("pointercancel", modifyPress.onUp);
+            }
+            modifyPress = { onUp };
+            window.addEventListener("pointerup", onUp);
+            window.addEventListener("pointercancel", onUp);
+            return;
+          }
           const now = getState();
           const item = now.scenes.find((row) => row.id === scene.id);
           if (!item) {
@@ -3069,7 +3102,7 @@ function createSceneColorWheel({
       }
       const active = selectedIds.includes(scene.id);
       const preview = hoverId === scene.id && !active;
-      const expanded = preview || (active && !hoverId);
+      const expanded = preview || active;
       const caps = capsOf(scene);
       if (!caps.hasColor && !caps.hasTemp) {
         marker.g.style.display = "none";
@@ -3159,19 +3192,7 @@ function createSceneColorWheel({
           }
         }
         const leadMarker = markers.get(lead);
-        if (leadMarker && group.length > 1 && hoverId && selectedIds.includes(lead)) {
-          leadMarker.g.classList.remove("active", "grouped", "preview");
-          leadMarker.path.setAttribute("d", HUE_DOT_PATH);
-          leadMarker.icon.textContent = "";
-          if (leadMarker.fo) {
-            leadMarker.fo.style.display = "none";
-          }
-          leadMarker.hit.setAttribute("cx", "6");
-          leadMarker.hit.setAttribute("cy", "6");
-          leadMarker.hit.setAttribute("r", "12");
-          leadMarker.hit.style.display = "";
-          placeMarker(leadMarker, leadMarker.x, leadMarker.y, false);
-        } else if (leadMarker && group.length > 1) {
+        if (leadMarker && group.length > 1) {
           leadMarker.icon.textContent = String(group.length);
           if (leadMarker.fo) {
             leadMarker.fo.style.display = "none";
@@ -3213,7 +3234,7 @@ function createSceneColorWheel({
         const count = fan.ids.length;
         const ang = (index / count) * Math.PI * 2 - Math.PI / 2;
         const dist = count > 1 ? 56 : 48;
-        const fanExpanded = id === hoverId || (selectedIds.includes(id) && !hoverId);
+        const fanExpanded = id === hoverId || selectedIds.includes(id);
         placeMarker(
           marker,
           fan.x + Math.cos(ang) * dist,
@@ -3728,6 +3749,11 @@ function createSceneColorWheel({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
       drag = null;
+    }
+    if (modifyPress) {
+      window.removeEventListener("pointerup", modifyPress.onUp);
+      window.removeEventListener("pointercancel", modifyPress.onUp);
+      modifyPress = null;
     }
     if (glow.parentElement !== canvasWrap) {
       canvasWrap.insertBefore(glow, canvasWrap.firstChild);

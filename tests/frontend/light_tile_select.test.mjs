@@ -6,6 +6,8 @@ import {
   binaryWheelPreview,
   lightTileColorGroup,
   lightTileGroupOrder,
+  relativeFillPercent,
+  selectAllTileAction,
   tileSelectionAfterClick,
 } from "../../custom_components/circadian_scenes/frontend/light_tiles.js";
 
@@ -155,6 +157,16 @@ test("cmd/ctrl click can clear the last selected id", () => {
   });
   assert.deepEqual(next.selected, []);
   assert.equal(next.anchorId, "b");
+});
+
+test("select all keeps each light's brightness offset", () => {
+  assert.equal(relativeFillPercent(20, 30), 50);
+  assert.equal(relativeFillPercent(80, 30), 100);
+  assert.equal(relativeFillPercent(20, 30) === relativeFillPercent(80, 30), false);
+  assert.equal(relativeFillPercent(10, -40), 0);
+  assert.equal(selectAllTileAction(0), "all");
+  assert.equal(selectAllTileAction(1), "all");
+  assert.equal(selectAllTileAction(2), "clear");
 });
 
 test("on/off drag resists and snaps across halfway", () => {

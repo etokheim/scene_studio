@@ -871,7 +871,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Kelvin side, group chrome, and tile brightness
 
 - **Date:** 2026-09-22
-- **Decision:** Dropping a temperature pin on the left of the kelvin ring leaves it on the left. That side is remembered only on the live wheel; a refresh places every temperature pin on the right again, and the side is not written into the draft. Color and temperature groups use the same surface, shadow, and padding as the mode pill. Select all scrubs every member’s brightness with the same drag and wheel as a single tile; on/off members resist and snap at halfway (huemane: resistance 0.56, jelly). A light that cannot do color or kelvin is grouped as brightness even when its stored draft is still `color_temp`. Every light tile, including Select all, shows its brightness percent on a second line.
+- **Superseded in part:** 2026-09-23 — Select all no longer writes one brightness onto every member. See “Select all is relative”.
+- **Decision:** Dropping a temperature pin on the left of the kelvin ring leaves it on the left. That side is remembered only on the live wheel; a refresh places every temperature pin on the right again, and the side is not written into the draft. Color and temperature groups use the same surface, shadow, and padding as the mode pill. On/off members resist and snap at halfway (huemane: resistance 0.56, jelly). A light that cannot do color or kelvin is grouped as brightness even when its stored draft is still `color_temp`. Every light tile, including Select all, shows its brightness percent on a second line.
 - **Why:** The centerline math always used the positive x, so a left drop jumped right. Persisting the side would make refresh disagree with the default distribution. Soverom garderobe is brightness-only hardware with a stale kelvin draft, so capability has to win over the stored mode.
 - **Do not reverse without user ask.**
 
@@ -896,10 +897,18 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** The horizontal row spent the leftover width beside a landscape disk. The side column is wide enough for the names.
 - **Do not reverse without user ask.**
 
+## Select all is relative
+
+- **Date:** 2026-09-23
+- **Decision:** Dragging or scrolling the Select all tile adds the same brightness delta to each selected light, clamped at 0% and 100%. Lights that were not selected stay put. The tile’s fill is the average of that selection, and when more than one light is selected its label is the count. A tap then clears the selection. With one or none selected, a tap still selects every member.
+- **Why:** Writing the finger position onto every draft made a dim lamp jump to match a bright one. The count is how you see which lights the gesture will move.
+- **Do not reverse without user ask.**
+
 ## Dot hover and group-label icon
 
 - **Date:** 2026-09-22
-- **Decision:** Hovering a disk dot opens that pin and closes the selected pin for as long as the pointer stays on the dot. Moving away restores the selected pin. The hover does not change the selection. A press still selects that light.
+- **Superseded in part:** 2026-09-23 — hovering a dot no longer closes the selected pins. A plain click still replaces the selection.
+- **Decision:** Hovering a disk dot opens that pin and leaves the selected pins open. Moving away closes only the hover pin. The hover does not change the selection. A plain press selects that light and closes the others. Cmd/Ctrl toggles a disk dot, and Shift selects the strip range, same as the light tiles.
 - **Why:** The icon was a prefix. Opening the hovered pin moved its hit target off the cursor, so the pin has a tip hit that stays under the pointer.
 - **Do not reverse without user ask.**
 
