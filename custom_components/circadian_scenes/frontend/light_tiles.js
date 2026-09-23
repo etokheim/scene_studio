@@ -210,106 +210,113 @@ export const LIGHT_TILES_CSS = `
     bottom: 2px;
     pointer-events: none;
   }
+  /* 36px lip, 6px gap, then the rest of the button continues under the tile
+     until it meets the buttons on the other side. The lip is the only part
+     that paints outside the tile; icons stay centered in that lip. */
   .light-tile-actions-top,
   .light-tile-actions-bottom {
+    --light-action-lip: 36px;
+    --light-action-gap: 6px;
+    --light-action-outset: calc(var(--light-action-lip) + var(--light-action-gap));
     position: absolute;
     left: 0;
     right: 0;
     display: flex;
-    height: 36px;
+    height: calc(var(--light-action-outset) + 50%);
     overflow: hidden;
     pointer-events: none;
     opacity: 1;
-    background-color: var(
-      --glass-fill,
-      var(--surface-1, var(--gray000, var(--card-background-color)))
+    background-color: transparent;
+    background-image: linear-gradient(
+      var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color)))),
+      var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color))))
     );
-    box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
-    transition: transform 280ms cubic-bezier(0.2, 0, 0, 1);
+    background-repeat: no-repeat;
+    background-size: 100% var(--light-action-lip);
+    transition-property: transform, pointer-events;
+    transition-duration: 280ms, 0s;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1), linear;
     transition-delay: 0s;
+    transition-behavior: allow-discrete;
   }
   /* Flat edge toward the tile. Hidden plates sit inside it; open plates clear it. */
   .light-tile-actions-top {
-    top: 0;
+    top: calc(var(--light-action-outset) * -1);
     border-radius: 18px 18px 0 0;
-    transform: translateY(100%);
+    background-position: top;
+    box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
+    transform: translateY(var(--light-action-outset));
   }
   .light-tile-actions-bottom {
-    bottom: 0;
+    bottom: calc(var(--light-action-outset) * -1);
     border-radius: 0 0 18px 18px;
-    transform: translateY(-100%);
+    background-position: bottom;
+    transform: translateY(calc(var(--light-action-outset) * -1));
   }
-  .simple-light-selector:hover .light-tile-actions-top {
-    transform: translateY(calc(-100% - 6px));
-    pointer-events: auto;
-    transition-delay: 200ms;
+  /* The lip used to be the whole plate, so its inner edge carried the highlight.
+     The plate is taller now; keep that line on the lip, not at the tile center. */
+  .light-tile-actions-bottom::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: var(--light-action-lip);
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    pointer-events: none;
   }
+  .simple-light-selector:hover .light-tile-actions-top,
   .simple-light-selector:hover .light-tile-actions-bottom {
-    transform: translateY(calc(100% + 6px));
+    transform: translateY(0);
     pointer-events: auto;
-    transition-delay: 200ms;
+    transition-delay: 500ms;
   }
   .simple-light-selector:focus-visible .light-tile-actions-top,
-  .simple-light-selector:has(:focus-visible) .light-tile-actions-top {
-    transform: translateY(calc(-100% - 6px));
-    pointer-events: auto;
-    transition-delay: 0s;
-  }
+  .simple-light-selector:has(:focus-visible) .light-tile-actions-top,
   .simple-light-selector:focus-visible .light-tile-actions-bottom,
-  .simple-light-selector:has(:focus-visible) .light-tile-actions-bottom {
-    transform: translateY(calc(100% + 6px));
-    pointer-events: auto;
-    transition-delay: 0s;
-  }
-  .simple-light-selector.active .light-tile-actions-top {
-    transform: translateY(calc(-100% - 6px));
-    pointer-events: auto;
-    transition-delay: 0s;
-  }
+  .simple-light-selector:has(:focus-visible) .light-tile-actions-bottom,
+  .simple-light-selector.active .light-tile-actions-top,
   .simple-light-selector.active .light-tile-actions-bottom {
-    transform: translateY(calc(100% + 6px));
+    transform: translateY(0);
     pointer-events: auto;
     transition-delay: 0s;
   }
   .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
-    .light-tile-actions-top,
-  .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
-    .light-tile-actions-bottom {
-    transform: translateY(100%);
+    .light-tile-actions-top {
+    transform: translateY(var(--light-action-outset));
     pointer-events: none;
     transition-delay: 0s;
   }
   .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
     .light-tile-actions-bottom {
-    transform: translateY(-100%);
+    transform: translateY(calc(var(--light-action-outset) * -1));
+    pointer-events: none;
+    transition-delay: 0s;
   }
-  .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-top {
-    transform: translateY(calc(-100% - 6px));
-    pointer-events: auto;
-    transition-delay: 200ms;
-  }
+  .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-top,
   .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-bottom {
-    transform: translateY(calc(100% + 6px));
+    transform: translateY(0);
     pointer-events: auto;
-    transition-delay: 200ms;
+    transition-delay: 500ms;
   }
-  /* One menu at a time. Hovering a light tucks every other tile's plates,
-     including a selected one, until the pointer leaves. */
+  /* One menu at a time. The selected plates stay out until the hovered light's
+     plates actually start opening (the same 500ms), then they tuck together. */
   .light-tiles:has(.simple-light-selector:not(.select-all-tile):not(.add-light-tile):not(.removed):hover)
     .simple-light-selector:not(:hover)
     .light-tile-actions-top {
-    transform: translateY(100%);
+    transform: translateY(var(--light-action-outset));
     pointer-events: none;
-    transition-delay: 0s;
+    transition-delay: 500ms;
   }
   .light-tiles:has(.simple-light-selector:not(.select-all-tile):not(.add-light-tile):not(.removed):hover)
     .simple-light-selector:not(:hover)
     .light-tile-actions-bottom {
-    transform: translateY(-100%);
+    transform: translateY(calc(var(--light-action-outset) * -1));
     pointer-events: none;
-    transition-delay: 0s;
+    transition-delay: 500ms;
   }
   .light-action {
+    position: relative;
     flex: 1 1 0;
     min-width: 0;
     height: 100%;
@@ -326,6 +333,38 @@ export const LIGHT_TILES_CSS = `
       background-color 140ms ease,
       transform 140ms ease;
   }
+  /* Hover and press cover the lip and the part hidden under the tile.
+     The 6px gap stays clear so the lip still reads as separate from the tile. */
+  .light-tile-actions-top .light-action:hover,
+  .light-tile-actions-top .light-action:active {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 0 var(--light-action-lip),
+      transparent var(--light-action-lip) var(--light-action-outset),
+      #000 var(--light-action-outset)
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      #000 0 var(--light-action-lip),
+      transparent var(--light-action-lip) var(--light-action-outset),
+      #000 var(--light-action-outset)
+    );
+  }
+  .light-tile-actions-bottom .light-action:hover,
+  .light-tile-actions-bottom .light-action:active {
+    -webkit-mask-image: linear-gradient(
+      to top,
+      #000 0 var(--light-action-lip),
+      transparent var(--light-action-lip) var(--light-action-outset),
+      #000 var(--light-action-outset)
+    );
+    mask-image: linear-gradient(
+      to top,
+      #000 0 var(--light-action-lip),
+      transparent var(--light-action-lip) var(--light-action-outset),
+      #000 var(--light-action-outset)
+    );
+  }
   .light-action:hover {
     background-color: color-mix(
       in srgb,
@@ -341,12 +380,30 @@ export const LIGHT_TILES_CSS = `
       transparent
     );
   }
-  .light-tile-actions-top .light-action + .light-action {
-    box-shadow: inset 1px 0 0
-      color-mix(in srgb, var(--divider-color, #9e9e9e) 45%, transparent);
+  .light-tile-actions-top .light-action {
+    align-items: flex-start;
+    padding-top: calc((var(--light-action-lip) - 22px) / 2);
+    transform-origin: center calc(var(--light-action-lip) / 2);
+  }
+  .light-tile-actions-bottom .light-action {
+    align-items: flex-end;
+    padding-bottom: calc((var(--light-action-lip) - 22px) / 2);
+    transform-origin: center calc(100% - var(--light-action-lip) / 2);
+  }
+  .light-tile-actions-top .light-action + .light-action::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: var(--light-action-lip);
+    background: color-mix(in srgb, var(--divider-color, #9e9e9e) 45%, transparent);
+    pointer-events: none;
   }
   .light-action ha-icon {
     --mdc-icon-size: 22px;
+    width: 22px;
+    height: 22px;
     pointer-events: none;
   }
   .light-action.is-off {
@@ -414,10 +471,20 @@ export const LIGHT_TILES_CSS = `
     box-shadow:
       var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08)),
       0px 2px 3px rgba(0, 0, 0, 0.4);
-    background: color-mix(
-      in srgb,
-      var(--hue-unfilled-color) var(--hue-unfilled-opacity),
-      transparent
+    /* Opaque surface under the wash, so a plate sliding out is not visible
+       through the tile while the unfilled color is translucent. */
+    background-color: var(--surface-1, var(--gray000, var(--card-background-color)));
+    background-image: linear-gradient(
+      color-mix(
+        in srgb,
+        var(--hue-unfilled-color) var(--hue-unfilled-opacity),
+        transparent
+      ),
+      color-mix(
+        in srgb,
+        var(--hue-unfilled-color) var(--hue-unfilled-opacity),
+        transparent
+      )
     );
     color: inherit;
     transition: all 0.3s ease-out 0s, transform 0.15s;

@@ -945,8 +945,9 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-23
 - **Superseded in part:** 2026-09-23 — a mouse click that only focuses a tile does not open its plates. Keyboard focus does. While the pointer is over one light, every other tile’s plates stay tucked, including the selected one. The plates paint above the hint under the strip.
-- **Decision:** Open action plates sit fully outside the tile, with a 6px gap and a square edge toward it. They are 36px tall and scale with the tile frame on hover and when the tile is selected. Each button highlights on hover and shrinks on press. Only one light’s plates are open at a time.
-- **Why:** The tucked tongue covered the icons, and a focused selected tile kept a second menu open under the pointer.
+- **Superseded in part:** 2026-09-23 — each button continues under the tile until it meets the buttons on the other side, so hover and press cover that whole area. The tile face has an opaque surface behind its color wash. Hover waits 500ms, and a selected menu stays open until the hovered menu starts to open.
+- **Decision:** Open action plates sit fully outside the tile, with a 6px gap and a square edge toward it. The visible lip is 36px and scales with the tile frame on hover and when the tile is selected. Icons stay in that lip. Each button’s hover and press continue under the tile, leaving the gap clear, until they meet the buttons on the other side. The tile’s color wash sits on an opaque surface, so the plates do not show through it while they slide. Hover waits 500ms before a menu opens. A selected menu stays out during that wait, then tucks as the other one starts to open. Only one light’s plates are open at a time.
+- **Why:** The tucked tongue covered the icons, and a focused selected tile kept a second menu open under the pointer. A highlight that stopped at the lip looked cut off, and the translucent tile showed the plates sliding underneath. Hiding the selected menu at the start of the hover made it disappear before the other one existed.
 - **Do not reverse without user ask.**
 
 ## Group headers and a second tap
