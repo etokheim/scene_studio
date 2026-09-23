@@ -230,6 +230,11 @@ export const LANDING_CSS = `
   .scene-card .card-overflow-slot ha-icon-button {
     color: #fff;
   }
+  :host(:not([data-dark-mode])) .scene-card.selected {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 16px 42px rgba(0, 0, 0, 0.16);
+  }
   .scene-card.selected::after {
     content: "";
     position: absolute;
@@ -255,6 +260,16 @@ export const LANDING_CSS = `
     left: 0;
     right: 0;
     pointer-events: none;
+  }
+  .scene-card .card-icon {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    --mdc-icon-size: 28px;
+    color: #fff;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
   }
   .scene-card .card-body {
     position: relative;
@@ -650,6 +665,14 @@ function makeSceneCardBg(scene) {
   return bg;
 }
 
+function sceneCardIcon(scene) {
+  const icon = scene.icon || scene.form?.icon;
+  if (icon) {
+    return icon;
+  }
+  return scene.kind === "simple" ? "mdi:palette" : "mdi:auto-fix";
+}
+
 function renderSceneCard(panel, scene) {
   const slot = document.createElement("div");
   slot.className = "scene-card-slot";
@@ -676,6 +699,9 @@ function renderSceneCard(panel, scene) {
       ? panel._t("frontend.kinds.simple", "Scene")
       : panel._t("frontend.kinds.circadian", "Circadian scene");
   body.append(name, sub);
+  const icon = document.createElement("ha-icon");
+  icon.className = "card-icon";
+  icon.setAttribute("icon", sceneCardIcon(scene));
   const overflowSlot = document.createElement("div");
   overflowSlot.className = "card-overflow-slot";
   if (panel._nameIsPlaceholder?.(scene.scene_name)) {
@@ -693,7 +719,7 @@ function renderSceneCard(panel, scene) {
   const overflow = panel._listSceneOverflowMenu(scene);
   overflow.classList.add("card-overflow");
   overflowSlot.appendChild(overflow);
-  cardEl.append(bg, body, overflowSlot);
+  cardEl.append(bg, icon, body, overflowSlot);
   const glowArt = makeSceneCardBg(scene);
   glowArt.classList.add("card-glow");
   let glow = glowArt;

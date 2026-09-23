@@ -59,7 +59,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
+import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -2363,6 +2363,10 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .hue-wheel-layer.is-back {
           z-index: 1;
+        }
+        :host(:not([data-dark-mode])) .hue-wheel-canvas.is-stacked .hue-wheel-layer.is-back,
+        :host(:not([data-dark-mode])) .hue-wheel-canvas:not(.is-stacked) .hue-wheel-layer.is-front {
+          filter: drop-shadow(0 18px 42px rgba(0, 0, 0, 0.18));
         }
         .hue-wheel-layer.is-drag-unavailable {
           opacity: 0.18;
@@ -17176,21 +17180,25 @@ class CircadianScenesPanel extends HTMLElement {
       this.shadowRoot?.removeEventListener("click", this._clockOutsideClick);
     }
     this._clockOutsideClick = (ev) => {
-      if (!this._sidebarLightId) {
-        return;
-      }
       const t = ev.target;
       if (!(t instanceof Element)) {
         return;
       }
       if (
         t.closest(
-          ".scene-sidebar, .sun-light-clock-rings, .simple-light-selector, .clock-event, .sun-event"
+          ".scene-sidebar, .sun-light-clock-rings, .simple-light-selector, .light-mode-label, .clock-event, .sun-event, .hue-wheel-stage, .simple-level-host, .var-palette, .hue-presets, ha-dialog, ha-dropdown"
         )
       ) {
         return;
       }
-      this._requestCloseSceneSidebar();
+      if (this._sidebarLightId) {
+        this._requestCloseSceneSidebar();
+        return;
+      }
+      if (this._legendSelectedIds?.size) {
+        this._legendSelectedIds = new Set();
+        this._syncClockLightSelection();
+      }
     };
     this.shadowRoot.addEventListener("click", this._clockOutsideClick);
     // Soft bloom clones behind the interactive rings — same conic colors as the
@@ -17741,33 +17749,32 @@ class CircadianScenesPanel extends HTMLElement {
     playLightStripLayout(tilesEl, beforeLayout);
   }
 
-  _lightMembershipButton(light, { removed }) {
-    const label = removed
-      ? this._t("frontend.lights.add_named_to_scene", "Add {name} to the scene", {
-          name: light.name,
-        })
-      : this._t(
-          "frontend.lights.remove_named_from_scene",
-          "Remove {name} from the scene",
-          { name: light.name }
-        );
-    const btn = document.createElement("button");
-    btn.className = removed ? "light-add" : "light-corner-btn light-remove";
-    btn.type = "button";
-    btn.setAttribute("aria-label", label);
-    btn.tabIndex = -1;
-    const icon = document.createElement("ha-icon");
-    icon.setAttribute("icon", removed ? "mdi:plus" : "mdi:close");
-    btn.appendChild(icon);
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      if (removed) {
-        void this._addLightToAssignedScenes(light.entity_id);
-      } else {
-        this._removeLightFromAssignedScenes(light.entity_id);
-      }
+  _toggleLegendLightPower(entityId) {
+    const events = this._sunPath?.events || [];
+    const assigned = events.filter((item) => this._eventSceneId(item.id));
+    const pinned = assigned.find((item) => item.id === this._sidebarEventId);
+    const now =
+      this._clockSunDisplayedSeconds ??
+      this._clockStickySeconds ??
+      this._clockSunIdleSeconds();
+    const event = pinned || this._closestEvent(assigned, now);
+    if (!event) {
+      return;
+    }
+    const current = this._dialEventBrightness(event.id, entityId);
+    const key = `${entityId}:${event.id}`;
+    if (!this._legendPowerLevel) {
+      this._legendPowerLevel = new Map();
+    }
+    const next =
+      current > 0 ? 0 : this._legendPowerLevel.get(key) || 255;
+    if (current > 0) {
+      this._legendPowerLevel.set(key, current);
+    }
+    this._writeDialEventBrightness(event.id, next, {
+      history: true,
+      lightId: entityId,
     });
-    return btn;
   }
 
   _clockLegendRow(light, events) {
@@ -17900,12 +17907,21 @@ class CircadianScenesPanel extends HTMLElement {
         });
       }
       if (!removed) {
-        selector.appendChild(this._lightMembershipButton(light, { removed: false }));
-        attachLightSettings(selector, {
-          label: this._t("frontend.lights.settings_named", "Settings for {name}", {
-            name: light.name,
-          }),
-          onOpen: () => this._showEntityMoreInfo(light.entity_id, "settings"),
+        attachLightActions(selector, {
+          removeLabel: this._t(
+            "frontend.lights.remove_named_from_scene",
+            "Remove {name} from the scene",
+            { name: light.name }
+          ),
+          onRemove: () => this._removeLightFromAssignedScenes(light.entity_id),
+          settingsLabel: this._t(
+            "frontend.lights.settings_named",
+            "Settings for {name}",
+            { name: light.name }
+          ),
+          onSettings: () => this._showEntityMoreInfo(light.entity_id, "settings"),
+          powerLabel: this._t("frontend.lights.toggle_power", "Toggle"),
+          onPower: () => this._toggleLegendLightPower(light.entity_id),
         });
       }
     }

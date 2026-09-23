@@ -8,8 +8,10 @@ export const LIGHT_TILES_CSS = `
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    /* Top/side pad so the hover-only remove control can sit on the tile corner. */
-    padding: 24px 24px 0;
+    /* Room for the action plates that slide out above and below a tile.
+       overflow-y is forced to auto by overflow-x, so the plates must fit
+       inside this padding instead of painting outside the scroller. */
+    padding: 56px 24px 56px;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -41,8 +43,8 @@ export const LIGHT_TILES_CSS = `
     content: "";
     position: absolute;
     z-index: -1;
-    top: -20px;
-    bottom: -12px;
+    top: -56px;
+    bottom: -56px;
     left: -24px;
     right: -12px;
     background: var(--primary-background-color, #111);
@@ -81,6 +83,11 @@ export const LIGHT_TILES_CSS = `
     background-clip: padding-box, border-box;
     box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
     color: var(--on-surface, var(--gray800, var(--primary-text-color)));
+  }
+  :host(:not([data-dark-mode])) .light-mode-group {
+    box-shadow:
+      var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08)),
+      0 16px 42px rgba(0, 0, 0, 0.12);
   }
   .light-mode-label {
     position: relative;
@@ -156,55 +163,83 @@ export const LIGHT_TILES_CSS = `
     position: relative;
     overflow: visible;
   }
-  /* Native button: ha-icon-button keeps a 48px MDC hit even when the host is smaller. */
-  .simple-light-selector .light-corner-btn {
+  /* Action plates sit behind the tile and share the group fill. They slide
+     out on hover, and stay out while the tile is selected (touch has no hover). */
+  .simple-light-selector:not(.select-all-tile):hover,
+  .simple-light-selector:not(.select-all-tile).active,
+  .simple-light-selector:not(.select-all-tile):focus-within {
+    z-index: 4;
+  }
+  .light-tile-actions {
     position: absolute;
-    top: 2px;
-    right: 2px;
-    z-index: 6;
-    display: none;
-    box-sizing: border-box;
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-    min-height: 40px;
-    padding: 0;
-    margin: 0;
-    border: 0;
-    appearance: none;
-    -webkit-appearance: none;
-    transform: translate(50%, -50%);
-    border-radius: 50%;
-    background: var(--card-background-color, #1c1c1c);
-    color: var(--primary-text-color);
-    box-shadow: 0 0 0 1px
-      color-mix(in srgb, var(--divider-color, #888) 55%, transparent);
-    cursor: pointer;
-    overflow: hidden;
+    z-index: 0;
+    left: 4px;
+    right: 4px;
+    top: 4px;
+    bottom: 4px;
     pointer-events: none;
   }
-  .simple-light-selector .light-remove {
-    right: 2px;
+  .light-tile-actions-top,
+  .light-tile-actions-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    height: 46px;
+    border-radius: 24px;
+    overflow: hidden;
+    pointer-events: none;
+    background-color: var(
+      --glass-fill,
+      var(--surface-1, var(--gray000, var(--card-background-color)))
+    );
+    box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
+    transition: transform 280ms cubic-bezier(0.2, 0, 0, 1);
   }
-  .simple-light-selector .light-settings {
-    right: 46px;
+  .light-tile-actions-top {
+    top: 0;
+    transform: translateY(100%);
   }
-  .simple-light-selector .light-corner-btn ha-icon {
+  .light-tile-actions-bottom {
+    bottom: 0;
+    transform: translateY(-100%);
+  }
+  .simple-light-selector:hover .light-tile-actions-top,
+  .simple-light-selector.active .light-tile-actions-top,
+  .simple-light-selector:focus-within .light-tile-actions-top {
+    transform: translateY(calc(-100% - 8px));
+    pointer-events: auto;
+  }
+  .simple-light-selector:hover .light-tile-actions-bottom,
+  .simple-light-selector.active .light-tile-actions-bottom,
+  .simple-light-selector:focus-within .light-tile-actions-bottom {
+    transform: translateY(calc(100% + 8px));
+    pointer-events: auto;
+  }
+  .light-action {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--primary-text-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .light-tile-actions-top .light-action + .light-action {
+    box-shadow: inset 1px 0 0
+      color-mix(in srgb, var(--divider-color, #9e9e9e) 45%, transparent);
+  }
+  .light-action ha-icon {
     --mdc-icon-size: 22px;
     pointer-events: none;
   }
-  @media (hover: hover) and (pointer: fine) {
-    .simple-light-selector .light-corner-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-    }
-    .simple-light-selector:hover .light-corner-btn,
-    .simple-light-selector .light-corner-btn:focus-visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
+  .light-action.is-off {
+    opacity: 0.45;
   }
   .simple-light-selector.active {
     border-color: var(
@@ -212,10 +247,26 @@ export const LIGHT_TILES_CSS = `
       var(--hue-light-on-background, #ffda95)
     );
   }
-  /* Select mode: same 2px ring as the other tiles, in solid primary.
-     The fill itself is a 32% primary wash set when the tile is painted. */
-  .simple-light-selector.select-all-tile.select-mode {
-    border-color: var(--primary-color);
+  /* Select mode: same offset ring as the other tiles, in solid primary.
+     Listed after .active so the wash color does not replace it. */
+  .simple-light-selector.select-all-tile.select-mode,
+  .simple-light-selector.select-all-tile.select-mode.active {
+    border: 2px solid var(--primary-color);
+  }
+  :host(:not([data-dark-mode])) .simple-light-selector.select-all-tile {
+    --hue-light-off-background: #f6f4f1 !important;
+    --hue-light-off-text-color: rgba(0, 0, 0, 0.72) !important;
+  }
+  :host(:not([data-dark-mode]))
+    .simple-light-selector.select-all-tile:not(.select-mode) {
+    --hue-light-on-background: #f6f4f1 !important;
+    --hue-light-on-color: #f6f4f1 !important;
+    --hue-light-on-text-color: rgba(0, 0, 0, 0.8) !important;
+  }
+  :host(:not([data-dark-mode]))
+    .simple-light-selector.select-all-tile.select-mode {
+    --hue-light-on-text-color: rgba(0, 0, 0, 0.8) !important;
+    --hue-light-off-text-color: rgba(0, 0, 0, 0.72) !important;
   }
   .simple-light-tile {
     --hue-unfilled-mix: 50%;
@@ -229,6 +280,7 @@ export const LIGHT_TILES_CSS = `
     --hue-light-off-text-color: var(--hue-light-on-text-color, rgba(0, 0, 0, 0.7));
     box-sizing: content-box;
     position: relative;
+    z-index: 1;
     /* Huemane light tile: 85×(90+45 switch slot), 5px pad, radius 24. No switch painted. */
     width: 85px;
     height: 135px;
@@ -281,7 +333,20 @@ export const LIGHT_TILES_CSS = `
     mask-composite: exclude;
     pointer-events: none;
   }
-  .simple-light-tile:not(.dragging):active:hover {
+  .simple-light-selector.active:not(.select-all-tile):not(.add-light-tile):not(.removed)
+    .simple-light-tile:not(.dragging):not(.wheel-adjusting) {
+    transform: scale(1.045);
+    box-shadow:
+      var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08)),
+      0 12px 28px rgba(0, 0, 0, 0.32);
+    transition:
+      transform 0.28s cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 0.28s ease,
+      background 0.3s ease-out;
+  }
+  .simple-light-tile:not(.dragging):active:hover,
+  .simple-light-selector.active:not(.select-all-tile)
+    .simple-light-tile:not(.dragging):not(.wheel-adjusting):active:hover {
     transform: scale(0.95);
   }
   .simple-light-tile.is-off {
@@ -591,6 +656,12 @@ export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLab
     el.textContent = label;
     el.hidden = label === "";
   }
+  const power = selector.querySelector(".light-power");
+  if (power) {
+    const off = pct <= 0;
+    power.classList.toggle("is-off", off);
+    power.setAttribute("aria-pressed", off ? "false" : "true");
+  }
 }
 
 function makeLabels(layer, name, makeIcon) {
@@ -657,13 +728,54 @@ export function playLightStripLayout(root, before) {
     if (Math.hypot(dx, dy) < 1) {
       continue;
     }
-    el.animate(
+    // Groups use backdrop-filter, which traps z-index. Lift the moving item
+    // onto the strip for the flight so it paints above every group and tile.
+    const host = el.parentElement;
+    let placeholder = null;
+    if (host && host !== root) {
+      const rootBox = root.getBoundingClientRect();
+      placeholder = document.createElement("div");
+      placeholder.setAttribute("aria-hidden", "true");
+      placeholder.style.flex = "0 0 auto";
+      placeholder.style.width = `${next.width}px`;
+      placeholder.style.height = `${next.height}px`;
+      placeholder.style.visibility = "hidden";
+      host.insertBefore(placeholder, el);
+      root.appendChild(el);
+      el.style.position = "absolute";
+      el.style.left = `${next.left - rootBox.left}px`;
+      el.style.top = `${next.top - rootBox.top}px`;
+      el.style.width = `${next.width}px`;
+      el.style.height = `${next.height}px`;
+      el.style.margin = "0";
+    }
+    el.style.zIndex = "30";
+    const anim = el.animate(
       [
         { transform: `translate(${dx}px, ${dy}px)` },
         { transform: "translate(0px, 0px)" },
       ],
       { duration: 280, easing: "cubic-bezier(0.2, 0, 0, 1)" }
     );
+    let restored = false;
+    const restore = () => {
+      if (restored) {
+        return;
+      }
+      restored = true;
+      el.style.position = "";
+      el.style.left = "";
+      el.style.top = "";
+      el.style.width = "";
+      el.style.height = "";
+      el.style.margin = "";
+      el.style.zIndex = "";
+      if (placeholder?.isConnected) {
+        placeholder.replaceWith(el);
+      }
+    };
+    anim.addEventListener("finish", restore);
+    anim.addEventListener("cancel", restore);
   }
 }
 
@@ -693,29 +805,65 @@ export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
   return { selector, tile, hit };
 }
 
-function cornerButton(selector, className, iconName, label, onClick) {
+function actionButton(className, iconName, label, onClick) {
   const btn = document.createElement("button");
-  btn.className = `light-corner-btn ${className}`;
   btn.type = "button";
+  btn.className = `light-action ${className}`;
   btn.setAttribute("aria-label", label);
-  btn.tabIndex = -1;
   const icon = document.createElement("ha-icon");
   icon.setAttribute("icon", iconName);
   btn.appendChild(icon);
+  const stop = (ev) => {
+    ev.stopPropagation();
+  };
+  btn.addEventListener("pointerdown", stop);
   btn.addEventListener("click", (ev) => {
     ev.stopPropagation();
+    ev.preventDefault();
     onClick?.();
   });
-  selector.appendChild(btn);
   return btn;
 }
 
-export function attachLightRemove(selector, { label, onRemove }) {
-  return cornerButton(selector, "light-remove", "mdi:close", label, onRemove);
-}
-
-export function attachLightSettings(selector, { label, onOpen }) {
-  return cornerButton(selector, "light-settings", "mdi:cog", label, onOpen);
+/**
+ * Settings and remove share a plate above the tile. Power is a full-width
+ * plate below it. Both stay tucked behind the tile until hover or selection.
+ */
+export function attachLightActions(
+  selector,
+  { removeLabel, onRemove, settingsLabel, onSettings, powerLabel, onPower } = {}
+) {
+  const tray = document.createElement("div");
+  tray.className = "light-tile-actions";
+  const top = document.createElement("div");
+  top.className = "light-tile-actions-top";
+  const bottom = document.createElement("div");
+  bottom.className = "light-tile-actions-bottom";
+  if (onSettings) {
+    top.appendChild(
+      actionButton("light-settings", "mdi:cog", settingsLabel, onSettings)
+    );
+  }
+  if (onRemove) {
+    top.appendChild(
+      actionButton("light-remove", "mdi:close", removeLabel, onRemove)
+    );
+  }
+  if (onPower) {
+    bottom.appendChild(
+      actionButton("light-power", "mdi:power", powerLabel, onPower)
+    );
+  }
+  tray.append(top, bottom);
+  selector.insertBefore(tray, selector.firstChild);
+  const powerBtn = bottom.querySelector(".light-power");
+  const tile = selector.querySelector(".simple-light-tile");
+  if (powerBtn && tile) {
+    const off = tile.classList.contains("is-off");
+    powerBtn.classList.toggle("is-off", off);
+    powerBtn.setAttribute("aria-pressed", off ? "false" : "true");
+  }
+  return tray;
 }
 
 export function createLightModeGroup({

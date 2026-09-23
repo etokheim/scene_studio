@@ -794,6 +794,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## light tile X is mouse-hover only; touch removes from the sidebar
 
 - **Date:** 2026-09-16
+- **Superseded:** 2026-09-23 — settings, remove, and power live on plates behind the tile. See “Tile actions and light-mode depth”.
 - **Decision:** The close control on a member light tile is visible only under `(hover: hover) and (pointer: fine)` while the tile is hovered. Coarse pointers get no hit target. Touch (and mouse) can remove from the light sidebar (**Remove light from scene**). Removed/suggested tiles have no corner plus; the bulb icon becomes plus and the label is **Add {name}**, and tapping the tile restores membership. The X is a native 40px disc (not `ha-icon-button`, whose MDC hit stays 48px) whose center sits on the tile’s top-right corner; the strip pads so overflow-x scroll does not clip it.
 - **Why:** A 32px corner control is a fat-finger trap on the brightness tile, and overflow-x auto would otherwise clip a corner-centered control.
 - **Do not reverse without user ask.**
@@ -914,6 +915,13 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-09-23
 - **Decision:** Removed lights sit in a Removed group and show no brightness. Unavailable lights sit in an Unavailable group. The tile face and those groups use the same glass stroke as the rest of the panel. The brightness and on/off stand-in glows a blurred copy of the filled part of that control, and it does not show a relative time. Dragging a tile’s brightness, or snapping an on/off tile, updates that stand-in the same way the slider updates the tile. The power button under the slider is round. A one-line hint under the tiles explains the drag. On a circadian scene that hint asks for a solar event or a light until an event is selected.
 - **Why:** A removed row was still reading as a dim light, and the level glow did not follow the control it sat behind.
+- **Do not reverse without user ask.**
+
+## Tile actions and light-mode depth
+
+- **Date:** 2026-09-23
+- **Decision:** Settings and remove share one plate above a member light tile; power is a second plate below it. Both use the group fill and the tile’s corner radius, stay behind the tile, and slide out on hover. A selected tile keeps them open, scales up slightly, and takes a stronger shadow. The plates are custom buttons that fill the plate; the top two split it in half. A tile flying between groups is reparented onto the strip for that animation so a group’s backdrop-filter cannot hide it. The color wheel blits its cached bitmap in the same turn it is built, so undo and redo do not flash an empty canvas. A click clears the light selection unless it lands on a tile, a group label, the wheel (including variables and the mode control), or the brightness / on-off stand-in. In light mode the outer color disk, each light group, the brightness slider, the on/off switch, and the selected scene card cast a soft shadow that sits over their glow. Select all is near-white in light mode, and in select mode it uses the same offset ring as a selected light. A scene card shows that scene’s icon, centered across the title and the kind line (`mdi:palette` / `mdi:auto-fix` when none is stored).
+- **Why:** Hover-only corner discs were unreachable on touch, and a group’s backdrop-filter trapped the move animation. Decoding the wheel image on the next frame painted black first.
 - **Do not reverse without user ask.**
 
 ## Dot hover and group-label icon

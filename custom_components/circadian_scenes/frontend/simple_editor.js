@@ -13,8 +13,7 @@ import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
 import {
   LIGHT_TILES_CSS,
   TILE_BRIGHTNESS_WHEEL_STEP,
-  attachLightRemove,
-  attachLightSettings,
+  attachLightActions,
   binaryDragPreview,
   binaryWheelPreview,
   captureLightStripLayout,
@@ -168,6 +167,10 @@ export const SIMPLE_EDITOR_CSS = `
   }
   .simple-level-host ha-control-slider {
     width: var(--control-slider-thickness);
+  }
+  :host(:not([data-dark-mode])) .simple-level-glow ha-control-slider,
+  :host(:not([data-dark-mode])) .simple-level-glow ha-control-switch {
+    filter: drop-shadow(0 18px 48px rgba(0, 0, 0, 0.16));
   }
   .simple-level-host ha-control-button {
     width: 48px;
@@ -706,6 +709,28 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       selected: selectedIds.has(eid),
       brightnessLabel: onOff ? onOffLabel(draft) : undefined,
     });
+  };
+
+  const toggleTilePower = (eid) => {
+    const draft = ensureDraft(eid);
+    const off = fillPercent(draft, eid) <= 0;
+    if (off) {
+      draft.state = "on";
+      if (!isOnOffLight(eid) && !(Number(draft.brightness) > 0)) {
+        draft.brightness = 255;
+      }
+    } else {
+      draft.state = "off";
+    }
+    persistLight(eid);
+    const selector = tiles.querySelector(
+      `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
+    );
+    if (selector) {
+      paintSelector(selector, eid, draft);
+    }
+    paintSelectAll();
+    syncLevelHost();
   };
 
   const ensureDraft = (eid) => {
@@ -1256,21 +1281,21 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         },
         { passive: false }
       );
-      attachLightRemove(selector, {
-        label: panel._t(
+      attachLightActions(selector, {
+        removeLabel: panel._t(
           "frontend.lights.remove_named_from_scene",
           "Remove {name} from the scene",
           { name }
         ),
         onRemove: () => panel._removeLightFromSimpleMembers(eid),
-      });
-      attachLightSettings(selector, {
-        label: panel._t(
+        settingsLabel: panel._t(
           "frontend.lights.settings_named",
           "Settings for {name}",
           { name }
         ),
-        onOpen: () => panel._showEntityMoreInfo(eid, "settings"),
+        onSettings: () => panel._showEntityMoreInfo(eid, "settings"),
+        powerLabel: panel._t("frontend.lights.toggle_power", "Toggle"),
+        onPower: () => toggleTilePower(eid),
       });
       const row = groupRows.get(
         lightIsUnavailable(eid) ? "unavailable" : groupOf(eid)
@@ -1589,6 +1614,38 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   panel._simpleEditorRefresh = refreshFromPanel;
   host.replaceChildren(wrap);
   refreshFromPanel();
+  const clearLightSelection = () => {
+    if (!selectedIds.size && !touchSelectMode) {
+      return;
+    }
+    touchSelectMode = false;
+    selectedIds = new Set();
+    peeledId = null;
+    paintTileSelection();
+    syncLevelHost();
+    wheel.sync();
+  };
+  const onBackgroundClick = (ev) => {
+    if (!wrap.isConnected) {
+      return;
+    }
+    const t = ev.target;
+    if (!(t instanceof Element)) {
+      return;
+    }
+    if (
+      t.closest(
+        ".simple-light-selector, .light-mode-label, .hue-wheel-stage, .simple-level-host, .var-palette, .hue-presets, .hue-wheel-chrome, ha-dialog, ha-dropdown, ha-menu, ha-textfield"
+      )
+    ) {
+      return;
+    }
+    clearLightSelection();
+  };
+  host.addEventListener("click", onBackgroundClick);
+  panel.shadowRoot?.removeEventListener("click", panel._simpleOutsideClick);
+  panel._simpleOutsideClick = onBackgroundClick;
+  panel.shadowRoot?.addEventListener("click", panel._simpleOutsideClick);
   if (glowHost && typeof wheel.attachGlow === "function") {
     panel._simpleWheelGlowLayout = wheel.attachGlow(glowHost);
     requestAnimationFrame(() => panel._simpleWheelGlowLayout?.());

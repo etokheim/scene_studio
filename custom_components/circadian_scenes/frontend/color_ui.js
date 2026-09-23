@@ -39,6 +39,7 @@ const WHEEL_PEEK_FRAC = 0.1;
 const WHEEL_MIXED_INNER_FRAC = 1 - (1 - 0.62) * 0.25 * 2;
 const WHEEL_MIXED_GAP_FRAC = 0;
 const _hueWheelImageCache = new Map();
+const _hueWheelCanvasCache = new Map();
 
 function hueLinearScale(t, min, max) {
   return (max - min) * t + min;
@@ -1669,6 +1670,7 @@ function drawHueWheelImage(mode, tempMin, tempMax) {
   ctx.putImageData(image, 0, 0);
   const url = canvas.toDataURL();
   _hueWheelImageCache.set(key, url);
+  _hueWheelCanvasCache.set(url, canvas);
   return url;
 }
 
@@ -1720,6 +1722,7 @@ function drawPaletteWheelImage(palette, catalog) {
   ctx.putImageData(image, 0, 0);
   const url = canvas.toDataURL();
   _hueWheelImageCache.set(key, url);
+  _hueWheelCanvasCache.set(url, canvas);
   return url;
 }
 
@@ -2541,9 +2544,15 @@ function createSceneColorWheel({
   };
 
   const drawImageTo = (canvas, url) => {
+    const ctx = canvas.getContext("2d");
+    const source = _hueWheelCanvasCache.get(url);
+    if (source) {
+      ctx.clearRect(0, 0, HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
+      ctx.drawImage(source, 0, 0);
+      return;
+    }
     const img = new Image();
     img.onload = () => {
-      const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
       ctx.drawImage(img, 0, 0);
     };
@@ -2567,13 +2576,7 @@ function createSceneColorWheel({
       tempMin,
       tempMax
     );
-    const img = new Image();
-    img.onload = () => {
-      const glowCtx = glow.getContext("2d");
-      glowCtx.clearRect(0, 0, HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
-      glowCtx.drawImage(img, 0, 0);
-    };
-    img.src = url;
+    drawImageTo(glow, url);
   };
 
   const applyLayer = (el, band, radius, isFront) => {
@@ -4084,6 +4087,9 @@ function createSceneColorWheel({
     const pt = pointFromEvent(ev);
     const dist = Math.hypot(pt.x - radius, pt.y - radius);
     if (dist > radius) {
+      if (!moveOnEmptyDisk) {
+        onSelect?.(null);
+      }
       return;
     }
     if (!moveOnEmptyDisk) {
