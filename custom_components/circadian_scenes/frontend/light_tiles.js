@@ -9,7 +9,7 @@ export const LIGHT_TILES_CSS = `
     min-width: 0;
     box-sizing: border-box;
     /* Top/side pad so the hover-only remove control can sit on the tile corner. */
-    padding: 24px 24px 24px;
+    padding: 24px 24px 0;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -54,13 +54,33 @@ export const LIGHT_TILES_CSS = `
     align-items: stretch;
     gap: 8px;
     flex: 0 0 auto;
-    /* Same chrome as the color-mode pill: surface, shadow, padding. No fixed
+    /* Glass stroke on the group, same treatment as the light tiles. No fixed
        height, and no overflow clip — the select-all icon sits inside the label. */
     box-sizing: border-box;
     padding: 8px;
     border-radius: 24px;
-    box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
-    background: var(--surface-2, var(--secondary-background-color, #242022));
+    border: 1px solid var(--glass-border, transparent);
+    background-color: var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color))));
+    backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
+    -webkit-backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
+    background-image:
+      linear-gradient(
+        var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color)))),
+        var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color))))
+      ),
+      var(
+        --glass-stroke,
+        linear-gradient(
+          160deg,
+          rgba(255, 255, 255, 0.12),
+          rgba(255, 255, 255, 0.04) 45%,
+          rgba(255, 255, 255, 0)
+        )
+      );
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
+    color: var(--on-surface, var(--gray800, var(--primary-text-color)));
   }
   .light-mode-label {
     position: relative;
@@ -97,6 +117,13 @@ export const LIGHT_TILES_CSS = `
   .light-mode-label:hover,
   .light-mode-label:focus-visible {
     color: var(--primary-text-color);
+  }
+  .light-mode-label.plain {
+    cursor: default;
+    pointer-events: none;
+  }
+  .light-mode-label.plain .light-mode-select {
+    display: none;
   }
   .light-mode-select {
     position: absolute;
@@ -213,7 +240,9 @@ export const LIGHT_TILES_CSS = `
     user-select: none;
     -webkit-user-select: none;
     touch-action: pan-x;
-    box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
+    box-shadow:
+      var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08)),
+      0px 2px 3px rgba(0, 0, 0, 0.4);
     background: color-mix(
       in srgb,
       var(--hue-unfilled-color) var(--hue-unfilled-opacity),
@@ -224,6 +253,33 @@ export const LIGHT_TILES_CSS = `
   }
   .simple-light-tile.tap-only {
     cursor: pointer;
+  }
+  /* Glass stroke on the tile face. The selection ring stays on the outer selector. */
+  .simple-light-tile::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(
+      --glass-stroke,
+      linear-gradient(
+        160deg,
+        rgba(255, 255, 255, 0.12),
+        rgba(255, 255, 255, 0.04) 45%,
+        rgba(255, 255, 255, 0)
+      )
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
   }
   .simple-light-tile:not(.dragging):active:hover {
     transform: scale(0.95);
@@ -389,6 +445,36 @@ export const LIGHT_TILES_CSS = `
     inset: 0;
     z-index: 2;
     cursor: inherit;
+  }
+  .light-tiles-block {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 0 0 auto;
+  }
+  .light-tiles-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 12px 24px 0;
+    padding: 0;
+    max-width: 520px;
+    align-self: center;
+    text-align: center;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--secondary-text-color);
+    pointer-events: none;
+  }
+  .light-tiles-hint ha-icon {
+    --mdc-icon-size: 16px;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    color: inherit;
   }
   .simple-light-selector.add-light-tile .simple-light-tile {
     background: color-mix(
@@ -637,19 +723,25 @@ export function createLightModeGroup({
   selectAllLabel,
   onSelectAll,
   groupKey,
+  plain = false,
 }) {
   const group = document.createElement("div");
   group.className = "light-mode-group";
   if (groupKey) {
     group.dataset.group = groupKey;
   }
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "light-mode-label";
+  const button = document.createElement(plain ? "div" : "button");
+  if (!plain) {
+    button.type = "button";
+  }
+  button.className = plain ? "light-mode-label plain" : "light-mode-label";
   if (groupKey) {
     button.dataset.stripKey = `group:${groupKey}`;
   }
-  button.setAttribute("aria-label", `${label}. ${selectAllLabel}`);
+  button.setAttribute(
+    "aria-label",
+    plain || !selectAllLabel ? label : `${label}. ${selectAllLabel}`
+  );
   const select = document.createElement("span");
   select.className = "light-mode-select";
   const selectIcon = document.createElement("ha-icon");
@@ -660,14 +752,28 @@ export function createLightModeGroup({
   name.className = "light-mode-name";
   name.textContent = label;
   button.append(name, select);
-  button.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    onSelectAll?.();
-  });
+  if (!plain) {
+    button.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      onSelectAll?.();
+    });
+  }
   const row = document.createElement("div");
   row.className = "light-mode-row";
   group.append(button, row);
   return { group, row };
+}
+
+export function createLightTilesHint(text) {
+  const hint = document.createElement("p");
+  hint.className = "light-tiles-hint";
+  const icon = document.createElement("ha-icon");
+  icon.setAttribute("icon", "mdi:information-outline");
+  icon.setAttribute("aria-hidden", "true");
+  const copy = document.createElement("span");
+  copy.textContent = text;
+  hint.append(icon, copy);
+  return hint;
 }
 
 export function createAddLightTile({ label, onActivate }) {

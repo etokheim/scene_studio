@@ -21,6 +21,7 @@ import {
   createAddLightTile,
   createLightModeGroup,
   createLightTile,
+  createLightTilesHint,
   playLightStripLayout,
   playLightTileJelly,
   lightTileColorGroup,
@@ -111,12 +112,6 @@ export const SIMPLE_EDITOR_CSS = `
     line-height: 1.1;
     color: var(--primary-text-color);
   }
-  .simple-level-ago {
-    display: block;
-    margin-top: 4px;
-    font-size: 16px;
-    color: var(--secondary-text-color);
-  }
   .simple-level-controls {
     display: flex;
     align-items: flex-end;
@@ -137,13 +132,16 @@ export const SIMPLE_EDITOR_CSS = `
   .simple-level-glow::before {
     content: "";
     position: absolute;
-    inset: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--simple-level-fill, 0%);
     border-radius: var(--ha-border-radius-6xl, 36px);
     background: var(--simple-level-color, #ffc107);
     filter: blur(54px) saturate(1.45);
     opacity: 0.55;
-    transform: scale(1.1);
-    transform-origin: center center;
+    transform: scale(1.08);
+    transform-origin: center bottom;
     z-index: 0;
     pointer-events: none;
   }
@@ -338,6 +336,14 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   };
 
   const groupOf = (eid) => lightTileColorGroup(drafts[eid], groupCaps(eid));
+  const lightIsUnavailable = (eid) => {
+    const st = panel._hass?.states?.[eid];
+    return !st || st.state === "unavailable";
+  };
+  const tileGroupSignature = () =>
+    `${members
+      .map((id) => `${id}:${lightIsUnavailable(id) ? "unavailable" : groupOf(id)}`)
+      .join("|")}|${removedMembers.join(",")}`;
 
   const cardDots = () =>
     members.map((eid) => {
@@ -376,6 +382,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     getState,
     showPath: false,
     groupNearby: true,
+    pinFlip: panel._wheelPinFlip || null,
     getPinIcon: (scene) => entityMdiIcon(panel, scene.id),
     moveOnEmptyDisk: false,
     onClusters: (clusters) => {
@@ -440,9 +447,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }
           persistLight(eid);
         }
-        const nextGroups = members
-          .map((id) => `${id}:${groupOf(id)}`)
-          .join("|");
+        const nextGroups = tileGroupSignature();
         if (nextGroups !== stripGroupSignature) {
           syncTiles();
           return;
@@ -509,7 +514,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const tiles = document.createElement("div");
   tiles.className = "light-tiles";
   scroller.appendChild(tiles);
-  wrap.appendChild(scroller);
+  const tileBlock = document.createElement("div");
+  tileBlock.className = "light-tiles-block";
+  tileBlock.append(scroller, createLightTilesHint(
+    panel._t(
+      "frontend.lights.tiles_hint_brightness",
+      "Drag or scroll on the light tiles to change the brightness"
+    )
+  ));
+  wrap.appendChild(tileBlock);
   scroller.addEventListener("keydown", (ev) => {
     const meta = ev.metaKey || ev.ctrlKey;
     if (meta && ev.key.toLowerCase() === "a") {
@@ -934,27 +947,22 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       paintSelectAll();
     }
     const ordered = [...members].sort((a, b) => {
-      const rank = (id) => {
-        const st = panel._hass?.states?.[id];
-        if (!st) {
-          return 2;
-        }
-        if (st.state === "unavailable") {
-          return 1;
-        }
-        return 0;
-      };
+      const rank = (id) => (lightIsUnavailable(id) ? 1 : 0);
       return rank(a) - rank(b);
     });
+    const availableOrdered = ordered.filter((eid) => !lightIsUnavailable(eid));
+    const unavailableIds = ordered.filter((eid) => lightIsUnavailable(eid));
     const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
-    for (const eid of ordered) {
+    for (const eid of availableOrdered) {
       const key = groupOf(eid);
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }
       grouped.get(key).push(eid);
     }
-    stripOrderIds = lightTileGroupOrder().flatMap((key) => grouped.get(key) || []);
+    stripOrderIds = lightTileGroupOrder()
+      .flatMap((key) => grouped.get(key) || [])
+      .concat(unavailableIds);
     const groupLabels = {
       color: panel._t("frontend.lights.group_color", "Color"),
       temp: panel._t("frontend.lights.group_temp", "Temperature"),
@@ -982,6 +990,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         },
       });
       groupRows.set(key, row);
+      tiles.appendChild(group);
+    }
+    if (unavailableIds.length) {
+      const { group, row } = createLightModeGroup({
+        label: panel._t("frontend.lights.unavailable", "Unavailable"),
+        plain: true,
+        groupKey: "unavailable",
+      });
+      groupRows.set("unavailable", row);
       tiles.appendChild(group);
     }
     for (const eid of stripOrderIds) {
@@ -1235,35 +1252,46 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         ),
         onOpen: () => panel._showEntityMoreInfo(eid, "settings"),
       });
-      const row = groupRows.get(groupOf(eid));
+      const row = groupRows.get(
+        lightIsUnavailable(eid) ? "unavailable" : groupOf(eid)
+      );
       (row || tiles).appendChild(selector);
     }
-    for (const eid of removedMembers) {
-      const state = panel._hass?.states?.[eid];
-      const name =
-        state?.attributes?.friendly_name || eid.replace(/^light\./, "");
-      const { selector, tile } = createLightTile({
-        entityId: eid,
-        name: panel._t("frontend.lights.add_named", "Add {name}", { name }),
-        tapOnly: true,
-        makeIcon: () => {
-          const icon = document.createElement("ha-icon");
-          icon.setAttribute("icon", "mdi:plus");
-          return icon;
-        },
+    if (removedMembers.length) {
+      const { group, row } = createLightModeGroup({
+        label: panel._t("frontend.lights.removed", "Removed"),
+        plain: true,
+        groupKey: "removed",
       });
-      selector.classList.add("removed", "suggested");
-      paintLightTile(selector, {
-        rgb: [64, 60, 58],
-        fillPct: 0,
-        selected: false,
-      });
-      const addBack = (ev) => {
-        ev.stopPropagation();
-        panel._addLightToSimpleMembers(eid);
-      };
-      tile.addEventListener("click", addBack);
-      tiles.appendChild(selector);
+      tiles.appendChild(group);
+      for (const eid of removedMembers) {
+        const state = panel._hass?.states?.[eid];
+        const name =
+          state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+        const { selector, tile } = createLightTile({
+          entityId: eid,
+          name: panel._t("frontend.lights.add_named", "Add {name}", { name }),
+          tapOnly: true,
+          makeIcon: () => {
+            const icon = document.createElement("ha-icon");
+            icon.setAttribute("icon", "mdi:plus");
+            return icon;
+          },
+        });
+        selector.classList.add("removed", "suggested");
+        paintLightTile(selector, {
+          rgb: [64, 60, 58],
+          fillPct: 0,
+          selected: false,
+          brightnessLabel: "",
+        });
+        const addBack = (ev) => {
+          ev.stopPropagation();
+          panel._addLightToSimpleMembers(eid);
+        };
+        tile.addEventListener("click", addBack);
+        row.appendChild(selector);
+      }
     }
     tiles.appendChild(
       createAddLightTile({
@@ -1276,9 +1304,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     playLightStripLayout(tiles, beforeLayout);
     paintSelectAll();
-    stripGroupSignature = members
-      .map((id) => `${id}:${groupOf(id)}`)
-      .join("|");
+    stripGroupSignature = tileGroupSignature();
     syncLevelHost();
   };
   let levelStand = "";
@@ -1336,19 +1362,6 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const allOn = (targets) =>
       targets.length > 0 &&
       targets.every((id) => (drafts[id]?.state || "on") !== "off");
-    const newestChanged = (targets) => {
-      let best = "";
-      let bestT = -Infinity;
-      for (const id of targets) {
-        const iso = panel._hass?.states?.[id]?.last_changed || "";
-        const t = Date.parse(iso);
-        if (Number.isFinite(t) && t > bestT) {
-          bestT = t;
-          best = iso;
-        }
-      }
-      return best;
-    };
     const levelColor = (targets) => {
       const id = targets[0];
       const rgb = id && drafts[id] ? draftRgb(drafts[id]) : null;
@@ -1393,9 +1406,16 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       refreshReadout();
     };
 
+    function paintLevelGlow(glow, fillPct, color) {
+      if (!glow) {
+        return;
+      }
+      glow.style.setProperty("--simple-level-fill", `${fillPct}%`);
+      glow.style.setProperty("--simple-level-color", color);
+    }
+
     function refreshReadout() {
       const valueEl = levelHost.querySelector(".simple-level-value");
-      const ago = levelHost.querySelector("ha-relative-time");
       const bright = brightnessTargets();
       const toggles = onOffTargets();
       if (valueEl) {
@@ -1410,24 +1430,30 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           valueEl.textContent = `${pct}%`;
         }
       }
-      if (ago) {
-        const iso = newestChanged(stand === "switch" ? toggles : bright.concat(toggles));
-        ago.datetime = iso;
-        if (panel._hass) {
-          ago.hass = panel._hass;
-        }
-      }
       const slider = levelHost.querySelector("ha-control-slider");
-      if (slider && !levelInteracting && bright.length) {
-        slider.value = pctOf(bright[0]);
-        levelHost.style.setProperty("--simple-level-color", levelColor(bright));
+      if (slider) {
+        const pct = bright.length ? pctOf(bright[0]) : 0;
+        const off = bright.length && bright.every((id) => (drafts[id]?.state || "on") === "off");
+        if (!levelInteracting && bright.length) {
+          slider.value = pct;
+          levelHost.style.setProperty("--simple-level-color", levelColor(bright));
+        }
+        paintLevelGlow(
+          slider.parentElement,
+          off ? 0 : pct,
+          levelColor(bright)
+        );
       }
       const sw = levelHost.querySelector("ha-control-switch");
-      if (sw && !levelInteracting && toggles.length) {
-        sw.checked = allOn(toggles);
-        if (stand === "switch") {
-          levelHost.style.setProperty("--simple-level-color", "#ffc107");
+      if (sw && toggles.length) {
+        const on = allOn(toggles);
+        if (!levelInteracting) {
+          sw.checked = on;
+          if (stand === "switch") {
+            levelHost.style.setProperty("--simple-level-color", "#ffc107");
+          }
         }
+        paintLevelGlow(sw.parentElement, on ? 100 : 0, on ? "#ffc107" : "transparent");
       }
     }
 
@@ -1439,9 +1465,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       readout.className = "simple-level-readout";
       const valueEl = document.createElement("div");
       valueEl.className = "simple-level-value";
-      const ago = document.createElement("ha-relative-time");
-      ago.className = "simple-level-ago";
-      readout.append(valueEl, ago);
+      readout.appendChild(valueEl);
       const controls = document.createElement("div");
       controls.className = "simple-level-controls";
       if (stand === "slider" || stand === "both") {
@@ -1628,6 +1652,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   });
   const wheel = createSceneColorWheel({
     t: (key, fallback) => panel._t(key, fallback),
+    pinFlip: panel._wheelPinFlip || null,
     getState,
     onSelect: (id) => {
       selectedId = id;

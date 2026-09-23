@@ -2248,6 +2248,31 @@ function createLightBrightnessGraph({
   };
 }
 
+/** Canvas positions of visible pins, so a rebuilt wheel can glide instead of jumping. */
+function captureWheelPinPositions(root) {
+  const map = new Map();
+  if (!root) {
+    return map;
+  }
+  for (const g of root.querySelectorAll(".hue-wheel-svg .gm")) {
+    const id = g.dataset.sceneId;
+    if (!id || g.style.display === "none") {
+      continue;
+    }
+    const match = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(
+      g.style.transform || ""
+    );
+    if (!match) {
+      continue;
+    }
+    map.set(id, {
+      x: Number(match[1]) + PIN_TIP_X,
+      y: Number(match[2]) + PIN_TIP_Y,
+    });
+  }
+  return map;
+}
+
 function createSceneColorWheel({
   hasColor,
   hasTemp,
@@ -2267,6 +2292,7 @@ function createSceneColorWheel({
   getPinIcon,
   onClusters,
   moveOnEmptyDisk = true,
+  pinFlip = null,
   t = (_key, fallback) => fallback,
 }) {
   // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
@@ -2359,6 +2385,8 @@ function createSceneColorWheel({
   const detached = new Set();
   /** Cluster ids shown on the center ring. Null when no group is open. */
   let openGroup = null;
+  /** Where a group was clicked, so the split can travel out from that pin. */
+  let groupSpawn = null;
   /** Pin pulled out of a cluster for the gesture that closes an open group. */
   let soloId = null;
   let drag = null;
@@ -2608,9 +2636,42 @@ function createSceneColorWheel({
 
   const placeMarker = (marker, x, y) => {
     // Tip stays on the color. Size is a scale on .pin-body around that tip.
-    marker.g.style.transform = `translate(${x - PIN_TIP_X}px, ${y - PIN_TIP_Y}px)`;
+    const at = (px, py) =>
+      `translate(${px - PIN_TIP_X}px, ${py - PIN_TIP_Y}px)`;
+    const from = !marker.posed ? pinFlip?.get(marker.sceneId) : null;
     marker.x = x;
     marker.y = y;
+    if (marker.flipPending) {
+      marker.x = x;
+      marker.y = y;
+      return;
+    }
+    if (
+      from &&
+      Number.isFinite(from.x) &&
+      Number.isFinite(from.y) &&
+      (Math.abs(from.x - x) > 0.5 || Math.abs(from.y - y) > 0.5)
+    ) {
+      marker.posed = true;
+      marker.flipPending = true;
+      marker.g.style.transition = "none";
+      marker.g.style.transform = at(from.x, from.y);
+      requestAnimationFrame(() => {
+        if (!marker.flipPending) {
+          return;
+        }
+        marker.g.style.transition = "";
+        requestAnimationFrame(() => {
+          if (!marker.flipPending) {
+            return;
+          }
+          marker.flipPending = false;
+          marker.g.style.transform = at(marker.x, marker.y);
+        });
+      });
+      return;
+    }
+    marker.g.style.transform = at(x, y);
     if (!marker.posed) {
       marker.posed = true;
       marker.g.style.transition = "none";
@@ -3046,18 +3107,19 @@ function createSceneColorWheel({
       if (!marker) {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.setAttribute("class", "gm");
+        g.dataset.sceneId = scene.id;
         const dot = document.createElementNS("http://www.w3.org/2000/svg", "g");
         dot.setAttribute("class", "pin-dot");
         const dotOutline = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         dotOutline.setAttribute("class", "pin-dot-outline");
         dotOutline.setAttribute("cx", String(PIN_TIP_X));
         dotOutline.setAttribute("cy", String(PIN_TIP_Y));
-        dotOutline.setAttribute("r", "12");
+        dotOutline.setAttribute("r", "8");
         const dotFill = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         dotFill.setAttribute("class", "pin-dot-fill");
         dotFill.setAttribute("cx", String(PIN_TIP_X));
         dotFill.setAttribute("cy", String(PIN_TIP_Y));
-        dotFill.setAttribute("r", "7.5");
+        dotFill.setAttribute("r", "6");
         const count = document.createElementNS("http://www.w3.org/2000/svg", "text");
         count.setAttribute("class", "group-count");
         count.setAttribute("x", String(PIN_TIP_X));
@@ -3401,19 +3463,46 @@ function createSceneColorWheel({
       groupRing.setAttribute("cy", String(radius));
       groupRing.setAttribute("r", String(ring));
       groupRing.style.display = "";
-      openGroup.forEach((id, index) => {
-        const marker = markers.get(id);
-        const point = points[index];
-        if (!marker || !point) {
-          return;
+      const spawn = groupSpawn;
+      groupSpawn = null;
+      const members = openGroup
+        .map((id, index) => ({ marker: markers.get(id), point: points[index] }))
+        .filter((row) => row.marker && row.point);
+      const placeOpenMember = (row, x, y, expanded) => {
+        row.marker.g.classList.add("group-member");
+        row.marker.g.classList.remove("grouped");
+        row.marker.g.classList.toggle("expanded", expanded);
+        row.marker.g.style.display = "";
+        row.marker.hit.style.display = "";
+        placeMarker(row.marker, x, y);
+        svg.appendChild(row.marker.g);
+      };
+      if (
+        spawn &&
+        Number.isFinite(spawn.x) &&
+        Number.isFinite(spawn.y) &&
+        members.length
+      ) {
+        for (const row of members) {
+          row.marker.g.style.transition = "none";
+          placeOpenMember(row, spawn.x, spawn.y, false);
         }
-        marker.g.classList.add("group-member");
-        marker.g.classList.remove("grouped", "expanded");
-        marker.g.style.display = "";
-        marker.hit.style.display = "";
-        placeMarker(marker, point.x, point.y);
-        svg.appendChild(marker.g);
-      });
+        svg.getBoundingClientRect();
+        requestAnimationFrame(() => {
+          for (const row of members) {
+            if (!openGroup?.includes(row.marker.sceneId)) {
+              continue;
+            }
+            row.marker.g.style.transition = "";
+            row.marker.g.classList.add("expanded");
+            placeMarker(row.marker, row.point.x, row.point.y);
+          }
+        });
+      } else {
+        for (const row of members) {
+          placeOpenMember(row, row.point.x, row.point.y, true);
+        }
+      }
     } else {
       groupRing.style.display = "none";
     }
@@ -3718,6 +3807,10 @@ function createSceneColorWheel({
       }) === "fan"
     ) {
       openGroup = [...(drag.cluster || [])];
+      groupSpawn = {
+        x: marker?.x,
+        y: marker?.y,
+      };
       for (const id of openGroup) {
         detached.delete(id);
       }
@@ -4072,6 +4165,7 @@ export {
   limitToWheel,
   drawHueWheelImage,
   createLightBrightnessGraph,
+  captureWheelPinPositions,
   createSceneColorWheel,
   lightDraftFingerprint,
   HUE_WHEEL_RENDER,

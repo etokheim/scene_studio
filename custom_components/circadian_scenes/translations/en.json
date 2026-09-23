@@ -238,6 +238,8 @@
       "select_all": "Select all",
       "n_selected": "{count} selected",
       "deselect": "Deselect",
+      "tiles_hint_brightness": "Drag or scroll on the light tiles to change the brightness",
+      "tiles_hint_pick": "Select a solar event or a light to edit it, or drag the sun to preview the lights at a time",
       "settings_named": "Settings for {name}",
       "group_color": "Color",
       "group_temp": "Temperature",

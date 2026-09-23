@@ -909,13 +909,21 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Writing the finger position onto every draft made a dim lamp jump to match a bright one. The count is how you see which lights the gesture will move.
 - **Do not reverse without user ask.**
 
+## Light strip chrome
+
+- **Date:** 2026-09-23
+- **Decision:** Removed lights sit in a Removed group and show no brightness. Unavailable lights sit in an Unavailable group. The tile face and those groups use the same glass stroke as the rest of the panel. The brightness and on/off stand-in glows a blurred copy of the filled part of that control, and it does not show a relative time. A one-line hint under the tiles explains the drag. On a circadian scene that hint asks for a solar event or a light until an event is selected.
+- **Why:** A removed row was still reading as a dim light, and the level glow did not follow the control it sat behind.
+- **Do not reverse without user ask.**
+
 ## Dot hover and group-label icon
 
 - **Date:** 2026-09-22
 - **Superseded in part:** 2026-09-23 — hovering a dot no longer closes the selected pins. A plain click still replaces the selection.
 - **Superseded in part:** 2026-09-23 — Shift on a disk toggles one light, same as Cmd/Ctrl. Shift range select stays on the light tiles.
 - **Superseded in part:** 2026-09-23 — a resting marker is the round dot again (white rim and shadow), not a scaled teardrop. The teardrop is the selected, hovered, or grabbed pin, and the scale and fade run in both directions. A click on a stacked pin opens that group: the lights spread around a circle in the middle of the wheel, the disks dim, and the circle carries a heavy shadow. Grabbing one pin closes the group and drags only that light.
-- **Decision:** Hovering a disk dot opens that pin and leaves the selected pins open. Moving away closes only the hover pin. The hover does not change the selection. A plain press selects that light and closes the others. Cmd, Ctrl, and Shift each toggle that disk light. Shift range select stays on the tile list. A resting marker is a round dot with a white rim and shadow. Selecting, hovering, or grabbing it grows the teardrop pin around the same tip, and that change animates open and closed. A click on a stacked pin opens the group on a center circle. Grabbing one of those pins closes the group, keeps that pin out of the stack until the pointer is released, and moves only that light. Mode changes and other moves glide; a drag follows the pointer.
+- **Superseded in part:** 2026-09-23 — the resting dot is the earlier marker again: a 12px color fill, a 2px white ring, and the same shadow, with no icon or count inside. Opening a stack grows those lights into pins and moves them from the clicked pin onto the center circle. Undo and redo glide existing pins to the restored spot instead of rebuilding them in place.
+- **Decision:** Hovering a disk dot opens that pin and leaves the selected pins open. Moving away closes only the hover pin. The hover does not change the selection. A plain press selects that light and closes the others. Cmd, Ctrl, and Shift each toggle that disk light. Shift range select stays on the tile list. A resting marker is the earlier round dot: 12px fill, 2px white ring, shadow, and nothing drawn inside it. Selecting, hovering, or grabbing it grows the teardrop pin around the same tip, and that change animates open and closed. A click on a stacked pin opens the group as pins that travel from that stack onto a center circle. Grabbing one of those pins closes the group, keeps that pin out of the stack until the pointer is released, and moves only that light. Mode changes, undo, redo, and other moves glide; a drag follows the pointer.
 - **Why:** Opening the hovered pin used to move the hit target off the cursor, so the pin keeps a tip hit under the pointer. The old drop animation snapped the scale to 0.7 before growing back, and a separate dot path jumped instead of springing. Shift range select on a disk did not match Cmd.
 - **Do not reverse without user ask.**
 

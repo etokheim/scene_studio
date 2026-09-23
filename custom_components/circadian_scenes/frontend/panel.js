@@ -12,6 +12,7 @@ import {
   setColorBrightnessOnDraft,
   setWhiteBrightnessOnDraft,
   createLightBrightnessGraph,
+  captureWheelPinPositions,
   createSceneColorWheel,
   polarEaseClosedPathD,
   lightDraftFingerprint,
@@ -58,7 +59,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
+import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightSettings, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -1985,7 +1986,10 @@ class CircadianScenesPanel extends HTMLElement {
           cursor: pointer;
         }
         .sun-light-clock-legend .light-tiles-scroller {
-          padding: 24px 22px 12px;
+          padding: 24px 22px 0;
+        }
+        .sun-light-clock-legend .light-tiles-hint {
+          margin-top: 4px;
         }
         .sun-light-clock-legend .light-list-add {
           width: min(100%, 500px);
@@ -2436,22 +2440,9 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-svg .pin-dot-fill {
           fill: currentColor;
         }
-        .hue-wheel-svg .group-count {
-          display: none;
-          font-size: 13px;
-          font-weight: 700;
-          pointer-events: none;
-        }
-        .hue-wheel-svg .gm.grouped .group-count {
-          display: block;
-        }
+        .hue-wheel-svg .group-count,
         .hue-wheel-svg .dot-icon {
           display: none;
-          pointer-events: none;
-          overflow: visible;
-        }
-        .hue-wheel-svg .gm.group-member:not(.expanded) .dot-icon {
-          display: block;
         }
         .hue-wheel-svg .dot-icon-host {
           width: 22px;
@@ -6121,6 +6112,7 @@ class CircadianScenesPanel extends HTMLElement {
     briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
     const wheel = createSceneColorWheel({
       t: (key, fallback) => this._t(key, fallback),
+      pinFlip: this._wheelPinFlip || null,
       hasColor: true,
       hasTemp: true,
       tempMin: 2000,
@@ -7010,6 +7002,7 @@ class CircadianScenesPanel extends HTMLElement {
     body.appendChild(brightnessGraphCtl.el);
     wheelCtl = createSceneColorWheel({
       t: (key, fallback) => this._t(key, fallback),
+      pinFlip: this._wheelPinFlip || null,
       hasColor: true,
       hasTemp: true,
       tempMin: 2000,
@@ -8528,7 +8521,9 @@ class CircadianScenesPanel extends HTMLElement {
       this._applySession(snap, { remount: false });
       await this._saveNow({ fromHistory: true });
       if (this._view === "edit" || this._view === "theme") {
+        this._wheelPinFlip = captureWheelPinPositions(this.shadowRoot);
         this._render();
+        this._wheelPinFlip = null;
       }
       this._clearPreviewCache();
       await this._ensureSunPath();
@@ -10079,10 +10074,20 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _syncClockLegendBrightEdit() {
-    this._clockLegendEl?.classList.toggle(
-      "event-bright-edit",
-      Boolean(this._sidebarEventId) && this._view === "edit"
-    );
+    const editing = Boolean(this._sidebarEventId) && this._view === "edit";
+    this._clockLegendEl?.classList.toggle("event-bright-edit", editing);
+    const copy = this._clockLegendEl?.querySelector(".light-tiles-hint span");
+    if (copy) {
+      copy.textContent = editing
+        ? this._t(
+            "frontend.lights.tiles_hint_brightness",
+            "Drag or scroll on the light tiles to change the brightness"
+          )
+        : this._t(
+            "frontend.lights.tiles_hint_pick",
+            "Select a solar event or a light to edit it, or drag the sun to preview the lights at a time"
+          );
+    }
   }
 
   _lightTileValueLabel(entityId, fillPct) {
@@ -12477,6 +12482,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (hasColor || hasTemp) {
       wheelCtl = createSceneColorWheel({
         t: (key, fallback) => this._t(key, fallback),
+        pinFlip: this._wheelPinFlip || null,
         hasColor,
         hasTemp,
         tempMin: attrs.min_color_temp_kelvin || 2000,
@@ -17566,7 +17572,15 @@ class CircadianScenesPanel extends HTMLElement {
     this._placeLegendModeGroups(tiles);
     if (tiles.childElementCount) {
       scroller.appendChild(tiles);
-      legend.appendChild(scroller);
+      legend.append(
+        scroller,
+        createLightTilesHint(
+          this._t(
+            "frontend.lights.tiles_hint_pick",
+            "Select a solar event or a light to edit it, or drag the sun to preview the lights at a time"
+          )
+        )
+      );
       this._clockLegendEl = legend;
       this._syncClockLegendBrightEdit();
     } else {
@@ -17622,13 +17636,15 @@ class CircadianScenesPanel extends HTMLElement {
       (entry) => entry.selector && entry.light && !entry.light.removed && !entry.light.suggested
     );
     const signature = entries
-      .map(
-        (entry) =>
-          `${entry.light.entity_id}:${lightTileColorGroup(
-            this._legendGroupDraft(entry.light),
-            this._legendTileCaps(entry.light.entity_id)
-          )}`
-      )
+      .map((entry) => {
+        const bucket = entry.selector.classList.contains("unavailable")
+          ? "unavailable"
+          : lightTileColorGroup(
+              this._legendGroupDraft(entry.light),
+              this._legendTileCaps(entry.light.entity_id)
+            );
+        return `${entry.light.entity_id}:${bucket}`;
+      })
       .join("|");
     if (signature === this._legendGroupSignature) {
       return;
@@ -17636,7 +17652,12 @@ class CircadianScenesPanel extends HTMLElement {
     this._legendGroupSignature = signature;
     const beforeLayout = captureLightStripLayout(tilesEl);
     const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
+    const unavailable = [];
     for (const entry of entries) {
+      if (entry.selector.classList.contains("unavailable")) {
+        unavailable.push(entry);
+        continue;
+      }
       const key = lightTileColorGroup(
         this._legendGroupDraft(entry.light),
         this._legendTileCaps(entry.light.entity_id)
@@ -17651,6 +17672,13 @@ class CircadianScenesPanel extends HTMLElement {
     };
     const selectAllLabel = this._t("frontend.lights.select_all", "Select all");
     const add = tilesEl.querySelector(".add-light-tile");
+    const orphanUnavailable = [
+      ...tilesEl.querySelectorAll(".simple-light-selector.unavailable"),
+    ].filter(
+      (node) =>
+        !node.classList.contains("removed") &&
+        !entries.some((entry) => entry.selector === node)
+    );
     const leftovers = [
       ...tilesEl.querySelectorAll(
         ".simple-light-selector.removed, .simple-light-selector.suggested"
@@ -17677,8 +17705,30 @@ class CircadianScenesPanel extends HTMLElement {
       }
       tilesEl.appendChild(group);
     }
-    for (const node of leftovers) {
-      tilesEl.appendChild(node);
+    if (unavailable.length || orphanUnavailable.length) {
+      const { group, row } = createLightModeGroup({
+        label: this._t("frontend.lights.unavailable", "Unavailable"),
+        plain: true,
+        groupKey: "unavailable",
+      });
+      for (const entry of unavailable) {
+        row.appendChild(entry.selector);
+      }
+      for (const node of orphanUnavailable) {
+        row.appendChild(node);
+      }
+      tilesEl.appendChild(group);
+    }
+    if (leftovers.length) {
+      const { group, row } = createLightModeGroup({
+        label: this._t("frontend.lights.removed", "Removed"),
+        plain: true,
+        groupKey: "removed",
+      });
+      for (const node of leftovers) {
+        row.appendChild(node);
+      }
+      tilesEl.appendChild(group);
     }
     if (add) {
       tilesEl.appendChild(add);
@@ -17764,10 +17814,9 @@ class CircadianScenesPanel extends HTMLElement {
       rgb: look.rgb,
       fillPct: removed ? 0 : look.fillPct,
       selected: !removed && this._legendTileSelected(light.entity_id),
-      brightnessLabel: this._lightTileValueLabel(
-        light.entity_id,
-        removed ? 0 : look.fillPct
-      ),
+      brightnessLabel: removed
+        ? ""
+        : this._lightTileValueLabel(light.entity_id, look.fillPct),
     });
     if (!removed && (!unavailable || capsKnown)) {
       this._lightNameLabels.push({ light, selector });
