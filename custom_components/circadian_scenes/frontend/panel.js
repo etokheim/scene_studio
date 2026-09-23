@@ -60,7 +60,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
+import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -10231,6 +10231,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._legendSelectedIds = new Set([entityId]);
     }
     this._syncClockLightSelection();
+    revealLightActionsNow(this.shadowRoot);
     this._layoutDialChromeFn?.();
   }
 
@@ -17412,7 +17413,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       if (
         t.closest(
-          ".scene-sidebar, .sun-light-clock-rings, .simple-light-selector, .light-mode-label, .clock-event, .sun-event, .hue-wheel-stage, .simple-level-host, .var-palette, .hue-presets, ha-dialog, ha-dropdown"
+          ".scene-sidebar, .sun-light-clock-rings, .simple-light-selector, .light-mode-label, .clock-event, .sun-event, .gm, .hue-wheel-chrome, .simple-level-host, .var-palette, .hue-presets, ha-dialog, ha-dropdown"
         )
       ) {
         return;
@@ -17424,6 +17425,7 @@ class CircadianScenesPanel extends HTMLElement {
       if (this._legendSelectedIds?.size) {
         this._legendSelectedIds = new Set();
         this._syncClockLightSelection();
+        revealLightActionsNow(this.shadowRoot);
       }
     };
     this.shadowRoot.addEventListener("click", this._clockOutsideClick);
@@ -17948,6 +17950,7 @@ class CircadianScenesPanel extends HTMLElement {
           });
           this._legendSelectedIds = new Set(result.selected);
           this._syncClockLightSelection();
+          revealLightActionsNow(this.shadowRoot);
         },
       });
       for (const entry of rows) {

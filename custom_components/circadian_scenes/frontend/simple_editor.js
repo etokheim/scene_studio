@@ -28,6 +28,7 @@ import {
   lightTileGroupOrder,
   lightTileValueLabel,
   paintLightTile,
+  revealLightActionsNow,
   proportionalFillPercent,
   relativeFillPercent,
   selectAllDisplayedFill,
@@ -477,6 +478,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           anchorId = id;
         }
       }
+      revealLightActionsNow(tiles);
       paintTileSelection();
       syncLevelHost();
       wheel.sync();
@@ -637,6 +639,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       anchorId = next;
       peeledId = next;
       wheel.detach?.(next);
+      revealLightActionsNow(tiles);
       paintTileSelection();
       wheel.sync();
       syncLevelHost();
@@ -671,6 +674,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       peeledId = null;
       wheel.clearDetached?.();
     }
+    revealLightActionsNow(tiles);
     paintTileSelection();
     wheel.sync();
     syncLevelHost();
@@ -1156,6 +1160,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }
           wheel.clearDetached?.();
           wheel.sync();
+          revealLightActionsNow(tiles);
           paintTileSelection();
           syncLevelHost();
         },
@@ -1338,6 +1343,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
               tile._lightTileSuppressTap = false;
             }, 400);
             wheel.detach?.(eid);
+            revealLightActionsNow(tiles);
             paintTileSelection();
             wheel.sync();
             syncLevelHost();
@@ -1749,6 +1755,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     selectedIds = new Set([...selectedIds].filter((id) => members.includes(id)));
     syncTiles();
     wheel.sync();
+    revealLightActionsNow(tiles);
   };
   panel._simpleEditorRefresh = refreshFromPanel;
   host.replaceChildren(wrap);
@@ -1760,6 +1767,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     touchSelectMode = false;
     selectedIds = new Set();
     peeledId = null;
+    revealLightActionsNow(tiles);
     paintTileSelection();
     syncLevelHost();
     wheel.sync();
@@ -1774,7 +1782,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     if (
       t.closest(
-        ".simple-light-selector, .light-mode-label, .hue-wheel-stage, .simple-level-host, .var-palette, .hue-presets, .hue-wheel-chrome, ha-dialog, ha-dropdown, ha-menu, ha-textfield"
+        ".simple-light-selector, .light-mode-label, .gm, .hue-wheel-chrome, .simple-level-host, .var-palette, .hue-presets, ha-dialog, ha-dropdown, ha-menu, ha-textfield"
       )
     ) {
       return;

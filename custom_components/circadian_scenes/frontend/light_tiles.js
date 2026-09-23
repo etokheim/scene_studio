@@ -31,35 +31,16 @@ export const LIGHT_TILES_CSS = `
     margin-inline: auto;
     flex: 0 0 auto;
     position: relative;
+    --light-action-delay: 500ms;
+  }
+  /* A click that changes the selection skips the hover delay. */
+  .light-tiles.actions-now {
+    --light-action-delay: 0s;
   }
   /* Group padding insets member tiles. Lift the loose tiles by that same pad. */
   .light-tiles:has(.light-mode-group) > .select-all-tile,
   .light-tiles:has(.light-mode-group) > .add-light-tile {
     margin-bottom: 8px;
-  }
-  .light-tiles > .select-all-tile {
-    position: sticky;
-    left: 8px;
-    z-index: 6;
-  }
-  /* Fade tiles that slide under Select all. The opaque end is 90%. */
-  .light-tiles > .select-all-tile::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    top: -20px;
-    bottom: -20px;
-    left: -8px;
-    right: -40px;
-    background: linear-gradient(
-      to right,
-      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
-        0%,
-      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
-        46%,
-      transparent 100%
-    );
-    pointer-events: none;
   }
   @media (orientation: portrait), (max-width: 700px) {
     .light-tiles {
@@ -112,7 +93,9 @@ export const LIGHT_TILES_CSS = `
       0 16px 42px rgba(0, 0, 0, 0.12);
   }
   .light-mode-label {
-    position: relative;
+    position: sticky;
+    left: 8px;
+    z-index: 5;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -132,6 +115,25 @@ export const LIGHT_TILES_CSS = `
     letter-spacing: 0.08em;
     text-transform: uppercase;
     cursor: pointer;
+  }
+  /* Tiles that slide under a stuck group title fade out. The solid end is 90%. */
+  .light-mode-label::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: -28px;
+    bottom: -28px;
+    left: -16px;
+    right: -40px;
+    background: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
+        0%,
+      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
+        46%,
+      transparent 100%
+    );
+    pointer-events: none;
   }
   /* Larger touch target. The extra area is invisible and does not change layout. */
   .light-mode-label::after {
@@ -191,16 +193,31 @@ export const LIGHT_TILES_CSS = `
     z-index: 1;
     transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1);
   }
-  /* Drop shadow sits behind the action plates. On the tile it paints over
-     them and reads as a dark bar between the tile and the buttons. */
+  /* Shadow and the selection ring paint above the plates, so the buttons
+     stay behind the tile. */
   .simple-light-frame::before {
     content: "";
     position: absolute;
-    z-index: -1;
+    z-index: 2;
     inset: 2px;
     border-radius: 24px;
     pointer-events: none;
     box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
+  }
+  .simple-light-frame::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    border-radius: inherit;
+    border: 2px solid transparent;
+    pointer-events: none;
+  }
+  .simple-light-selector.active:not(.select-all-tile) .simple-light-frame::after {
+    border-color: var(
+      --hue-light-on-color,
+      var(--hue-light-on-background, #ffda95)
+    );
   }
   .simple-light-selector.active:not(.select-all-tile):not(.add-light-tile):not(.removed)
     .simple-light-frame::before {
@@ -254,7 +271,7 @@ export const LIGHT_TILES_CSS = `
     transition-property: transform, pointer-events;
     transition-duration: 280ms, 0s;
     transition-timing-function: cubic-bezier(0.2, 0, 0, 1), linear;
-    transition-delay: 0s;
+    transition-delay: var(--light-action-delay, 500ms);
     transition-behavior: allow-discrete;
   }
   /* Flat edge toward the tile. Hidden plates sit inside it; open plates clear it. */
@@ -272,17 +289,16 @@ export const LIGHT_TILES_CSS = `
     transform: translateY(calc(var(--light-action-outset) * -1));
   }
   .simple-light-selector:hover .light-tile-actions-top,
-  .simple-light-selector:hover .light-tile-actions-bottom {
+  .simple-light-selector:hover .light-tile-actions-bottom,
+  .simple-light-selector.active .light-tile-actions-top,
+  .simple-light-selector.active .light-tile-actions-bottom {
     transform: translateY(0);
     pointer-events: auto;
-    transition-delay: 500ms;
   }
   .simple-light-selector:focus-visible .light-tile-actions-top,
   .simple-light-selector:has(:focus-visible) .light-tile-actions-top,
   .simple-light-selector:focus-visible .light-tile-actions-bottom,
-  .simple-light-selector:has(:focus-visible) .light-tile-actions-bottom,
-  .simple-light-selector.active .light-tile-actions-top,
-  .simple-light-selector.active .light-tile-actions-bottom {
+  .simple-light-selector:has(:focus-visible) .light-tile-actions-bottom {
     transform: translateY(0);
     pointer-events: auto;
     transition-delay: 0s;
@@ -291,35 +307,31 @@ export const LIGHT_TILES_CSS = `
     .light-tile-actions-top {
     transform: translateY(var(--light-action-outset));
     pointer-events: none;
-    transition-delay: 0s;
   }
   .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
     .light-tile-actions-bottom {
     transform: translateY(calc(var(--light-action-outset) * -1));
     pointer-events: none;
-    transition-delay: 0s;
   }
   .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-top,
   .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-bottom {
     transform: translateY(0);
     pointer-events: auto;
-    transition-delay: 500ms;
   }
-  /* One menu at a time. The selected plates stay out until the hovered light's
-     plates actually start opening (the same 500ms), then they tuck together. */
+  /* One menu at a time. Leaving a hover waits the same 500ms to tuck, and the
+     selected plates wait that long to come back. A click sets --light-action-delay
+     to 0s so a new single selection moves immediately. */
   .light-tiles:has(.simple-light-selector:not(.select-all-tile):not(.add-light-tile):not(.removed):hover)
     .simple-light-selector:not(:hover)
     .light-tile-actions-top {
     transform: translateY(var(--light-action-outset));
     pointer-events: none;
-    transition-delay: 500ms;
   }
   .light-tiles:has(.simple-light-selector:not(.select-all-tile):not(.add-light-tile):not(.removed):hover)
     .simple-light-selector:not(:hover)
     .light-tile-actions-bottom {
     transform: translateY(calc(var(--light-action-outset) * -1));
     pointer-events: none;
-    transition-delay: 500ms;
   }
   .light-action {
     position: relative;
@@ -1231,6 +1243,30 @@ export function lightTileColorGroup(draft, caps) {
 
 export function lightTileGroupOrder() {
   return [...COLOR_GROUP_ORDER];
+}
+
+const actionRevealTimers = new WeakMap();
+
+/** Skip the hover delay so a new selection shows its actions on this frame. */
+export function revealLightActionsNow(root) {
+  const tiles = root?.classList?.contains("light-tiles")
+    ? root
+    : root?.querySelector?.(".light-tiles");
+  if (!tiles) {
+    return;
+  }
+  tiles.classList.add("actions-now");
+  const pending = actionRevealTimers.get(tiles);
+  if (pending) {
+    window.clearTimeout(pending);
+  }
+  actionRevealTimers.set(
+    tiles,
+    window.setTimeout(() => {
+      tiles.classList.remove("actions-now");
+      actionRevealTimers.delete(tiles);
+    }, 400)
+  );
 }
 
 /**
