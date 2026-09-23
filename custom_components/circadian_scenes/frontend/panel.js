@@ -2397,7 +2397,6 @@ class CircadianScenesPanel extends HTMLElement {
           stroke-linejoin: round;
         }
         .hue-wheel-svg .gm {
-          --pin-scale: 0.2;
           cursor: pointer;
           transition:
             transform 480ms cubic-bezier(0.22, 1.15, 0.36, 1),
@@ -2409,14 +2408,81 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-svg .pin-body {
           transform-box: fill-box;
           transform-origin: 50% 100%;
-          transform: rotate(180deg) scale(var(--pin-scale));
-          transition: transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
+          transform: rotate(180deg) scale(0.2);
+          opacity: 0;
+          transition:
+            transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1),
+            opacity 280ms ease;
         }
-        .hue-wheel-svg .gm.expanded {
-          --pin-scale: 1;
+        .hue-wheel-svg .gm.expanded .pin-body {
+          transform: rotate(180deg) scale(1);
+          opacity: 1;
         }
-        .hue-wheel-svg .gm.drag {
-          --pin-scale: 1.16;
+        .hue-wheel-svg .gm.drag .pin-body {
+          transform: rotate(180deg) scale(1.16);
+          opacity: 1;
+        }
+        .hue-wheel-svg .pin-dot {
+          opacity: 1;
+          transition: opacity 280ms ease;
+        }
+        .hue-wheel-svg .gm.expanded .pin-dot {
+          opacity: 0;
+        }
+        .hue-wheel-svg .pin-dot-outline {
+          fill: #fff;
+          filter: url(#se-dot-shadow);
+        }
+        .hue-wheel-svg .pin-dot-fill {
+          fill: currentColor;
+        }
+        .hue-wheel-svg .group-count {
+          display: none;
+          font-size: 13px;
+          font-weight: 700;
+          pointer-events: none;
+        }
+        .hue-wheel-svg .gm.grouped .group-count {
+          display: block;
+        }
+        .hue-wheel-svg .dot-icon {
+          display: none;
+          pointer-events: none;
+          overflow: visible;
+        }
+        .hue-wheel-svg .gm.group-member:not(.expanded) .dot-icon {
+          display: block;
+        }
+        .hue-wheel-svg .dot-icon-host {
+          width: 22px;
+          height: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        }
+        .hue-wheel-svg .dot-icon-host ha-icon {
+          --mdc-icon-size: 16px;
+          width: 16px;
+          height: 16px;
+          color: inherit;
+          --icon-primary-color: currentColor;
+        }
+        .hue-wheel-svg .group-ring {
+          fill: color-mix(
+            in srgb,
+            var(--card-background-color, #1c1c1c) 48%,
+            transparent
+          );
+          stroke: rgba(255, 255, 255, 0.92);
+          stroke-width: 3;
+          pointer-events: none;
+        }
+        .hue-wheel-layer {
+          transition: opacity 280ms ease;
+        }
+        .hue-wheel-canvas.group-open .hue-wheel-layer {
+          opacity: 0.38;
         }
         .hue-wheel-svg .pin-hit {
           pointer-events: all;
@@ -3460,7 +3526,6 @@ class CircadianScenesPanel extends HTMLElement {
           max-width: none;
           height: 100%;
           max-height: 100%;
-          container-type: size;
         }
         .stage-col .simple-editor .hue-wheel-canvas {
           width: max(
@@ -3473,7 +3538,7 @@ class CircadianScenesPanel extends HTMLElement {
         /* Landscape wheel container: mode toggles and variables stack from the
            disk's top-right. 200px column + 16px gap. Square and portrait keep
            the horizontal row under the disk. */
-        @container (aspect-ratio > 1 / 1) {
+        @container wheel (aspect-ratio > 1 / 1) {
           .hue-wheel-face {
             position: relative;
             display: flex;

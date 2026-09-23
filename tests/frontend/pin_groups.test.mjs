@@ -12,7 +12,9 @@ import {
   disksUnsupportedByDrag,
   wheelPillModes,
   wheelStandIn,
+  groupRingPoints,
   kelvinTrackDragPoint,
+  placeTempInAnnulus,
 } from "../../custom_components/circadian_scenes/frontend/color_ui.js";
 
 const supports =
@@ -98,6 +100,30 @@ test("select all drags the selection, then drops lights the disk cannot drive", 
     keep: ["color-2", "temp-1"],
     drop: ["color-1"],
   });
+});
+
+test("an open group spreads around a circle in the middle of the wheel", () => {
+  const radius = 200;
+  const points = groupRingPoints(4, radius);
+  assert.equal(points.length, 4);
+  const ring = radius * 0.42;
+  for (const point of points) {
+    const dist = Math.hypot(point.x - radius, point.y - radius);
+    assert.ok(Math.abs(dist - ring) < 0.01);
+  }
+  assert.ok(points[0].y < radius);
+  assert.notEqual(points[0].x, points[1].x);
+  assert.equal(groupRingPoints(0, radius).length, 0);
+  assert.throws(() => groupRingPoints(2, 0));
+});
+
+test("a full kelvin disk keeps the drop's horizontal offset", () => {
+  const centered = placeTempInAnnulus(4000, 0, 100, 2000, 6500, 1, null);
+  const held = placeTempInAnnulus(4000, 0, 100, 2000, 6500, 1, 60);
+  assert.equal(centered.x, 0);
+  assert.equal(held.y, centered.y);
+  assert.ok(held.x > 40);
+  assert.throws(() => placeTempInAnnulus(4000, 0, 100, 2000, 6500, 1, Number.NaN));
 });
 
 test("a short press on a stack fans; a longer move commits", () => {

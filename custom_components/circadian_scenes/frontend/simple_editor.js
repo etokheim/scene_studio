@@ -72,6 +72,8 @@ export const SIMPLE_EDITOR_CSS = `
        The scrollport scrolls once the disk cannot shrink further. */
     min-height: calc(400px + 48px + 16px + 24px);
     padding-bottom: 24px;
+    container-type: size;
+    container-name: wheel;
   }
   .simple-wheels .hue-wheel-stage {
     width: 100%;
@@ -82,7 +84,6 @@ export const SIMPLE_EDITOR_CSS = `
     min-height: 0;
     margin: 0;
     flex: 1 1 auto;
-    container-type: size;
   }
   .simple-wheels .hue-wheel-stage[hidden] {
     display: none;
@@ -620,10 +621,16 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const ids = mode ? selectedMemberIds() : members;
     const count = selectedMemberIds().length;
     selector.classList.toggle("select-mode", mode);
+    const caption = mode
+      ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
+      : panel._t("frontend.lights.select_all", "Select all");
     paintLightTile(selector, {
       rgb: [64, 60, 58],
       fillPct: selectAllShownPct(ids),
       selected: mode,
+      brightnessLabel: mode
+        ? panel._t("frontend.lights.deselect", "Deselect")
+        : undefined,
     });
     if (mode) {
       const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
@@ -631,14 +638,13 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       selector.style.setProperty("--hue-light-on-color", wash);
       selector.style.setProperty("--hue-light-on-text-color", "#fff");
     }
-    const caption = mode
-      ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
-      : panel._t("frontend.lights.select_all", "Select all");
-    const name = selector.querySelector(".simple-light-name");
-    if (name) {
+    for (const name of selector.querySelectorAll(".simple-light-name")) {
       name.textContent = caption;
     }
-    selector.setAttribute("aria-label", caption);
+    selector.setAttribute(
+      "aria-label",
+      mode ? `${caption}, ${panel._t("frontend.lights.deselect", "Deselect")}` : caption
+    );
   };
 
   const paintTileSelection = () => {

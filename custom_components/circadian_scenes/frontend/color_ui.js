@@ -870,12 +870,36 @@ function detachedAfterDrag(detachedIds, finishedIds) {
   return [...detachedIds].filter((id) => !finished.has(id));
 }
 
-/** A short press on a stack fans the pins. Movement past the threshold is a drag. */
+/** A short press on a stack opens the group. Movement past the threshold is a drag. */
 function pinPressAction({ moved, travel, stacked }) {
   if (!moved && travel < PIN_DRAG_THRESHOLD_PX && stacked) {
     return "fan";
   }
   return "commit";
+}
+
+/** Even spots on a circle in the middle of the wheel. `radius` is the disk radius; the center is `(radius, radius)`. */
+function groupRingPoints(count, radius) {
+  const n = Number(count);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error("group ring count must be a non-negative integer");
+  }
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new Error("group ring needs a positive radius");
+  }
+  if (!n) {
+    return [];
+  }
+  const ring = radius * 0.42;
+  const points = [];
+  for (let index = 0; index < n; index += 1) {
+    const angle = -Math.PI / 2 + (index / n) * Math.PI * 2;
+    points.push({
+      x: radius + Math.cos(angle) * ring,
+      y: radius + Math.sin(angle) * ring,
+    });
+  }
+  return points;
 }
 
 function collapseSceneCycle(sequence) {
@@ -1444,10 +1468,28 @@ function placeColorInAnnulus(hue, saturation, inner, outer) {
   return clampRelToAnnulus(coords.x, coords.y, inner, outer);
 }
 
-function placeTempInAnnulus(kelvin, inner, outer, tempMin, tempMax, side = 1) {
+function placeTempInAnnulus(
+  kelvin,
+  inner,
+  outer,
+  tempMin,
+  tempMax,
+  side = 1,
+  anchorX = null
+) {
   const coords = coordinatesForTemp(kelvin, outer, tempMin, tempMax);
   if (!(inner > 0)) {
-    return { x: coords.x, y: coords.y };
+    // A full kelvin disk only encodes temperature in Y. Keep the drop's X
+    // instead of snapping every pin onto the vertical center.
+    if (anchorX == null) {
+      return { x: coords.x, y: coords.y };
+    }
+    if (!Number.isFinite(anchorX)) {
+      throw new Error("temp pin anchor must be a finite offset");
+    }
+    const maxX = Math.sqrt(Math.max(0, outer * outer - coords.y * coords.y));
+    const x = Math.max(-maxX, Math.min(maxX, anchorX));
+    return { x, y: coords.y };
   }
   // Resting pins sit on the band centerline (not the inner rim). An outer-ring
   // drag uses the same centerline; a full disk still follows the pointer.
@@ -2256,6 +2298,10 @@ function createSceneColorWheel({
       <filter id="se-dot-shadow">
         <feDropShadow dx="0" dy="0.5" stdDeviation="1" flood-opacity="1"></feDropShadow>
       </filter>
+      <filter id="se-group-shadow" x="-80%" y="-80%" width="260%" height="260%">
+        <feDropShadow dx="0" dy="14" stdDeviation="16" flood-opacity="0.55"></feDropShadow>
+        <feDropShadow dx="0" dy="3" stdDeviation="5" flood-opacity="0.4"></feDropShadow>
+      </filter>
       <filter id="se-active-shadow">
         <feOffset dx="0" dy="-10" />
         <feGaussianBlur stdDeviation="7" result="offset-blur"/>
@@ -2270,6 +2316,11 @@ function createSceneColorWheel({
   const pathLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   pathLayer.setAttribute("class", "hue-wheel-paths");
   svg.appendChild(pathLayer);
+  const groupRing = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  groupRing.setAttribute("class", "group-ring");
+  groupRing.setAttribute("filter", "url(#se-group-shadow)");
+  groupRing.style.display = "none";
+  svg.appendChild(groupRing);
   canvasWrap.append(glow, bgTemp, bgColor, bgPalette, svg);
   const face = document.createElement("div");
   face.className = "hue-wheel-face";
@@ -2306,6 +2357,10 @@ function createSceneColorWheel({
   let pinClusters = [];
   /** Pins pulled out of a stack so each can be grabbed on its own. */
   const detached = new Set();
+  /** Cluster ids shown on the center ring. Null when no group is open. */
+  let openGroup = null;
+  /** Pin pulled out of a cluster for the gesture that closes an open group. */
+  let soloId = null;
   let drag = null;
   /** Dot under the pointer. Not a selection — leaving it closes only this pin. */
   let hoverId = null;
@@ -2548,6 +2603,8 @@ function createSceneColorWheel({
 
   // Kelvin left/right is not part of the draft. Cleared when this wheel is rebuilt.
   const tempSides = new Map();
+  /** Horizontal offset on a full kelvin disk, keyed by scene id and entity id. */
+  const tempAnchors = new Map();
 
   const placeMarker = (marker, x, y) => {
     // Tip stays on the color. Size is a scale on .pin-body around that tip.
@@ -2599,7 +2656,8 @@ function createSceneColorWheel({
       geom.temp.outer,
       tempMin,
       tempMax,
-      tempSides.get(entityId) ?? 1
+      tempSides.get(entityId) ?? 1,
+      tempAnchors.get(entityId) ?? null
     );
     return { x: cx + rel.x, y: cx + rel.y, rgb: hueTempToRgb(kelvin) };
   };
@@ -2638,6 +2696,18 @@ function createSceneColorWheel({
       }
     }
     return limited;
+  };
+
+  const rememberFullDiskTemp = (keys, canvasX, radius, band) => {
+    if (!band || band.inner > 0) {
+      return;
+    }
+    const offset = canvasX - radius;
+    for (const key of keys) {
+      if (key) {
+        tempAnchors.set(key, offset);
+      }
+    }
   };
 
   const regionAt = (x, y, geom, radius) => {
@@ -2976,6 +3046,37 @@ function createSceneColorWheel({
       if (!marker) {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.setAttribute("class", "gm");
+        const dot = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        dot.setAttribute("class", "pin-dot");
+        const dotOutline = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dotOutline.setAttribute("class", "pin-dot-outline");
+        dotOutline.setAttribute("cx", String(PIN_TIP_X));
+        dotOutline.setAttribute("cy", String(PIN_TIP_Y));
+        dotOutline.setAttribute("r", "12");
+        const dotFill = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dotFill.setAttribute("class", "pin-dot-fill");
+        dotFill.setAttribute("cx", String(PIN_TIP_X));
+        dotFill.setAttribute("cy", String(PIN_TIP_Y));
+        dotFill.setAttribute("r", "7.5");
+        const count = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        count.setAttribute("class", "group-count");
+        count.setAttribute("x", String(PIN_TIP_X));
+        count.setAttribute("y", String(PIN_TIP_Y));
+        count.setAttribute("text-anchor", "middle");
+        count.setAttribute("dominant-baseline", "central");
+        const dotFo = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
+        dotFo.setAttribute("class", "dot-icon");
+        dotFo.setAttribute("x", String(PIN_TIP_X - 11));
+        dotFo.setAttribute("y", String(PIN_TIP_Y - 11));
+        dotFo.setAttribute("width", "22");
+        dotFo.setAttribute("height", "22");
+        const dotHost = document.createElement("div");
+        dotHost.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+        dotHost.className = "dot-icon-host";
+        const dotHaIcon = document.createElement("ha-icon");
+        dotHost.appendChild(dotHaIcon);
+        dotFo.appendChild(dotHost);
+        dot.append(dotOutline, dotFill, count, dotFo);
         const body = document.createElementNS("http://www.w3.org/2000/svg", "g");
         body.setAttribute("class", "pin-body");
         const outline = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -3015,8 +3116,19 @@ function createSceneColorWheel({
         hit.setAttribute("cy", String(PIN_TIP_Y));
         hit.setAttribute("r", "20");
         hit.setAttribute("fill", "transparent");
-        g.append(body, hit);
-        marker = { g, path, outline, hit, icon, fo, haIcon, sceneId: scene.id };
+        g.append(dot, body, hit);
+        marker = {
+          g,
+          path,
+          outline,
+          hit,
+          icon,
+          fo,
+          haIcon,
+          dotHaIcon,
+          count,
+          sceneId: scene.id,
+        };
         markers.set(scene.id, marker);
         g.addEventListener("pointerenter", (ev) => {
           if (drag || suppressHover) {
@@ -3096,12 +3208,28 @@ function createSceneColorWheel({
           }
           const cluster =
             pinClusters.find((row) => row.includes(scene.id)) || [scene.id];
+          const caps = capsOf(item);
+          const markerMode = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
+          if (openGroup?.includes(scene.id)) {
+            const pt = pointFromEvent(ev);
+            const heldX = marker.x ?? radiusPx();
+            const heldY = marker.y ?? radiusPx();
+            const grabX = pt.x - heldX;
+            const grabY = pt.y - heldY;
+            // Keep this pin out of the stack the select-sync would rebuild,
+            // then put it back under the pointer. The other lights go home.
+            soloId = scene.id;
+            openGroup = null;
+            onSelect?.(scene.id);
+            placeMarker(marker, heldX, heldY);
+            startDrag(ev, scene.id, grabX, grabY, markerMode, [scene.id]);
+            g.classList.add("drag");
+            return;
+          }
           const stacked = cluster.length > 1 && !detached.has(scene.id);
           if (!stacked && !selectedIdsOf(now).includes(scene.id)) {
             onSelect(scene.id);
           }
-          const caps = capsOf(item);
-          const markerMode = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
           const pt = pointFromEvent(ev);
           startDrag(
             ev,
@@ -3124,12 +3252,17 @@ function createSceneColorWheel({
         continue;
       }
       const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
+      marker.g.classList.remove("grouped", "group-member");
+      if (expanded && svg.lastChild !== marker.g) {
+        svg.appendChild(marker.g);
+      }
       marker.g.classList.toggle("expanded", expanded);
       marker.g.classList.toggle("active", active && expanded);
       marker.g.classList.toggle("preview", preview);
       const mdi = pinIconOf(scene);
       if (mdi && marker.haIcon) {
         marker.haIcon.setAttribute("icon", mdi);
+        marker.dotHaIcon?.setAttribute("icon", mdi);
         marker.fo.style.display = expanded ? "" : "none";
       } else if (marker.fo) {
         marker.fo.style.display = "none";
@@ -3159,6 +3292,12 @@ function createSceneColorWheel({
       if (marker.haIcon) {
         marker.haIcon.style.color = pinForeground(pos.rgb);
       }
+      if (marker.dotHaIcon) {
+        marker.dotHaIcon.style.color = pinForeground(pos.rgb);
+      }
+      if (marker.count) {
+        marker.count.style.fill = pinForeground(pos.rgb);
+      }
       placeMarker(marker, pos.x, pos.y, expanded);
       placed.push({
         id: scene.id,
@@ -3167,14 +3306,13 @@ function createSceneColorWheel({
         mode: markerMode,
         off: isOffDraft(scene.draft),
       });
-      if (expanded) {
-        if (preview) {
-          suppressHover = true;
-        }
-        svg.appendChild(marker.g);
+      if (preview) {
+        suppressHover = true;
       }
     }
-    const clusterInput = placed.filter((item) => !detached.has(item.id));
+    const clusterInput = placed.filter(
+      (item) => !detached.has(item.id) && item.id !== soloId
+    );
     pinClusters =
       groupNearby && radius
         ? clusterNearbyPinIds(clusterInput, radius)
@@ -3187,6 +3325,9 @@ function createSceneColorWheel({
     if (groupNearby) {
       const hidden = new Set();
       for (const group of pinClusters) {
+        if (openGroup?.some((id) => group.includes(id))) {
+          continue;
+        }
         const lead =
           group.find((id) => selectedIds.includes(id)) || group[0];
         for (const id of group) {
@@ -3196,12 +3337,13 @@ function createSceneColorWheel({
         }
         const leadMarker = markers.get(lead);
         if (leadMarker && group.length > 1) {
-          leadMarker.icon.textContent = String(group.length);
+          leadMarker.count.textContent = String(group.length);
           if (leadMarker.fo) {
             leadMarker.fo.style.display = "none";
           }
-          leadMarker.g.classList.add("grouped", "active", "expanded");
-          leadMarker.hit.style.display = "none";
+          leadMarker.g.classList.add("grouped");
+          leadMarker.g.classList.remove("expanded", "group-member");
+          leadMarker.hit.style.display = "";
           svg.appendChild(leadMarker.g);
         }
       }
@@ -3244,6 +3386,36 @@ function createSceneColorWheel({
         );
         marker.g.style.display = "";
       });
+    }
+    if (openGroup) {
+      openGroup = openGroup.filter((id) => seen.has(id) && markers.has(id));
+      if (openGroup.length < 2) {
+        openGroup = null;
+      }
+    }
+    canvasWrap.classList.toggle("group-open", Boolean(openGroup));
+    if (openGroup && radius) {
+      const points = groupRingPoints(openGroup.length, radius);
+      const ring = radius * 0.42;
+      groupRing.setAttribute("cx", String(radius));
+      groupRing.setAttribute("cy", String(radius));
+      groupRing.setAttribute("r", String(ring));
+      groupRing.style.display = "";
+      openGroup.forEach((id, index) => {
+        const marker = markers.get(id);
+        const point = points[index];
+        if (!marker || !point) {
+          return;
+        }
+        marker.g.classList.add("group-member");
+        marker.g.classList.remove("grouped", "expanded");
+        marker.g.style.display = "";
+        marker.hit.style.display = "";
+        placeMarker(marker, point.x, point.y);
+        svg.appendChild(marker.g);
+      });
+    } else {
+      groupRing.style.display = "none";
     }
     onClusters?.(pinClusters.map((group) => [...group]));
     for (const [id, marker] of markers) {
@@ -3447,6 +3619,18 @@ function createSceneColorWheel({
     const limited = tracked
       ? { x: tracked.x, y: tracked.y }
       : applyAtBand(item.draft, x, y, radius, pinMode, band);
+    if (pinMode === "temp") {
+      const keys = [];
+      for (const id of moveIds) {
+        keys.push(id);
+        const row = scenes.find((scene) => scene.id === id);
+        const eid = row ? entityIdOf(row) : null;
+        if (eid) {
+          keys.push(eid);
+        }
+      }
+      rememberFullDiskTemp(keys, limited.x, radius, band);
+    }
     const moved = new Set();
     const placeDragPin = (row) => {
       const pin = markers.get(row.id);
@@ -3519,6 +3703,7 @@ function createSceneColorWheel({
     if (!drag || ev.pointerId !== drag.pointerId) {
       return;
     }
+    soloId = null;
     const marker = markers.get(drag.sceneId);
     const finishedIds = drag.ids?.length ? [...drag.ids] : [drag.sceneId];
     const travel = Math.hypot(ev.clientX - drag.startX, ev.clientY - drag.startY);
@@ -3532,8 +3717,9 @@ function createSceneColorWheel({
         stacked,
       }) === "fan"
     ) {
-      for (const id of drag.cluster) {
-        detached.add(id);
+      openGroup = [...(drag.cluster || [])];
+      for (const id of openGroup) {
+        detached.delete(id);
       }
       drag = null;
       hideFloatReadout();
@@ -3612,6 +3798,14 @@ function createSceneColorWheel({
   };
 
   svg.addEventListener("pointerdown", (ev) => {
+    if (openGroup && !ev.target?.closest?.(".gm")) {
+      openGroup = null;
+      if (!moveOnEmptyDisk) {
+        onSelect?.(null);
+      }
+      sync();
+      return;
+    }
     const radius = radiusPx();
     if (!radius) {
       return;
@@ -3650,6 +3844,14 @@ function createSceneColorWheel({
       return;
     }
     const limited = applyAtBand(item.draft, pt.x, pt.y, radius, pinMode, band);
+    if (pinMode === "temp") {
+      rememberFullDiskTemp(
+        [item.id, entityIdOf(item)],
+        limited.x,
+        radius,
+        band
+      );
+    }
     const marker = markers.get(item.id);
     marker?.g.classList.add("drag", "active");
     if (marker) {
@@ -3890,4 +4092,6 @@ export {
   kelvinTrackDragPoint,
   detachedAfterDrag,
   pinPressAction,
+  groupRingPoints,
+  placeTempInAnnulus,
 };
