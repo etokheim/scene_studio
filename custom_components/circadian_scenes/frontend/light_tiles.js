@@ -62,17 +62,19 @@ export const LIGHT_TILES_CSS = `
     /* Glass stroke on the group, same treatment as the light tiles. No fixed
        height, and no overflow clip — the select-all icon sits inside the label. */
     box-sizing: border-box;
-    padding: 8px;
-    border-radius: 24px;
-    border: 1px solid var(--glass-border, transparent);
-    background-color: var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color))));
+    --group-radius: 24px;
+    --group-pad: 8px;
+    --group-border: 1px;
+    --group-inner-radius: calc(var(--group-radius) - var(--group-border));
+    --group-fill: var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color))));
+    padding: var(--group-pad);
+    border-radius: var(--group-radius);
+    border: var(--group-border) solid var(--glass-border, transparent);
+    background-color: var(--group-fill);
     backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
     -webkit-backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
     background-image:
-      linear-gradient(
-        var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color)))),
-        var(--glass-fill, var(--surface-1, var(--gray000, var(--card-background-color))))
-      ),
+      linear-gradient(var(--group-fill), var(--group-fill)),
       var(
         --glass-stroke,
         linear-gradient(
@@ -116,24 +118,39 @@ export const LIGHT_TILES_CSS = `
     text-transform: uppercase;
     cursor: pointer;
   }
-  /* Tiles that slide under a stuck group title fade out. The solid end is 90%. */
+  /* Hidden until the title sticks, so it does not cover the first tile.
+     Then it uses the group's fill and stays on the padding edge, inside the
+     border. While the title has been stuck for less than the corner radius,
+     the ramp's left edge stays on that corner. After that the corner has
+     slid away, and the ramp's left edge is square. */
   .light-mode-label::before {
     content: "";
     position: absolute;
     z-index: -1;
-    top: -28px;
-    bottom: -28px;
-    left: -16px;
-    right: -40px;
-    background: linear-gradient(
+    top: calc(var(--group-pad, 8px) * -1);
+    bottom: calc(var(--group-pad, 8px) * -1);
+    left: calc((var(--group-pad, 8px) + var(--ramp-left, 0px)) * -1);
+    right: calc(var(--ramp-extra, 0px) * -1);
+    border-top-left-radius: var(--ramp-radius, var(--group-inner-radius, 23px));
+    border-bottom-left-radius: var(--ramp-radius, var(--group-inner-radius, 23px));
+    background-color: var(--group-fill, var(--card-background-color));
+    opacity: 0;
+    pointer-events: none;
+  }
+  .light-mode-label.is-stuck::before {
+    opacity: 1;
+    backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
+    -webkit-backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
+    -webkit-mask-image: linear-gradient(
       to right,
-      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
-        0%,
-      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
-        46%,
+      #000 calc(100% - var(--ramp-extra, 0px)),
       transparent 100%
     );
-    pointer-events: none;
+    mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - var(--ramp-extra, 0px)),
+      transparent 100%
+    );
   }
   /* Larger touch target. The extra area is invisible and does not change layout. */
   .light-mode-label::after {
@@ -1103,6 +1120,82 @@ export function createLightModeGroup({
   row.className = "light-mode-row";
   group.append(button, row);
   return { group, row };
+}
+
+/** How far a sticky group title has been held, and how its ramp meets the group. */
+export function groupTitleStickState({
+  naturalLeft,
+  labelLeft,
+  labelRight,
+  innerRight,
+  innerRadius = 23,
+  rampReach = 40,
+} = {}) {
+  const shift = Math.max(0, labelLeft - naturalLeft);
+  const stuck = shift > 0.5;
+  const extra = stuck
+    ? Math.max(0, Math.min(rampReach, innerRight - labelRight))
+    : 0;
+  const flat = stuck && shift >= innerRadius;
+  return {
+    shift: stuck ? shift : 0,
+    stuck,
+    extra,
+    // Stay on the group's corner until that curve has slid past the title.
+    rampLeft: stuck && !flat ? shift : 0,
+    radius: flat ? 0 : innerRadius,
+  };
+}
+
+const GROUP_TITLE_RAMP_REACH = 40;
+
+export function bindGroupTitleStick(scroller) {
+  if (!scroller) {
+    return () => {};
+  }
+  if (scroller._groupTitleStick) {
+    return scroller._groupTitleStick;
+  }
+  const sync = () => {
+    for (const label of scroller.querySelectorAll(".light-mode-label")) {
+      const group = label.parentElement;
+      if (!group?.classList.contains("light-mode-group")) {
+        continue;
+      }
+      const groupRect = group.getBoundingClientRect();
+      const labelRect = label.getBoundingClientRect();
+      const style = getComputedStyle(group);
+      const pad = parseFloat(style.paddingRight) || 0;
+      const border = parseFloat(style.borderRightWidth) || 0;
+      const padLeft = parseFloat(style.paddingLeft) || 0;
+      const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+      const innerRadius = Math.max(
+        0,
+        (parseFloat(style.borderTopLeftRadius) || 0) - borderLeft
+      );
+      const state = groupTitleStickState({
+        naturalLeft: groupRect.left + borderLeft + padLeft,
+        labelLeft: labelRect.left,
+        labelRight: labelRect.right,
+        innerRight: groupRect.right - border - pad,
+        innerRadius,
+        rampReach: GROUP_TITLE_RAMP_REACH,
+      });
+      label.classList.toggle("is-stuck", state.stuck);
+      label.style.setProperty("--stuck-shift", `${state.shift}px`);
+      label.style.setProperty("--ramp-extra", `${state.extra}px`);
+      label.style.setProperty("--ramp-left", `${state.rampLeft}px`);
+      label.style.setProperty("--ramp-radius", `${state.radius}px`);
+    }
+  };
+  scroller.addEventListener("scroll", sync, { passive: true });
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(sync);
+    observer.observe(scroller);
+  }
+  scroller._groupTitleStick = sync;
+  sync();
+  return sync;
 }
 
 export function createLightTilesHint(text) {

@@ -14,6 +14,7 @@ import {
   LIGHT_TILES_CSS,
   TILE_BRIGHTNESS_WHEEL_STEP,
   attachLightActions,
+  bindGroupTitleStick,
   binaryDragPreview,
   binaryWheelPreview,
   captureLightStripLayout,
@@ -591,6 +592,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const tiles = document.createElement("div");
   tiles.className = "light-tiles";
   scroller.appendChild(tiles);
+  const syncGroupTitles = bindGroupTitleStick(scroller);
   const tileBlock = document.createElement("div");
   tileBlock.className = "light-tiles-block";
   tileBlock.append(scroller, createLightTilesHint(
@@ -1489,6 +1491,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     if (scroller) {
       scroller.scrollLeft = keepLeft;
     }
+    syncGroupTitles();
     playLightStripLayout(tiles, beforeLayout);
     paintSelectAll();
     stripGroupSignature = tileGroupSignature();

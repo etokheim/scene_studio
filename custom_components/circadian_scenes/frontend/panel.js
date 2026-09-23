@@ -60,7 +60,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
+import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -5778,7 +5778,10 @@ class CircadianScenesPanel extends HTMLElement {
         "Use palette"
       );
       custom.addEventListener("click", () => {
-        void restoreSnaps().then(() => finish({ palette: null }));
+        // Copy before restore clears the preview snapshots. Those are the
+        // room colors from before the palette preview.
+        const room = snaps ? structuredClone(snaps) : null;
+        void restoreSnaps().then(() => finish({ palette: null, room }));
       });
       useBtn.addEventListener("click", () => {
         const palette = palettes.find((item) => item.id === selectedId);
@@ -5854,6 +5857,13 @@ class CircadianScenesPanel extends HTMLElement {
           assignmentSeed = choice.seed || 0;
           for (const entityId of this._areaLightIds(areaId)) {
             lights[entityId] = { variable_ref: paletteId };
+          }
+        } else {
+          for (const entityId of this._areaLightIds(areaId)) {
+            const prior = choice.room?.[entityId];
+            lights[entityId] = prior
+              ? structuredClone(prior)
+              : this._snapshotLight(entityId);
           }
         }
         const saved = await this._hass.callWS({
@@ -17813,6 +17823,7 @@ class CircadianScenesPanel extends HTMLElement {
     this._placeLegendModeGroups(tiles);
     if (tiles.childElementCount) {
       scroller.appendChild(tiles);
+      bindGroupTitleStick(scroller);
       legend.append(
         scroller,
         createLightTilesHint(
@@ -17987,6 +17998,7 @@ class CircadianScenesPanel extends HTMLElement {
       tilesEl.appendChild(add);
     }
     playLightStripLayout(tilesEl, beforeLayout);
+    tilesEl.parentElement?._groupTitleStick?.();
   }
 
   _toggleLegendLightPower(entityId) {

@@ -5,6 +5,7 @@ import {
   binaryDragPreview,
   binaryWheelPreview,
   groupSelectionAfterClick,
+  groupTitleStickState,
   lightTileColorGroup,
   lightTileGroupOrder,
   proportionalFillPercent,
@@ -259,4 +260,55 @@ test("on/off drag resists and snaps across halfway", () => {
   assert.equal(wheeled.snapOn, true);
   const shortWheel = binaryWheelPreview({ startFill: 0, stepPct: 10 });
   assert.equal(shortWheel.snapOn, false);
+});
+
+test("group title ramp stays off until the title sticks", () => {
+  const resting = groupTitleStickState({
+    naturalLeft: 80,
+    labelLeft: 80,
+    labelRight: 108,
+    innerRight: 400,
+  });
+  assert.deepEqual(resting, {
+    shift: 0,
+    stuck: false,
+    extra: 0,
+    rampLeft: 0,
+    radius: 23,
+  });
+  const jitter = groupTitleStickState({
+    naturalLeft: 80.4,
+    labelLeft: 80,
+    labelRight: 108,
+    innerRight: 400,
+  });
+  assert.equal(jitter.stuck, false);
+  assert.equal(jitter.extra, 0);
+  const stuck = groupTitleStickState({
+    naturalLeft: 40,
+    labelLeft: 80,
+    labelRight: 108,
+    innerRight: 400,
+  });
+  assert.equal(stuck.stuck, true);
+  assert.equal(stuck.shift, 40);
+  assert.equal(stuck.extra, 40);
+  assert.equal(stuck.rampLeft, 0);
+  assert.equal(stuck.radius, 0);
+  const early = groupTitleStickState({
+    naturalLeft: 74,
+    labelLeft: 80,
+    labelRight: 108,
+    innerRight: 400,
+  });
+  assert.equal(early.shift, 6);
+  assert.equal(early.rampLeft, 6);
+  assert.equal(early.radius, 23);
+  const ending = groupTitleStickState({
+    naturalLeft: -20,
+    labelLeft: 8,
+    labelRight: 36,
+    innerRight: 50,
+  });
+  assert.equal(ending.extra, 14);
 });
