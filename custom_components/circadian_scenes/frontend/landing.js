@@ -824,6 +824,38 @@ function renderSelectEmpty(panel) {
   });
 }
 
+export function createPaletteChip(palette, catalog, { selected = false, onClick } = {}) {
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "var-chip";
+  if (selected) {
+    chip.classList.add("selected");
+  }
+  const swatch = document.createElement("div");
+  swatch.className = "palette-swatch";
+  for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
+    const slot = resolveSlot(palette, i, catalog);
+    const disc = document.createElement("span");
+    disc.className = "palette-slot";
+    disc.style.zIndex = String(i + 1);
+    disc.style.background = variableSwatchCss(
+      { color: slot, brightness: slot.brightness, kind: "color" },
+      catalog
+    );
+    swatch.appendChild(disc);
+  }
+  const name = document.createElement("span");
+  name.textContent = palette.name;
+  chip.append(swatch, name);
+  if (onClick) {
+    chip.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      onClick();
+    });
+  }
+  return chip;
+}
+
 function renderLibrary(panel, { compact } = {}) {
   const wrap = document.createElement("div");
   if (!compact) {
@@ -897,29 +929,10 @@ function renderLibrary(panel, { compact } = {}) {
   const palRow = document.createElement("div");
   palRow.className = "var-row";
   for (const palette of palettes) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "var-chip";
-    if (panel._view === "palette" && panel._variableId === palette.id) {
-      chip.classList.add("selected");
-    }
-    const swatch = document.createElement("div");
-    swatch.className = "palette-swatch";
-    for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
-      const slot = resolveSlot(palette, i, panel._variables);
-      const disc = document.createElement("span");
-      disc.className = "palette-slot";
-      disc.style.zIndex = String(i + 1);
-      disc.style.background = variableSwatchCss(
-        { color: slot, brightness: slot.brightness, kind: "color" },
-        panel._variables
-      );
-      swatch.appendChild(disc);
-    }
-    const name = document.createElement("span");
-    name.textContent = palette.name;
-    chip.append(swatch, name);
-    chip.addEventListener("click", () => panel._openPaletteEditor(palette));
+    const chip = createPaletteChip(palette, panel._variables, {
+      selected: panel._view === "palette" && panel._variableId === palette.id,
+      onClick: () => panel._openPaletteEditor(palette),
+    });
     palRow.appendChild(chip);
   }
   wrap.appendChild(palRow);

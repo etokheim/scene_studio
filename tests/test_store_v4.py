@@ -178,7 +178,24 @@ class TestToFormData:
         form = to_form_data(item)
         assert form["kind"] == KIND_SIMPLE
         assert form["lights"] == {"light.a": {"state": "on"}}
+        assert form["palette_id"] is None
+        assert form["assignment_seed"] == 0
         assert AUTOMATICALLY_UPDATE_LIGHTS not in form
+
+    def test_palette_base_round_trip(self):
+        item = normalize_simple_scene(
+            {
+                SCENE_NAME: "Party",
+                "palette_id": "pal-1",
+                "assignment_seed": 42,
+                "lights": {"light.a": {"variable_ref": "pal-1"}},
+            }
+        )
+        assert item["palette_id"] == "pal-1"
+        assert item["assignment_seed"] == 42
+        form = to_form_data(item)
+        assert form["palette_id"] == "pal-1"
+        assert form["assignment_seed"] == 42
 
 
 # ---------------------------------------------------------------------------

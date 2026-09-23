@@ -199,10 +199,10 @@ export const LIGHT_TILES_CSS = `
   .light-tile-actions {
     position: absolute;
     z-index: 0;
-    left: 4px;
-    right: 4px;
-    top: 4px;
-    bottom: 4px;
+    left: 2px;
+    right: 2px;
+    top: 2px;
+    bottom: 2px;
     pointer-events: none;
   }
   .light-tile-actions-top,
@@ -211,7 +211,7 @@ export const LIGHT_TILES_CSS = `
     left: 0;
     right: 0;
     display: flex;
-    height: 64px;
+    height: 36px;
     overflow: hidden;
     pointer-events: none;
     opacity: 1;
@@ -223,36 +223,36 @@ export const LIGHT_TILES_CSS = `
     transition: transform 280ms cubic-bezier(0.2, 0, 0, 1);
     transition-delay: 0s;
   }
-  /* Flat edge toward the tile, and a tongue that stays behind it. */
+  /* Flat edge toward the tile. Hidden plates sit inside it; open plates clear it. */
   .light-tile-actions-top {
     top: 0;
-    border-radius: 24px 24px 0 0;
-    transform: translateY(16px);
+    border-radius: 18px 18px 0 0;
+    transform: translateY(100%);
   }
   .light-tile-actions-bottom {
     bottom: 0;
-    border-radius: 0 0 24px 24px;
-    transform: translateY(-16px);
+    border-radius: 0 0 18px 18px;
+    transform: translateY(-100%);
   }
   .simple-light-selector:hover .light-tile-actions-top,
   .simple-light-selector:focus-within .light-tile-actions-top {
-    transform: translateY(calc(-100% + 16px));
+    transform: translateY(calc(-100% - 6px));
     pointer-events: auto;
     transition-delay: 200ms;
   }
   .simple-light-selector:hover .light-tile-actions-bottom,
   .simple-light-selector:focus-within .light-tile-actions-bottom {
-    transform: translateY(calc(100% - 16px));
+    transform: translateY(calc(100% + 6px));
     pointer-events: auto;
     transition-delay: 200ms;
   }
   .simple-light-selector.active .light-tile-actions-top {
-    transform: translateY(calc(-100% + 16px));
+    transform: translateY(calc(-100% - 6px));
     pointer-events: auto;
     transition-delay: 0s;
   }
   .simple-light-selector.active .light-tile-actions-bottom {
-    transform: translateY(calc(100% - 16px));
+    transform: translateY(calc(100% + 6px));
     pointer-events: auto;
     transition-delay: 0s;
   }
@@ -260,21 +260,21 @@ export const LIGHT_TILES_CSS = `
     .light-tile-actions-top,
   .light-tiles.select-mode .simple-light-selector.active:not(:hover)
     .light-tile-actions-bottom {
-    transform: translateY(16px);
+    transform: translateY(100%);
     pointer-events: none;
     transition-delay: 0s;
   }
   .light-tiles.select-mode .simple-light-selector.active:not(:hover)
     .light-tile-actions-bottom {
-    transform: translateY(-16px);
+    transform: translateY(-100%);
   }
   .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-top {
-    transform: translateY(calc(-100% + 16px));
+    transform: translateY(calc(-100% - 6px));
     pointer-events: auto;
     transition-delay: 200ms;
   }
   .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-bottom {
-    transform: translateY(calc(100% - 16px));
+    transform: translateY(calc(100% + 6px));
     pointer-events: auto;
     transition-delay: 200ms;
   }
@@ -291,6 +291,24 @@ export const LIGHT_TILES_CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
+    transition:
+      background-color 140ms ease,
+      transform 140ms ease;
+  }
+  .light-action:hover {
+    background-color: color-mix(
+      in srgb,
+      var(--primary-text-color) 14%,
+      transparent
+    );
+  }
+  .light-action:active {
+    transform: scale(0.94);
+    background-color: color-mix(
+      in srgb,
+      var(--primary-text-color) 22%,
+      transparent
+    );
   }
   .light-tile-actions-top .light-action + .light-action {
     box-shadow: inset 1px 0 0
@@ -309,6 +327,8 @@ export const LIGHT_TILES_CSS = `
       var(--hue-light-on-background, #ffda95)
     );
   }
+  .simple-light-selector:hover:not(.select-all-tile):not(.add-light-tile):not(.removed)
+    .simple-light-frame,
   .simple-light-selector.active:not(.select-all-tile):not(.add-light-tile):not(.removed)
     .simple-light-frame {
     transform: scale(1.045);
@@ -347,6 +367,7 @@ export const LIGHT_TILES_CSS = `
     --hue-light-off-text-color: var(--hue-light-on-text-color, rgba(0, 0, 0, 0.7));
     box-sizing: content-box;
     position: relative;
+    z-index: 1;
     z-index: 1;
     /* Huemane light tile: 85×(90+45 switch slot), 5px pad, radius 24. No switch painted. */
     width: 85px;
@@ -940,7 +961,12 @@ export function attachLightActions(
     );
   }
   tray.append(top, bottom);
-  selector.insertBefore(tray, selector.firstChild);
+  const frame = selector.querySelector(".simple-light-frame");
+  if (frame) {
+    frame.insertBefore(tray, frame.firstChild);
+  } else {
+    selector.insertBefore(tray, selector.firstChild);
+  }
   const powerBtn = bottom.querySelector(".light-power");
   const tile = selector.querySelector(".simple-light-tile");
   if (powerBtn && tile) {
@@ -1091,7 +1117,7 @@ export function playLightTileJelly(tile) {
   window.setTimeout(() => tile.classList.remove("jelly-snap"), 520);
 }
 
-const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness"];
+const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness", "onoff"];
 
 /**
  * Bucket a stored light draft by the color mode it is in now.
@@ -1103,6 +1129,9 @@ export function lightTileColorGroup(draft, caps) {
     if (draft?.color_mode === "white") {
       return "white";
     }
+    if (caps.onOff || draft?.color_mode === "onoff") {
+      return "onoff";
+    }
     return "brightness";
   }
   const mode = draft?.color_mode;
@@ -1112,7 +1141,10 @@ export function lightTileColorGroup(draft, caps) {
   if (mode === "white") {
     return "white";
   }
-  if (mode === "brightness" || mode === "onoff") {
+  if (mode === "onoff") {
+    return "onoff";
+  }
+  if (mode === "brightness") {
     return "brightness";
   }
   if (mode === "hs" || mode === "rgb" || mode === "rgbw" || mode === "rgbww" || mode === "xy") {

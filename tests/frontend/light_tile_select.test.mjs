@@ -17,7 +17,13 @@ import {
 const ids = ["a", "b", "c", "d"];
 
 test("color mode buckets follow the strip order", () => {
-  assert.deepEqual(lightTileGroupOrder(), ["color", "temp", "white", "brightness"]);
+  assert.deepEqual(lightTileGroupOrder(), [
+    "color",
+    "temp",
+    "white",
+    "brightness",
+    "onoff",
+  ]);
   assert.equal(lightTileColorGroup({ color_mode: "hs" }), "color");
   assert.equal(lightTileColorGroup({ color_mode: "xy" }), "color");
   assert.equal(lightTileColorGroup({ rgb_color: [1, 2, 3] }), "color");
@@ -25,7 +31,14 @@ test("color mode buckets follow the strip order", () => {
   assert.equal(lightTileColorGroup({ color_temp_kelvin: 2700 }), "temp");
   assert.equal(lightTileColorGroup({ color_mode: "white" }), "white");
   assert.equal(lightTileColorGroup({ color_mode: "brightness" }), "brightness");
-  assert.equal(lightTileColorGroup({ color_mode: "onoff" }), "brightness");
+  assert.equal(lightTileColorGroup({ color_mode: "onoff" }), "onoff");
+  assert.equal(
+    lightTileColorGroup(
+      { color_mode: "onoff" },
+      { known: true, hasColor: false, hasTemp: false, onOff: true }
+    ),
+    "onoff"
+  );
   assert.equal(lightTileColorGroup({ color_mode: "rgbw" }), "color");
   assert.equal(lightTileColorGroup({ color_mode: "rgbww" }), "color");
   assert.equal(

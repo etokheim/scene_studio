@@ -51,6 +51,7 @@ import {
 } from "./dial_clock.js";
 import {
   LANDING_CSS,
+  createPaletteChip,
   renderLanding,
   applyRampBackground,
   previewRampsForTheme,
@@ -3042,6 +3043,31 @@ class CircadianScenesPanel extends HTMLElement {
         .live-edit-toggle ha-switch {
           --mdc-switch-track-width: 36px;
         }
+        .scene-palette-dialog .scene-palette-hint {
+          margin: 0 0 12px;
+          color: var(--secondary-text-color);
+          font-size: 14px;
+          line-height: 20px;
+        }
+        .scene-palette-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          max-height: min(420px, 50vh);
+          overflow: auto;
+        }
+        .scene-palette-choice {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .scene-palette-choice .var-chip {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .scene-palette-randomize[hidden] {
+          display: none !important;
+        }
         .dialog-row {
           display: flex;
           align-items: center;
@@ -5612,6 +5638,184 @@ class CircadianScenesPanel extends HTMLElement {
     void this._createLibraryItem("theme");
   }
 
+  _areaLightIds(areaId) {
+    if (!areaId) {
+      return [];
+    }
+    const floorAreas = (this._floors || []).flatMap((floor) => floor.areas || []);
+    const area = floorAreas.find((item) => item.id === areaId);
+    return (area?.lights || []).filter((id) => this._isPhysicalLightEntityId(id));
+  }
+
+  _chooseScenePalette({ areaId } = {}) {
+    return new Promise((resolve) => {
+      this.shadowRoot.querySelector("ha-dialog.scene-palette-dialog")?.remove();
+      const palettes = (this._variables || []).filter((item) =>
+        variableIsPalette(item)
+      );
+      const areaLights = this._areaLightIds(areaId);
+      const dialog = document.createElement("ha-dialog");
+      dialog.className = "scene-palette-dialog";
+      dialog.setAttribute(
+        "header-title",
+        this._t("frontend.dialogs.scene_palette_title", "New scene")
+      );
+      dialog.open = true;
+      let settled = false;
+      let selectedId = null;
+      let seed = (Math.random() * 0xffffffff) >>> 0;
+      let snaps = null;
+      const finish = (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        dialog.open = false;
+        resolve(value);
+      };
+      const restoreSnaps = async () => {
+        if (!snaps) {
+          return;
+        }
+        const prior = snaps;
+        snaps = null;
+        await Promise.all(
+          Object.entries(prior).map(([entityId, stored]) =>
+            this._applyLightState(entityId, stored, { transition: 0.4 })
+          )
+        );
+      };
+      const applyPreview = async () => {
+        const palette = palettes.find((item) => item.id === selectedId);
+        if (!this._readRoomPreviewPref() || !palette) {
+          await restoreSnaps();
+          return;
+        }
+        if (!snaps) {
+          snaps = {};
+          for (const entityId of areaLights) {
+            snaps[entityId] = this._snapshotLight(entityId);
+          }
+        }
+        await Promise.all(
+          areaLights.map((entityId) => {
+            const draft = { state: "on", brightness: 200 };
+            applyVariableToDraft(draft, palette, {
+              entityId,
+              seed,
+              catalog: this._variables,
+            });
+            return this._applyLightState(entityId, draft, { transition: 0.4 });
+          })
+        );
+      };
+      const hint = document.createElement("p");
+      hint.className = "scene-palette-hint";
+      hint.textContent = this._t(
+        "frontend.dialogs.scene_palette_hint",
+        "Pick a palette as the base, or start without one."
+      );
+      const liveToggle = document.createElement("label");
+      liveToggle.className = "live-edit-toggle";
+      const liveLabel = document.createElement("span");
+      liveLabel.textContent = this._t("frontend.actions.live_edit", "Live edit");
+      const liveSwitch = document.createElement("ha-switch");
+      liveSwitch.checked = this._readRoomPreviewPref();
+      liveSwitch.addEventListener("change", () => {
+        this._writeRoomPreviewPref(Boolean(liveSwitch.checked));
+        void applyPreview();
+      });
+      liveToggle.append(liveLabel, liveSwitch);
+      const list = document.createElement("div");
+      list.className = "scene-palette-list";
+      const rows = [];
+      const paintSelection = () => {
+        for (const row of rows) {
+          row.chip.classList.toggle("selected", row.id === selectedId);
+          row.randomize.hidden = row.id !== selectedId;
+        }
+        const locked = !selectedId;
+        useBtn.disabled = locked;
+        useBtn.toggleAttribute("disabled", locked);
+      };
+      for (const palette of palettes) {
+        const choice = document.createElement("div");
+        choice.className = "scene-palette-choice";
+        const chip = createPaletteChip(palette, this._variables, {
+          onClick: () => {
+            selectedId = palette.id;
+            paintSelection();
+            void applyPreview();
+          },
+        });
+        const randomize = document.createElement("ha-button");
+        randomize.className = "scene-palette-randomize";
+        randomize.appearance = "plain";
+        randomize.hidden = true;
+        randomize.textContent = this._t(
+          "frontend.dialogs.scene_palette_randomize",
+          "Randomize"
+        );
+        randomize.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          seed = (Math.random() * 0xffffffff) >>> 0;
+          void applyPreview();
+        });
+        choice.append(chip, randomize);
+        list.appendChild(choice);
+        rows.push({ id: palette.id, chip, randomize });
+      }
+      dialog.append(hint, liveToggle, list);
+      const footer = customElements.get("ha-dialog-footer")
+        ? document.createElement("ha-dialog-footer")
+        : document.createElement("div");
+      footer.slot = "footer";
+      const custom = document.createElement("ha-button");
+      custom.slot = "secondaryAction";
+      custom.appearance = "plain";
+      custom.textContent = this._t(
+        "frontend.dialogs.scene_palette_custom",
+        "Custom"
+      );
+      const useBtn = document.createElement("ha-button");
+      useBtn.slot = "primaryAction";
+      useBtn.variant = "brand";
+      useBtn.disabled = true;
+      useBtn.toggleAttribute("disabled", true);
+      useBtn.textContent = this._t(
+        "frontend.dialogs.scene_palette_use",
+        "Use palette"
+      );
+      custom.addEventListener("click", () => {
+        void restoreSnaps().then(() => finish({ palette: null }));
+      });
+      useBtn.addEventListener("click", () => {
+        const palette = palettes.find((item) => item.id === selectedId);
+        if (!palette) {
+          return;
+        }
+        const keepPreview = this._readRoomPreviewPref() && Boolean(snaps);
+        finish({
+          palette,
+          seed,
+          snapshots: keepPreview ? snaps : null,
+          keepPreview,
+        });
+        snaps = null;
+      });
+      footer.append(custom, useBtn);
+      dialog.appendChild(footer);
+      paintSelection();
+      dialog.addEventListener("closed", () => {
+        dialog.remove();
+        if (!settled) {
+          void restoreSnaps().then(() => finish(null));
+        }
+      });
+      this.shadowRoot.appendChild(dialog);
+    });
+  }
+
   async _createLibraryItem(kind, { fromDraft, areaId, areaName } = {}) {
     if (this._creatingLibrary) {
       return;
@@ -5647,6 +5851,20 @@ class CircadianScenesPanel extends HTMLElement {
         return;
       }
       if (kind === "simple") {
+        const choice = await this._chooseScenePalette({ areaId });
+        if (!choice) {
+          return;
+        }
+        const lights = {};
+        let paletteId = null;
+        let assignmentSeed = 0;
+        if (choice.palette) {
+          paletteId = choice.palette.id;
+          assignmentSeed = choice.seed || 0;
+          for (const entityId of this._areaLightIds(areaId)) {
+            lights[entityId] = { variable_ref: paletteId };
+          }
+        }
         const saved = await this._hass.callWS({
           type: `${DOMAIN}/save`,
           data: {
@@ -5654,9 +5872,16 @@ class CircadianScenesPanel extends HTMLElement {
             scene_name: this._untitledLabel(),
             area: areaId || null,
             membership: { exclude: [], include: [] },
-            lights: {},
+            lights,
+            palette_id: paletteId,
+            assignment_seed: assignmentSeed,
           },
         });
+        if (choice.keepPreview && choice.snapshots) {
+          this._roomPreview = true;
+          this._roomPreviewSnapshots = choice.snapshots;
+          this._scenePreviewOwnerId = saved.id;
+        }
         this._upsertSceneInList(saved);
         this._commitCreatedUndo({
           kind: "scene",
@@ -11721,6 +11946,9 @@ class CircadianScenesPanel extends HTMLElement {
     return {
       state: state.state,
       brightness: attrs.brightness,
+      // Without the active mode, restore prefers hs/rgb and a color-temp
+      // light comes back at a different kelvin.
+      color_mode: attrs.color_mode,
       color_temp_kelvin: attrs.color_temp_kelvin,
       hs_color: attrs.hs_color,
       rgb_color: attrs.rgb_color,
@@ -17646,7 +17874,12 @@ class CircadianScenesPanel extends HTMLElement {
       return undefined;
     }
     const caps = lightWheelCaps(attrs);
-    return { known: true, hasColor: caps.hasColor, hasTemp: caps.hasTemp };
+    return {
+      known: true,
+      hasColor: caps.hasColor,
+      hasTemp: caps.hasTemp,
+      onOff: modes.length > 0 && modes.every((mode) => mode === "onoff"),
+    };
   }
 
   _placeLegendModeGroups(tilesEl) {
@@ -17690,6 +17923,7 @@ class CircadianScenesPanel extends HTMLElement {
       temp: this._t("frontend.lights.group_temp", "Temperature"),
       white: this._t("frontend.lights.group_white", "White"),
       brightness: this._t("frontend.lights.group_brightness", "Brightness"),
+      onoff: this._t("frontend.lights.group_onoff", "On/off"),
     };
     const selectAllLabel = this._t("frontend.lights.select_all", "Select all");
     const add = tilesEl.querySelector(".add-light-tile");

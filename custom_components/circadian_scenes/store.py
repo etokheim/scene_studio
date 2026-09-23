@@ -264,6 +264,8 @@ def normalize_simple_scene(
             "include": list(membership.get("include") or []),
         },
         "lights": raw.get("lights") or {},
+        "palette_id": raw.get("palette_id") or None,
+        "assignment_seed": int(raw.get("assignment_seed") or 0),
     }
 
 
@@ -485,6 +487,8 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
         )
     elif kind == KIND_SIMPLE:
         data["lights"] = item.get("lights") or {}
+        data["palette_id"] = item.get("palette_id") or None
+        data["assignment_seed"] = int(item.get("assignment_seed") or 0)
     return data
 
 

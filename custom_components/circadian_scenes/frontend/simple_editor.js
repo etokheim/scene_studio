@@ -268,6 +268,23 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const wheels = document.createElement("div");
   wheels.className = "simple-wheels";
 
+  const paletteBaseId = () => panel._formData?.palette_id || null;
+
+  const hydrateDraft = (raw, eid) => {
+    const draft = { ...(raw || { state: "on", brightness: 200 }) };
+    const color = resolveColor(draft, variables);
+    Object.assign(draft, color);
+    const variable = variables.find((item) => item.id === draft.variable_ref);
+    if (variable && variableIsPalette(variable)) {
+      applyVariableToDraft(draft, variable, {
+        entityId: eid,
+        seed: Number(panel._formData?.assignment_seed) || 0,
+        catalog: variables,
+      });
+    }
+    return draft;
+  };
+
   let selectedIds = new Set(members[0] ? [members[0]] : []);
   let touchSelectMode = false;
   let peeledId = null;
@@ -280,13 +297,27 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const scrubTargets = () => (inSelectMode() ? selectedMemberIds() : members);
   const drafts = {};
   for (const eid of members) {
-    const raw = lights[eid] || { state: "on", brightness: 200 };
-    const color = resolveColor(raw, variables);
-    drafts[eid] = {
-      ...raw,
-      ...color,
-    };
+    drafts[eid] = hydrateDraft(lights[eid], eid);
   }
+
+  const lightOverridesPalette = (eid) => {
+    const base = paletteBaseId();
+    if (!base) {
+      return false;
+    }
+    return drafts[eid]?.variable_ref !== base;
+  };
+
+  const detachFromPalette = (draft) => {
+    const base = paletteBaseId();
+    if (!base || draft?.variable_ref !== base) {
+      return;
+    }
+    delete draft.variable_ref;
+    delete draft.palette_t;
+    delete draft.palette_r;
+    delete draft.assignment_seed;
+  };
 
   const persistLight = (eid) => {
     const draft = drafts[eid];
@@ -295,7 +326,17 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     // Snapshot the scene before this write so undo can restore it.
     panel._beginSimpleUndo?.();
-    if (draft.variable_ref) {
+    if (draft.variable_ref && draft.variable_ref === paletteBaseId()) {
+      lights[eid] = {
+        variable_ref: draft.variable_ref,
+      };
+      if (draft.palette_t != null) {
+        lights[eid].palette_t = draft.palette_t;
+      }
+      if (draft.palette_r != null) {
+        lights[eid].palette_r = draft.palette_r;
+      }
+    } else if (draft.variable_ref) {
       lights[eid] = {
         state: draft.state || "on",
         brightness: draft.brightness ?? 200,
@@ -340,7 +381,12 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       return undefined;
     }
     const caps = lightWheelCaps(attrs);
-    return { known: true, hasColor: caps.hasColor, hasTemp: caps.hasTemp };
+    return {
+      known: true,
+      hasColor: caps.hasColor,
+      hasTemp: caps.hasTemp,
+      onOff: modes.length > 0 && modes.every((mode) => mode === "onoff"),
+    };
   };
 
   const groupOf = (eid) => lightTileColorGroup(drafts[eid], groupCaps(eid));
@@ -711,10 +757,60 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       selected: selectedIds.has(eid),
       brightnessLabel: onOff ? onOffLabel(draft) : undefined,
     });
+    const removeBtn = selector?.querySelector(".light-remove");
+    if (!removeBtn) {
+      return;
+    }
+    const overridden = lightOverridesPalette(eid);
+    removeBtn.querySelector("ha-icon")?.setAttribute(
+      "icon",
+      overridden ? "mdi:restore" : "mdi:close"
+    );
+    const state = panel._hass?.states?.[eid];
+    const name =
+      state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+    removeBtn.setAttribute(
+      "aria-label",
+      overridden
+        ? panel._t(
+            "frontend.lights.reset_palette",
+            "Reset {name} to the palette",
+            { name }
+          )
+        : panel._t(
+            "frontend.lights.remove_named_from_scene",
+            "Remove {name} from the scene",
+            { name }
+          )
+    );
+  };
+
+  const resetPaletteLight = (eid) => {
+    const palette = variables.find((item) => item.id === paletteBaseId());
+    if (!palette) {
+      return;
+    }
+    const draft = ensureDraft(eid);
+    applyVariableToDraft(draft, palette, {
+      entityId: eid,
+      seed: Number(panel._formData?.assignment_seed) || 0,
+      catalog: variables,
+    });
+    persistLight(eid);
+    const selector = tiles.querySelector(
+      `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
+    );
+    if (selector) {
+      paintSelector(selector, eid, draft);
+    }
+    paintSelectAll();
+    syncLevelHost();
+    wheel.sync();
   };
 
   const toggleTilePower = (eid) => {
     const draft = ensureDraft(eid);
+    detachFromPalette(draft);
     const off = fillPercent(draft, eid) <= 0;
     if (off) {
       draft.state = "on";
@@ -739,9 +835,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     if (drafts[eid]) {
       return drafts[eid];
     }
-    const raw = lights[eid] || { state: "on", brightness: 200 };
-    const color = resolveColor(raw, variables);
-    drafts[eid] = { ...raw, ...color };
+    drafts[eid] = hydrateDraft(lights[eid], eid);
     return drafts[eid];
   };
 
@@ -821,6 +915,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           if (base == null) {
             continue;
           }
+          detachFromPalette(draft);
           const pct = proportionalFillPercent(base, startShown, nextShown);
           draft.brightness = Math.round((pct / 100) * 255);
           draft.state = draft.brightness > 0 ? "on" : "off";
@@ -1024,6 +1119,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       temp: panel._t("frontend.lights.group_temp", "Temperature"),
       white: panel._t("frontend.lights.group_white", "White"),
       brightness: panel._t("frontend.lights.group_brightness", "Brightness"),
+      onoff: panel._t("frontend.lights.group_onoff", "On/off"),
     };
     const selectAllLabel = panel._t("frontend.lights.select_all", "Select all");
     const groupRows = new Map();
@@ -1090,6 +1186,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const onOffOnly = isOnOffLight(eid);
 
       const applyBri = (next) => {
+        detachFromPalette(draft);
         draft.brightness = Math.max(0, Math.min(255, Math.round(next)));
         draft.state = draft.brightness > 0 ? "on" : "off";
         persistLight(eid);
@@ -1301,7 +1398,13 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           "Remove {name} from the scene",
           { name }
         ),
-        onRemove: () => panel._removeLightFromSimpleMembers(eid),
+        onRemove: () => {
+          if (lightOverridesPalette(eid)) {
+            resetPaletteLight(eid);
+            return;
+          }
+          panel._removeLightFromSimpleMembers(eid);
+        },
         settingsLabel: panel._t(
           "frontend.lights.settings_named",
           "Settings for {name}",
@@ -1434,6 +1537,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const targets = brightnessTargets();
       for (const id of targets) {
         const draft = ensureDraft(id);
+        detachFromPalette(draft);
         draft.brightness = next;
         draft.state = next > 0 ? "on" : "off";
         persistLight(id);
@@ -1445,6 +1549,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const targets = brightnessTargets();
       for (const id of targets) {
         const draft = ensureDraft(id);
+        detachFromPalette(draft);
         draft.state = on ? "on" : "off";
         if (on && !(Number(draft.brightness) > 0)) {
           draft.brightness = 255;
@@ -1458,6 +1563,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const targets = onOffTargets();
       for (const id of targets) {
         const draft = ensureDraft(id);
+        detachFromPalette(draft);
         draft.state = on ? "on" : "off";
         persistLight(id);
       }

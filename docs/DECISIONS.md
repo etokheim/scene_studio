@@ -934,6 +934,20 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Animating `transform: rotate() scale()` on the SVG did not reverse, and appending the node on every move cancelled the transition before it could be seen. The return flight had no stored home, so leaving the group hid the members in place.
 - **Do not reverse without user ask.**
 
+## On/off group and palette base
+
+- **Date:** 2026-09-23
+- **Decision:** On/off-only lights sit in their own strip group. A new scene asks for a palette base or a custom start. Choosing a palette stores that id and a seed on the scene, and each area light keeps only the palette reference so color and brightness stay inherited. Editing a light drops the reference and keeps the current values; the remove button becomes reset, which links that light again. The same palette chip as the library list is used in the dialog. Live edit in the dialog previews the palette on the area’s lights, and randomize beside the selected palette changes the seed.
+- **Why:** On/off bulbs were sitting in Brightness. A palette base has to stay linked until the user changes a light, or reset has nothing to return to.
+- **Do not reverse without user ask.**
+
+## Tile action buttons
+
+- **Date:** 2026-09-23
+- **Decision:** Open action plates sit fully outside the tile, with a 6px gap and a square edge toward it. They are 36px tall and scale with the tile frame on hover and when the tile is selected. Each button highlights on hover and shrinks on press.
+- **Why:** The tucked tongue covered the icons.
+- **Do not reverse without user ask.**
+
 ## Dot hover and group-label icon
 
 - **Date:** 2026-09-22
