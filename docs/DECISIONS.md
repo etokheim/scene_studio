@@ -885,21 +885,21 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## On/off tiles, native switch, and group labels
 
 - **Date:** 2026-09-22
-- **Decision:** On/off light tiles say On or Off. Select all still shows the average percent. The on/off stand-in is `ha-control-switch` with the `vertical` and `reversed` attributes set (the properties do not reflect, and the component’s layout is attribute CSS). Brightness and on/off stand-ins sit on the same blurred glow as the color wheel. The group label is a centered column: the vertical name, then 8px, then the select-all icon. Both share the label color, including hover. An invisible inset on the label enlarges the touch target. Selecting a pin or clicking the empty disk updates selection in place; the strip rebuilds only when a light changes group. Select all is painted at its average fill the first time, so a rebuild does not animate up from empty.
+- **Decision:** On/off light tiles say On or Off. Select all still shows the average percent. The on/off stand-in is `ha-control-switch` with the `vertical` and `reversed` attributes set (the properties do not reflect, and the component’s layout is attribute CSS). Brightness and on/off stand-ins sit on the same blurred glow as the color wheel. The group label’s name is centered; the select-all icon is pinned to the bottom of the group (see the landscape-wheel entry). Both share the label color, including hover. An invisible inset on the label enlarges the touch target. Selecting a pin or clicking the empty disk updates selection in place; the strip rebuilds only when a light changes group. Select all is painted at its average fill the first time, so a rebuild does not animate up from empty.
 - **Why:** Forcing a horizontal switch to 130×320 drew the thumb as a full-height column on the right. Rebuilding the strip on every disk click replayed the Select all fill transition.
 - **Do not reverse without user ask.**
 
 ## Landscape wheel chrome
 
 - **Date:** 2026-09-23
-- **Decision:** When the wheel stage is wider than it is tall, the color-mode toggles and the variable list stack from the top-right of the disk. Variable names stay visible, and that list has no capsule background. A square or portrait stage keeps the horizontal row under the disk, with names only in the tooltip. When a scene card is selected, the rest of the area rail fades until the pointer is over the rail. The first time the rail is shown, it scrolls so that selected card is in view.
+- **Decision:** When the wheel stage is wider than it is tall, the color-mode toggles and the variable list are a right-hand aside. Mode buttons show Color, Temperature, or Palette beside the icon. Variable names stay visible, and that list has no capsule background. The aside scrolls as one column; a mask feathers whichever edge still has more to scroll. A square or portrait stage keeps the horizontal row under the disk, with names only in the tooltip. When a scene card is selected, the rest of the area rail fades until the pointer is over the rail. The first time the rail is shown, it scrolls so that selected card is in view. The group label’s name is centered in the group; the select-all icon is absolutely positioned at the bottom so it does not shift that center.
 - **Why:** The horizontal row spent the leftover width beside a landscape disk. The side column is wide enough for the names.
 - **Do not reverse without user ask.**
 
 ## Dot hover and group-label icon
 
 - **Date:** 2026-09-22
-- **Decision:** The group label’s select-all icon follows the vertical name (8px below it). Hovering a disk dot opens that pin and closes the selected pin for as long as the pointer stays on the dot. Moving away restores the selected pin. The hover does not change the selection. A press still selects that light.
+- **Decision:** Hovering a disk dot opens that pin and closes the selected pin for as long as the pointer stays on the dot. Moving away restores the selected pin. The hover does not change the selection. A press still selects that light.
 - **Why:** The icon was a prefix. Opening the hovered pin moved its hit target off the cursor, so the pin has a tip hit that stays under the pointer.
 - **Do not reverse without user ask.**
 

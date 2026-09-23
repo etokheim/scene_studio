@@ -361,6 +361,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   });
 
   const wheel = createSceneColorWheel({
+    t: (key, fallback) => panel._t(key, fallback),
     getState,
     showPath: false,
     groupNearby: true,
@@ -1581,6 +1582,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     activeId: selectedId,
   });
   const wheel = createSceneColorWheel({
+    t: (key, fallback) => panel._t(key, fallback),
     getState,
     onSelect: (id) => {
       selectedId = id;

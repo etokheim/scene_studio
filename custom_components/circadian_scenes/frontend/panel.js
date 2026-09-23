@@ -2236,6 +2236,17 @@ class CircadianScenesPanel extends HTMLElement {
           border-radius: 12px;
           background-size: cover;
           background-position: center;
+          flex: 0 0 auto;
+        }
+        .wheel-mode-name {
+          display: none;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 13px;
+          line-height: 1.2;
+          color: var(--primary-text-color);
         }
         .hue-wheel-mode-cluster {
           display: flex;
@@ -3448,74 +3459,146 @@ class CircadianScenesPanel extends HTMLElement {
            the horizontal row under the disk. */
         @container (aspect-ratio > 1 / 1) {
           .hue-wheel-face {
-            flex-direction: row;
-            align-items: flex-start;
-            justify-content: center;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 200px;
+            align-items: center;
+            justify-items: center;
+            gap: 16px;
           }
           .stage-col .simple-editor .hue-wheel-canvas {
-            width: auto;
-            height: min(100cqb, ${WHEEL_FACE_MAX_PX}px, calc(100cqi - 216px));
-            max-width: min(${WHEEL_FACE_MAX_PX}px, calc(100cqi - 216px));
+            width: min(100%, 100cqb, ${WHEEL_FACE_MAX_PX}px);
+            height: auto;
+            max-width: 100%;
             max-height: 100%;
             aspect-ratio: 1;
-            flex: 0 0 auto;
             margin: 0;
+            justify-self: center;
           }
           .hue-wheel-chrome {
             flex-direction: column;
-            align-items: flex-start;
+            align-items: flex-end;
             justify-content: flex-start;
             align-self: stretch;
+            justify-self: end;
             width: 200px;
             max-width: 200px;
+            height: 100%;
             max-height: 100%;
             min-height: 0;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
+            scrollbar-width: none;
             gap: 8px;
+          }
+          .hue-wheel-chrome::-webkit-scrollbar {
+            display: none;
+          }
+          /* Feather only the edge that still has something to scroll to. */
+          .hue-wheel-chrome.can-scroll-start {
+            -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px);
+            mask-image: linear-gradient(to bottom, transparent, #000 28px);
+          }
+          .hue-wheel-chrome.can-scroll-end {
+            -webkit-mask-image: linear-gradient(
+              to bottom,
+              #000 calc(100% - 28px),
+              transparent
+            );
+            mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+          }
+          .hue-wheel-chrome.can-scroll-start.can-scroll-end {
+            -webkit-mask-image: linear-gradient(
+              to bottom,
+              transparent,
+              #000 28px,
+              #000 calc(100% - 28px),
+              transparent
+            );
+            mask-image: linear-gradient(
+              to bottom,
+              transparent,
+              #000 28px,
+              #000 calc(100% - 28px),
+              transparent
+            );
+          }
+          .hue-wheel-mode-cluster {
+            align-items: flex-end;
+            width: 100%;
           }
           .wheel-mode-pill {
             flex-direction: column;
-            width: 48px;
+            align-items: flex-end;
+            width: auto;
+            max-width: 100%;
             height: auto;
+            padding: 0;
+            gap: 4px;
+            background: none;
+            box-shadow: none;
+          }
+          .wheel-mode-pill .wheel-wrapper {
+            width: auto;
+            max-width: 100%;
+            height: 32px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 0;
+            border-color: transparent;
+          }
+          .wheel-mode-pill .wheel-wrapper.active .wheel {
+            box-shadow: 0 0 0 2px #fff;
+          }
+          .wheel-mode-name {
+            display: block;
+            text-align: end;
           }
           .hue-presets {
             flex-direction: column;
-            align-items: stretch;
+            align-items: flex-end;
             justify-content: flex-start;
             width: 100%;
             max-width: 200px;
             height: auto;
-            max-height: 100%;
+            max-height: none;
             min-height: 0;
-            flex: 0 1 auto;
-            border-radius: 16px;
+            flex: 0 0 auto;
+            overflow: visible;
+            border-radius: 0;
             background: none;
             box-shadow: none;
+            padding: 0;
           }
           .hue-presets-track {
             flex-direction: column;
-            align-items: stretch;
+            align-items: flex-end;
             width: 100%;
             max-width: 100%;
-            overflow-x: hidden;
-            overflow-y: auto;
+            overflow: visible;
           }
           .hue-presets::after {
             display: none;
           }
           .hue-preset:not(.add) {
-            width: 100%;
+            width: auto;
+            max-width: 100%;
             height: 36px;
             border-radius: 18px;
+            flex-direction: row-reverse;
             justify-content: flex-start;
             gap: 8px;
-            padding: 2px 10px 2px 2px;
+            padding: 2px 2px 2px 10px;
           }
           .hue-preset.add {
-            align-self: flex-start;
+            align-self: flex-end;
           }
           .hue-preset-name {
             display: block;
+            max-width: 148px;
+            text-align: end;
           }
         }
         .stage-bg .hue-wheel-glow {
@@ -5888,6 +5971,7 @@ class CircadianScenesPanel extends HTMLElement {
     });
     briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
     const wheel = createSceneColorWheel({
+      t: (key, fallback) => this._t(key, fallback),
       hasColor: true,
       hasTemp: true,
       tempMin: 2000,
@@ -6776,6 +6860,7 @@ class CircadianScenesPanel extends HTMLElement {
     });
     body.appendChild(brightnessGraphCtl.el);
     wheelCtl = createSceneColorWheel({
+      t: (key, fallback) => this._t(key, fallback),
       hasColor: true,
       hasTemp: true,
       tempMin: 2000,
@@ -12240,6 +12325,7 @@ class CircadianScenesPanel extends HTMLElement {
 
     if (hasColor || hasTemp) {
       wheelCtl = createSceneColorWheel({
+        t: (key, fallback) => this._t(key, fallback),
         hasColor,
         hasTemp,
         tempMin: attrs.min_color_temp_kelvin || 2000,

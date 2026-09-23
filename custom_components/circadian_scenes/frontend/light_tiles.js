@@ -53,7 +53,6 @@ export const LIGHT_TILES_CSS = `
     align-items: center;
     justify-content: center;
     align-self: stretch;
-    gap: 8px;
     box-sizing: border-box;
     width: 28px;
     min-width: 28px;
@@ -84,11 +83,15 @@ export const LIGHT_TILES_CSS = `
     color: var(--primary-text-color);
   }
   .light-mode-select {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     writing-mode: horizontal-tb;
     color: inherit;
+    transform: translateX(-50%);
   }
   .light-mode-select ha-icon {
     --mdc-icon-size: 18px;

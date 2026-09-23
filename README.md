@@ -94,6 +94,10 @@ Keep the core simple, then add behavior with the rest of Home Assistant:
 1. **All-day fade** — use built-in automatic light updates (default). Older blueprints that re-activate every few minutes are legacy and not required.
 2. **Motion lighting** — automation that activates the circadian scene on motion (a blueprint is still useful for this).
 
+## Acknowledgements
+
+The color wheel is based on the wheel in [Hue Like Light Card](https://github.com/Gh61/lovelace-hue-like-light-card) by [Gh61](https://github.com/Gh61). [huemane-light-card](https://github.com/etokheim/huemane-light-card) is built on that card, and this panel’s wheel uses the same implementation as its starting point.
+
 ## Support
 
 If Circadian Scenes saves you setup time or makes your evenings nicer, you can [buy me a coffee](https://buymeacoffee.com/etokheim):

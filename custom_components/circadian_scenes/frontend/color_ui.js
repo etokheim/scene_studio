@@ -2223,6 +2223,7 @@ function createSceneColorWheel({
   getPinIcon,
   onClusters,
   moveOnEmptyDisk = true,
+  t = (_key, fallback) => fallback,
 }) {
   // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
   const stage = document.createElement("div");
@@ -2759,6 +2760,14 @@ function createSceneColorWheel({
       if (mode === current) {
         wrap.classList.add("active");
       }
+      const name = document.createElement("span");
+      name.className = "wheel-mode-name";
+      name.textContent =
+        mode === "temp"
+          ? t("frontend.lights.group_temp", "Temperature")
+          : mode === "palette"
+            ? t("frontend.naming.palette", "Palette")
+            : t("frontend.lights.group_color", "Color");
       const face = document.createElement("span");
       face.className = `wheel wheel-mode-${mode}`;
       if (mode === "color") {
@@ -2773,7 +2782,7 @@ function createSceneColorWheel({
           draftRgb
         );
       }
-      wrap.appendChild(face);
+      wrap.append(name, face);
         wrap.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if (mode === "palette") {
@@ -2816,6 +2825,18 @@ function createSceneColorWheel({
   };
 
   const updatePresetOverflow = () => {
+    const vertical = getComputedStyle(chrome).flexDirection === "column";
+    if (vertical) {
+      const max = chrome.scrollHeight - chrome.clientHeight;
+      chrome.classList.toggle("can-scroll-start", max > 1 && chrome.scrollTop > 1);
+      chrome.classList.toggle(
+        "can-scroll-end",
+        max > 1 && chrome.scrollTop < max - 1
+      );
+      presets.classList.remove("can-scroll-end");
+      return;
+    }
+    chrome.classList.remove("can-scroll-start", "can-scroll-end");
     const maxScroll = presetTrack.scrollWidth - presetTrack.clientWidth;
     presets.classList.toggle(
       "can-scroll-end",
@@ -3695,6 +3716,8 @@ function createSceneColorWheel({
   ro?.observe(canvasWrap);
   ro?.observe(presets);
   presetTrack.addEventListener("scroll", updatePresetOverflow, { passive: true });
+  chrome.addEventListener("scroll", updatePresetOverflow, { passive: true });
+  ro?.observe(chrome);
   paintWheels();
 
   const disconnect = () => {
