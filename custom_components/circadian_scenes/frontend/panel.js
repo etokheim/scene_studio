@@ -1986,7 +1986,8 @@ class CircadianScenesPanel extends HTMLElement {
           cursor: pointer;
         }
         .sun-light-clock-legend .light-tiles-scroller {
-          padding: 24px 22px 0;
+          padding-left: 0;
+          padding-right: 0;
         }
         .sun-light-clock-legend .light-tiles-hint {
           margin-top: 4px;
@@ -2416,19 +2417,20 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-svg .pin-body {
           transform-box: fill-box;
           transform-origin: 50% 100%;
-          transform: rotate(180deg) scale(0.2);
+          transform: rotate(180deg);
+          scale: 0.2;
           opacity: 0;
           transition:
-            transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1),
+            scale 520ms cubic-bezier(0.34, 1.56, 0.64, 1),
             opacity 280ms ease;
         }
         .hue-wheel-svg .gm.expanded .pin-body,
         .hue-wheel-svg .gm.drop-target .pin-body {
-          transform: rotate(180deg) scale(1);
+          scale: 1;
           opacity: 1;
         }
         .hue-wheel-svg .gm.drag .pin-body {
-          transform: rotate(180deg) scale(1.16);
+          scale: 1.16;
           opacity: 1;
         }
         .hue-wheel-svg .pin-dot {
@@ -3536,8 +3538,9 @@ class CircadianScenesPanel extends HTMLElement {
           height: auto;
         }
         /* Landscape wheel container: mode toggles and variables stack from the
-           disk's top-right. 200px column + 16px gap. Square and portrait keep
-           the horizontal row under the disk. */
+           disk's top-right. 200px column + 16px gap. A portrait viewport keeps
+           the horizontal row under the disk even when the wheel box is wide. */
+        @media (orientation: landscape) {
         @container wheel (aspect-ratio > 1 / 1) {
           .hue-wheel-face {
             position: relative;
@@ -3702,6 +3705,7 @@ class CircadianScenesPanel extends HTMLElement {
             max-width: 148px;
             text-align: end;
           }
+        }
         }
         .stage-bg .hue-wheel-glow {
           position: absolute;
@@ -10047,6 +10051,10 @@ class CircadianScenesPanel extends HTMLElement {
       }
     }
     const picked = this._legendSelectedIds;
+    root.querySelector(".light-tiles")?.classList.toggle(
+      "select-mode",
+      Boolean(picked && picked.size > 1)
+    );
     for (const row of root.querySelectorAll(
       ".simple-light-selector[data-entity-id]"
     )) {

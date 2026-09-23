@@ -8,10 +8,11 @@ export const LIGHT_TILES_CSS = `
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    /* Room for the action plates that slide out above and below a tile.
-       overflow-y is forced to auto by overflow-x, so the plates must fit
-       inside this padding instead of painting outside the scroller. */
-    padding: 56px 24px 56px;
+    /* Plates slide out of the strip. The padding is cancelled by the negative
+       margin so they can overlap the wheel and the hint without pushing them. */
+    padding: 64px 0;
+    margin-top: -64px;
+    margin-bottom: -64px;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -36,19 +37,38 @@ export const LIGHT_TILES_CSS = `
   }
   .light-tiles > .select-all-tile {
     position: sticky;
-    left: 0;
+    left: 8px;
     z-index: 6;
   }
+  /* Fade tiles that slide under Select all. The opaque end is 90%. */
   .light-tiles > .select-all-tile::before {
     content: "";
     position: absolute;
     z-index: -1;
-    top: -56px;
-    bottom: -56px;
-    left: -24px;
-    right: -12px;
-    background: var(--primary-background-color, #111);
+    top: -20px;
+    bottom: -20px;
+    left: -8px;
+    right: -40px;
+    background: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
+        0%,
+      color-mix(in srgb, var(--primary-background-color, #111) 90%, transparent)
+        46%,
+      transparent 100%
+    );
     pointer-events: none;
+  }
+  @media (orientation: portrait), (max-width: 700px) {
+    .light-tiles {
+      margin-inline: 0;
+    }
+    /* The editor page keeps 12px of inline padding when the area rail is
+       hidden. Pull only the strip out so tiles can scroll to the screen edge. */
+    .page:not(:has(.workspace)) .light-tiles-block {
+      width: calc(100% + 24px);
+      margin-inline: -12px;
+    }
   }
   .light-mode-group {
     display: flex;
@@ -157,11 +177,17 @@ export const LIGHT_TILES_CSS = `
   .simple-light-selector {
     box-sizing: border-box;
     flex: 0 0 auto;
+    position: relative;
+    overflow: visible;
+  }
+  .simple-light-frame {
+    box-sizing: border-box;
     border: 2px solid transparent;
     padding: 2px;
     border-radius: 28px;
     position: relative;
-    overflow: visible;
+    z-index: 1;
+    transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1);
   }
   /* Action plates sit behind the tile and share the group fill. They slide
      out on hover, and stay out while the tile is selected (touch has no hover). */
@@ -185,36 +211,72 @@ export const LIGHT_TILES_CSS = `
     left: 0;
     right: 0;
     display: flex;
-    height: 46px;
-    border-radius: 24px;
+    height: 64px;
     overflow: hidden;
     pointer-events: none;
+    opacity: 1;
     background-color: var(
       --glass-fill,
       var(--surface-1, var(--gray000, var(--card-background-color)))
     );
     box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
     transition: transform 280ms cubic-bezier(0.2, 0, 0, 1);
+    transition-delay: 0s;
   }
+  /* Flat edge toward the tile, and a tongue that stays behind it. */
   .light-tile-actions-top {
     top: 0;
-    transform: translateY(100%);
+    border-radius: 24px 24px 0 0;
+    transform: translateY(16px);
   }
   .light-tile-actions-bottom {
     bottom: 0;
-    transform: translateY(-100%);
+    border-radius: 0 0 24px 24px;
+    transform: translateY(-16px);
   }
   .simple-light-selector:hover .light-tile-actions-top,
-  .simple-light-selector.active .light-tile-actions-top,
   .simple-light-selector:focus-within .light-tile-actions-top {
-    transform: translateY(calc(-100% - 8px));
+    transform: translateY(calc(-100% + 16px));
     pointer-events: auto;
+    transition-delay: 200ms;
   }
   .simple-light-selector:hover .light-tile-actions-bottom,
-  .simple-light-selector.active .light-tile-actions-bottom,
   .simple-light-selector:focus-within .light-tile-actions-bottom {
-    transform: translateY(calc(100% + 8px));
+    transform: translateY(calc(100% - 16px));
     pointer-events: auto;
+    transition-delay: 200ms;
+  }
+  .simple-light-selector.active .light-tile-actions-top {
+    transform: translateY(calc(-100% + 16px));
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+  .simple-light-selector.active .light-tile-actions-bottom {
+    transform: translateY(calc(100% - 16px));
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+  .light-tiles.select-mode .simple-light-selector.active:not(:hover)
+    .light-tile-actions-top,
+  .light-tiles.select-mode .simple-light-selector.active:not(:hover)
+    .light-tile-actions-bottom {
+    transform: translateY(16px);
+    pointer-events: none;
+    transition-delay: 0s;
+  }
+  .light-tiles.select-mode .simple-light-selector.active:not(:hover)
+    .light-tile-actions-bottom {
+    transform: translateY(-16px);
+  }
+  .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-top {
+    transform: translateY(calc(-100% + 16px));
+    pointer-events: auto;
+    transition-delay: 200ms;
+  }
+  .light-tiles.select-mode .simple-light-selector:hover .light-tile-actions-bottom {
+    transform: translateY(calc(100% - 16px));
+    pointer-events: auto;
+    transition-delay: 200ms;
   }
   .light-action {
     flex: 1 1 0;
@@ -241,16 +303,21 @@ export const LIGHT_TILES_CSS = `
   .light-action.is-off {
     opacity: 0.45;
   }
-  .simple-light-selector.active {
+  .simple-light-selector.active .simple-light-frame {
     border-color: var(
       --hue-light-on-color,
       var(--hue-light-on-background, #ffda95)
     );
   }
+  .simple-light-selector.active:not(.select-all-tile):not(.add-light-tile):not(.removed)
+    .simple-light-frame {
+    transform: scale(1.045);
+    z-index: 2;
+  }
   /* Select mode: same offset ring as the other tiles, in solid primary.
      Listed after .active so the wash color does not replace it. */
-  .simple-light-selector.select-all-tile.select-mode,
-  .simple-light-selector.select-all-tile.select-mode.active {
+  .simple-light-selector.select-all-tile.select-mode .simple-light-frame,
+  .simple-light-selector.select-all-tile.select-mode.active .simple-light-frame {
     border: 2px solid var(--primary-color);
   }
   :host(:not([data-dark-mode])) .simple-light-selector.select-all-tile {
@@ -335,14 +402,9 @@ export const LIGHT_TILES_CSS = `
   }
   .simple-light-selector.active:not(.select-all-tile):not(.add-light-tile):not(.removed)
     .simple-light-tile:not(.dragging):not(.wheel-adjusting) {
-    transform: scale(1.045);
     box-shadow:
       var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08)),
       0 12px 28px rgba(0, 0, 0, 0.32);
-    transition:
-      transform 0.28s cubic-bezier(0.2, 0, 0, 1),
-      box-shadow 0.28s ease,
-      background 0.3s ease-out;
   }
   .simple-light-tile:not(.dragging):active:hover,
   .simple-light-selector.active:not(.select-all-tile)
@@ -584,6 +646,26 @@ export function lightTileOnTextCss(rgb) {
   return luma > 0.45 ? "rgba(0, 0, 0, 0.7)" : "#fff";
 }
 
+/**
+ * Scale one light by how the Select all level changed.
+ * 100% and 50% at a 75% average become 50% and 25% when that average is halved.
+ * A light already at 0% stays there. A light stops at 100% if the scale would pass it.
+ * When the starting average is 0, every light takes the new level so the gesture can turn them on.
+ */
+export function proportionalFillPercent(startPct, startShown, nextShown) {
+  const start = Number(startPct);
+  const from = Number(startShown);
+  const to = Number(nextShown);
+  if (!Number.isFinite(start) || !Number.isFinite(from) || !Number.isFinite(to)) {
+    throw new Error("proportional fill expects finite percents");
+  }
+  const target = Math.max(0, Math.min(100, to));
+  if (from <= 0) {
+    return target;
+  }
+  return Math.max(0, Math.min(100, (start * target) / from));
+}
+
 /** Shared drag delta, clamped. Each light keeps its own starting level. */
 export function relativeFillPercent(startPct, deltaPct) {
   const start = Number(startPct);
@@ -801,7 +883,10 @@ export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
     makeLabels("layer-on", name, makeIcon),
     hit
   );
-  selector.appendChild(tile);
+  const frame = document.createElement("div");
+  frame.className = "simple-light-frame";
+  frame.appendChild(tile);
+  selector.appendChild(frame);
   return { selector, tile, hit };
 }
 

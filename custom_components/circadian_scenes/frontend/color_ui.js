@@ -2353,7 +2353,8 @@ function createSceneColorWheel({
         <feDropShadow dx="0" dy="3" stdDeviation="5" flood-opacity="0.4"></feDropShadow>
       </filter>
       <filter id="se-active-shadow">
-        <feOffset dx="0" dy="-10" />
+        <!-- The pin body is rotated 180°, so a negative offset hangs the heavy shadow off the bottom. -->
+        <feOffset dx="0" dy="-12" />
         <feGaussianBlur stdDeviation="7" result="offset-blur"/>
         <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse"/>
         <feFlood flood-color="#0005" flood-opacity=".95" result="color"/>
@@ -2411,6 +2412,7 @@ function createSceneColorWheel({
   let openGroup = null;
   /** Where a group was clicked, so the split can travel out from that pin. */
   let groupSpawn = null;
+  let groupHome = null;
   let groupFlightGen = 0;
   /** Pin pulled out of a cluster for the gesture that closes an open group. */
   let soloId = null;
@@ -2674,6 +2676,122 @@ function createSceneColorWheel({
       marker.g.getAnimations().forEach((anim) => anim.cancel());
       marker.g.style.transition = "";
     }
+  };
+
+  const revealPinIcon = (marker, scene) => {
+    const mdi = pinIconOf(scene);
+    if (!mdi || !marker?.haIcon) {
+      if (marker?.fo) {
+        marker.fo.style.display = "none";
+      }
+      return;
+    }
+    marker.haIcon.setAttribute("icon", mdi);
+    marker.dotHaIcon?.setAttribute("icon", mdi);
+    marker.fo.style.display = "";
+    marker.icon.textContent = "";
+    const ink = pinForeground(
+      scene?.draft ? draftRgb(scene.draft) : [255, 255, 255]
+    );
+    marker.haIcon.style.color = ink;
+  };
+
+  const flyPinsHome = (ids, home, fromTransforms) => {
+    if (!home || !ids.length) {
+      return;
+    }
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const gen = ++groupFlightGen;
+    let pending = 0;
+    const scenes = getState().scenes || [];
+    const finish = () => {
+      if (gen !== groupFlightGen) {
+        return;
+      }
+      for (const id of ids) {
+        const marker = markers.get(id);
+        if (!marker?.flying) {
+          continue;
+        }
+        marker.flying = false;
+        marker.g.getAnimations().forEach((anim) => anim.cancel());
+        marker.g.style.transition = "";
+        marker.g.style.transform = pinAt(home.x, home.y);
+      }
+      sync();
+    };
+    for (const id of ids) {
+      const marker = markers.get(id);
+      if (!marker) {
+        continue;
+      }
+      marker.flying = true;
+      marker.x = home.x;
+      marker.y = home.y;
+      marker.g.style.display = "";
+      marker.g.classList.add("expanded", "group-member");
+      marker.g.classList.remove("grouped");
+      const scene = scenes.find((row) => row.id === id);
+      if (scene) {
+        revealPinIcon(marker, scene);
+      }
+      if (reduce) {
+        continue;
+      }
+      pending += 1;
+      const captured = fromTransforms?.get(id);
+      const to = pinAt(home.x, home.y);
+      marker.g.style.transition = "none";
+      const anim = marker.g.animate(
+        [{ transform: captured && captured !== "none" ? captured : to }, { transform: to }],
+        {
+          duration: 480,
+          easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
+          fill: "both",
+        }
+      );
+      anim.onfinish = () => {
+        if (gen !== groupFlightGen) {
+          return;
+        }
+        pending -= 1;
+        if (pending <= 0) {
+          finish();
+        }
+      };
+    }
+    if (reduce || pending === 0) {
+      for (const id of ids) {
+        const marker = markers.get(id);
+        if (marker) {
+          marker.flying = false;
+        }
+      }
+    }
+  };
+
+  const closeOpenGroup = ({ exceptId = null } = {}) => {
+    const ids = (openGroup || []).filter((id) => id !== exceptId);
+    const home = groupHome;
+    const from = new Map();
+    for (const id of ids) {
+      const marker = markers.get(id);
+      if (!marker) {
+        continue;
+      }
+      from.set(id, getComputedStyle(marker.g).transform);
+    }
+    releaseGroupFlight();
+    openGroup = null;
+    if (
+      !ids.length ||
+      !home ||
+      !Number.isFinite(home.x) ||
+      !Number.isFinite(home.y)
+    ) {
+      return;
+    }
+    flyPinsHome(ids, home, from);
   };
 
   const placeMarker = (marker, x, y) => {
@@ -3131,7 +3249,16 @@ function createSceneColorWheel({
   };
 
   const sync = () => {
-    if (!openGroup) {
+    // A return flight runs after the group is closed. Cancelling it here
+    // snapped the pins home instead of letting them fly back.
+    let returning = false;
+    for (const marker of markers.values()) {
+      if (marker.flying) {
+        returning = true;
+        break;
+      }
+    }
+    if (!openGroup && !returning) {
       releaseGroupFlight();
     }
     syncModePill();
@@ -3340,9 +3467,8 @@ function createSceneColorWheel({
             const grabY = pt.y - heldY;
             // Keep this pin out of the stack the select-sync would rebuild,
             // then put it back under the pointer. The other lights go home.
-            releaseGroupFlight();
+            closeOpenGroup({ exceptId: scene.id });
             soloId = scene.id;
-            openGroup = null;
             onSelect?.(scene.id);
             placeMarker(marker, heldX, heldY);
             startDrag(ev, scene.id, grabX, grabY, markerMode, [scene.id]);
@@ -3365,6 +3491,19 @@ function createSceneColorWheel({
           g.classList.add("drag");
         });
         svg.appendChild(g);
+      }
+      if (marker.flying) {
+        const caps = capsOf(scene);
+        const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
+        marker.g.style.display = "";
+        placed.push({
+          id: scene.id,
+          x: marker.x,
+          y: marker.y,
+          mode: markerMode,
+          off: isOffDraft(scene.draft),
+        });
+        continue;
       }
       const active = selectedIds.includes(scene.id);
       const preview = hoverId === scene.id && !active;
@@ -3459,6 +3598,9 @@ function createSceneColorWheel({
           }
         }
         const leadMarker = markers.get(lead);
+        if (leadMarker?.flying) {
+          continue;
+        }
         if (leadMarker && group.length > 1) {
           const expandGroup =
             (hoverId != null && group.includes(hoverId)) ||
@@ -3478,12 +3620,14 @@ function createSceneColorWheel({
           leadMarker.icon.textContent = expandGroup ? String(group.length) : "";
           leadMarker.g.classList.toggle("expanded", expandGroup);
           leadMarker.hit.style.display = "";
-          svg.appendChild(leadMarker.g);
+          if (leadMarker.g.parentNode !== svg) {
+            svg.appendChild(leadMarker.g);
+          }
         }
       }
       for (const id of hidden) {
         const marker = markers.get(id);
-        if (marker) {
+        if (marker && !marker.flying) {
           marker.g.style.display = "none";
         }
       }
@@ -3546,6 +3690,12 @@ function createSceneColorWheel({
         row.marker.g.classList.toggle("expanded", expanded);
         row.marker.g.style.display = "";
         row.marker.hit.style.display = "";
+        const scene = (getState().scenes || []).find(
+          (item) => item.id === row.marker.sceneId
+        );
+        if (scene) {
+          revealPinIcon(row.marker, scene);
+        }
         placeMarker(row.marker, x, y);
         svg.appendChild(row.marker.g);
       };
@@ -3614,7 +3764,9 @@ function createSceneColorWheel({
             row.marker.g.classList.add("group-member", "expanded");
             row.marker.g.classList.remove("grouped");
             row.marker.g.style.display = "";
-            svg.appendChild(row.marker.g);
+            if (row.marker.g.parentNode !== svg) {
+              svg.appendChild(row.marker.g);
+            }
             continue;
           }
           placeOpenMember(row, row.point.x, row.point.y, true);
@@ -3939,6 +4091,10 @@ function createSceneColorWheel({
     const targets = new Set(dropTargetIds(sim, radius, [...moved]));
     for (const pin of markers.values()) {
       const hit = targets.has(pin.sceneId);
+      const wasTarget = pin.g.classList.contains("drop-target");
+      if (hit && !wasTarget) {
+        svg.appendChild(pin.g);
+      }
       pin.g.classList.toggle("drop-target", hit);
       if (hit) {
         if (
@@ -3948,7 +4104,6 @@ function createSceneColorWheel({
         ) {
           pin.fo.style.display = "";
         }
-        svg.appendChild(pin.g);
       } else if (!pin.g.classList.contains("expanded") && pin.fo) {
         pin.fo.style.display = "none";
       }
@@ -3987,10 +4142,11 @@ function createSceneColorWheel({
       }) === "fan"
     ) {
       openGroup = [...(drag.cluster || [])];
-      groupSpawn = {
+      groupHome = {
         x: marker?.x,
         y: marker?.y,
       };
+      groupSpawn = groupHome;
       for (const id of openGroup) {
         detached.delete(id);
       }
@@ -4072,8 +4228,7 @@ function createSceneColorWheel({
 
   svg.addEventListener("pointerdown", (ev) => {
     if (openGroup && !ev.target?.closest?.(".gm")) {
-      releaseGroupFlight();
-      openGroup = null;
+      closeOpenGroup();
       if (!moveOnEmptyDisk) {
         onSelect?.(null);
       }

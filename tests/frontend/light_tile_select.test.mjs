@@ -6,6 +6,7 @@ import {
   binaryWheelPreview,
   lightTileColorGroup,
   lightTileGroupOrder,
+  proportionalFillPercent,
   relativeFillPercent,
   selectAllDisplayedFill,
   selectAllOnOffState,
@@ -159,6 +160,14 @@ test("cmd/ctrl click can clear the last selected id", () => {
   });
   assert.deepEqual(next.selected, []);
   assert.equal(next.anchorId, "b");
+});
+
+test("select all scales each light with the shown average", () => {
+  assert.equal(proportionalFillPercent(100, 75, 37.5), 50);
+  assert.equal(proportionalFillPercent(50, 75, 37.5), 25);
+  assert.equal(proportionalFillPercent(0, 75, 37.5), 0);
+  assert.equal(proportionalFillPercent(80, 40, 80), 100);
+  assert.equal(proportionalFillPercent(10, 0, 40), 40);
 });
 
 test("select all keeps each light's brightness offset", () => {

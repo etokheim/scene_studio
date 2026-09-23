@@ -27,6 +27,7 @@ import {
   lightTileGroupOrder,
   lightTileValueLabel,
   paintLightTile,
+  proportionalFillPercent,
   relativeFillPercent,
   selectAllDisplayedFill,
   selectAllOnOffState,
@@ -680,6 +681,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   };
 
   const paintTileSelection = () => {
+    tiles.classList.toggle("select-mode", inSelectMode());
     for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
       const eid = selector.dataset.entityId;
       if (eid === "__select_all__") {
@@ -807,13 +809,19 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
             : selectAllVirtualPct;
           selectAllVirtualPct = relativeFillPercent(base, deltaPct);
         }
+        const startShown = !dimmable.length
+          ? 0
+          : fromStart
+            ? (drag?.shownStart ?? selectAllShownPct(dimmable))
+            : selectAllShownPct(dimmable);
+        const nextShown = Math.max(0, Math.min(100, startShown + deltaPct));
         for (const id of dimmable) {
           const draft = ensureDraft(id);
           const base = fromStart ? dragStarts.get(id) : fillPercent(draft, id);
           if (base == null) {
             continue;
           }
-          const pct = relativeFillPercent(base, deltaPct);
+          const pct = proportionalFillPercent(base, startShown, nextShown);
           draft.brightness = Math.round((pct / 100) * 255);
           draft.state = draft.brightness > 0 ? "on" : "off";
           persistLight(id);
@@ -922,8 +930,13 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         }
         panel._holdSimpleUndo?.(true);
         dragStarts.clear();
+        const shownStarts = [];
         for (const id of scrubTargets()) {
-          dragStarts.set(id, fillPercent(ensureDraft(id), id));
+          const pct = fillPercent(ensureDraft(id), id);
+          dragStarts.set(id, pct);
+          if (!isOnOffLight(id)) {
+            shownStarts.push(pct);
+          }
         }
         drag = {
           pointerId: ev.pointerId,
@@ -933,6 +946,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           axis: null,
           suppressTap: false,
           virtualStart: selectAllVirtualPct,
+          shownStart: selectAllDisplayedFill(shownStarts) ?? selectAllVirtualPct,
         };
         document.addEventListener("pointermove", onDocMove);
         document.addEventListener("pointerup", endDrag);
