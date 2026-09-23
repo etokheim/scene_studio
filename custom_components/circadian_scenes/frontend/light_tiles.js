@@ -185,6 +185,11 @@ export const LIGHT_TILES_CSS = `
       var(--hue-light-on-background, #ffda95)
     );
   }
+  /* Select mode: same 2px ring as the other tiles, in solid primary.
+     The fill itself is a 32% primary wash set when the tile is painted. */
+  .simple-light-selector.select-all-tile.select-mode {
+    border-color: var(--primary-color);
+  }
   .simple-light-tile {
     --hue-unfilled-mix: 50%;
     --hue-unfilled-opacity: 100%;
@@ -441,6 +446,33 @@ export function relativeFillPercent(startPct, deltaPct) {
 /** More than one selected light: the select-all tile clears. Otherwise it selects every member. */
 export function selectAllTileAction(selectedCount) {
   return selectedCount > 1 ? "clear" : "all";
+}
+
+/**
+ * Average brightness for the Select all tile. Pass only dimmable fills;
+ * on/off lights are omitted so they cannot pull the number to 0 or 100.
+ * Null when there is nothing dimmable to average.
+ */
+export function selectAllDisplayedFill(fills) {
+  const dimmable = [];
+  for (const value of fills) {
+    if (!Number.isFinite(value)) {
+      throw new Error("select-all fill expects finite percents");
+    }
+    dimmable.push(value);
+  }
+  if (!dimmable.length) {
+    return null;
+  }
+  return dimmable.reduce((sum, value) => sum + value, 0) / dimmable.length;
+}
+
+/** On at or above 50% of the Select all level; off below it. */
+export function selectAllOnOffState(shownPct) {
+  if (!Number.isFinite(shownPct)) {
+    throw new Error("select-all on/off expects a finite percent");
+  }
+  return shownPct >= 50 ? "on" : "off";
 }
 
 /** Second line on a light tile. On/off lights say On or Off; the rest say a percent. */

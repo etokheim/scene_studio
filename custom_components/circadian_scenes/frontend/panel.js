@@ -277,6 +277,9 @@ class CircadianScenesPanel extends HTMLElement {
     this._nativeDrafts = {};
     this._undoStack = [];
     this._redoStack = [];
+    this._simpleUndoLatched = false;
+    this._simpleUndoHold = false;
+    this._simpleUndoEndTimer = null;
     this._sessionBaseline = null;
     this._previewInFlight = false;
     this._previewQueued = false;
@@ -5342,6 +5345,53 @@ class CircadianScenesPanel extends HTMLElement {
     this._saveSoon();
   }
 
+  // Simple-scene light edits share the global undo stack. The snapshot is the
+  // scene before the write; a drag or scroll stays one entry until the gesture ends.
+  _beginSimpleUndo() {
+    if (this._historyRestoring) {
+      return;
+    }
+    if (!this._simpleUndoLatched) {
+      this._simpleUndoLatched = true;
+      this._commitUndo({ type: "simple" });
+    }
+    window.clearTimeout(this._simpleUndoEndTimer);
+    if (this._simpleUndoHold) {
+      this._simpleUndoEndTimer = null;
+      return;
+    }
+    this._simpleUndoEndTimer = window.setTimeout(() => {
+      this._simpleUndoEndTimer = null;
+      this._finishSimpleUndo();
+    }, 400);
+  }
+
+  _holdSimpleUndo(hold) {
+    if (hold) {
+      if (!this._simpleUndoHold && this._simpleUndoLatched) {
+        this._finishSimpleUndo();
+      }
+      this._simpleUndoHold = true;
+      window.clearTimeout(this._simpleUndoEndTimer);
+      this._simpleUndoEndTimer = null;
+      return;
+    }
+    this._simpleUndoHold = false;
+    window.clearTimeout(this._simpleUndoEndTimer);
+    this._simpleUndoEndTimer = null;
+    this._finishSimpleUndo();
+  }
+
+  _finishSimpleUndo() {
+    window.clearTimeout(this._simpleUndoEndTimer);
+    this._simpleUndoEndTimer = null;
+    if (!this._simpleUndoLatched) {
+      return;
+    }
+    this._stampHistoryAfter();
+    this._simpleUndoLatched = false;
+  }
+
   async _autoConfigure() {
     try {
       await this._hass.callWS({ type: `${DOMAIN}/auto_configure` });
@@ -8424,6 +8474,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _undo() {
+    this._finishSimpleUndo();
     if (!this._undoStack.length || this._historyRestoring) {
       return;
     }
@@ -8443,6 +8494,7 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _redo() {
+    this._finishSimpleUndo();
     if (!this._redoStack.length || this._historyRestoring) {
       return;
     }

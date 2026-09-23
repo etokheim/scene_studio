@@ -7,6 +7,8 @@ import {
   lightTileColorGroup,
   lightTileGroupOrder,
   relativeFillPercent,
+  selectAllDisplayedFill,
+  selectAllOnOffState,
   selectAllTileAction,
   tileSelectionAfterClick,
 } from "../../custom_components/circadian_scenes/frontend/light_tiles.js";
@@ -167,6 +169,16 @@ test("select all keeps each light's brightness offset", () => {
   assert.equal(selectAllTileAction(0), "all");
   assert.equal(selectAllTileAction(1), "all");
   assert.equal(selectAllTileAction(2), "clear");
+});
+
+test("select all brightness ignores on/off lights and flips them at 50%", () => {
+  assert.equal(selectAllDisplayedFill([20, 40]), 30);
+  assert.equal(selectAllDisplayedFill([80]), 80);
+  assert.equal(selectAllDisplayedFill([]), null);
+  assert.equal(selectAllOnOffState(50), "on");
+  assert.equal(selectAllOnOffState(49), "off");
+  assert.throws(() => selectAllDisplayedFill([Number.NaN]));
+  assert.throws(() => selectAllOnOffState(Number.NaN));
 });
 
 test("on/off drag resists and snaps across halfway", () => {

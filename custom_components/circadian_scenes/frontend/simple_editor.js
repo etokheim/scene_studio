@@ -28,6 +28,8 @@ import {
   lightTileValueLabel,
   paintLightTile,
   relativeFillPercent,
+  selectAllDisplayedFill,
+  selectAllOnOffState,
   tileSelectionAfterClick,
   wheelDeltaToPercent,
 } from "./light_tiles.js";
@@ -284,6 +286,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     if (!draft) {
       return;
     }
+    // Snapshot the scene before this write so undo can restore it.
+    panel._beginSimpleUndo?.();
     if (draft.variable_ref) {
       lights[eid] = {
         state: draft.state || "on",
@@ -407,47 +411,56 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       wheel.sync();
     },
     onChange: ({ dragging, fromPalette, ids, deselected } = {}) => {
-      if (deselected?.length) {
-        for (const id of deselected) {
-          selectedIds.delete(id);
-          if (peeledId === id) {
-            peeledId = null;
+      if (dragging) {
+        panel._holdSimpleUndo?.(true);
+      }
+      try {
+        if (deselected?.length) {
+          for (const id of deselected) {
+            selectedIds.delete(id);
+            if (peeledId === id) {
+              peeledId = null;
+            }
+          }
+          paintTileSelection();
+        }
+        const write = ids?.length ? ids : deselected?.length ? [] : [...selectedIds];
+        if (!write.length) {
+          return;
+        }
+        for (const eid of write) {
+          if (!drafts[eid]) {
+            continue;
+          }
+          if (!fromPalette) {
+            delete drafts[eid].variable_ref;
+            delete drafts[eid].palette_t;
+            delete drafts[eid].palette_r;
+          }
+          persistLight(eid);
+        }
+        const nextGroups = members
+          .map((id) => `${id}:${groupOf(id)}`)
+          .join("|");
+        if (nextGroups !== stripGroupSignature) {
+          syncTiles();
+          return;
+        }
+        for (const eid of write) {
+          const sel = tiles.querySelector(
+            `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
+          );
+          if (sel && drafts[eid]) {
+            paintSelector(sel, eid, drafts[eid]);
           }
         }
-        paintTileSelection();
-      }
-      const write = ids?.length ? ids : deselected?.length ? [] : [...selectedIds];
-      if (!write.length) {
-        return;
-      }
-      for (const eid of write) {
-        if (!drafts[eid]) {
-          continue;
+        if (!dragging) {
+          paintSelectAll();
         }
-        if (!fromPalette) {
-          delete drafts[eid].variable_ref;
-          delete drafts[eid].palette_t;
-          delete drafts[eid].palette_r;
+      } finally {
+        if (!dragging) {
+          panel._holdSimpleUndo?.(false);
         }
-        persistLight(eid);
-      }
-      const nextGroups = members
-        .map((id) => `${id}:${groupOf(id)}`)
-        .join("|");
-      if (nextGroups !== stripGroupSignature) {
-        syncTiles();
-        return;
-      }
-      for (const eid of write) {
-        const sel = tiles.querySelector(
-          `.simple-light-selector[data-entity-id="${CSS.escape(eid)}"]`
-        );
-        if (sel && drafts[eid]) {
-          paintSelector(sel, eid, drafts[eid]);
-        }
-      }
-      if (!dragging) {
-        paintSelectAll();
       }
     },
     hasColor,
@@ -460,6 +473,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     getAssignmentEntityId: (scene) => scene.id,
     onRandomizeSeed: () => {
       const seed = (Math.random() * 0xffffffff) >>> 0;
+      panel._beginSimpleUndo?.();
       panel._formData = { ...panel._formData, assignment_seed: seed };
       for (const eid of members) {
         const draft = drafts[eid];
@@ -583,30 +597,16 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     return (bri / 255) * 100;
   };
 
-  const accentRgb = (host) => {
-    const raw = getComputedStyle(host).getPropertyValue("--primary-color").trim();
-    if (raw.startsWith("#")) {
-      const hex = raw.slice(1);
-      const n =
-        hex.length === 3
-          ? hex
-              .split("")
-              .map((ch) => ch + ch)
-              .join("")
-          : hex;
-      if (n.length >= 6) {
-        return [
-          parseInt(n.slice(0, 2), 16),
-          parseInt(n.slice(2, 4), 16),
-          parseInt(n.slice(4, 6), 16),
-        ];
-      }
-    }
-    const match = raw.match(/(\d+),\s*(\d+),\s*(\d+)/);
-    if (match) {
-      return [Number(match[1]), Number(match[2]), Number(match[3])];
-    }
-    return [3, 169, 244];
+  // On/off lights are not part of this level. With none dimmable, the tile
+  // keeps the last Select all gesture instead of reading 0/100 off the switches.
+  let selectAllVirtualPct = 0;
+
+  const selectAllShownPct = (ids) => {
+    const fills = ids
+      .filter((id) => !isOnOffLight(id))
+      .map((id) => fillPercent(drafts[id] || {}, id));
+    const shown = selectAllDisplayedFill(fills);
+    return shown == null ? selectAllVirtualPct : shown;
   };
 
   const paintSelectAll = () => {
@@ -618,17 +618,19 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     const mode = inSelectMode();
     const ids = mode ? selectedMemberIds() : members;
-    let sum = 0;
-    for (const id of ids) {
-      sum += fillPercent(drafts[id] || {}, id);
-    }
     const count = selectedMemberIds().length;
     selector.classList.toggle("select-mode", mode);
     paintLightTile(selector, {
-      rgb: mode ? accentRgb(selector) : [64, 60, 58],
-      fillPct: ids.length ? sum / ids.length : 0,
+      rgb: [64, 60, 58],
+      fillPct: selectAllShownPct(ids),
       selected: mode,
     });
+    if (mode) {
+      const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
+      selector.style.setProperty("--hue-light-on-background", wash);
+      selector.style.setProperty("--hue-light-on-color", wash);
+      selector.style.setProperty("--hue-light-on-text-color", "#fff");
+    }
     const caption = mode
       ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
       : panel._t("frontend.lights.select_all", "Select all");
@@ -730,48 +732,28 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       let wheelAxisTimer = null;
       let wheelRevert = null;
       const dragStarts = new Map();
-      const binaryStarts = new Map();
 
       const memberSelector = (id) =>
         tiles.querySelector(
           `.simple-light-selector[data-entity-id="${CSS.escape(id)}"]`
         );
 
-      const applyRelative = (deltaPct) => {
-        let snapped = false;
-        for (const id of scrubTargets()) {
+      const applySelectAllDelta = (deltaPct, { fromStart }) => {
+        const ids = scrubTargets();
+        const dimmable = ids.filter((id) => !isOnOffLight(id));
+        if (!dimmable.length) {
+          const base = fromStart
+            ? (drag?.virtualStart ?? selectAllVirtualPct)
+            : selectAllVirtualPct;
+          selectAllVirtualPct = relativeFillPercent(base, deltaPct);
+        }
+        for (const id of dimmable) {
           const draft = ensureDraft(id);
-          if (isOnOffLight(id)) {
-            const step = binaryDragPreview({
-              startFill: binaryStarts.get(id) ?? fillPercent(draft, id),
-              deltaPct,
-            });
-            if (step.snapOn || step.snapOff) {
-              draft.state = step.snapOn ? "on" : "off";
-              persistLight(id);
-              binaryStarts.set(id, step.snapOn ? 100 : 0);
-              dragStarts.set(id, step.snapOn ? 100 : 0);
-              snapped = true;
-              playLightTileJelly(memberSelector(id)?.querySelector(".simple-light-tile"));
-              paintSelector(memberSelector(id), id, draft);
-            } else {
-              const sel = memberSelector(id);
-              if (sel) {
-                paintLightTile(sel, {
-                  rgb: draftRgb(draft),
-                  fillPct: step.preview,
-                  selected: selectedIds.has(id),
-                  brightnessLabel: onOffLabel(draft),
-                });
-              }
-            }
+          const base = fromStart ? dragStarts.get(id) : fillPercent(draft, id);
+          if (base == null) {
             continue;
           }
-          const start = dragStarts.get(id);
-          if (start == null) {
-            continue;
-          }
-          const pct = relativeFillPercent(start, deltaPct);
+          const pct = relativeFillPercent(base, deltaPct);
           draft.brightness = Math.round((pct / 100) * 255);
           draft.state = draft.brightness > 0 ? "on" : "off";
           persistLight(id);
@@ -780,14 +762,21 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
             paintSelector(sel, id, draft);
           }
         }
-        if (snapped && drag) {
-          for (const id of scrubTargets()) {
-            if (isOnOffLight(id)) {
-              continue;
-            }
-            dragStarts.set(id, fillPercent(ensureDraft(id), id));
+        const want = selectAllOnOffState(selectAllShownPct(ids));
+        for (const id of ids) {
+          if (!isOnOffLight(id)) {
+            continue;
           }
-          drag.startY = drag.lastY;
+          const draft = ensureDraft(id);
+          const sel = memberSelector(id);
+          if ((draft.state || "on") !== want) {
+            draft.state = want;
+            persistLight(id);
+            playLightTileJelly(sel?.querySelector(".simple-light-tile"));
+          }
+          if (sel) {
+            paintSelector(sel, id, draft);
+          }
         }
         paintSelectAll();
       };
@@ -796,6 +785,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         if (!drag || (ev && ev.pointerId !== drag.pointerId)) {
           return;
         }
+        panel._holdSimpleUndo?.(false);
         document.removeEventListener("pointermove", onDocMove);
         document.removeEventListener("pointerup", endDrag);
         document.removeEventListener("pointercancel", endDrag);
@@ -862,21 +852,17 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         const rect = tile.getBoundingClientRect();
         const deltaPct =
           -((ev.clientY - drag.startY) / Math.max(1, rect.height)) * 100;
-        applyRelative(deltaPct);
+        applySelectAllDelta(deltaPct, { fromStart: true });
       };
 
       hit.addEventListener("pointerdown", (ev) => {
         if (ev.button && ev.button !== 0) {
           return;
         }
+        panel._holdSimpleUndo?.(true);
         dragStarts.clear();
-        binaryStarts.clear();
         for (const id of scrubTargets()) {
-          const fill = fillPercent(ensureDraft(id), id);
-          dragStarts.set(id, fill);
-          if (isOnOffLight(id)) {
-            binaryStarts.set(id, fill);
-          }
+          dragStarts.set(id, fillPercent(ensureDraft(id), id));
         }
         drag = {
           pointerId: ev.pointerId,
@@ -885,6 +871,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           lastY: ev.clientY,
           axis: null,
           suppressTap: false,
+          virtualStart: selectAllVirtualPct,
         };
         document.addEventListener("pointermove", onDocMove);
         document.addEventListener("pointerup", endDrag);
@@ -921,60 +908,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           tile.classList.add("wheel-adjusting");
           const dimStep =
             (-Math.sign(ev.deltaY) * TILE_BRIGHTNESS_WHEEL_STEP / 255) * 100;
-          for (const id of scrubIds) {
-            const draft = ensureDraft(id);
-            const sel = memberSelector(id);
-            if (isOnOffLight(id)) {
-              const start = binaryStarts.has(id)
-                ? binaryStarts.get(id)
-                : fillPercent(draft, id);
-              const step = binaryWheelPreview({
-                startFill: start,
-                stepPct: wheelDeltaToPercent(ev),
-              });
-              if (step.snapOn || step.snapOff) {
-                draft.state = step.snapOn ? "on" : "off";
-                persistLight(id);
-                binaryStarts.set(id, step.snapOn ? 100 : 0);
-                playLightTileJelly(sel?.querySelector(".simple-light-tile"));
-                if (sel) {
-                  paintSelector(sel, id, draft);
-                }
-              } else {
-                binaryStarts.set(id, step.preview);
-                if (sel) {
-                  paintLightTile(sel, {
-                    rgb: draftRgb(draft),
-                    fillPct: step.preview,
-                    selected: selectedIds.has(id),
-                    brightnessLabel: onOffLabel(draft),
-                  });
-                }
-              }
-            } else {
-              const pct = relativeFillPercent(fillPercent(draft, id), dimStep);
-              draft.brightness = Math.round((pct / 100) * 255);
-              draft.state = draft.brightness > 0 ? "on" : "off";
-              persistLight(id);
-              if (sel) {
-                paintSelector(sel, id, draft);
-              }
-            }
-          }
-          paintSelectAll();
+          applySelectAllDelta(dimStep, { fromStart: false });
           window.clearTimeout(wheelRevert);
           wheelRevert = window.setTimeout(() => {
             wheelRevert = null;
             tile.classList.remove("wheel-adjusting");
-            for (const id of scrubTargets()) {
-              if (!isOnOffLight(id)) {
-                continue;
-              }
-              const committed = fillPercent(ensureDraft(id), id);
-              if (binaryStarts.get(id) !== committed) {
-                binaryStarts.delete(id);
-              }
-            }
             for (const id of scrubTargets()) {
               const sel = memberSelector(id);
               if (sel && drafts[id]) {
@@ -1093,6 +1031,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         if (!drag || (ev && ev.pointerId !== drag.pointerId)) {
           return;
         }
+        panel._holdSimpleUndo?.(false);
         document.removeEventListener("pointermove", onDocMove);
         document.removeEventListener("pointerup", endDrag);
         document.removeEventListener("pointercancel", endDrag);
@@ -1176,6 +1115,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         if (!editable || (ev.button && ev.button !== 0)) {
           return;
         }
+        panel._holdSimpleUndo?.(true);
         binaryPreview = null;
         drag = {
           pointerId: ev.pointerId,
@@ -1518,6 +1458,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         };
         slider.addEventListener("pointerdown", () => {
           levelInteracting = true;
+          panel._holdSimpleUndo?.(true);
         });
         slider.addEventListener("slider-moved", (ev) => {
           if (ev.detail?.value == null) {
@@ -1526,9 +1467,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }
           applySlider(ev.detail.value);
         });
+        const releaseSliderUndo = () => {
+          window.setTimeout(() => panel._holdSimpleUndo?.(false), 0);
+        };
+        slider.addEventListener("pointerup", releaseSliderUndo);
+        slider.addEventListener("pointercancel", releaseSliderUndo);
         slider.addEventListener("value-changed", (ev) => {
           levelInteracting = false;
           applySlider(ev.detail?.value);
+          panel._holdSimpleUndo?.(false);
         });
         const power = document.createElement("ha-control-button");
         power.setAttribute(
