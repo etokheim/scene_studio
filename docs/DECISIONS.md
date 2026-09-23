@@ -908,7 +908,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-22
 - **Superseded in part:** 2026-09-23 — hovering a dot no longer closes the selected pins. A plain click still replaces the selection.
-- **Decision:** Hovering a disk dot opens that pin and leaves the selected pins open. Moving away closes only the hover pin. The hover does not change the selection. A plain press selects that light and closes the others. Cmd/Ctrl toggles a disk dot, and Shift selects the strip range, same as the light tiles.
-- **Why:** The icon was a prefix. Opening the hovered pin moved its hit target off the cursor, so the pin has a tip hit that stays under the pointer.
+- **Superseded in part:** 2026-09-23 — Shift on a disk toggles one light, same as Cmd/Ctrl. Shift range select stays on the light tiles.
+- **Decision:** Hovering a disk dot opens that pin and leaves the selected pins open. Moving away closes only the hover pin. The hover does not change the selection. A plain press selects that light and closes the others. Cmd, Ctrl, and Shift each toggle that disk light. Shift range select stays on the tile list. A disk marker is one pin: it scales down to a dot and back with a spring around its tip, grows while grabbed, and hangs below the color so the point stays visible under a finger. Mode changes and other moves glide; a drag follows the pointer.
+- **Why:** Opening the hovered pin used to move the hit target off the cursor, so the pin keeps a tip hit under the pointer. The old drop animation snapped the scale to 0.7 before growing back, and a separate dot path jumped instead of springing. Shift range select on a disk did not match Cmd.
 - **Do not reverse without user ask.**
 

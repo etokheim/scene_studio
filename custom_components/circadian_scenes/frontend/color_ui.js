@@ -23,8 +23,10 @@ const HUE_COLOR_PRESETS = [
 const HUE_TEMP_PRESETS = [2200, 2700, 3000, 4000, 5000, 6500];
 const HUE_PIN_PATH =
   "M 24,0 C 10.745166,0 0,10.575951 0,23.622046 0,39.566928 21,57.578739 22.05,58.346457 L 24,60 25.95,58.346457 C 27,57.578739 48,39.566928 48,23.622046 48,10.575951 37.254834,0 24,0 Z";
-/** Active pin graphic height. The tip sits on the color; the body extends upward. */
-const ACTIVE_PIN_BODY = 60;
+/** Pin tip in the path. The body hangs below this point (rotated 180°). */
+const PIN_TIP_X = 24;
+const PIN_TIP_Y = 60;
+const ACTIVE_PIN_BODY = PIN_TIP_Y;
 const HUE_DOT_PATH = "M6 0A6 6 0 006 12 6 6 0 006 0Z";
 const HUE_DOT_OUTLINE_PATH = "M8 0A8 8 0 008 16 8 8 0 008 0Z";
 /* Cosmetic path density only — lerp math is unchanged (same samples as runtime). */
@@ -2547,15 +2549,18 @@ function createSceneColorWheel({
   // Kelvin left/right is not part of the draft. Cleared when this wheel is rebuilt.
   const tempSides = new Map();
 
-  const markerOffset = (active) =>
-    active ? { x: 24, y: 60 } : { x: 6, y: 6 };
-
-  const placeMarker = (marker, x, y, active) => {
-    const offset = markerOffset(active);
-    marker.g.style.transform = `translate(${x - offset.x}px, ${y - offset.y}px)`;
-    marker.g.style.transformOrigin = `${x}px ${y}px`;
+  const placeMarker = (marker, x, y) => {
+    // Tip stays on the color. Size is a scale on .pin-body around that tip.
+    marker.g.style.transform = `translate(${x - PIN_TIP_X}px, ${y - PIN_TIP_Y}px)`;
     marker.x = x;
     marker.y = y;
+    if (!marker.posed) {
+      marker.posed = true;
+      marker.g.style.transition = "none";
+      requestAnimationFrame(() => {
+        marker.g.style.transition = "";
+      });
+    }
   };
 
   const positionForDraft = (draft, markerMode, geom, radius, entityId) => {
@@ -2971,16 +2976,18 @@ function createSceneColorWheel({
       if (!marker) {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.setAttribute("class", "gm");
+        const body = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        body.setAttribute("class", "pin-body");
         const outline = document.createElementNS("http://www.w3.org/2000/svg", "path");
         outline.setAttribute("class", "marker-outline");
-        outline.setAttribute("d", HUE_DOT_OUTLINE_PATH);
+        outline.setAttribute("d", HUE_PIN_PATH);
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         path.setAttribute("class", "marker");
-        const hit = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        hit.setAttribute("cx", "6");
-        hit.setAttribute("cy", "6");
-        hit.setAttribute("r", "12");
-        hit.setAttribute("fill", "transparent");
+        path.setAttribute("d", HUE_PIN_PATH);
+        const glyph = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        glyph.setAttribute("class", "pin-glyph");
+        // The pin body is rotated 180°. Spin the glyph back so icons stay upright.
+        glyph.setAttribute("transform", "rotate(180 24 24)");
         const icon = document.createElementNS("http://www.w3.org/2000/svg", "text");
         icon.setAttribute("class", "icon text");
         icon.setAttribute("x", "24");
@@ -3000,7 +3007,15 @@ function createSceneColorWheel({
         haIcon.style.setProperty("--mdc-icon-size", "32px");
         iconHost.appendChild(haIcon);
         fo.appendChild(iconHost);
-        g.append(outline, path, hit, icon, fo);
+        glyph.append(icon, fo);
+        body.append(outline, path, glyph);
+        const hit = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        hit.setAttribute("class", "pin-hit");
+        hit.setAttribute("cx", String(PIN_TIP_X));
+        hit.setAttribute("cy", String(PIN_TIP_Y));
+        hit.setAttribute("r", "20");
+        hit.setAttribute("fill", "transparent");
+        g.append(body, hit);
         marker = { g, path, outline, hit, icon, fo, haIcon, sceneId: scene.id };
         markers.set(scene.id, marker);
         g.addEventListener("pointerenter", (ev) => {
@@ -3109,7 +3124,7 @@ function createSceneColorWheel({
         continue;
       }
       const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
-      marker.path.setAttribute("d", expanded ? HUE_PIN_PATH : HUE_DOT_PATH);
+      marker.g.classList.toggle("expanded", expanded);
       marker.g.classList.toggle("active", active && expanded);
       marker.g.classList.toggle("preview", preview);
       const mdi = pinIconOf(scene);
@@ -3126,19 +3141,7 @@ function createSceneColorWheel({
           : scene.index == null || scene.index === ""
             ? ""
             : String(scene.index);
-      if (preview) {
-        // Keep a hit on the tip. The pin body sits above the dot, so the
-        // cursor would otherwise leave the marker the moment it opens.
-        marker.hit.setAttribute("cx", "24");
-        marker.hit.setAttribute("cy", "60");
-        marker.hit.setAttribute("r", "18");
-        marker.hit.style.display = "";
-      } else {
-        marker.hit.setAttribute("cx", "6");
-        marker.hit.setAttribute("cy", "6");
-        marker.hit.setAttribute("r", "12");
-        marker.hit.style.display = expanded ? "none" : "";
-      }
+      marker.hit.style.display = "";
       marker.g.style.display = "";
       marker.g.classList.remove("grouped");
       if (!radius) {
@@ -3197,9 +3200,7 @@ function createSceneColorWheel({
           if (leadMarker.fo) {
             leadMarker.fo.style.display = "none";
           }
-          leadMarker.g.classList.add("grouped");
-          leadMarker.g.classList.add("active");
-          leadMarker.path.setAttribute("d", HUE_PIN_PATH);
+          leadMarker.g.classList.add("grouped", "active", "expanded");
           leadMarker.hit.style.display = "none";
           svg.appendChild(leadMarker.g);
         }
@@ -3518,6 +3519,7 @@ function createSceneColorWheel({
     const travel = Math.hypot(ev.clientX - drag.startX, ev.clientY - drag.startY);
     const stacked = (drag.cluster || []).length > 1 && !detached.has(drag.sceneId);
     marker?.g.classList.remove("drag");
+    svg.classList.remove("pin-drag");
     if (
       pinPressAction({
         moved: drag.moved,
@@ -3542,8 +3544,6 @@ function createSceneColorWheel({
       sync();
       return;
     }
-    marker?.g.classList.add("boing");
-    setTimeout(() => marker?.g.classList.remove("boing"), 200);
     if (drag.moved) {
       const staySplit = detachedAfterDrag(detached, finishedIds);
       detached.clear();
@@ -3594,6 +3594,7 @@ function createSceneColorWheel({
       startX: ev.clientX,
       startY: ev.clientY,
     };
+    svg.classList.add("pin-drag");
     stage.dispatchEvent(
       new CustomEvent("slider-interaction-start", {
         bubbles: true,

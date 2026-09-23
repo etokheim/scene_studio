@@ -2394,12 +2394,36 @@ class CircadianScenesPanel extends HTMLElement {
           stroke-linejoin: round;
         }
         .hue-wheel-svg .gm {
+          --pin-scale: 0.2;
           cursor: pointer;
+          transition:
+            transform 480ms cubic-bezier(0.22, 1.15, 0.36, 1),
+            color 360ms ease;
+        }
+        .hue-wheel-svg.pin-drag .gm {
+          transition: none;
+        }
+        .hue-wheel-svg .pin-body {
+          transform-box: fill-box;
+          transform-origin: 50% 100%;
+          transform: rotate(180deg) scale(var(--pin-scale));
+          transition: transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .hue-wheel-svg .gm.expanded {
+          --pin-scale: 1;
+        }
+        .hue-wheel-svg .gm.drag {
+          --pin-scale: 1.16;
+        }
+        .hue-wheel-svg .pin-hit {
+          pointer-events: all;
         }
         .hue-wheel-svg .marker-outline {
-          fill: white;
+          fill: none;
+          stroke: #fff;
+          stroke-width: 2px;
+          vector-effect: non-scaling-stroke;
           filter: url(#se-dot-shadow);
-          transform: translate(-2px, -2px);
         }
         .hue-wheel-svg .marker {
           fill: currentColor;
@@ -2431,31 +2455,20 @@ class CircadianScenesPanel extends HTMLElement {
           color: inherit;
           --icon-primary-color: currentColor;
         }
-        .hue-wheel-svg .gm.active .marker-outline,
-        .hue-wheel-svg .gm.preview .marker-outline {
+        .hue-wheel-svg .gm.expanded .marker-outline {
           display: none;
         }
-        .hue-wheel-svg .gm.active .marker,
-        .hue-wheel-svg .gm.preview .marker {
+        .hue-wheel-svg .gm.expanded .marker {
           filter: url(#se-active-shadow);
         }
-        .hue-wheel-svg .gm:not(.active):not(.preview) .icon,
-        .hue-wheel-svg .gm:not(.active):not(.preview) .icon-fo {
+        .hue-wheel-svg .gm:not(.expanded) .pin-glyph {
           display: none;
         }
-        .hue-wheel-svg .gm.active.drag {
-          scale: 1.1;
-        }
-        .hue-wheel-svg .gm.boing {
-          animation: hue-marker-boing 150ms ease-in-out;
-        }
-        .hue-wheel-svg .gm.glide {
-          transition: transform 0.4s ease-out, color 0.4s ease-out;
-        }
-        @keyframes hue-marker-boing {
-          0% { scale: 0.7; }
-          50% { scale: 1.05; translate: 0 -5px; }
-          100% { scale: 1; }
+        @media (prefers-reduced-motion: reduce) {
+          .hue-wheel-svg .gm,
+          .hue-wheel-svg .pin-body {
+            transition: none;
+          }
         }
         .hue-wheel-chrome {
           position: relative;

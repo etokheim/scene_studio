@@ -380,8 +380,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           selected: [...selectedIds],
           anchorId,
           entityId: id,
-          shiftKey: Boolean(mods.shiftKey),
-          toggleKey: Boolean(mods.toggleKey),
+          shiftKey: false,
+          toggleKey: true,
         });
         selectedIds = new Set(result.selected);
         anchorId = result.anchorId;
