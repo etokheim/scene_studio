@@ -944,8 +944,23 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Tile action buttons
 
 - **Date:** 2026-09-23
-- **Decision:** Open action plates sit fully outside the tile, with a 6px gap and a square edge toward it. They are 36px tall and scale with the tile frame on hover and when the tile is selected. Each button highlights on hover and shrinks on press.
-- **Why:** The tucked tongue covered the icons.
+- **Superseded in part:** 2026-09-23 — a mouse click that only focuses a tile does not open its plates. Keyboard focus does. While the pointer is over one light, every other tile’s plates stay tucked, including the selected one. The plates paint above the hint under the strip.
+- **Decision:** Open action plates sit fully outside the tile, with a 6px gap and a square edge toward it. They are 36px tall and scale with the tile frame on hover and when the tile is selected. Each button highlights on hover and shrinks on press. Only one light’s plates are open at a time.
+- **Why:** The tucked tongue covered the icons, and a focused selected tile kept a second menu open under the pointer.
+- **Do not reverse without user ask.**
+
+## Group headers and a second tap
+
+- **Date:** 2026-09-23
+- **Decision:** A group header selects every light in that group. When those lights are already all selected, the header removes them and leaves any other selected lights. Cmd, Ctrl, or Shift on the header adds the group, or removes it when every member is already selected. A plain tap still selects one light, and a second tap on that light, when it is the only one selected, clears the selection.
+- **Why:** The header was a one-way select-all, and the only selected light could not be cleared by tapping it again.
+- **Do not reverse without user ask.**
+
+## Palette base covers the area’s lights
+
+- **Date:** 2026-09-23
+- **Decision:** The area passed into a new scene is the area whose lights inherit the palette. A member with no stored color still inherits that palette, in the editor and when the scene is activated. A stored color that is not the palette reference stays an override.
+- **Why:** The light list was taken from the scene already open, so the new area’s lights never received the palette.
 - **Do not reverse without user ask.**
 
 ## Dot hover and group-label icon

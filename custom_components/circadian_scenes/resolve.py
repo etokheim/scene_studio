@@ -256,8 +256,13 @@ def build_simple_snapshot(
     for eid in member_ids:
         raw = lights.get(eid)
         if raw is None:
-            entities[eid] = {"state": "off"}
-            continue
+            # Members with no stored color still inherit the scene palette.
+            palette_id = scene.get("palette_id")
+            if palette_id:
+                raw = {VARIABLE_REF: palette_id}
+            else:
+                entities[eid] = {"state": "off"}
+                continue
         color_part = resolve_variable(
             {k: v for k, v in raw.items() if k not in ("brightness", "state")},
             variables,

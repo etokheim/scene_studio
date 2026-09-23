@@ -60,7 +60,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
-import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
+import { bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
 const PANEL_URL_PATH = "circadian_scenes";
@@ -5638,15 +5638,6 @@ class CircadianScenesPanel extends HTMLElement {
     void this._createLibraryItem("theme");
   }
 
-  _areaLightIds(areaId) {
-    if (!areaId) {
-      return [];
-    }
-    const floorAreas = (this._floors || []).flatMap((floor) => floor.areas || []);
-    const area = floorAreas.find((item) => item.id === areaId);
-    return (area?.lights || []).filter((id) => this._isPhysicalLightEntityId(id));
-  }
-
   _chooseScenePalette({ areaId } = {}) {
     return new Promise((resolve) => {
       this.shadowRoot.querySelector("ha-dialog.scene-palette-dialog")?.remove();
@@ -8970,14 +8961,13 @@ class CircadianScenesPanel extends HTMLElement {
     return this._formData.membership;
   }
 
-  _areaLightIds() {
-    const areaId = this._formData?.area;
+  _areaLightIds(areaId = this._formData?.area) {
     if (!areaId) {
       return [];
     }
     const floorAreas = (this._floors || []).flatMap((floor) => floor.areas || []);
     const area = floorAreas.find((item) => item.id === areaId);
-    return area?.lights || [];
+    return (area?.lights || []).filter((id) => this._isPhysicalLightEntityId(id));
   }
 
   _entityInSelectedArea(entityId) {
@@ -17950,8 +17940,13 @@ class CircadianScenesPanel extends HTMLElement {
         label: labels[key] || key,
         selectAllLabel,
         groupKey: key,
-        onSelectAll: () => {
-          this._legendSelectedIds = new Set(ids);
+        onSelectAll: (ev) => {
+          const result = groupSelectionAfterClick({
+            ids,
+            selected: [...(this._legendSelectedIds || [])],
+            toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey || ev?.shiftKey),
+          });
+          this._legendSelectedIds = new Set(result.selected);
           this._syncClockLightSelection();
         },
       });

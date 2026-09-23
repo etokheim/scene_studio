@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   binaryDragPreview,
   binaryWheelPreview,
+  groupSelectionAfterClick,
   lightTileColorGroup,
   lightTileGroupOrder,
   proportionalFillPercent,
@@ -67,6 +68,18 @@ test("color mode buckets follow the strip order", () => {
     ),
     "temp"
   );
+});
+
+test("a plain click on the only selected light clears it", () => {
+  const next = tileSelectionAfterClick({
+    ids,
+    selected: ["c"],
+    anchorId: "c",
+    entityId: "c",
+    shiftKey: false,
+    toggleKey: false,
+  });
+  assert.deepEqual(next, { selected: [], anchorId: null });
 });
 
 test("plain click replaces the selection and moves the anchor", () => {
@@ -160,6 +173,36 @@ test("shift wins over cmd/ctrl when the anchor is in the strip", () => {
   });
   assert.deepEqual(next.selected, ["a", "b", "c"]);
   assert.equal(next.anchorId, "a");
+});
+
+test("a group click selects that group, and again removes it", () => {
+  const selected = groupSelectionAfterClick({
+    ids: ["b", "c"],
+    selected: ["a"],
+    toggleKey: false,
+  });
+  assert.deepEqual(selected, { selected: ["b", "c"], anchorId: "b" });
+  const cleared = groupSelectionAfterClick({
+    ids: ["b", "c"],
+    selected: ["a", "b", "c"],
+    toggleKey: false,
+  });
+  assert.deepEqual(cleared, { selected: ["a"], anchorId: "a" });
+});
+
+test("cmd or shift on a group adds it, or removes it when it is all selected", () => {
+  const added = groupSelectionAfterClick({
+    ids: ["c", "d"],
+    selected: ["a"],
+    toggleKey: true,
+  });
+  assert.deepEqual(added, { selected: ["a", "c", "d"], anchorId: "c" });
+  const removed = groupSelectionAfterClick({
+    ids: ["c", "d"],
+    selected: added.selected,
+    toggleKey: true,
+  });
+  assert.deepEqual(removed, { selected: ["a"], anchorId: "a" });
 });
 
 test("cmd/ctrl click can clear the last selected id", () => {

@@ -24,6 +24,7 @@ import {
   playLightStripLayout,
   playLightTileJelly,
   lightTileColorGroup,
+  groupSelectionAfterClick,
   lightTileGroupOrder,
   lightTileValueLabel,
   paintLightTile,
@@ -271,7 +272,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const paletteBaseId = () => panel._formData?.palette_id || null;
 
   const hydrateDraft = (raw, eid) => {
-    const draft = { ...(raw || { state: "on", brightness: 200 }) };
+    const base = paletteBaseId();
+    const stored =
+      raw && typeof raw === "object" && Object.keys(raw).length ? raw : null;
+    // A palette base covers every member that has no stored color of its own.
+    const draft = {
+      ...(base && !stored
+        ? { state: "on", variable_ref: base }
+        : stored || { state: "on", brightness: 200 }),
+    };
     const color = resolveColor(draft, variables);
     Object.assign(draft, color);
     const variable = variables.find((item) => item.id === draft.variable_ref);
@@ -653,8 +662,9 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     anchorId = result.anchorId;
     if (selectedIds.size === 0) {
       touchSelectMode = false;
-    }
-    if (plain && !wasSelectMode) {
+      peeledId = null;
+      wheel.clearDetached?.();
+    } else if (plain && !wasSelectMode) {
       peeledId = eid;
       wheel.detach?.(eid);
     } else {
@@ -1132,13 +1142,22 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         label: groupLabels[key] || key,
         selectAllLabel,
         groupKey: key,
-        onSelectAll: () => {
-          selectedIds = new Set(ids);
-          anchorId = ids[0] || null;
+        onSelectAll: (ev) => {
+          const result = groupSelectionAfterClick({
+            ids,
+            selected: [...selectedIds],
+            toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey || ev?.shiftKey),
+          });
+          selectedIds = new Set(result.selected);
+          anchorId = result.anchorId;
           peeledId = null;
+          if (!selectedIds.size) {
+            touchSelectMode = false;
+          }
           wheel.clearDetached?.();
           wheel.sync();
-          syncTiles();
+          paintTileSelection();
+          syncLevelHost();
         },
       });
       groupRows.set(key, row);

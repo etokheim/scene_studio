@@ -19,6 +19,8 @@ export const LIGHT_TILES_CSS = `
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
     position: relative;
+    /* Above the hint, which sits later in the column and overlaps this padding. */
+    z-index: 1;
   }
   .light-tiles {
     display: flex;
@@ -190,10 +192,13 @@ export const LIGHT_TILES_CSS = `
     transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1);
   }
   /* Action plates sit behind the tile and share the group fill. They slide
-     out on hover, and stay out while the tile is selected (touch has no hover). */
+     out on hover, and stay out while the tile is selected (touch has no hover).
+     :focus-visible is keyboard focus. A mouse click focuses the tile too, and
+     that must not open the plates. */
   .simple-light-selector:not(.select-all-tile):hover,
   .simple-light-selector:not(.select-all-tile).active,
-  .simple-light-selector:not(.select-all-tile):focus-within {
+  .simple-light-selector:not(.select-all-tile):focus-visible,
+  .simple-light-selector:not(.select-all-tile):has(:focus-visible) {
     z-index: 4;
   }
   .light-tile-actions {
@@ -234,17 +239,27 @@ export const LIGHT_TILES_CSS = `
     border-radius: 0 0 18px 18px;
     transform: translateY(-100%);
   }
-  .simple-light-selector:hover .light-tile-actions-top,
-  .simple-light-selector:focus-within .light-tile-actions-top {
+  .simple-light-selector:hover .light-tile-actions-top {
     transform: translateY(calc(-100% - 6px));
     pointer-events: auto;
     transition-delay: 200ms;
   }
-  .simple-light-selector:hover .light-tile-actions-bottom,
-  .simple-light-selector:focus-within .light-tile-actions-bottom {
+  .simple-light-selector:hover .light-tile-actions-bottom {
     transform: translateY(calc(100% + 6px));
     pointer-events: auto;
     transition-delay: 200ms;
+  }
+  .simple-light-selector:focus-visible .light-tile-actions-top,
+  .simple-light-selector:has(:focus-visible) .light-tile-actions-top {
+    transform: translateY(calc(-100% - 6px));
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+  .simple-light-selector:focus-visible .light-tile-actions-bottom,
+  .simple-light-selector:has(:focus-visible) .light-tile-actions-bottom {
+    transform: translateY(calc(100% + 6px));
+    pointer-events: auto;
+    transition-delay: 0s;
   }
   .simple-light-selector.active .light-tile-actions-top {
     transform: translateY(calc(-100% - 6px));
@@ -256,15 +271,15 @@ export const LIGHT_TILES_CSS = `
     pointer-events: auto;
     transition-delay: 0s;
   }
-  .light-tiles.select-mode .simple-light-selector.active:not(:hover)
+  .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
     .light-tile-actions-top,
-  .light-tiles.select-mode .simple-light-selector.active:not(:hover)
+  .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
     .light-tile-actions-bottom {
     transform: translateY(100%);
     pointer-events: none;
     transition-delay: 0s;
   }
-  .light-tiles.select-mode .simple-light-selector.active:not(:hover)
+  .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
     .light-tile-actions-bottom {
     transform: translateY(-100%);
   }
@@ -277,6 +292,22 @@ export const LIGHT_TILES_CSS = `
     transform: translateY(calc(100% + 6px));
     pointer-events: auto;
     transition-delay: 200ms;
+  }
+  /* One menu at a time. Hovering a light tucks every other tile's plates,
+     including a selected one, until the pointer leaves. */
+  .light-tiles:has(.simple-light-selector:not(.select-all-tile):not(.add-light-tile):not(.removed):hover)
+    .simple-light-selector:not(:hover)
+    .light-tile-actions-top {
+    transform: translateY(100%);
+    pointer-events: none;
+    transition-delay: 0s;
+  }
+  .light-tiles:has(.simple-light-selector:not(.select-all-tile):not(.add-light-tile):not(.removed):hover)
+    .simple-light-selector:not(:hover)
+    .light-tile-actions-bottom {
+    transform: translateY(-100%);
+    pointer-events: none;
+    transition-delay: 0s;
   }
   .light-action {
     flex: 1 1 0;
@@ -603,6 +634,8 @@ export const LIGHT_TILES_CSS = `
     flex: 0 0 auto;
   }
   .light-tiles-hint {
+    position: relative;
+    z-index: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1014,7 +1047,7 @@ export function createLightModeGroup({
   if (!plain) {
     button.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      onSelectAll?.();
+      onSelectAll?.(ev);
     });
   }
   const row = document.createElement("div");
@@ -1164,8 +1197,9 @@ export function lightTileGroupOrder() {
 }
 
 /**
- * Plain click replaces the selection. Cmd/Ctrl toggles one id.
- * Shift selects the inclusive range from the anchor through the clicked id.
+ * Plain click replaces the selection. A plain click on the only selected id
+ * clears it. Cmd/Ctrl toggles one id. Shift selects the inclusive range from
+ * the anchor through the clicked id.
  */
 export function tileSelectionAfterClick({
   ids,
@@ -1196,7 +1230,40 @@ export function tileSelectionAfterClick({
     }
     return { selected: order.filter((id) => next.has(id)), anchorId: entityId };
   }
+  const current = selected || [];
+  if (current.length === 1 && current[0] === entityId) {
+    return { selected: [], anchorId: null };
+  }
   return { selected: [entityId], anchorId: entityId };
+}
+
+/**
+ * A plain click selects the group, or drops those ids when they are already
+ * all selected. Cmd, Ctrl, and Shift add the group, or drop it in that same case.
+ */
+export function groupSelectionAfterClick({ ids, selected, toggleKey }) {
+  const group = ids || [];
+  const current = [...(selected || [])];
+  const allIn =
+    group.length > 0 && group.every((id) => current.includes(id));
+  if (toggleKey) {
+    if (allIn) {
+      const next = current.filter((id) => !group.includes(id));
+      return { selected: next, anchorId: next[0] ?? null };
+    }
+    const next = [...current];
+    for (const id of group) {
+      if (!next.includes(id)) {
+        next.push(id);
+      }
+    }
+    return { selected: next, anchorId: group[0] ?? null };
+  }
+  if (allIn) {
+    const next = current.filter((id) => !group.includes(id));
+    return { selected: next, anchorId: next[0] ?? null };
+  }
+  return { selected: [...group], anchorId: group[0] ?? null };
 }
 
 /** Vertical drag + wheel brightness (0–255). Horizontal pan stays strip scroll. */

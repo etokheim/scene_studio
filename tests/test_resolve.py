@@ -351,6 +351,39 @@ class TestBuildSimpleSnapshot:
         assert snap["light.b"]["color_temp_kelvin"] == 5000
         assert snap["light.b"]["brightness"] == 128
 
+    def test_missing_light_inherits_palette_base(self):
+        palette = {
+            "id": "pal",
+            "kind": "palette",
+            "slots": [
+                {"color": {"color_mode": "hs", "hs_color": [i * 72, 80]}, "brightness": 200}
+                for i in range(5)
+            ],
+        }
+        scene = {
+            "id": "s",
+            "kind": "simple",
+            "palette_id": "pal",
+            "assignment_seed": 3,
+            "lights": {
+                "light.kept": {
+                    "state": "on",
+                    "brightness": 40,
+                    "color_mode": "hs",
+                    "hs_color": [10, 10],
+                }
+            },
+        }
+        snap = build_simple_snapshot(
+            scene, {"pal": palette}, ["light.kept", "light.a", "light.b"]
+        )
+        assert snap["light.kept"]["hs_color"] == [10, 10]
+        assert snap["light.kept"]["brightness"] == 40
+        assert snap["light.a"]["state"] == "on"
+        assert snap["light.b"]["state"] == "on"
+        assert "hs_color" in snap["light.a"]
+        assert "hs_color" in snap["light.b"]
+
     def test_missing_light_defaults_off(self):
         snap = build_simple_snapshot(
             {"id": "x", "kind": "simple", "lights": {}},
