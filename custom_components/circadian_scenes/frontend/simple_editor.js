@@ -172,8 +172,12 @@ export const SIMPLE_EDITOR_CSS = `
   .simple-level-host ha-control-button {
     width: 48px;
     height: 48px;
+    --control-button-border-radius: 50%;
+    --control-button-width: 48px;
+    --control-button-height: 48px;
     --mdc-icon-size: 24px;
     color: var(--primary-text-color);
+    border-radius: 50%;
   }
   .simple-editor .library-name-field {
     width: min(100%, 650px);
@@ -417,6 +421,18 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       paintTileSelection();
       syncLevelHost();
       wheel.sync();
+    },
+    onSelectMany: (ids) => {
+      const next = (ids || []).filter((item) => members.includes(item));
+      if (next.length < 2) {
+        return;
+      }
+      selectedIds = new Set(next);
+      anchorId = next[0];
+      peeledId = null;
+      touchSelectMode = false;
+      paintTileSelection();
+      syncLevelHost();
     },
     onChange: ({ dragging, fromPalette, ids, deselected } = {}) => {
       if (dragging) {
@@ -798,6 +814,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           }
         }
         paintSelectAll();
+        syncLevelHost();
       };
 
       const endDrag = (ev) => {
@@ -1039,6 +1056,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         persistLight(eid);
         paintSelector(selector, eid, draft);
         paintSelectAll();
+        syncLevelHost();
       };
 
       const showPreview = (pct) => {
@@ -1124,6 +1142,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
             playLightTileJelly(tile);
             paintSelector(selector, eid, draft);
             paintSelectAll();
+            syncLevelHost();
           } else {
             binaryPreview = step.preview;
             showPreview(step.preview);
@@ -1215,6 +1234,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
               playLightTileJelly(tile);
               paintSelector(selector, eid, draft);
               paintSelectAll();
+              syncLevelHost();
             } else {
               binaryPreview = step.preview;
               showPreview(step.preview);

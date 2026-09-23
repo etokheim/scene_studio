@@ -5,6 +5,7 @@ import {
   PIN_DRAG_THRESHOLD_PX,
   PIN_GROUP_FRAC,
   clusterNearbyPinIds,
+  dropTargetIds,
   detachedAfterDrag,
   dragIdsForPin,
   pinPressAction,
@@ -37,6 +38,19 @@ test("nearby same-mode pins cluster; other modes and off pins stay alone", () =>
     radius
   );
   assert.deepEqual(clusters, [["a", "b"], ["c"], ["d"], ["e"]]);
+});
+
+test("a drag highlights only the pins a drop would join", () => {
+  const radius = 200;
+  const placed = [
+    { id: "drag", x: 0, y: 0, mode: "color", off: false },
+    { id: "near", x: 10, y: 0, mode: "color", off: false },
+    { id: "other-mode", x: 0, y: 0, mode: "temp", off: false },
+    { id: "off", x: 0, y: 0, mode: "color", off: true },
+    { id: "far", x: 80, y: 0, mode: "color", off: false },
+  ];
+  assert.deepEqual(dropTargetIds(placed, radius, ["drag"]), ["near"]);
+  assert.deepEqual(dropTargetIds(placed, radius, []), []);
 });
 
 test("a grouped pin drag writes every member", () => {

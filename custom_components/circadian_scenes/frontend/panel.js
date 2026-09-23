@@ -2418,7 +2418,8 @@ class CircadianScenesPanel extends HTMLElement {
             transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1),
             opacity 280ms ease;
         }
-        .hue-wheel-svg .gm.expanded .pin-body {
+        .hue-wheel-svg .gm.expanded .pin-body,
+        .hue-wheel-svg .gm.drop-target .pin-body {
           transform: rotate(180deg) scale(1);
           opacity: 1;
         }
@@ -2430,7 +2431,8 @@ class CircadianScenesPanel extends HTMLElement {
           opacity: 1;
           transition: opacity 280ms ease;
         }
-        .hue-wheel-svg .gm.expanded .pin-dot {
+        .hue-wheel-svg .gm.expanded .pin-dot,
+        .hue-wheel-svg .gm.drop-target .pin-dot {
           opacity: 0;
         }
         .hue-wheel-svg .pin-dot-outline {
@@ -2523,6 +2525,9 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .hue-wheel-svg .gm:not(.expanded) .pin-glyph {
           display: none;
+        }
+        .hue-wheel-svg .gm.drop-target .pin-glyph {
+          display: block;
         }
         @media (prefers-reduced-motion: reduce) {
           .hue-wheel-svg .gm,
