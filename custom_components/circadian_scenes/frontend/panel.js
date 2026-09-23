@@ -23,6 +23,13 @@ import {
   lightWheelCaps,
   variableSwatchCss,
 } from "./color_ui.js";
+import {
+  galleryAsPalette,
+  galleryCopyName,
+  galleryCoverUrl,
+  galleryPalette,
+  gallerySections,
+} from "./gallery.js";
 import { defaultPaletteSlots, samplePaletteWheel, variableIsPalette } from "./palette.js";
 import {
   isoYear,
@@ -3053,7 +3060,7 @@ class CircadianScenesPanel extends HTMLElement {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          max-height: min(420px, 50vh);
+          max-height: min(640px, 68vh);
           overflow: auto;
         }
         .scene-palette-choice {
@@ -3067,6 +3074,55 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .scene-palette-randomize[hidden] {
           display: none !important;
+        }
+        .scene-gallery-label {
+          margin: 14px 0 8px;
+          color: var(--secondary-text-color);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .scene-palette-list > .scene-gallery-label:first-child {
+          margin-top: 0;
+        }
+        .scene-gallery-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+          gap: 8px;
+        }
+        .scene-gallery-card {
+          position: relative;
+          display: block;
+          width: 100%;
+          aspect-ratio: 16 / 10;
+          margin: 0;
+          padding: 0;
+          border: 2px solid transparent;
+          border-radius: 14px;
+          overflow: hidden;
+          background: var(--surface-2, #242022);
+          color: #fff;
+          cursor: pointer;
+        }
+        .scene-gallery-card.selected {
+          border-color: var(--primary-color);
+        }
+        .scene-gallery-card img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .scene-gallery-card span {
+          position: absolute;
+          left: 8px;
+          right: 8px;
+          bottom: 6px;
+          font-size: 13px;
+          font-weight: 600;
+          text-align: left;
+          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
         }
         .dialog-row {
           display: flex;
@@ -5653,6 +5709,7 @@ class CircadianScenesPanel extends HTMLElement {
       );
       dialog.open = true;
       let settled = false;
+      let selectedKind = null;
       let selectedId = null;
       let seed = (Math.random() * 0xffffffff) >>> 0;
       let snaps = null;
@@ -5676,8 +5733,12 @@ class CircadianScenesPanel extends HTMLElement {
           )
         );
       };
+      const selectedPalette = () =>
+        selectedKind === "gallery"
+          ? galleryAsPalette(selectedId)
+          : palettes.find((item) => item.id === selectedId);
       const applyPreview = async () => {
-        const palette = palettes.find((item) => item.id === selectedId);
+        const palette = selectedPalette();
         if (!this._readRoomPreviewPref() || !palette) {
           await restoreSnaps();
           return;
@@ -5704,7 +5765,7 @@ class CircadianScenesPanel extends HTMLElement {
       hint.className = "scene-palette-hint";
       hint.textContent = this._t(
         "frontend.dialogs.scene_palette_hint",
-        "Pick a palette as the base, or start without one."
+        "Pick one of your palettes, or start from a picture."
       );
       const liveToggle = document.createElement("label");
       liveToggle.className = "live-edit-toggle";
@@ -5720,24 +5781,44 @@ class CircadianScenesPanel extends HTMLElement {
       const list = document.createElement("div");
       list.className = "scene-palette-list";
       const rows = [];
+      const cards = [];
+      const choose = (kind, id) => {
+        selectedKind = kind;
+        selectedId = id;
+        paintSelection();
+        void applyPreview();
+      };
       const paintSelection = () => {
         for (const row of rows) {
-          row.chip.classList.toggle("selected", row.id === selectedId);
-          row.randomize.hidden = row.id !== selectedId;
+          const on = selectedKind === "user" && row.id === selectedId;
+          row.chip.classList.toggle("selected", on);
+          row.randomize.hidden = !on;
         }
-        const locked = !selectedId;
+        for (const card of cards) {
+          card.el.classList.toggle(
+            "selected",
+            selectedKind === "gallery" && card.id === selectedId
+          );
+        }
+        galleryRandomize.hidden = selectedKind !== "gallery";
+        const locked = !selectedPalette();
         useBtn.disabled = locked;
         useBtn.toggleAttribute("disabled", locked);
       };
+      if (palettes.length) {
+        const yours = document.createElement("p");
+        yours.className = "scene-gallery-label";
+        yours.textContent = this._t(
+          "frontend.dialogs.scene_palette_yours",
+          "Your palettes"
+        );
+        list.appendChild(yours);
+      }
       for (const palette of palettes) {
         const choice = document.createElement("div");
         choice.className = "scene-palette-choice";
         const chip = createPaletteChip(palette, this._variables, {
-          onClick: () => {
-            selectedId = palette.id;
-            paintSelection();
-            void applyPreview();
-          },
+          onClick: () => choose("user", palette.id),
         });
         const randomize = document.createElement("ha-button");
         randomize.className = "scene-palette-randomize";
@@ -5756,6 +5837,42 @@ class CircadianScenesPanel extends HTMLElement {
         list.appendChild(choice);
         rows.push({ id: palette.id, chip, randomize });
       }
+      for (const section of gallerySections()) {
+        const label = document.createElement("p");
+        label.className = "scene-gallery-label";
+        label.textContent = this._t(section.nameKey, section.name);
+        const grid = document.createElement("div");
+        grid.className = "scene-gallery-grid";
+        for (const item of section.palettes) {
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = "scene-gallery-card";
+          const photo = document.createElement("img");
+          photo.alt = "";
+          photo.src = galleryCoverUrl(item.id);
+          const name = document.createElement("span");
+          name.textContent = this._t(item.nameKey, item.name);
+          card.append(photo, name);
+          card.addEventListener("click", () => choose("gallery", item.id));
+          grid.appendChild(card);
+          cards.push({ id: item.id, el: card });
+        }
+        list.append(label, grid);
+      }
+      const galleryRandomize = document.createElement("ha-button");
+      galleryRandomize.className = "scene-palette-randomize";
+      galleryRandomize.appearance = "plain";
+      galleryRandomize.hidden = true;
+      galleryRandomize.textContent = this._t(
+        "frontend.dialogs.scene_palette_randomize",
+        "Randomize"
+      );
+      galleryRandomize.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        seed = (Math.random() * 0xffffffff) >>> 0;
+        void applyPreview();
+      });
+      list.appendChild(galleryRandomize);
       dialog.append(hint, liveToggle, list);
       const footer = customElements.get("ha-dialog-footer")
         ? document.createElement("ha-dialog-footer")
@@ -5784,18 +5901,52 @@ class CircadianScenesPanel extends HTMLElement {
         void restoreSnaps().then(() => finish({ palette: null, room }));
       });
       useBtn.addEventListener("click", () => {
-        const palette = palettes.find((item) => item.id === selectedId);
-        if (!palette) {
+        const picked = selectedPalette();
+        if (!picked) {
           return;
         }
         const keepPreview = this._readRoomPreviewPref() && Boolean(snaps);
-        finish({
-          palette,
-          seed,
-          snapshots: keepPreview ? snaps : null,
-          keepPreview,
-        });
-        snaps = null;
+        const done = (palette) => {
+          finish({
+            palette,
+            seed,
+            snapshots: keepPreview ? snaps : null,
+            keepPreview,
+          });
+          snaps = null;
+        };
+        if (selectedKind !== "gallery") {
+          done(picked);
+          return;
+        }
+        const source = galleryPalette(selectedId);
+        void this._hass
+          .callWS({
+            type: `${DOMAIN}/save_variable`,
+            data: {
+              name: galleryCopyName(
+                this._t(source.nameKey, source.name),
+                (this._variables || []).map((item) => item.name)
+              ),
+              kind: "palette",
+              slots: source.slots,
+              builtin_id: source.id,
+            },
+          })
+          .then((saved) => {
+            const list = [...(this._variables || [])];
+            const index = list.findIndex((item) => item.id === saved.id);
+            if (index >= 0) {
+              list[index] = saved;
+            } else {
+              list.push(saved);
+            }
+            this._variables = list;
+            done(saved);
+          })
+          .catch((err) => {
+            this._error = err.message || String(err);
+          });
       });
       footer.append(custom, useBtn);
       dialog.appendChild(footer);
@@ -6127,6 +6278,7 @@ class CircadianScenesPanel extends HTMLElement {
     return {
       kind: paletteEditor || variableIsPalette(variable) ? "palette" : "color",
       name: variable.name || "",
+      builtin_id: variable.builtin_id || null,
       colorDraft: this._variableEditorDraft(variable),
       slots: variableIsPalette(variable)
         ? structuredClone(variable.slots || defaultPaletteSlots())
@@ -6217,6 +6369,7 @@ class CircadianScenesPanel extends HTMLElement {
         name,
         kind: "palette",
         slots: working.slots,
+        ...(working.builtin_id ? { builtin_id: working.builtin_id } : {}),
       };
     }
     const brightness = Number(working.colorDraft?.brightness);

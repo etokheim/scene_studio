@@ -2,6 +2,7 @@
 
 import { createSimpleCardMesh } from "./card_mesh.js";
 import { swatchRgb, variableSwatchCss } from "./color_ui.js";
+import { galleryCoverUrl, galleryPalette } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, resolveSlot, variableIsPalette } from "./palette.js";
 
 const AREA_RAIL_PX = 340;
@@ -347,10 +348,18 @@ export const LANDING_CSS = `
     background: var(--surface-2, var(--secondary-background-color, #242022));
     overflow: hidden;
   }
-  .var-chip.selected .palette-swatch {
+  .var-chip.selected .palette-swatch,
+  .var-chip.selected .palette-cover {
     box-shadow:
       inset 0 0 0 2px var(--primary-color),
       0px 2px 3px rgba(0, 0, 0, 0.4);
+  }
+  .palette-cover {
+    width: 96px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.4);
   }
   .palette-slot {
     width: 32px;
@@ -830,6 +839,24 @@ export function createPaletteChip(palette, catalog, { selected = false, onClick 
   chip.className = "var-chip";
   if (selected) {
     chip.classList.add("selected");
+  }
+  const cover = galleryPalette(palette?.builtin_id);
+  if (cover) {
+    chip.classList.add("has-cover");
+    const photo = document.createElement("img");
+    photo.className = "palette-cover";
+    photo.alt = "";
+    photo.src = galleryCoverUrl(cover.id);
+    const name = document.createElement("span");
+    name.textContent = palette.name;
+    chip.append(photo, name);
+    if (onClick) {
+      chip.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        onClick();
+      });
+    }
+    return chip;
   }
   const swatch = document.createElement("div");
   swatch.className = "palette-swatch";

@@ -936,6 +936,13 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Animating `transform: rotate() scale()` on the SVG did not reverse, and appending the node on every move cancelled the transition before it could be seen. The return flight had no stored home, so leaving the group hid the members in place.
 - **Do not reverse without user ask.**
 
+## Picture palettes
+
+- **Date:** 2026-09-23
+- **Decision:** The new-scene dialog lists the user’s palettes first, then picture sections (Hearth, Study, Dayroom, Small hours). Each picture’s five colors are sampled from that photo. Choosing a picture saves a new palette copied from it, keeps the photo on that palette’s library chip, and points the scene at the copy. Using the same picture again saves another copy, named with a rising number. A copied palette remembers its `builtin_id`. A slot that no longer matches that original shows the same restore control a scene light uses, and restore puts that one slot back. The palette editor groups its colors the way the light strip groups lights, and Select all scales their brightness together.
+- **Why:** A built-in has to stay available to reset against, and each use has to be its own palette so one scene’s edits do not rewrite another. The photographs are credited in `frontend/gallery/CREDITS.md`; the section and palette names are not taken from another app.
+- **Do not reverse without user ask.**
+
 ## On/off group and palette base
 
 - **Date:** 2026-09-23

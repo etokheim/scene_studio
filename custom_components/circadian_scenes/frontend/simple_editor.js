@@ -9,6 +9,7 @@ import {
   wheelStandIn,
 } from "./color_ui.js";
 import { scaledCardRgb } from "./card_mesh.js";
+import { galleryPalette, paletteSlotSignature } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
 import {
   LIGHT_TILES_CSS,
@@ -1852,7 +1853,8 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   const wheels = document.createElement("div");
   wheels.className = "simple-wheels";
   const ids = [...Array(PALETTE_SLOT_COUNT)].map((_, i) => `slot:${i}`);
-  let selectedId = ids[0];
+  let selectedIds = new Set([ids[0]]);
+  const primaryId = () => [...selectedIds][0] || null;
   const drafts = {};
   for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
     drafts[ids[i]] = slotToDraft(working.slots[i], variables);
@@ -1875,17 +1877,18 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       }),
     })),
     sequence: ids,
-    activeId: selectedId,
+    activeId: primaryId(),
   });
   const wheel = createSceneColorWheel({
     t: (key, fallback) => panel._t(key, fallback),
     pinFlip: panel._wheelPinFlip || null,
     getState,
     onSelect: (id) => {
-      selectedId = id;
+      selectedIds = new Set(id ? [id] : []);
       syncTiles();
     },
     onChange: ({ fromPalette } = {}) => {
+      const selectedId = primaryId();
       if (!selectedId) {
         return;
       }
@@ -1912,106 +1915,352 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   const tiles = document.createElement("div");
   tiles.className = "light-tiles";
   scroller.appendChild(tiles);
+  bindGroupTitleStick(scroller);
 
   const fillPercent = (draft) => ((Number(draft.brightness) || 0) / 255) * 100;
+  const builtinSlots = () => galleryPalette(working.builtin_id)?.slots || null;
+  const slotOverridden = (id) => {
+    const source = builtinSlots();
+    const index = ids.indexOf(id);
+    if (!source || index < 0 || !source[index]) {
+      return false;
+    }
+    return (
+      paletteSlotSignature(draftToSlot(drafts[id])) !==
+      paletteSlotSignature(source[index])
+    );
+  };
+  const scrubTargets = () => (selectedIds.size > 1 ? [...selectedIds] : [...ids]);
+  // Wheel events don't have a pointer-up, so rebuild once the scrub settles.
+  // That is what reveals each changed color's restore control.
+  let scrubSync = 0;
   const syncTiles = () => {
+    const keepLeft = scroller.scrollLeft;
     tiles.replaceChildren();
-    ids.forEach((id, index) => {
-      const draft = drafts[id];
-      const name = panel._t("frontend.library.slot_label", "Slot {n}", {
-        n: index + 1,
+    const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
+    for (const id of ids) {
+      const key = lightTileColorGroup(drafts[id]);
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push(id);
+    }
+
+    const { selector: allSelector, tile: allTile, hit: allHit } = createLightTile({
+      entityId: "__select_all__",
+      name: panel._t("frontend.lights.select_all", "Select all"),
+      makeIcon: () => {
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("icon", "mdi:select-all");
+        return icon;
+      },
+    });
+    allSelector.classList.add("select-all-tile");
+    const paintAll = () => {
+      const mode = selectedIds.size > 1;
+      allSelector.classList.toggle("select-mode", mode);
+      const targets = scrubTargets();
+      paintLightTile(allSelector, {
+        rgb: [64, 60, 58],
+        fillPct:
+          selectAllDisplayedFill(targets.map((id) => fillPercent(drafts[id]))) ?? 0,
+        selected: mode,
+        brightnessLabel: mode
+          ? panel._t("frontend.lights.deselect", "Deselect")
+          : undefined,
       });
-      const { selector, tile, hit } = createLightTile({
-        entityId: id,
-        name,
-        makeIcon: () => {
-          const icon = document.createElement("ha-icon");
-          icon.setAttribute("icon", "mdi:palette-swatch");
-          return icon;
-        },
+      if (mode) {
+        const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
+        allSelector.style.setProperty("--hue-light-on-background", wash);
+        allSelector.style.setProperty("--hue-light-on-color", wash);
+      } else {
+        allSelector.style.removeProperty("--hue-light-on-background");
+        allSelector.style.removeProperty("--hue-light-on-color");
+      }
+    };
+    const paintSlot = (id) => {
+      const sel = tiles.querySelector(
+        `.simple-light-selector[data-entity-id="${CSS.escape(id)}"]`
+      );
+      if (!sel) {
+        return;
+      }
+      paintLightTile(sel, {
+        rgb: draftRgb(drafts[id]),
+        fillPct: fillPercent(drafts[id]),
+        selected: selectedIds.has(id),
       });
-      paintLightTile(selector, {
-        rgb: draftRgb(draft),
-        fillPct: fillPercent(draft),
-        selected: id === selectedId,
-      });
-      let drag = null;
-      const applyBri = (next) => {
-        draft.brightness = Math.max(0, Math.min(255, Math.round(next)));
+    };
+    const applySelectAllDelta = (deltaPct, { fromStart, starts, shownStart }) => {
+      const targets = scrubTargets();
+      const startShown = fromStart
+        ? shownStart
+        : (selectAllDisplayedFill(targets.map((id) => fillPercent(drafts[id]))) ?? 0);
+      const nextShown = Math.max(0, Math.min(100, startShown + deltaPct));
+      for (const id of targets) {
+        const draft = drafts[id];
+        const base = fromStart ? starts.get(id) : fillPercent(draft);
         delete draft.variable_ref;
+        draft.brightness = Math.round(
+          (proportionalFillPercent(base, startShown, nextShown) / 100) * 255
+        );
         persistSlot(id);
-        paintLightTile(selector, {
-          rgb: draftRgb(draft),
-          fillPct: fillPercent(draft),
-          selected: id === selectedId,
-        });
+        paintSlot(id);
+      }
+      paintAll();
+    };
+    let drag = null;
+    const pickAll = (ev) => {
+      ev.stopPropagation();
+      if (allTile._lightTileSuppressTap) {
+        return;
+      }
+      selectedIds = selectedIds.size > 1 ? new Set() : new Set(ids);
+      wheel.sync();
+      syncTiles();
+    };
+    allTile.addEventListener("click", pickAll);
+    allHit.addEventListener("pointerdown", (ev) => {
+      if (ev.button && ev.button !== 0) {
+        return;
+      }
+      const starts = new Map(scrubTargets().map((id) => [id, fillPercent(drafts[id])]));
+      const shownStart =
+        selectAllDisplayedFill([...starts.values()]) ?? 0;
+      drag = {
+        pointerId: ev.pointerId,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        axis: null,
+        starts,
+        shownStart,
       };
-      const endDrag = (ev) => {
-        if (!drag || (ev && ev.pointerId !== drag.pointerId)) {
+      const onMove = (move) => {
+        if (!drag || move.pointerId !== drag.pointerId) {
           return;
         }
-        document.removeEventListener("pointermove", onDocMove);
-        document.removeEventListener("pointerup", endDrag);
-        document.removeEventListener("pointercancel", endDrag);
-        const wasVertical = drag.axis === "y";
-        const suppressTap = drag.suppressTap;
-        drag = null;
-        window.setTimeout(() => tile.classList.remove("dragging"), 250);
-        if (wasVertical || suppressTap) {
-          return;
-        }
-        selectedId = id;
-        wheel.sync();
-        syncTiles();
-      };
-      const onDocMove = (ev) => {
-        if (!drag || ev.pointerId !== drag.pointerId) {
-          return;
-        }
-        const dx = ev.clientX - drag.startX;
-        const dy = ev.clientY - drag.startY;
+        const dx = move.clientX - drag.startX;
+        const dy = move.clientY - drag.startY;
         if (!drag.axis) {
           if (Math.hypot(dx, dy) < 8) {
             return;
           }
-          if (Math.abs(dx) > Math.abs(dy)) {
-            drag.axis = "x";
-            drag.suppressTap = true;
-            return;
+          drag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+          if (drag.axis === "y") {
+            allTile.classList.add("dragging");
           }
-          drag.axis = "y";
-          drag.suppressTap = true;
-          tile.classList.add("dragging");
           return;
         }
         if (drag.axis !== "y") {
           return;
         }
-        ev.preventDefault();
-        const rect = tile.getBoundingClientRect();
-        const fromBottom = rect.bottom - ev.clientY;
-        applyBri(
-          (Math.max(0, Math.min(100, (fromBottom / rect.height) * 100)) / 100) *
-            255
-        );
+        move.preventDefault();
+        const rect = allTile.getBoundingClientRect();
+        const deltaPct = -((move.clientY - drag.startY) / Math.max(1, rect.height)) * 100;
+        applySelectAllDelta(deltaPct, {
+          fromStart: true,
+          starts: drag.starts,
+          shownStart: drag.shownStart,
+        });
       };
-      hit.addEventListener("pointerdown", (ev) => {
-        if (ev.button && ev.button !== 0) {
+      const onUp = (up) => {
+        if (!drag || up.pointerId !== drag.pointerId) {
           return;
         }
-        drag = {
-          pointerId: ev.pointerId,
-          startX: ev.clientX,
-          startY: ev.clientY,
-          axis: null,
-          suppressTap: false,
-        };
-        document.addEventListener("pointermove", onDocMove);
-        document.addEventListener("pointerup", endDrag);
-        document.addEventListener("pointercancel", endDrag);
-      });
-      tiles.appendChild(selector);
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        const moved = drag.axis != null;
+        drag = null;
+        window.setTimeout(() => allTile.classList.remove("dragging"), 250);
+        if (moved) {
+          allTile._lightTileSuppressTap = true;
+          window.setTimeout(() => {
+            allTile._lightTileSuppressTap = false;
+          }, 0);
+          syncTiles();
+          wheel.sync();
+        }
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
     });
+    allTile.addEventListener(
+      "wheel",
+      (ev) => {
+        if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) {
+          return;
+        }
+        ev.preventDefault();
+        const step = (-Math.sign(ev.deltaY) * TILE_BRIGHTNESS_WHEEL_STEP / 255) * 100;
+        const starts = new Map(scrubTargets().map((id) => [id, fillPercent(drafts[id])]));
+        applySelectAllDelta(step, {
+          fromStart: true,
+          starts,
+          shownStart: selectAllDisplayedFill([...starts.values()]) ?? 0,
+        });
+        window.clearTimeout(scrubSync);
+        scrubSync = window.setTimeout(() => {
+          syncTiles();
+          wheel.sync();
+        }, 120);
+      },
+      { passive: false }
+    );
+    tiles.appendChild(allSelector);
+
+    const groupLabels = {
+      color: panel._t("frontend.lights.group_color", "Color"),
+      temp: panel._t("frontend.lights.group_temp", "Temperature"),
+      white: panel._t("frontend.lights.group_white", "White"),
+      brightness: panel._t("frontend.lights.group_brightness", "Brightness"),
+      onoff: panel._t("frontend.lights.group_onoff", "On/off"),
+    };
+    const selectAllLabel = panel._t("frontend.lights.select_all", "Select all");
+    for (const key of lightTileGroupOrder()) {
+      const groupIds = grouped.get(key) || [];
+      if (!groupIds.length) {
+        continue;
+      }
+      const { group, row } = createLightModeGroup({
+        label: groupLabels[key] || key,
+        selectAllLabel,
+        groupKey: key,
+        onSelectAll: (ev) => {
+          const result = groupSelectionAfterClick({
+            ids: groupIds,
+            selected: [...selectedIds],
+            toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey || ev?.shiftKey),
+          });
+          selectedIds = new Set(result.selected);
+          wheel.sync();
+          revealLightActionsNow(tiles);
+          syncTiles();
+        },
+      });
+      for (const id of groupIds) {
+        const index = ids.indexOf(id);
+        const draft = drafts[id];
+        const name = panel._t("frontend.library.slot_label", "Slot {n}", {
+          n: index + 1,
+        });
+        const { selector, tile, hit } = createLightTile({
+          entityId: id,
+          name,
+          makeIcon: () => {
+            const icon = document.createElement("ha-icon");
+            icon.setAttribute("icon", "mdi:palette-swatch");
+            return icon;
+          },
+        });
+        paintLightTile(selector, {
+          rgb: draftRgb(draft),
+          fillPct: fillPercent(draft),
+          selected: selectedIds.has(id),
+        });
+        if (slotOverridden(id)) {
+          const source = builtinSlots()[index];
+          attachLightActions(selector, {
+            removeLabel: panel._t(
+              "frontend.gallery.reset_slot",
+              "Reset {name} to the original color",
+              { name }
+            ),
+            onRemove: () => {
+              drafts[id] = slotToDraft(source, variables);
+              persistSlot(id);
+              wheel.sync();
+              syncTiles();
+            },
+          });
+          selector.querySelector(".light-remove ha-icon")?.setAttribute(
+            "icon",
+            "mdi:restore"
+          );
+        }
+        let slotDrag = null;
+        const applyBri = (next) => {
+          draft.brightness = Math.max(0, Math.min(255, Math.round(next)));
+          delete draft.variable_ref;
+          persistSlot(id);
+          paintLightTile(selector, {
+            rgb: draftRgb(draft),
+            fillPct: fillPercent(draft),
+            selected: selectedIds.has(id),
+          });
+          paintAll();
+        };
+        const endDrag = (ev) => {
+          if (!slotDrag || (ev && ev.pointerId !== slotDrag.pointerId)) {
+            return;
+          }
+          document.removeEventListener("pointermove", onDocMove);
+          document.removeEventListener("pointerup", endDrag);
+          document.removeEventListener("pointercancel", endDrag);
+          const wasVertical = slotDrag.axis === "y";
+          const suppressTap = slotDrag.suppressTap;
+          slotDrag = null;
+          window.setTimeout(() => tile.classList.remove("dragging"), 250);
+          if (wasVertical || suppressTap) {
+            if (wasVertical) {
+              syncTiles();
+            }
+            return;
+          }
+          selectedIds = new Set([id]);
+          wheel.sync();
+          syncTiles();
+        };
+        const onDocMove = (ev) => {
+          if (!slotDrag || ev.pointerId !== slotDrag.pointerId) {
+            return;
+          }
+          const dx = ev.clientX - slotDrag.startX;
+          const dy = ev.clientY - slotDrag.startY;
+          if (!slotDrag.axis) {
+            if (Math.hypot(dx, dy) < 8) {
+              return;
+            }
+            slotDrag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+            slotDrag.suppressTap = true;
+            if (slotDrag.axis === "y") {
+              tile.classList.add("dragging");
+            }
+            return;
+          }
+          if (slotDrag.axis !== "y") {
+            return;
+          }
+          ev.preventDefault();
+          const rect = tile.getBoundingClientRect();
+          const fromBottom = rect.bottom - ev.clientY;
+          applyBri(
+            (Math.max(0, Math.min(100, (fromBottom / rect.height) * 100)) / 100) * 255
+          );
+        };
+        hit.addEventListener("pointerdown", (ev) => {
+          if (ev.button && ev.button !== 0) {
+            return;
+          }
+          slotDrag = {
+            pointerId: ev.pointerId,
+            startX: ev.clientX,
+            startY: ev.clientY,
+            axis: null,
+            suppressTap: false,
+          };
+          document.addEventListener("pointermove", onDocMove);
+          document.addEventListener("pointerup", endDrag);
+          document.addEventListener("pointercancel", endDrag);
+        });
+        row.appendChild(selector);
+      }
+      tiles.appendChild(group);
+    }
+    scroller.scrollLeft = keepLeft;
+    scroller._groupTitleStick?.();
+    paintAll();
   };
   wrap.append(wheels, scroller);
   syncTiles();

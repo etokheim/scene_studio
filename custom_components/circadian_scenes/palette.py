@@ -20,6 +20,17 @@ _EMPTY_SLOT = {
 }
 
 
+def optional_builtin_id(raw: Any) -> str | None:
+    """Id of a shipped picture palette this variable was copied from."""
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("builtin_id")
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
 def variable_is_palette(var: dict[str, Any] | None) -> bool:
     """True when this catalog item is a 5-slot palette."""
     if not var:

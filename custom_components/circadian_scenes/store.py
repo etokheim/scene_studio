@@ -45,7 +45,7 @@ from .const import (
     VARIABLE_REF,
 )
 
-from .palette import KIND_PALETTE, normalize_palette_slots
+from .palette import KIND_PALETTE, normalize_palette_slots, optional_builtin_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -632,6 +632,9 @@ class CircadianScenesStore:
                 "kind": KIND_PALETTE,
                 "slots": normalize_palette_slots(raw.get("slots")),
             }
+            builtin_id = optional_builtin_id(raw)
+            if builtin_id:
+                var["builtin_id"] = builtin_id
         else:
             color = raw.get("color")
             if not color or not isinstance(color, dict):

@@ -7,6 +7,7 @@ from custom_components.circadian_scenes.palette import (
     assignment_slot,
     assignment_t_r,
     normalize_palette_slots,
+    optional_builtin_id,
     resolve_palette_color,
     sample_palette_wheel,
 )
@@ -14,6 +15,13 @@ from custom_components.circadian_scenes.resolve import (
     build_circadian_event_snapshot,
     resolve_variable,
 )
+
+
+def test_optional_builtin_id():
+    assert optional_builtin_id({"builtin_id": " ember "}) == "ember"
+    assert optional_builtin_id({"builtin_id": "  "}) is None
+    assert optional_builtin_id({"builtin_id": 3}) is None
+    assert optional_builtin_id(None) is None
 
 
 def _solid(hue: float, bri: int = 200) -> dict:
