@@ -2815,32 +2815,29 @@ function createSceneColorWheel({
       el.style.webkitClipPath = "";
       return;
     }
-    const innerFrac = band.inner / radius;
-    const outerFrac = band.outer / radius;
-    const isBack = role === "back";
-    // A non-back disk must not paint out to the canvas edge. An inner disk is
-    // scaled so its rim stays saturated; the clip is the full local circle and
-    // the scale shrinks it. A ring is not scaled, so the clip is its outer edge.
-    const clipPct = band.inner <= 1 && band.outer < radius - 1 ? 50 : outerFrac * 50;
-    if (!isBack && outerFrac < 0.999) {
-      const clip = `circle(${clipPct}% at 50% 50%)`;
-      el.style.clipPath = clip;
-      el.style.webkitClipPath = clip;
-    } else {
-      el.style.clipPath = "";
-      el.style.webkitClipPath = "";
+    const scale = band.outer / radius;
+    const hole = band.outer > 1 ? (band.inner / band.outer) * 100 : 0;
+    // Every disk is a scaled copy of its full image. The hole is the next disk's
+    // rim, in the element's own size, so a focus change is a scale plus a hole
+    // and both can interpolate. A clip would snap and leave the pin behind.
+    el.style.webkitMaskImage = "";
+    el.style.maskImage = "";
+    el.style.clipPath = "";
+    el.style.webkitClipPath = "";
+    const pose = () => {
+      el.style.setProperty("--disk-hole", `${hole}%`);
+      el.style.transform = `scale(${scale})`;
+    };
+    if (!el.dataset.posed) {
+      el.style.transition = "none";
+      pose();
+      requestAnimationFrame(() => {
+        el.style.transition = "";
+        el.dataset.posed = "1";
+      });
+      return;
     }
-    if (band.inner <= 1 && band.outer < radius - 1) {
-      // Scale the full disk so the rim matches the inner overlay (do not also
-      // mask — mask is pre-transform and would shrink twice).
-      el.style.webkitMaskImage = "none";
-      el.style.maskImage = "none";
-      el.style.transform = `scale(${band.outer / radius})`;
-    } else {
-      el.style.transform = "";
-      el.style.webkitMaskImage = annulusMask(innerFrac, outerFrac);
-      el.style.maskImage = annulusMask(innerFrac, outerFrac);
-    }
+    pose();
   };
 
   const layoutLayers = (geom) => {

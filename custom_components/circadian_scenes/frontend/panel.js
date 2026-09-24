@@ -2366,6 +2366,11 @@ class CircadianScenesPanel extends HTMLElement {
           pointer-events: none;
           z-index: 1;
         }
+        @property --disk-hole {
+          syntax: "<percentage>";
+          inherits: false;
+          initial-value: 0%;
+        }
         .hue-wheel-layer {
           position: absolute;
           left: 0;
@@ -2374,10 +2379,21 @@ class CircadianScenesPanel extends HTMLElement {
           height: 100%;
           pointer-events: none;
           transform-origin: center center;
+          --disk-hole: 0%;
+          /* Hole and scale share the pin's 480ms curve so a pin stays on its disk. */
+          -webkit-mask-image: radial-gradient(
+            farthest-side,
+            transparent var(--disk-hole),
+            #000 var(--disk-hole)
+          );
+          mask-image: radial-gradient(
+            farthest-side,
+            transparent var(--disk-hole),
+            #000 var(--disk-hole)
+          );
           transition:
-            transform 280ms cubic-bezier(0.2, 0, 0, 1),
-            mask-image 280ms cubic-bezier(0.2, 0, 0, 1),
-            -webkit-mask-image 280ms cubic-bezier(0.2, 0, 0, 1);
+            transform 480ms cubic-bezier(0.22, 1.15, 0.36, 1),
+            --disk-hole 480ms cubic-bezier(0.22, 1.15, 0.36, 1);
         }
         .hue-wheel-disk.is-mid {
           z-index: 2;
@@ -2520,7 +2536,10 @@ class CircadianScenesPanel extends HTMLElement {
           pointer-events: none;
         }
         .hue-wheel-layer {
-          transition: opacity 280ms ease;
+          transition:
+            transform 480ms cubic-bezier(0.22, 1.15, 0.36, 1),
+            --disk-hole 480ms cubic-bezier(0.22, 1.15, 0.36, 1),
+            opacity 280ms ease;
         }
         .hue-wheel-canvas.group-open .hue-wheel-layer {
           opacity: 0.38;
@@ -3526,9 +3545,13 @@ class CircadianScenesPanel extends HTMLElement {
           padding-bottom: 156px;
           box-sizing: border-box;
           position: relative;
-          /* Event chips sit near the face edge — do not clip them here; clip X
-             on the shell below so horizon bleed cannot widen the app-bar scroller. */
-          overflow: visible;
+          flex: 1 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          /* The shell clips. This page fills it so the scenes list and the
+             editor body scroll inside, instead of growing past the panel. */
+          overflow: hidden;
         }
         /* Clip X on the wide page. Horizon may bleed under the frosted rail;
            height is capped in _layoutClockHorizonBack. */
@@ -5224,10 +5247,12 @@ class CircadianScenesPanel extends HTMLElement {
       scroller.style.overflow = workspace ? "hidden" : "";
     }
     if (workspace && this._contentEl) {
-      const hostTop = this.getBoundingClientRect().top;
-      const contentTop = this._contentEl.getBoundingClientRect().top;
-      const hostH = this.clientHeight || window.innerHeight;
-      const available = Math.max(120, Math.floor(hostH - (contentTop - hostTop)));
+      const shell = this.shadowRoot?.querySelector(".page-shell");
+      const shellBottom = shell
+        ? shell.getBoundingClientRect().bottom
+        : this.getBoundingClientRect().bottom;
+      const workspaceTop = workspace.getBoundingClientRect().top;
+      const available = Math.max(120, Math.floor(shellBottom - workspaceTop));
       workspace.style.height = `${available}px`;
       this._bindAreaRailScroll(this._visibleRailBody(workspace));
       this._syncStageFaceMax();
