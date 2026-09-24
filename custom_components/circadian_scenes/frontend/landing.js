@@ -127,12 +127,29 @@ export const LANDING_CSS = `
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 10px;
-    flex: 1 0 100%;
+    flex: 0 0 auto;
+    align-self: flex-start;
     min-width: 0;
+    max-width: 100%;
     padding: 0 0 4px;
   }
+  /* Own row above the time and play controls. Basis is width here. */
+  .sun-toolbar-chrome > .scene-used {
+    flex: 1 0 100%;
+  }
+  /* Corner overlay. A flex basis of 100% in the column editor was the height,
+     so the list stretched and pushed the wheel off the stage. */
   .simple-editor > .scene-used {
-    padding: 12px 16px 0;
+    position: absolute;
+    top: 8px;
+    left: 16px;
+    z-index: 3;
+    width: max-content;
+    padding: 0;
+    pointer-events: none;
+  }
+  .simple-editor > .scene-used .scene-used-chip {
+    pointer-events: auto;
   }
   .scene-used-chip {
     display: inline-flex;

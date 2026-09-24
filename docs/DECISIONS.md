@@ -14,7 +14,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## First column is the scene list; library is a second tab
 
 - **Date:** 2026-09-24
-- **Decision:** The area rail opens on **Scenes**. Variables, palettes, and circadian themes share a **Library** tab. Editing a scene lists the theme, palettes, and variables it uses at the top left of the editor. Choosing one opens that item and switches the rail to the tab that lists it, scrolled so the item is in view. The dial time, sun angle, and play control stay on the circadian readout; the readout node is created with the dial (the table chart that used to create it is gone).
+- **Decision:** The area rail opens on **Scenes**. Variables, palettes, and circadian themes share a **Library** tab. Editing a scene lists the theme, palettes, and variables it uses at the top left of the editor, over the corner so the list does not take a row in the editor column. Choosing one opens that item and switches the rail to the tab that lists it, scrolled so the item is in view. On a circadian scene the same list is its own row in the dial toolbar, above the time and play controls. The dial time, sun angle, and play control stay on the circadian readout; the readout node is created with the dial (the table chart that used to create it is gone).
 - **Why:** The scene list was buried under the library. Used items need a way back to their editors without hunting the column.
 - **Do not reverse without user ask.**
 
