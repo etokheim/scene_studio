@@ -1,5 +1,13 @@
 # Decisions
 
+## Palette lights share a named group and the palette disk
+
+- **Date:** 2026-09-24
+- **Decision:** A light whose draft references a palette is grouped under that palette’s name, ahead of the color/temperature/white/brightness/on-off groups. Selecting that light shows the palette disk. A color or temperature choice stays on the light it was made for, so the next palette light is not left on the RGB disk. The selection ring is drawn outside the tile and scales with the tile (press and jelly), over the action plates. Pin moves after the first pose glide; a drag still follows the pointer.
+- **Why:** Palette lights were filed with their sampled color mode, and a previous disk choice kept them on RGB. The ring lived on the frame while the tile scaled, so it sat flush and stayed still. Pins snapped because a later sync cleared the CSS transition before it could run.
+- **Do not reverse without user ask.**
+
+
 Durable product and architecture choices for Circadian Scenes.
 Agents: do not reverse these without an explicit user request. Supersede entries in the same change set when intentionally changing course.
 

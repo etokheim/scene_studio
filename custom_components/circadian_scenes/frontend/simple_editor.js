@@ -401,7 +401,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     };
   };
 
-  const groupOf = (eid) => lightTileColorGroup(drafts[eid], groupCaps(eid));
+  const paletteIdSet = () =>
+    new Set(
+      (panel._variables || []).filter((item) => variableIsPalette(item)).map((item) => item.id)
+    );
+  const groupOf = (eid) => lightTileColorGroup(drafts[eid], groupCaps(eid), paletteIdSet());
   const lightIsUnavailable = (eid) => {
     const st = panel._hass?.states?.[eid];
     return !st || st.state === "unavailable";
@@ -1128,7 +1132,17 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       }
       grouped.get(key).push(eid);
     }
-    stripOrderIds = lightTileGroupOrder()
+    const paletteKeys = [...grouped.keys()]
+      .filter((key) => key.startsWith("palette:"))
+      .sort((a, b) => {
+        const name = (key) => {
+          const id = key.slice("palette:".length);
+          return variables.find((item) => item.id === id)?.name || id;
+        };
+        return name(a).localeCompare(name(b));
+      });
+    const groupOrder = lightTileGroupOrder(paletteKeys);
+    stripOrderIds = groupOrder
       .flatMap((key) => grouped.get(key) || [])
       .concat(unavailableIds);
     const groupLabels = {
@@ -1140,13 +1154,17 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     };
     const selectAllLabel = panel._t("frontend.lights.select_all", "Select all");
     const groupRows = new Map();
-    for (const key of lightTileGroupOrder()) {
+    for (const key of groupOrder) {
       const ids = grouped.get(key) || [];
       if (!ids.length) {
         continue;
       }
+      const paletteId = key.startsWith("palette:") ? key.slice("palette:".length) : "";
+      const label = paletteId
+        ? variables.find((item) => item.id === paletteId)?.name || paletteId
+        : groupLabels[key] || key;
       const { group, row } = createLightModeGroup({
-        label: groupLabels[key] || key,
+        label,
         selectAllLabel,
         groupKey: key,
         onSelectAll: (ev) => {

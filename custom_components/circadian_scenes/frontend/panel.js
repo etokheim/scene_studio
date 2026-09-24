@@ -18135,16 +18135,19 @@ class CircadianScenesPanel extends HTMLElement {
     const entries = (this._lightNameLabels || []).filter(
       (entry) => entry.selector && entry.light && !entry.light.removed && !entry.light.suggested
     );
+    const paletteIds = new Set(
+      (this._variables || []).filter((item) => variableIsPalette(item)).map((item) => item.id)
+    );
+    const bucketOf = (entry) =>
+      entry.selector.classList.contains("unavailable")
+        ? "unavailable"
+        : lightTileColorGroup(
+            this._legendGroupDraft(entry.light),
+            this._legendTileCaps(entry.light.entity_id),
+            paletteIds
+          );
     const signature = entries
-      .map((entry) => {
-        const bucket = entry.selector.classList.contains("unavailable")
-          ? "unavailable"
-          : lightTileColorGroup(
-              this._legendGroupDraft(entry.light),
-              this._legendTileCaps(entry.light.entity_id)
-            );
-        return `${entry.light.entity_id}:${bucket}`;
-      })
+      .map((entry) => `${entry.light.entity_id}:${bucketOf(entry)}`)
       .join("|");
     if (signature === this._legendGroupSignature) {
       return;
@@ -18158,10 +18161,10 @@ class CircadianScenesPanel extends HTMLElement {
         unavailable.push(entry);
         continue;
       }
-      const key = lightTileColorGroup(
-        this._legendGroupDraft(entry.light),
-        this._legendTileCaps(entry.light.entity_id)
-      );
+      const key = bucketOf(entry);
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
       grouped.get(key).push(entry);
     }
     const labels = {
@@ -18185,15 +18188,29 @@ class CircadianScenesPanel extends HTMLElement {
         ".simple-light-selector.removed, .simple-light-selector.suggested"
       ),
     ];
+    const paletteKeys = [...grouped.keys()]
+      .filter((key) => key.startsWith("palette:"))
+      .sort((a, b) => {
+        const name = (key) => {
+          const id = key.slice("palette:".length);
+          return (this._variables || []).find((item) => item.id === id)?.name || id;
+        };
+        return name(a).localeCompare(name(b));
+      });
+    const groupOrder = lightTileGroupOrder(paletteKeys);
     tilesEl.replaceChildren();
-    for (const key of lightTileGroupOrder()) {
+    for (const key of groupOrder) {
       const rows = grouped.get(key) || [];
       if (!rows.length) {
         continue;
       }
+      const paletteId = key.startsWith("palette:") ? key.slice("palette:".length) : "";
+      const label = paletteId
+        ? (this._variables || []).find((item) => item.id === paletteId)?.name || paletteId
+        : labels[key] || key;
       const ids = rows.map((entry) => entry.light.entity_id);
       const { group, row } = createLightModeGroup({
-        label: labels[key] || key,
+        label,
         selectAllLabel,
         groupKey: key,
         onSelectAll: (ev) => {

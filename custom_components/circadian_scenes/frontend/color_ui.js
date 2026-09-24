@@ -2505,6 +2505,18 @@ function createSceneColorWheel({
 
   const radiusPx = () => canvasWrap.clientWidth / 2;
   let uiMode = null;
+  /** Color/temperature choice applies only to the light it was made for. */
+  let uiModeForId = null;
+
+  const lockUiMode = (mode) => {
+    uiMode = mode;
+    uiModeForId = getState().activeId ?? null;
+  };
+
+  const lockedUiMode = () => {
+    const { activeId } = getState();
+    return uiModeForId === activeId ? uiMode : null;
+  };
 
   const paletteCatalog = () =>
     typeof getPalette === "function" ? getPalette() || [] : [];
@@ -2523,7 +2535,8 @@ function createSceneColorWheel({
   const showingPalette = () => {
     const { scenes, activeId } = getState();
     const draft = scenes.find((row) => row.id === activeId)?.draft;
-    if (uiMode === "color" || uiMode === "temp") {
+    const locked = lockedUiMode();
+    if (locked === "color" || locked === "temp") {
       return false;
     }
     return variableIsPalette(paletteForDraft(draft));
@@ -2794,18 +2807,19 @@ function createSceneColorWheel({
     flyPinsHome(ids, home, from);
   };
 
-  const placeMarker = (marker, x, y) => {
+  const placeMarker = (marker, x, y, opts) => {
     if (marker.flying) {
       return;
     }
     // Tip stays on the color. Size is a scale on .pin-body around that tip.
     const at = pinAt;
+    const instant = Boolean(opts && typeof opts === "object" && opts.instant);
     const from = !marker.posed ? pinFlip?.get(marker.sceneId) : null;
+    const prevX = marker.x;
+    const prevY = marker.y;
     marker.x = x;
     marker.y = y;
     if (marker.flipPending) {
-      marker.x = x;
-      marker.y = y;
       return;
     }
     if (
@@ -2833,6 +2847,34 @@ function createSceneColorWheel({
       });
       return;
     }
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const moved =
+      marker.posed &&
+      Number.isFinite(prevX) &&
+      Number.isFinite(prevY) &&
+      (Math.abs(prevX - x) > 0.5 || Math.abs(prevY - y) > 0.5);
+    if (!moved && marker.g.getAnimations().some((anim) => anim.playState === "running")) {
+      return;
+    }
+    if (moved && !instant && !drag && !reduce) {
+      marker.g.getAnimations().forEach((anim) => anim.cancel());
+      marker.g.style.transition = "none";
+      const anim = marker.g.animate(
+        [{ transform: at(prevX, prevY) }, { transform: at(x, y) }],
+        {
+          duration: 480,
+          easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
+          fill: "both",
+        }
+      );
+      anim.onfinish = () => {
+        marker.g.style.transition = "";
+        marker.g.style.transform = at(marker.x, marker.y);
+        anim.cancel();
+      };
+      return;
+    }
+    marker.g.getAnimations().forEach((anim) => anim.cancel());
     marker.g.style.transform = at(x, y);
     if (!marker.posed) {
       marker.posed = true;
@@ -3049,10 +3091,11 @@ function createSceneColorWheel({
       return;
     }
     const caps = capsOf(item || {});
+    const locked = lockedUiMode();
     const current = showingPalette()
       ? "palette"
-      : uiMode === "color" || uiMode === "temp"
-        ? uiMode
+      : locked === "color" || locked === "temp"
+        ? locked
         : draftWheelMode(draft, caps.hasColor, caps.hasTemp);
     for (const mode of modes) {
       const wrap = document.createElement("button");
@@ -3088,11 +3131,11 @@ function createSceneColorWheel({
         wrap.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if (mode === "palette") {
-          uiMode = "palette";
+          lockUiMode("palette");
           sync();
           return;
         }
-        uiMode = mode;
+        lockUiMode(mode);
         const state = getState();
         const targets = clusterMatesOf(selectedIdsOf(state));
         const { keep, drop } = splitCompatible(targets, mode);
@@ -3177,7 +3220,7 @@ function createSceneColorWheel({
           seed: seedNow(),
           catalog: palette,
         });
-        uiMode = variableIsPalette(variable) ? "palette" : null;
+        lockUiMode(variableIsPalette(variable) ? "palette" : null);
         const marker = markers.get(active.id);
         if (marker) {
           marker.g.classList.add("glide");
@@ -3684,7 +3727,7 @@ function createSceneColorWheel({
       const members = openGroup
         .map((id, index) => ({ marker: markers.get(id), point: points[index] }))
         .filter((row) => row.marker && row.point);
-      const placeOpenMember = (row, x, y, expanded) => {
+      const placeOpenMember = (row, x, y, expanded, instant) => {
         row.marker.g.classList.add("group-member");
         row.marker.g.classList.remove("grouped");
         row.marker.g.classList.toggle("expanded", expanded);
@@ -3696,7 +3739,7 @@ function createSceneColorWheel({
         if (scene) {
           revealPinIcon(row.marker, scene);
         }
-        placeMarker(row.marker, x, y);
+        placeMarker(row.marker, x, y, instant ? { instant: true } : undefined);
         svg.appendChild(row.marker.g);
       };
       const reduceMotion = window.matchMedia?.(
@@ -3715,7 +3758,7 @@ function createSceneColorWheel({
         for (const row of members) {
           row.marker.flying = false;
           row.marker.g.style.transition = "none";
-          placeOpenMember(row, spawn.x, spawn.y, true);
+          placeOpenMember(row, spawn.x, spawn.y, true, true);
           row.marker.flying = true;
         }
         svg.getBoundingClientRect();
@@ -4297,7 +4340,7 @@ function createSceneColorWheel({
 
   const setMode = (next, { convertDraft = false } = {}) => {
     if (next === "palette") {
-      uiMode = "palette";
+      lockUiMode("palette");
       sync();
       return;
     }
@@ -4307,7 +4350,7 @@ function createSceneColorWheel({
     if (next === "temp" && !hasTemp) {
       return;
     }
-    uiMode = next;
+    lockUiMode(next);
     if (convertDraft) {
       const state = getState();
       const targets = clusterMatesOf(selectedIdsOf(state));

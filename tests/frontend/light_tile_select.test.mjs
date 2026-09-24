@@ -48,6 +48,24 @@ test("color mode buckets follow the strip order", () => {
     "color"
   );
   assert.equal(lightTileColorGroup({}), "brightness");
+  const palettes = new Set(["pal-1"]);
+  assert.equal(
+    lightTileColorGroup({ variable_ref: "pal-1", color_mode: "hs" }, undefined, palettes),
+    "palette:pal-1"
+  );
+  assert.equal(
+    lightTileColorGroup({ variable_ref: "other", color_mode: "hs" }, undefined, palettes),
+    "color"
+  );
+  assert.deepEqual(lightTileGroupOrder(["palette:b", "palette:a"]), [
+    "palette:b",
+    "palette:a",
+    "color",
+    "temp",
+    "white",
+    "brightness",
+    "onoff",
+  ]);
   assert.equal(
     lightTileColorGroup(
       { color_mode: "color_temp", color_temp_kelvin: 2286 },

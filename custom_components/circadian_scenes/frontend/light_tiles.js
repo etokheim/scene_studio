@@ -224,11 +224,18 @@ export const LIGHT_TILES_CSS = `
   .simple-light-frame::after {
     content: "";
     position: absolute;
-    inset: 0;
-    z-index: 3;
-    border-radius: inherit;
+    /* Sit outside the tile, and above the action plates where they overlap. */
+    inset: -4px;
+    z-index: 5;
+    border-radius: 32px;
     border: 2px solid transparent;
     pointer-events: none;
+  }
+  .simple-light-frame:has(.simple-light-tile.jelly-snap) {
+    animation: light-tile-jelly 480ms cubic-bezier(0.22, 1.55, 0.36, 1);
+  }
+  .simple-light-frame:has(.simple-light-tile:not(.dragging):not(.wheel-adjusting):active:hover) {
+    transform: scale(0.95);
   }
   .simple-light-selector.active:not(.select-all-tile) .simple-light-frame::after {
     border-color: var(
@@ -524,11 +531,6 @@ export const LIGHT_TILES_CSS = `
     .simple-light-tile:not(.dragging):not(.wheel-adjusting) {
     box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
   }
-  .simple-light-tile:not(.dragging):active:hover,
-  .simple-light-selector.active:not(.select-all-tile)
-    .simple-light-tile:not(.dragging):not(.wheel-adjusting):active:hover {
-    transform: scale(0.95);
-  }
   .simple-light-tile.is-off {
     --hue-unfilled-mix: 0%;
     --hue-unfilled-opacity: 100%;
@@ -542,9 +544,6 @@ export const LIGHT_TILES_CSS = `
     --hue-light-off-text-color: #fff;
     touch-action: none;
     transform: none;
-  }
-  .simple-light-tile.jelly-snap {
-    animation: light-tile-jelly 480ms cubic-bezier(0.22, 1.55, 0.36, 1);
   }
   .simple-light-tile.jelly-snap .simple-light-fill,
   .simple-light-tile.jelly-snap .simple-light-labels {
@@ -1295,11 +1294,16 @@ export function playLightTileJelly(tile) {
 const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness", "onoff"];
 
 /**
- * Bucket a stored light draft by the color mode it is in now.
+ * Bucket a stored light draft. A palette reference wins over color mode
+ * so those lights share a group named for the palette.
  * When caps are known and the bulb cannot do color or kelvin, a stale
  * color_temp draft still belongs in the brightness group.
  */
-export function lightTileColorGroup(draft, caps) {
+export function lightTileColorGroup(draft, caps, paletteIds) {
+  const ref = draft?.variable_ref;
+  if (ref && paletteIds?.has?.(ref)) {
+    return `palette:${ref}`;
+  }
   if (caps?.known && !caps.hasColor && !caps.hasTemp) {
     if (draft?.color_mode === "white") {
       return "white";
@@ -1334,8 +1338,9 @@ export function lightTileColorGroup(draft, caps) {
   return "brightness";
 }
 
-export function lightTileGroupOrder() {
-  return [...COLOR_GROUP_ORDER];
+export function lightTileGroupOrder(extraKeys = []) {
+  const palettes = extraKeys.filter((key) => String(key).startsWith("palette:"));
+  return [...palettes, ...COLOR_GROUP_ORDER];
 }
 
 const actionRevealTimers = new WeakMap();
