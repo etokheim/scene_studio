@@ -419,12 +419,8 @@ export const LIGHT_TILES_CSS = `
   .light-action.is-off {
     opacity: 0.45;
   }
-  .simple-light-selector.active .simple-light-frame {
-    border-color: var(
-      --hue-light-on-color,
-      var(--hue-light-on-background, #ffda95)
-    );
-  }
+  /* The frame border stays clear. The offset ring is ::after; coloring both
+     draws two selection strokes. */
   .simple-light-selector:hover:not(.select-all-tile):not(.add-light-tile):not(.removed)
     .simple-light-frame,
   .simple-light-selector.active:not(.select-all-tile):not(.add-light-tile):not(.removed)
