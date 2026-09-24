@@ -159,8 +159,23 @@ export const LANDING_CSS = `
     padding: 0;
     pointer-events: none;
   }
-  .simple-editor > .scene-used .scene-used-chip {
+  .simple-editor > .scene-used .scene-used-chip,
+  .simple-editor > .scene-used .scene-palette-split {
     pointer-events: auto;
+  }
+  .scene-palette-split {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+  }
+  .scene-palette-edit {
+    --mdc-icon-button-size: 28px;
+    --mdc-icon-size: 18px;
+    color: var(--primary-text-color);
+  }
+  .scene-used-chip.is-placeholder span {
+    color: var(--secondary-text-color);
+    font-weight: 400;
   }
   .scene-used-chip {
     display: inline-flex;
@@ -1310,17 +1325,15 @@ export function renderSceneUsed(panel) {
     theme: panel._themeDraft,
     themes: panel._themes,
     variables: panel._variables,
-  });
-  if (!uses.length) {
-    return null;
-  }
+  }).filter((item) => item.kind !== "palette");
   const row = document.createElement("div");
   row.className = "scene-used";
+  row.appendChild(renderBasePaletteSplit(panel));
   for (const item of uses) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "scene-used-chip";
-    const swatch = document.createElement(item.kind === "palette" ? "span" : "span");
+    const swatch = document.createElement("span");
     swatch.className = "scene-used-swatch";
     const name = document.createElement("span");
     if (item.kind === "theme") {
@@ -1333,32 +1346,78 @@ export function renderSceneUsed(panel) {
     } else {
       const variable = (panel._variables || []).find((entry) => entry.id === item.id);
       name.textContent = variable?.name || item.id;
-      const cover = galleryPalette(variable?.builtin_id);
-      if (cover) {
-        const photo = document.createElement("img");
-        photo.className = "scene-used-swatch cover";
-        photo.alt = "";
-        photo.src = galleryCoverUrl(cover.id);
-        button.appendChild(photo);
-      } else if (variableIsPalette(variable)) {
-        swatch.style.background = variableSwatchCss(
-          { ...(variable?.slots?.[0]?.color || {}), brightness: variable?.slots?.[0]?.brightness },
-          panel._variables
-        );
-        button.appendChild(swatch);
-      } else {
-        swatch.style.background = variableSwatchCss(variable, panel._variables);
-        button.appendChild(swatch);
-      }
-      const hash = item.kind === "palette" ? "palette" : "variable";
-      button.addEventListener("click", () => panel._go(`${hash}/${item.id}`));
+      swatch.style.background = variableSwatchCss(variable, panel._variables);
+      button.addEventListener("click", () => panel._go(`variable/${item.id}`));
     }
-    if (!button.querySelector(".scene-used-swatch")) {
-      button.appendChild(swatch);
-    }
-    button.appendChild(name);
+    button.append(swatch, name);
     button.setAttribute("aria-label", name.textContent);
     row.appendChild(button);
   }
   return row;
+}
+
+function renderBasePaletteSplit(panel) {
+  const split = document.createElement("div");
+  split.className = "scene-palette-split";
+  const base = panel._sceneBasePalette?.() || null;
+  const paletteId = base?.palette_id || null;
+  const variable = paletteId
+    ? (panel._variables || []).find((entry) => entry.id === paletteId)
+    : null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "scene-used-chip";
+  const name = document.createElement("span");
+  if (!variable) {
+    button.classList.add("is-placeholder");
+    name.textContent = panel._t(
+      "frontend.dialogs.scene_palette_select",
+      "Select a palette"
+    );
+  } else {
+    name.textContent = variable.name || paletteId;
+    appendPaletteFace(button, variable, panel._variables);
+  }
+  button.appendChild(name);
+  button.setAttribute("aria-label", name.textContent);
+  button.addEventListener("click", () => panel._pickSceneBasePalette?.());
+  split.appendChild(button);
+  if (paletteId) {
+    const edit = document.createElement("ha-icon-button");
+    edit.className = "scene-palette-edit";
+    edit.label = panel._t("frontend.dialogs.scene_palette_edit", "Edit palette");
+    const icon = document.createElement("ha-icon");
+    icon.setAttribute("icon", "mdi:pencil");
+    edit.appendChild(icon);
+    edit.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      panel._go(`palette/${paletteId}`);
+    });
+    split.appendChild(edit);
+  }
+  return split;
+}
+
+function appendPaletteFace(button, variable, catalog) {
+  const cover = galleryPalette(variable?.builtin_id);
+  if (cover) {
+    const photo = document.createElement("img");
+    photo.className = "scene-used-swatch cover";
+    photo.alt = "";
+    photo.src = galleryCoverUrl(cover.id);
+    button.appendChild(photo);
+    return;
+  }
+  const swatch = document.createElement("span");
+  swatch.className = "scene-used-swatch";
+  if (variableIsPalette(variable)) {
+    const slot = variable?.slots?.[0] || {};
+    swatch.style.background = variableSwatchCss(
+      { ...(slot.color || {}), brightness: slot.brightness },
+      catalog
+    );
+  } else {
+    swatch.style.background = variableSwatchCss(variable, catalog);
+  }
+  button.appendChild(swatch);
 }

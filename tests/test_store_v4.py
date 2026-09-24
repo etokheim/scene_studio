@@ -197,6 +197,24 @@ class TestToFormData:
         assert form["palette_id"] == "pal-1"
         assert form["assignment_seed"] == 42
 
+    def test_event_palettes_round_trip(self):
+        item = normalize_circadian_scene(
+            {
+                SCENE_NAME: "Day",
+                "event_palettes": {
+                    "dawn": {"palette_id": "wool", "assignment_seed": 7},
+                    "noon": {"palette_id": None},
+                    "nope": {"palette_id": "x"},
+                },
+            }
+        )
+        assert item["event_palettes"] == {
+            "dawn": {"palette_id": "wool", "assignment_seed": 7}
+        }
+        assert "palette_id" not in item
+        form = to_form_data(item)
+        assert form["event_palettes"]["dawn"]["palette_id"] == "wool"
+
 
 # ---------------------------------------------------------------------------
 # v3 → v4 migration

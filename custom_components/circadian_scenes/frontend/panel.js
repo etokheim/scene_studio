@@ -3130,9 +3130,18 @@ class CircadianScenesPanel extends HTMLElement {
           align-items: center;
           gap: 8px;
         }
-        .scene-palette-choice .var-chip {
-          flex: 1 1 auto;
-          min-width: 0;
+        .scene-palette-none {
+          align-self: flex-start;
+          padding: 6px 10px;
+          border: 2px solid transparent;
+          border-radius: 10px;
+          background: none;
+          color: var(--primary-text-color);
+          font: inherit;
+          cursor: pointer;
+        }
+        .scene-palette-none.selected {
+          border-color: var(--primary-color);
         }
         .scene-palette-randomize[hidden] {
           display: none !important;
@@ -5865,7 +5874,97 @@ class CircadianScenesPanel extends HTMLElement {
     void this._createLibraryItem("theme");
   }
 
-  _chooseScenePalette({ areaId } = {}) {
+  _editedSolarEventId() {
+    if (this._sidebarEventId) {
+      return this._sidebarEventId;
+    }
+    const events = (this._sunPath?.events || []).filter((item) => item?.id);
+    if (!events.length) {
+      return "noon";
+    }
+    const seconds = this._idleReadoutSeconds?.() ?? 0;
+    let best = events[0];
+    for (const event of events) {
+      if (event.seconds != null && event.seconds <= seconds) {
+        best = event;
+      }
+    }
+    return best.id;
+  }
+
+  _sceneBasePalette() {
+    const scene = this._formData;
+    if (!scene || this._view !== "edit") {
+      return null;
+    }
+    if (scene.kind === "simple") {
+      return scene.palette_id
+        ? { palette_id: scene.palette_id, assignment_seed: scene.assignment_seed || 0 }
+        : null;
+    }
+    const eventId = this._editedSolarEventId();
+    const entry = scene.event_palettes?.[eventId];
+    return entry?.palette_id
+      ? { palette_id: entry.palette_id, assignment_seed: entry.assignment_seed || 0, eventId }
+      : { eventId };
+  }
+
+  async _pickSceneBasePalette() {
+    if (this._view !== "edit" || !this._formData) {
+      return;
+    }
+    const current = this._sceneBasePalette();
+    const choice = await this._chooseScenePalette({
+      areaId: this._formData.area,
+      mode: "edit",
+      paletteId: current?.palette_id || null,
+    });
+    if (!choice) {
+      return;
+    }
+    this._applySceneBasePalette(choice);
+  }
+
+  _applySceneBasePalette(choice) {
+    const scene = this._formData;
+    if (!scene || !choice) {
+      return;
+    }
+    const next = choice.palette?.id || null;
+    const seed = next ? choice.seed || 0 : 0;
+    this._commitUndo();
+    if (scene.kind === "simple") {
+      const prev = scene.palette_id || null;
+      scene.palette_id = next;
+      scene.assignment_seed = seed;
+      const lights = scene.lights || {};
+      for (const [eid, light] of Object.entries(lights)) {
+        if (!light || light.variable_ref !== prev) {
+          continue;
+        }
+        if (next) {
+          lights[eid] = { variable_ref: next };
+        } else {
+          delete lights[eid];
+        }
+      }
+      this._saveSoon();
+      this._render();
+      return;
+    }
+    const eventId = this._editedSolarEventId();
+    const map = { ...(scene.event_palettes || {}) };
+    if (next) {
+      map[eventId] = { palette_id: next, assignment_seed: seed };
+    } else {
+      delete map[eventId];
+    }
+    scene.event_palettes = map;
+    this._saveSoon();
+    this._syncSceneUsed();
+  }
+
+  _chooseScenePalette({ areaId, mode, paletteId } = {}) {
     return new Promise((resolve) => {
       this.shadowRoot.querySelector("ha-dialog.scene-palette-dialog")?.remove();
       const palettes = (this._variables || []).filter((item) =>
@@ -5880,8 +5979,8 @@ class CircadianScenesPanel extends HTMLElement {
       );
       dialog.open = true;
       let settled = false;
-      let selectedKind = null;
-      let selectedId = null;
+      let selectedKind = mode === "edit" ? (paletteId ? "user" : "none") : null;
+      let selectedId = mode === "edit" ? paletteId || null : null;
       let seed = (Math.random() * 0xffffffff) >>> 0;
       let snaps = null;
       const finish = (value) => {
@@ -5953,12 +6052,20 @@ class CircadianScenesPanel extends HTMLElement {
       list.className = "scene-palette-list";
       const rows = [];
       const cards = [];
+      let noneChip = null;
       const choose = (kind, id) => {
         selectedKind = kind;
         selectedId = id;
         paintSelection();
         void applyPreview();
       };
+      const noneChoice = document.createElement("button");
+      noneChoice.type = "button";
+      noneChoice.className = "scene-palette-none";
+      noneChoice.textContent = this._t("frontend.dialogs.scene_palette_none", "None");
+      noneChoice.addEventListener("click", () => choose("none", null));
+      noneChip = noneChoice;
+      list.appendChild(noneChoice);
       const paintSelection = () => {
         for (const row of rows) {
           const on = selectedKind === "user" && row.id === selectedId;
@@ -5972,7 +6079,8 @@ class CircadianScenesPanel extends HTMLElement {
           );
         }
         galleryRandomize.hidden = selectedKind !== "gallery";
-        const locked = !selectedPalette();
+        noneChip?.classList.toggle("selected", selectedKind === "none");
+        const locked = selectedKind !== "none" && !selectedPalette();
         useBtn.disabled = locked;
         useBtn.toggleAttribute("disabled", locked);
       };
@@ -6067,17 +6175,29 @@ class CircadianScenesPanel extends HTMLElement {
       );
       custom.addEventListener("click", () => {
         // Copy before restore clears the preview snapshots. Those are the
-        // room colors from before the palette preview.
+        // room colors from before the palette preview. Create-only: Custom
+        // builds a scene from the room. The editor uses None instead.
         const room = snaps ? structuredClone(snaps) : null;
         void restoreSnaps().then(() => finish({ palette: null, room }));
       });
+      if (mode === "edit") {
+        custom.hidden = true;
+      }
       useBtn.addEventListener("click", () => {
+        if (selectedKind === "none") {
+          void restoreSnaps().then(() => finish({ palette: null }));
+          return;
+        }
         const picked = selectedPalette();
         if (!picked) {
           return;
         }
-        const keepPreview = this._readRoomPreviewPref() && Boolean(snaps);
         const done = (palette) => {
+          if (mode === "edit") {
+            void restoreSnaps().then(() => finish({ palette, seed }));
+            return;
+          }
+          const keepPreview = this._readRoomPreviewPref() && Boolean(snaps);
           finish({
             palette,
             seed,
@@ -10556,6 +10676,7 @@ class CircadianScenesPanel extends HTMLElement {
       force: true,
       transition: SCENE_PLAY_TRANSITION_SEC,
     });
+    this._syncSceneUsed();
   }
 
   _setSidebarLight(entityId) {
@@ -15060,6 +15181,9 @@ class CircadianScenesPanel extends HTMLElement {
       }
     }
     this._syncYearScrub();
+    if (this._toolbarChrome?.isConnected && this._view === "edit" && this._formData?.kind !== "simple") {
+      this._syncSceneUsed();
+    }
     if (landscapeClock) {
       requestAnimationFrame(() => this._alignYearScrubRail());
     }

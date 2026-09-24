@@ -180,6 +180,13 @@ def build_circadian_event_snapshot(
     entities: dict[str, dict[str, Any]] = {}
     ev = theme["events"].get(event) or {}
     seed = int(ev.get("assignment_seed") or 0)
+    # Scene base for this event. Lights with an override still win. The theme
+    # record is left alone.
+    event_palette = (scene.get("event_palettes") or {}).get(event) or {}
+    scene_palette_id = event_palette.get("palette_id") or None
+    scene_palette = variables.get(scene_palette_id) if scene_palette_id else None
+    scene_is_palette = variable_is_palette(scene_palette)
+    scene_seed = int(event_palette.get("assignment_seed") or 0)
     theme_ref = (ev.get("color") or {}).get(VARIABLE_REF)
     theme_var = variables.get(theme_ref) if theme_ref else None
     theme_is_palette = variable_is_palette(theme_var)
@@ -216,6 +223,19 @@ def build_circadian_event_snapshot(
                     "brightness",
                     var_brightness if var_brightness is not None else fallback_bri,
                 ),
+                **color_part,
+            }
+        elif scene_is_palette:
+            color_part = resolve_variable(
+                {VARIABLE_REF: scene_palette_id},
+                variables,
+                entity_id=eid,
+                seed=scene_seed,
+            )
+            var_brightness = color_part.pop("brightness", ev.get("brightness", 255))
+            state_dict = {
+                "state": "on",
+                "brightness": var_brightness,
                 **color_part,
             }
         elif theme_is_palette:

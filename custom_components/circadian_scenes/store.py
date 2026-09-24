@@ -197,6 +197,25 @@ def _optional_icon(raw: dict[str, Any]) -> str | None:
     return icon or None
 
 
+def _normalize_event_palettes(raw: Any) -> dict[str, dict[str, Any]]:
+    """Keep a palette id and seed for each solar event that has one."""
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for event in SOLAR_EVENTS:
+        entry = raw.get(event)
+        if not isinstance(entry, dict):
+            continue
+        palette_id = entry.get("palette_id") or None
+        if not palette_id:
+            continue
+        result[event] = {
+            "palette_id": palette_id,
+            "assignment_seed": int(entry.get("assignment_seed") or 0),
+        }
+    return result
+
+
 def normalize_circadian_scene(
     raw: dict[str, Any],
     scene_id: str | None = None,
@@ -232,6 +251,8 @@ def normalize_circadian_scene(
         },
         "overrides": raw.get("overrides") or {},
         AUTOMATICALLY_UPDATE_LIGHTS: automatically_update_lights,
+        # One palette per solar event. Not the theme, and not palette_id.
+        "event_palettes": _normalize_event_palettes(raw.get("event_palettes")),
     }
 
 
@@ -482,6 +503,7 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
     if kind == KIND_CIRCADIAN:
         data["theme_id"] = item.get("theme_id") or "default"
         data["overrides"] = item.get("overrides") or {}
+        data["event_palettes"] = _normalize_event_palettes(item.get("event_palettes"))
         data[AUTOMATICALLY_UPDATE_LIGHTS] = bool(
             item.get(AUTOMATICALLY_UPDATE_LIGHTS, True)
         )
