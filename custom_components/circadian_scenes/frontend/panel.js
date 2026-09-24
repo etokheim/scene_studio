@@ -2429,14 +2429,18 @@ class CircadianScenesPanel extends HTMLElement {
           transform: rotate(180deg);
           scale: 0.2;
           opacity: 0;
+          /* Collapse fades late so the shrink is the expand played backwards. */
           transition:
             scale 520ms cubic-bezier(0.34, 1.56, 0.64, 1),
-            opacity 280ms ease;
+            opacity 280ms ease 240ms;
         }
         .hue-wheel-svg .gm.expanded .pin-body,
         .hue-wheel-svg .gm.drop-target .pin-body {
           scale: 1;
           opacity: 1;
+          transition:
+            scale 520ms cubic-bezier(0.34, 1.56, 0.64, 1),
+            opacity 280ms ease;
         }
         .hue-wheel-svg .gm.drag .pin-body {
           scale: 1.16;
@@ -2444,11 +2448,12 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .hue-wheel-svg .pin-dot {
           opacity: 1;
-          transition: opacity 280ms ease;
+          transition: opacity 280ms ease 240ms;
         }
         .hue-wheel-svg .gm.expanded .pin-dot,
         .hue-wheel-svg .gm.drop-target .pin-dot {
           opacity: 0;
+          transition: opacity 280ms ease;
         }
         .hue-wheel-svg .pin-dot-outline {
           fill: #fff;
@@ -2532,17 +2537,26 @@ class CircadianScenesPanel extends HTMLElement {
           color: inherit;
           --icon-primary-color: currentColor;
         }
-        .hue-wheel-svg .gm.expanded .marker-outline {
-          display: none;
-        }
-        .hue-wheel-svg .gm.expanded .marker {
+        .hue-wheel-svg .gm.expanded .marker,
+        .hue-wheel-svg .gm.drop-target .marker {
           filter: url(#se-active-shadow);
         }
-        .hue-wheel-svg .gm:not(.expanded) .pin-glyph {
-          display: none;
+        .hue-wheel-svg .marker-outline {
+          opacity: 1;
+          transition: opacity 280ms ease 240ms;
         }
-        .hue-wheel-svg .gm.drop-target .pin-glyph {
-          display: block;
+        .hue-wheel-svg .gm.expanded .marker-outline,
+        .hue-wheel-svg .gm.drop-target .marker-outline {
+          opacity: 0;
+          transition: opacity 280ms ease;
+        }
+        .hue-wheel-svg .pin-glyph {
+          opacity: 1;
+          transition: opacity 280ms ease;
+        }
+        .hue-wheel-svg .gm:not(.expanded):not(.drop-target) .pin-glyph {
+          opacity: 0;
+          transition: opacity 280ms ease 240ms;
         }
         @media (prefers-reduced-motion: reduce) {
           .hue-wheel-svg .gm,

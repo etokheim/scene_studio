@@ -2853,11 +2853,13 @@ function createSceneColorWheel({
       Number.isFinite(prevX) &&
       Number.isFinite(prevY) &&
       (Math.abs(prevX - x) > 0.5 || Math.abs(prevY - y) > 0.5);
-    if (!moved && marker.g.getAnimations().some((anim) => anim.playState === "running")) {
+    const pinMoves = () =>
+      marker.g.getAnimations({ subtree: false }).filter((anim) => anim.playState === "running");
+    if (!moved && pinMoves().length) {
       return;
     }
     if (moved && !instant && !drag && !reduce) {
-      marker.g.getAnimations().forEach((anim) => anim.cancel());
+      pinMoves().forEach((anim) => anim.cancel());
       marker.g.style.transition = "none";
       const anim = marker.g.animate(
         [{ transform: at(prevX, prevY) }, { transform: at(x, y) }],
@@ -2874,7 +2876,7 @@ function createSceneColorWheel({
       };
       return;
     }
-    marker.g.getAnimations().forEach((anim) => anim.cancel());
+    pinMoves().forEach((anim) => anim.cancel());
     marker.g.style.transform = at(x, y);
     if (!marker.posed) {
       marker.posed = true;
@@ -3568,7 +3570,7 @@ function createSceneColorWheel({
       if (mdi && marker.haIcon) {
         marker.haIcon.setAttribute("icon", mdi);
         marker.dotHaIcon?.setAttribute("icon", mdi);
-        marker.fo.style.display = expanded ? "" : "none";
+        marker.fo.style.display = "";
       } else if (marker.fo) {
         marker.fo.style.display = "none";
       }
