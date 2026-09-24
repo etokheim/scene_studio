@@ -11,6 +11,7 @@ import {
   pinPressAction,
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
+  lightCanUsePalette,
   wheelPillModes,
   wheelStandIn,
   groupRingPoints,
@@ -306,13 +307,54 @@ test("an outer kelvin drag stays on the track and resists the color disk", () =>
 
 test("a drag fades a disk none of the dragged lights can use", () => {
   const caps = {
-    a: { hasColor: true, hasTemp: false },
-    b: { hasColor: true, hasTemp: false },
-    c: { hasColor: false, hasTemp: true },
+    a: { hasColor: true, hasTemp: false, canPalette: true },
+    b: { hasColor: true, hasTemp: false, canPalette: true },
+    c: { hasColor: false, hasTemp: true, canPalette: false },
+    d: { hasColor: false, hasTemp: true, canPalette: true },
   };
   const of = (id) => caps[id];
-  assert.deepEqual(disksUnsupportedByDrag([], of), { color: false, temp: false });
-  assert.deepEqual(disksUnsupportedByDrag(["a", "b"], of), { color: false, temp: true });
-  assert.deepEqual(disksUnsupportedByDrag(["a", "c"], of), { color: false, temp: false });
-  assert.deepEqual(disksUnsupportedByDrag(["c"], of), { color: true, temp: false });
+  assert.deepEqual(disksUnsupportedByDrag([], of), {
+    color: false,
+    temp: false,
+    palette: false,
+  });
+  assert.deepEqual(disksUnsupportedByDrag(["a", "b"], of), {
+    color: false,
+    temp: true,
+    palette: false,
+  });
+  assert.deepEqual(disksUnsupportedByDrag(["a", "c"], of), {
+    color: false,
+    temp: false,
+    palette: false,
+  });
+  assert.deepEqual(disksUnsupportedByDrag(["c"], of), {
+    color: true,
+    temp: false,
+    palette: true,
+  });
+  assert.deepEqual(disksUnsupportedByDrag(["d"], of), {
+    color: true,
+    temp: false,
+    palette: false,
+  });
+});
+
+test("a color bulb can join any palette; a temperature bulb only an all-kelvin one", () => {
+  const mixed = {
+    kind: "palette",
+    slots: [{ color: { color_mode: "hs", hs_color: [20, 80] } }],
+  };
+  const kelvin = {
+    kind: "palette",
+    slots: Array.from({ length: 5 }, () => ({
+      color: { color_mode: "color_temp", color_temp_kelvin: 2700 },
+    })),
+  };
+  const colorBulb = { hasColor: true, hasTemp: true };
+  const tempBulb = { hasColor: false, hasTemp: true };
+  assert.equal(lightCanUsePalette(colorBulb, mixed, []), true);
+  assert.equal(lightCanUsePalette(tempBulb, mixed, []), false);
+  assert.equal(lightCanUsePalette(tempBulb, kelvin, []), true);
+  assert.equal(lightCanUsePalette({ hasColor: false, hasTemp: false }, kelvin, []), false);
 });

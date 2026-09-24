@@ -869,14 +869,32 @@ function wheelStandIn(lights) {
   return "slider";
 }
 
+/**
+ * A light can sit on a palette disk. Color bulbs can use any palette.
+ * Temperature-only bulbs can use one only when every slot is kelvin.
+ * `canPalette` on a drag caps object is this answer for the disk in view.
+ */
+function lightCanUsePalette(caps, palette, catalog) {
+  if (!variableIsPalette(palette)) {
+    return false;
+  }
+  if (caps?.hasColor) {
+    return true;
+  }
+  return Boolean(
+    caps?.hasTemp && !caps.hasColor && paletteIsTemperatureOnly(palette, catalog)
+  );
+}
+
 /** Disks to fade while dragging: a visible mode none of the dragged lights can use. */
 function disksUnsupportedByDrag(ids, capsOf) {
   const list = ids || [];
   if (!list.length) {
-    return { color: false, temp: false };
+    return { color: false, temp: false, palette: false };
   }
   let anyColor = false;
   let anyTemp = false;
+  let anyPalette = false;
   for (const id of list) {
     const caps = capsOf(id) || {};
     if (caps.hasColor) {
@@ -885,8 +903,11 @@ function disksUnsupportedByDrag(ids, capsOf) {
     if (caps.hasTemp) {
       anyTemp = true;
     }
+    if (caps.canPalette) {
+      anyPalette = true;
+    }
   }
-  return { color: !anyColor, temp: !anyTemp };
+  return { color: !anyColor, temp: !anyTemp, palette: !anyPalette };
 }
 
 /** After a real drag, only lights that could not follow the disk stay pulled out of clusters. */
@@ -2535,7 +2556,10 @@ function createSceneColorWheel({
     if (mode === "temp") {
       return Boolean(caps.hasTemp);
     }
-    return true;
+    if (mode === "palette") {
+      return lightCanUsePalette(caps, wheelPalette(), paletteCatalog());
+    }
+    return false;
   };
 
   const splitCompatible = (ids, mode) =>
@@ -2576,6 +2600,11 @@ function createSceneColorWheel({
 
   const paletteForDraft = (draft) =>
     paletteCatalog().find((item) => item.id === draft?.variable_ref);
+
+  const wheelPalette = () =>
+    (getState().scenes || [])
+      .map((row) => paletteForDraft(row?.draft))
+      .find((item) => variableIsPalette(item)) || null;
 
   const entityIdOf = (scene) =>
     typeof getAssignmentEntityId === "function"
@@ -2739,9 +2768,15 @@ function createSceneColorWheel({
       paintGlow(geom.role?.temp === "back" ? "temp" : geom.front === "palette" ? "color" : geom.front);
     }
     const dragging = Boolean(drag?.moved);
+    const palette = wheelPalette();
+    const catalog = paletteCatalog();
     const fade = disksUnsupportedByDrag(dragging ? drag.ids : [], (id) => {
       const scene = (getState().scenes || []).find((row) => row.id === id);
-      return scene ? capsOf(scene) : {};
+      const caps = scene ? capsOf(scene) : {};
+      return {
+        ...caps,
+        canPalette: lightCanUsePalette(caps, palette, catalog),
+      };
     });
     bgColor.classList.toggle(
       "is-drag-unavailable",
@@ -2750,6 +2785,10 @@ function createSceneColorWheel({
     bgTemp.classList.toggle(
       "is-drag-unavailable",
       dragging && hasTemp && !bgTemp.hidden && fade.temp
+    );
+    bgPalette.classList.toggle(
+      "is-drag-unavailable",
+      dragging && !bgPalette.hidden && fade.palette
     );
   };
 
@@ -3138,8 +3177,18 @@ function createSceneColorWheel({
         return "temp";
       }
     }
-    if (pinMode === "color" && bandLive(geom.palette) && r < geom.palette.outer - hyst) {
-      return "palette";
+    if (
+      pinMode !== "palette" &&
+      bandLive(geom.palette) &&
+      lightCanUsePalette(caps, wheelPalette(), paletteCatalog())
+    ) {
+      const pal = geom.palette;
+      const inner = pal.inner || 0;
+      const inBand =
+        inner > 1 ? r >= inner + hyst && r <= pal.outer + 2 : r <= pal.outer - hyst;
+      if (inBand) {
+        return "palette";
+      }
     }
     if (pinMode === "color" && caps.hasTemp && bandLive(geom.temp)) {
       const intoTemp =
@@ -3229,7 +3278,8 @@ function createSceneColorWheel({
       .map((row) => ({
         hasColor: capsOf(row).hasColor,
         hasTemp: capsOf(row).hasTemp,
-        palette: onPaletteDisk(row.draft, capsOf(row)),
+        // Capability, not "already on the disk". A color bulb can join any palette.
+        palette: lightCanUsePalette(capsOf(row), wheelPalette(), paletteCatalog()),
       }));
     const sceneHasPalette = (scenes || []).some((row) =>
       variableIsPalette(paletteForDraft(row.draft))
@@ -3295,11 +3345,6 @@ function createSceneColorWheel({
         if (!entry.supported) {
           return;
         }
-        if (mode === "palette") {
-          lockUiMode("palette");
-          sync();
-          return;
-        }
         lockUiMode(mode);
         const state = getState();
         const targets = clusterMatesOf(selectedIdsOf(state));
@@ -3311,7 +3356,9 @@ function createSceneColorWheel({
             continue;
           }
           const caps = capsOf(row);
-          const current = draftWheelMode(row.draft, caps.hasColor, caps.hasTemp);
+          const current = onPaletteDisk(row.draft, caps)
+            ? "palette"
+            : draftWheelMode(row.draft, caps.hasColor, caps.hasTemp);
           if (current !== mode && convertDraftTo(row.draft, mode, caps)) {
             markers.get(id)?.g.classList.add("glide");
             changed.push(id);
@@ -3321,7 +3368,12 @@ function createSceneColorWheel({
           for (const id of changed) {
             markers.get(id)?.g.getBoundingClientRect();
           }
-          emitChange({ dragging: false, ids: changed, deselected: drop });
+          emitChange({
+            dragging: false,
+            ids: changed,
+            deselected: drop,
+            fromPalette: mode === "palette",
+          });
         }
         sync();
         window.setTimeout(() => {
@@ -3659,7 +3711,9 @@ function createSceneColorWheel({
           const cluster =
             pinClusters.find((row) => row.includes(scene.id)) || [scene.id];
           const caps = capsOf(item);
-          const markerMode = draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
+          const markerMode = onPaletteDisk(item.draft, caps)
+            ? "palette"
+            : draftWheelMode(item.draft, caps.hasColor, caps.hasTemp);
           if (openGroup?.includes(scene.id)) {
             const pt = pointFromEvent(ev);
             let heldX = marker.x ?? radiusPx();
@@ -4167,6 +4221,20 @@ function createSceneColorWheel({
           }
           emitChange({ dragging: true, deselected: drop, ids: keep });
         }
+        if (pinMode === "palette") {
+          lockUiMode("palette");
+          const joinIds = drag.ids?.length ? drag.ids : [item.id];
+          for (const id of joinIds) {
+            const row = scenes.find((scene) => scene.id === id);
+            if (!row?.draft) {
+              continue;
+            }
+            const rowCaps = capsOf(row);
+            if (!onPaletteDisk(row.draft, rowCaps)) {
+              convertDraftTo(row.draft, "palette", rowCaps);
+            }
+          }
+        }
       }
     }
     const band = pinMode === "palette" ? geom.palette : pinMode === "color" ? geom.color : geom.temp;
@@ -4327,7 +4395,7 @@ function createSceneColorWheel({
     }
     emitChange({
       dragging: true,
-      fromPalette: showingPalette(),
+      fromPalette: drag.mode === "palette" || showingPalette(),
       ids: [...moved],
     });
   };
@@ -4733,6 +4801,7 @@ export {
   dragIdsForPin,
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
+  lightCanUsePalette,
   wheelPillModes,
   wheelStandIn,
   kelvinTrackDragPoint,
