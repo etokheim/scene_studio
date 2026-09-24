@@ -315,7 +315,7 @@ export const LANDING_CSS = `
     z-index: 3;
     margin: 0 -8px 0 -12px;
     width: calc(100% + 20px);
-    padding: 0 0 0 12px;
+    padding: 0 0 12px 12px;
     box-sizing: border-box;
     background: none;
     overflow: visible;

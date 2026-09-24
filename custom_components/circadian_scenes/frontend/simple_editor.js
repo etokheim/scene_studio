@@ -1927,7 +1927,8 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     getState,
     onSelect: (id) => {
       selectedIds = new Set(id ? [id] : []);
-      syncTiles();
+      revealLightActionsNow(tiles);
+      paintPaletteSelection();
     },
     onChange: ({ fromPalette } = {}) => {
       const selectedId = primaryId();
@@ -1974,6 +1975,18 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     );
   };
   const scrubTargets = () => (selectedIds.size > 1 ? [...selectedIds] : [...ids]);
+  let paintAll = () => {};
+  const paintPaletteSelection = () => {
+    tiles.classList.toggle("select-mode", selectedIds.size > 1);
+    for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
+      const id = selector.dataset.entityId;
+      if (id === "__select_all__") {
+        continue;
+      }
+      selector.classList.toggle("active", selectedIds.has(id));
+    }
+    paintAll();
+  };
   // Wheel events don't have a pointer-up, so rebuild once the scrub settles.
   // That is what reveals each changed color's restore control.
   let scrubSync = 0;
@@ -2000,7 +2013,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       },
     });
     allSelector.classList.add("select-all-tile");
-    const paintAll = () => {
+    paintAll = () => {
       const mode = selectedIds.size > 1;
       allSelector.classList.toggle("select-mode", mode);
       const targets = scrubTargets();
@@ -2074,7 +2087,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       selectedIds = selectedIds.size > 1 ? new Set() : new Set(ids);
       revealLightActionsNow(tiles);
       wheel.sync();
-      syncTiles();
+      paintPaletteSelection();
     };
     allTile.addEventListener("click", pickAll);
     allHit.addEventListener("pointerdown", (ev) => {
@@ -2193,7 +2206,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           selectedIds = new Set(result.selected);
           wheel.sync();
           revealLightActionsNow(tiles);
-          syncTiles();
+          paintPaletteSelection();
         },
       });
       for (const id of groupIds) {
@@ -2268,7 +2281,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           selectedIds = new Set([id]);
           revealLightActionsNow(tiles);
           wheel.sync();
-          syncTiles();
+          paintPaletteSelection();
         };
         const onDocMove = (ev) => {
           if (!slotDrag || ev.pointerId !== slotDrag.pointerId) {
@@ -2320,7 +2333,18 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     scroller._groupTitleStick?.();
     paintAll();
   };
-  wrap.append(wheels, scroller);
+  const tileBlock = document.createElement("div");
+  tileBlock.className = "light-tiles-block";
+  tileBlock.append(
+    scroller,
+    createLightTilesHint(
+      panel._t(
+        "frontend.lights.tiles_hint_palette",
+        "Edits here are reflected in all scenes using this palette"
+      )
+    )
+  );
+  wrap.append(wheels, tileBlock);
   syncTiles();
   host.replaceChildren(wrap);
   wheel.sync();

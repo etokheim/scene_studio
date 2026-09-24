@@ -14,3 +14,7 @@ These pictures ship with the integration so a new scene can start from a palette
 | `blue-hour.jpg` | [Canal de la Peyrade toward Sète](https://commons.wikimedia.org/wiki/File:Canal_de_la_Peyrade_toward_S%C3%A8te.jpg) | Christian Ferrer | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `rain.jpg` | [Behind The Glass Window](https://commons.wikimedia.org/wiki/File:Behind_The_Glass_Window_(34026465).jpeg) | Reddy Aprianto | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | `candle.jpg` | [Candle light projected through a glass orb](https://commons.wikimedia.org/wiki/File:Candle_light_projected_through_a_glass_orb.jpg) | W.carter | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+
+## Color wheel
+
+The color wheel is based on the wheel in [Hue Like Light Card](https://github.com/Gh61/lovelace-hue-like-light-card) by [Gh61](https://github.com/Gh61).
