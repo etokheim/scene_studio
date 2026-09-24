@@ -1309,13 +1309,14 @@ const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness", "onoff"];
 
 /**
  * Bucket a stored light draft. A palette reference groups lights that can
- * be drawn on that disk: color bulbs on any palette, temperature bulbs only
- * when every slot is kelvin. A mixed palette leaves temperature bulbs in
- * the temperature group. On/off and brightness bulbs stay in their own groups.
+ * be drawn on that disk: bulbs that do color and kelvin on any palette,
+ * RGB-only bulbs unless the palette mixes kelvin and color, temperature
+ * bulbs only when every slot is kelvin. A mixed palette leaves RGB-only
+ * bulbs in the color group and temperature bulbs in the temperature group. On/off and brightness bulbs stay in their own groups.
  * When caps are known and the bulb cannot do color or kelvin, a stale
  * color_temp draft still belongs in the brightness group.
  */
-export function lightTileColorGroup(draft, caps, paletteIds, tempOnlyPaletteIds) {
+export function lightTileColorGroup(draft, caps, paletteIds, tempOnlyPaletteIds, mixedPaletteIds) {
   const ref = draft?.variable_ref;
   const linked = Boolean(ref && paletteIds?.has?.(ref));
   const canDrawColor = caps?.known
@@ -1324,7 +1325,12 @@ export function lightTileColorGroup(draft, caps, paletteIds, tempOnlyPaletteIds)
   const tempOnlyBulb = caps?.known
     ? Boolean(caps.hasTemp) && !caps.hasColor
     : draft?.color_mode === "color_temp";
-  if (linked && (canDrawColor || (tempOnlyBulb && tempOnlyPaletteIds?.has?.(ref)))) {
+  const colorOnlyBulb = caps?.known ? Boolean(caps.hasColor) && !caps.hasTemp : false;
+  const mixedBlocked = colorOnlyBulb && mixedPaletteIds?.has?.(ref);
+  if (
+    linked &&
+    ((canDrawColor && !mixedBlocked) || (tempOnlyBulb && tempOnlyPaletteIds?.has?.(ref)))
+  ) {
     return `palette:${ref}`;
   }
   if (caps?.known && !caps.hasColor) {

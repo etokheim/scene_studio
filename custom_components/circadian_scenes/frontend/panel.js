@@ -30,7 +30,7 @@ import {
   galleryPalette,
   gallerySections,
 } from "./gallery.js";
-import { defaultPaletteSlots, paletteIsTemperatureOnly, samplePaletteWheel, variableIsPalette } from "./palette.js";
+import { defaultPaletteSlots, paletteIsMixed, paletteIsTemperatureOnly, samplePaletteWheel, variableIsPalette } from "./palette.js";
 import {
   isoYear,
   daysInYear,
@@ -18175,6 +18175,11 @@ class CircadianScenesPanel extends HTMLElement {
         .filter((item) => paletteIsTemperatureOnly(item, this._variables))
         .map((item) => item.id)
     );
+    const mixedPaletteIds = new Set(
+      paletteVars
+        .filter((item) => paletteIsMixed(item, this._variables))
+        .map((item) => item.id)
+    );
     const bucketOf = (entry) =>
       entry.selector.classList.contains("unavailable")
         ? "unavailable"
@@ -18182,7 +18187,8 @@ class CircadianScenesPanel extends HTMLElement {
             this._legendGroupDraft(entry.light),
             this._legendTileCaps(entry.light.entity_id),
             paletteIds,
-            tempOnlyPaletteIds
+            tempOnlyPaletteIds,
+            mixedPaletteIds
           );
     const signature = entries
       .map((entry) => `${entry.light.entity_id}:${bucketOf(entry)}`)

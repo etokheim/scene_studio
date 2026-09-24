@@ -3,6 +3,7 @@
 
 import {
   assignmentTR,
+  paletteIsMixed,
   paletteIsTemperatureOnly,
   paletteSwatchCss,
   samplePaletteWheel,
@@ -870,16 +871,20 @@ function wheelStandIn(lights) {
 }
 
 /**
- * A light can sit on a palette disk. Color bulbs can use any palette.
- * Temperature-only bulbs can use one only when every slot is kelvin.
+ * A light can sit on a palette disk. Bulbs that do both color and kelvin can
+ * use any palette. Temperature-only bulbs need every slot to be kelvin.
+ * RGB-only bulbs cannot use a palette that mixes kelvin and color.
  * `canPalette` on a drag caps object is this answer for the disk in view.
  */
 function lightCanUsePalette(caps, palette, catalog) {
   if (!variableIsPalette(palette)) {
     return false;
   }
-  if (caps?.hasColor) {
+  if (caps?.hasColor && caps?.hasTemp) {
     return true;
+  }
+  if (caps?.hasColor && !caps?.hasTemp) {
+    return !paletteIsMixed(palette, catalog);
   }
   return Boolean(
     caps?.hasTemp && !caps.hasColor && paletteIsTemperatureOnly(palette, catalog)
@@ -1601,9 +1606,10 @@ function placeTempInAnnulus(
 
 /**
  * Pin position while dragging on an outer kelvin ring.
- * The pin stays on the track centerline (the release position). Pulling inward
- * toward a supported color disk eases it slightly off that line until the
- * convert threshold; the caller then animates to the cursor.
+ * The pin stays on the track centerline, at the point closest to the cursor.
+ * Kelvin comes from that point's height, not the cursor's raw y. At three and
+ * nine o'clock those heights match. Pulling inward toward a supported color
+ * disk eases the pin slightly off the line until the convert threshold.
  * Returns null when kelvin is not an outer ring.
  */
 function kelvinTrackDragPoint({
@@ -1629,32 +1635,27 @@ function kelvinTrackDragPoint({
   }
   const relX = x - radius;
   const relY = y - radius;
-  let sample = hueTempAt(relX, relY, outer, tempMin, tempMax);
-  if (!sample) {
-    const clampedY = Math.max(-outer, Math.min(outer, relY));
-    sample = hueTempAt(0, clampedY, outer, tempMin, tempMax);
+  const mid = (inner + outer) / 2;
+  const dist = Math.hypot(relX, relY);
+  let px;
+  let py;
+  if (dist < 1e-6) {
+    const resolvedSide = side == null || side >= 0 ? 1 : -1;
+    px = resolvedSide * mid;
+    py = 0;
+  } else {
+    px = (relX / dist) * mid;
+    py = (relY / dist) * mid;
   }
+  const sample = hueTempAt(px, py, outer, tempMin, tempMax);
   if (!sample) {
     return null;
   }
-  const resolvedSide = side == null ? (relX < 0 ? -1 : 1) : side;
-  const rel = placeTempInAnnulus(
-    sample.kelvin,
-    inner,
-    outer,
-    tempMin,
-    tempMax,
-    resolvedSide
-  );
-  let px = rel.x;
-  let py = rel.y;
   if (canColor && colorLive && colorOuter <= inner + 1) {
-    const pointerR = Math.hypot(relX, relY);
-    const mid = (inner + outer) / 2;
     const threshold = Math.max(0, inner - hyst);
-    if (pointerR < mid) {
+    if (dist < mid) {
       const span = Math.max(1, mid - threshold);
-      const pull = Math.max(0, Math.min(1, (mid - pointerR) / span));
+      const pull = Math.max(0, Math.min(1, (mid - dist) / span));
       const pinR = Math.hypot(px, py) || mid;
       const maxDrift = (mid - inner) * 0.4;
       const nextR = Math.max(inner, pinR - pull * maxDrift);
@@ -2626,20 +2627,8 @@ function createSceneColorWheel({
 
   let diskFocus = "color";
 
-  const onPaletteDisk = (draft, caps) => {
-    const variable = paletteForDraft(draft);
-    if (!variableIsPalette(variable)) {
-      return false;
-    }
-    if (caps?.hasColor) {
-      return true;
-    }
-    return Boolean(
-      caps?.hasTemp &&
-        !caps.hasColor &&
-        paletteIsTemperatureOnly(variable, paletteCatalog())
-    );
-  };
+  const onPaletteDisk = (draft, caps) =>
+    lightCanUsePalette(caps, paletteForDraft(draft), paletteCatalog());
 
   const showingPalette = () => {
     const { scenes, activeId } = getState();

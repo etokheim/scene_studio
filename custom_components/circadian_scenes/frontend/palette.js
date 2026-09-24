@@ -30,6 +30,23 @@ export function paletteIsTemperatureOnly(palette, variables) {
   return true;
 }
 
+/** True when some slots are kelvin and some are chromatic. */
+export function paletteIsMixed(palette, variables) {
+  if (!variableIsPalette(palette)) {
+    return false;
+  }
+  let temp = false;
+  let color = false;
+  for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
+    if (slotIsTemperature(resolveSlot(palette, i, variables))) {
+      temp = true;
+    } else {
+      color = true;
+    }
+  }
+  return temp && color;
+}
+
 export function assignmentSlot(entityId, seed) {
   let h = (2166136261 ^ (Number(seed) || 0)) >>> 0;
   const bytes = new TextEncoder().encode(String(entityId || ""));

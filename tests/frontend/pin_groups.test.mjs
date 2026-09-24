@@ -304,6 +304,36 @@ test("an outer kelvin drag stays on the track and resists the color disk", () =>
   });
   assert.ok(left.x < radius);
   assert.ok(Math.abs(Math.hypot(left.x - radius, left.y - radius) - mid) < 1.5);
+  const aboveRight = kelvinTrackDragPoint({
+    x: radius + 100,
+    y: radius - 200,
+    radius,
+    inner,
+    outer,
+    colorOuter: inner,
+    colorLive: true,
+    tempMin: 2000,
+    tempMax: 6500,
+    canColor: false,
+    hyst: 8,
+  });
+  const dx = aboveRight.x - radius;
+  const dy = aboveRight.y - radius;
+  assert.ok(Math.abs(Math.hypot(dx, dy) - mid) < 1.5);
+  assert.ok(Math.abs(Math.atan2(dy, dx) - Math.atan2(-200, 100)) < 0.02);
+  assert.ok(Math.abs(dy - -200) > 10);
+  const three = kelvinTrackDragPoint({
+    x: radius + 40,
+    y: radius,
+    radius,
+    inner,
+    outer,
+    colorLive: false,
+    tempMin: 2000,
+    tempMax: 6500,
+    canColor: false,
+  });
+  assert.ok(Math.abs(three.y - radius) < 1.5);
 });
 
 test("a drag fades a disk none of the dragged lights can use", () => {
@@ -344,7 +374,13 @@ test("a drag fades a disk none of the dragged lights can use", () => {
 test("a color bulb can join any palette; a temperature bulb only an all-kelvin one", () => {
   const mixed = {
     kind: "palette",
-    slots: [{ color: { color_mode: "hs", hs_color: [20, 80] } }],
+    slots: [
+      { color: { color_mode: "hs", hs_color: [20, 80] } },
+      { color: { color_mode: "color_temp", color_temp_kelvin: 2700 } },
+      { color: { color_mode: "hs", hs_color: [200, 70] } },
+      { color: { color_mode: "color_temp", color_temp_kelvin: 4000 } },
+      { color: { color_mode: "hs", hs_color: [40, 60] } },
+    ],
   };
   const kelvin = {
     kind: "palette",
@@ -353,8 +389,17 @@ test("a color bulb can join any palette; a temperature bulb only an all-kelvin o
     })),
   };
   const colorBulb = { hasColor: true, hasTemp: true };
+  const rgbOnly = { hasColor: true, hasTemp: false };
   const tempBulb = { hasColor: false, hasTemp: true };
+  const colorOnly = {
+    kind: "palette",
+    slots: Array.from({ length: 5 }, () => ({
+      color: { color_mode: "hs", hs_color: [20, 80] },
+    })),
+  };
   assert.equal(lightCanUsePalette(colorBulb, mixed, []), true);
+  assert.equal(lightCanUsePalette(rgbOnly, mixed, []), false);
+  assert.equal(lightCanUsePalette(rgbOnly, colorOnly, []), true);
   assert.equal(lightCanUsePalette(tempBulb, mixed, []), false);
   assert.equal(lightCanUsePalette(tempBulb, kelvin, []), true);
   assert.equal(lightCanUsePalette({ hasColor: false, hasTemp: false }, kelvin, []), false);

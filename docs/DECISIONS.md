@@ -16,6 +16,14 @@
 - **Why:** The first hover, and any hover while another pin was open, moved the node in the same turn as the class change, so the scale transition never started. Group open used a different flight.
 - **Do not reverse without user ask.**
 
+## RGB-only bulbs skip a palette that mixes kelvin and color
+
+- **Date:** 2026-09-24
+- **Supersedes in part:** “Temperature bulbs use a palette disk only when it is all kelvin” — a color bulb no longer joins every palette.
+- **Decision:** A bulb that can do both color and kelvin can sit on any palette. An RGB-only bulb joins a palette group and disk unless the palette mixes kelvin and chromatic slots; then it stays in the color group. Temperature-only bulbs still join only an all-kelvin palette.
+- **Why:** An RGB-only bulb cannot show the kelvin slots of a mixed disk, the same way a temperature bulb cannot show its chromatic slots.
+- **Do not reverse without user ask.**
+
 ## Temperature bulbs use a palette disk only when it is all kelvin
 
 - **Date:** 2026-09-24
