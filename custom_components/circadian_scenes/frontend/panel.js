@@ -5380,11 +5380,8 @@ class CircadianScenesPanel extends HTMLElement {
     for (const body of rail.querySelectorAll(".area-rail-body")) {
       body.hidden = body.dataset.tab !== tab;
     }
-    for (const button of rail.querySelectorAll(".area-rail-tab")) {
-      button.setAttribute(
-        "aria-selected",
-        button.dataset.tab === tab ? "true" : "false"
-      );
+    for (const button of rail.querySelectorAll("ha-tab")) {
+      button.active = button.dataset.tab === tab;
     }
     const body = rail.querySelector(`.area-rail-body[data-tab="${tab}"]`);
     this._areaRailBound = null;

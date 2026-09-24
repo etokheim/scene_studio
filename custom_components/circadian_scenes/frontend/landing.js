@@ -20,11 +20,13 @@ export const LANDING_CSS = `
   }
   .scene-cover {
     position: absolute;
-    inset: 0;
+    inset: -8%;
     z-index: 0;
     background-size: cover;
     background-position: center;
     pointer-events: none;
+    opacity: 0.5;
+    filter: blur(48px);
   }
   .area-rail {
     width: ${AREA_RAIL_PX}px;
@@ -75,25 +77,13 @@ export const LANDING_CSS = `
      is over the column, so the open scene is easy to find. */
   .area-rail-tabs {
     display: flex;
-    gap: 4px;
     flex: 0 0 auto;
-    padding: 8px 12px 0;
+    --header-height: 56px;
   }
-  .area-rail-tab {
-    appearance: none;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--secondary-text-color);
-    font: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 8px 10px 10px;
-    cursor: pointer;
-  }
-  .area-rail-tab[aria-selected="true"] {
-    color: var(--primary-text-color);
-    border-bottom-color: var(--primary-color);
+  .area-rail-tabs ha-tab {
+    flex: 1 1 50%;
+    min-width: 0;
+    --mdc-icon-size: 24px;
   }
   .area-rail-body {
     flex: 1 1 auto;
@@ -102,6 +92,9 @@ export const LANDING_CSS = `
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
+    padding: 0 0 24px;
+  }
+  .area-rail-body[data-tab="library"] {
     padding: 4px 8px 24px 12px;
   }
   .area-rail-body[hidden] {
@@ -109,8 +102,6 @@ export const LANDING_CSS = `
   }
   @media (hover: hover) and (pointer: fine) {
     .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
-      .floor-label,
-      .area-head,
       .area-empty,
       .var-row,
       .theme-row,
@@ -120,8 +111,6 @@ export const LANDING_CSS = `
       opacity: 0.38;
     }
     .area-rail:hover .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
-      .floor-label,
-      .area-head,
       .area-empty,
       .var-row,
       .theme-row,
@@ -246,9 +235,6 @@ export const LANDING_CSS = `
   }
   /* Floor titles collapse their areas. The title sticks for the whole floor;
      each area name sticks just under it until the next area pushes it away. */
-  .floor-block {
-    margin-top: 8px;
-  }
   .floor-block > .floor-label {
     position: sticky;
     top: 0;
@@ -257,15 +243,26 @@ export const LANDING_CSS = `
     align-items: center;
     gap: 2px;
     width: 100%;
-    height: 36px;
+    height: 32px;
     margin: 0;
-    padding: 0 2px;
+    padding: 0 8px 0 12px;
     border: 0;
-    background: color-mix(in srgb, var(--primary-background-color) 88%, transparent);
+    background: var(--primary-background-color);
     color: var(--secondary-text-color);
     cursor: pointer;
     text-align: left;
     box-sizing: border-box;
+  }
+  .floor-block > .floor-label::after,
+  .floor-block .area-head::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: 16px;
+    background: linear-gradient(to bottom, var(--primary-background-color), transparent);
+    pointer-events: none;
   }
   .floor-block > .floor-label ha-icon {
     --mdc-icon-size: 18px;
@@ -285,13 +282,16 @@ export const LANDING_CSS = `
     gap: 8px;
     margin: 0 4px 8px;
   }
+  .floor-areas {
+    padding: 0 8px 0 12px;
+  }
   .floor-block .area-head {
     position: sticky;
-    top: 36px;
+    top: 40px;
     z-index: 3;
-    margin: 0 0 8px;
-    padding: 4px 4px;
-    background: color-mix(in srgb, var(--primary-background-color) 88%, transparent);
+    margin: 8px 0;
+    padding: 0 8px 0 12px;
+    background: var(--primary-background-color);
   }
   .area-head h2 {
     font-size: 16px;
@@ -718,19 +718,19 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   rail.className = "area-rail";
   const tabs = document.createElement("div");
   tabs.className = "area-rail-tabs";
-  tabs.setAttribute("role", "tablist");
   const tab = panel._railTab === "library" ? "library" : "scenes";
-  for (const [id, label] of [
-    ["scenes", panel._t("frontend.library.tab_scenes", "Scenes")],
-    ["library", panel._t("frontend.library.tab_library", "Library")],
+  for (const [id, label, iconName] of [
+    ["scenes", panel._t("frontend.library.tab_scenes", "Scenes"), "mdi:palette"],
+    ["library", panel._t("frontend.library.tab_library", "Library"), "mdi:bookshelf"],
   ]) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "area-rail-tab";
+    const button = document.createElement("ha-tab");
     button.dataset.tab = id;
-    button.setAttribute("role", "tab");
-    button.setAttribute("aria-selected", id === tab ? "true" : "false");
-    button.textContent = label;
+    button.name = label;
+    button.active = id === tab;
+    const icon = document.createElement("ha-icon");
+    icon.slot = "icon";
+    icon.setAttribute("icon", iconName);
+    button.appendChild(icon);
     button.addEventListener("click", () => panel._setRailTab(id));
     tabs.appendChild(button);
   }
