@@ -1941,7 +1941,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
         delete drafts[selectedId].palette_r;
       }
       persistSlot(selectedId);
-      syncTiles();
+      refreshPaletteSlot(selectedId);
     },
     hasColor: true,
     hasTemp: true,
@@ -1975,7 +1975,48 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     );
   };
   const scrubTargets = () => (selectedIds.size > 1 ? [...selectedIds] : [...ids]);
+  let stripShape = "";
+  const paletteStripShape = () =>
+    ids
+      .map(
+        (id) =>
+          `${lightTileColorGroup(drafts[id])}:${slotOverridden(id) ? 1 : 0}`
+      )
+      .join("|");
   let paintAll = () => {};
+  const paintPaletteSlot = (id) => {
+    const sel = tiles.querySelector(
+      `.simple-light-selector[data-entity-id="${CSS.escape(id)}"]`
+    );
+    if (!sel) {
+      return;
+    }
+    paintLightTile(sel, {
+      rgb: draftRgb(drafts[id]),
+      fillPct: fillPercent(drafts[id]),
+      selected: selectedIds.has(id),
+    });
+  };
+  // Same rule as the scene editor: repaint tiles in place. Rebuild only when
+  // a color changes group or a restore button has to appear or disappear.
+  const refreshPaletteStrip = () => {
+    if (paletteStripShape() !== stripShape) {
+      syncTiles();
+      return;
+    }
+    for (const id of ids) {
+      paintPaletteSlot(id);
+    }
+    paintAll();
+  };
+  const refreshPaletteSlot = (id) => {
+    if (paletteStripShape() !== stripShape) {
+      syncTiles();
+      return;
+    }
+    paintPaletteSlot(id);
+    paintAll();
+  };
   const paintPaletteSelection = () => {
     tiles.classList.toggle("select-mode", selectedIds.size > 1);
     for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
@@ -1987,8 +2028,8 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     }
     paintAll();
   };
-  // Wheel events don't have a pointer-up, so rebuild once the scrub settles.
-  // That is what reveals each changed color's restore control.
+  // Wheel events don't have a pointer-up. Repaint once the scrub settles
+  // so a changed color can gain or lose its restore control.
   let scrubSync = 0;
   const syncTiles = () => {
     const keepLeft = scroller.scrollLeft;
@@ -2148,7 +2189,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           window.setTimeout(() => {
             allTile._lightTileSuppressTap = false;
           }, 0);
-          syncTiles();
+          refreshPaletteStrip();
           wheel.sync();
         }
       };
@@ -2172,7 +2213,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
         });
         window.clearTimeout(scrubSync);
         scrubSync = window.setTimeout(() => {
-          syncTiles();
+          refreshPaletteStrip();
           wheel.sync();
         }, 120);
       },
@@ -2241,7 +2282,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
               drafts[id] = slotToDraft(source, variables);
               persistSlot(id);
               wheel.sync();
-              syncTiles();
+              refreshPaletteStrip();
             },
           });
           selector.querySelector(".light-remove ha-icon")?.setAttribute(
@@ -2274,7 +2315,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           window.setTimeout(() => tile.classList.remove("dragging"), 250);
           if (wasVertical || suppressTap) {
             if (wasVertical) {
-              syncTiles();
+              refreshPaletteSlot(id);
             }
             return;
           }
@@ -2331,6 +2372,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     }
     scroller.scrollLeft = keepLeft;
     scroller._groupTitleStick?.();
+    stripShape = paletteStripShape();
     paintAll();
   };
   const tileBlock = document.createElement("div");

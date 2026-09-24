@@ -864,7 +864,25 @@ export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLab
   selector.style.setProperty("--hue-light-off-background", "#242022");
   const tile = selector.querySelector(".simple-light-tile");
   const pct = Number(fillPct) || 0;
+  // A new tile's fill defaults to 0%. Setting the real level in the same
+  // turn still animates if layout already saw that 0. Freeze the fill and
+  // the clipped labels for this first paint. Later updates keep the transition.
+  const firstPaint = tile.dataset.fillReady !== "1";
+  const frozen = firstPaint
+    ? [tile, ...tile.querySelectorAll(".simple-light-fill, .simple-light-labels")]
+    : [];
+  for (const el of frozen) {
+    el.style.transition = "none";
+  }
   tile.style.setProperty("--hue-light-fill", `${pct}%`);
+  if (firstPaint) {
+    tile.dataset.fillReady = "1";
+    requestAnimationFrame(() => {
+      for (const el of frozen) {
+        el.style.transition = "";
+      }
+    });
+  }
   const tileH = tile.clientHeight || 135;
   const rampPx =
     pct <= 0 || pct >= 100 ? 0 : Math.min(20, ((100 - pct) / 100) * tileH);
