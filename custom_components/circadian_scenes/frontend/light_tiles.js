@@ -300,10 +300,11 @@ export const LIGHT_TILES_CSS = `
     );
     background-repeat: no-repeat;
     background-size: 100% calc(var(--light-action-lip) + 2px);
-    transition-property: transform, pointer-events;
-    transition-duration: 280ms, 0s;
-    transition-timing-function: cubic-bezier(0.2, 0, 0, 1), linear;
-    transition-delay: var(--light-action-delay, 500ms);
+    transition-property: transform, margin, pointer-events;
+    transition-duration: 280ms, 280ms, 0s;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1), cubic-bezier(0.2, 0, 0, 1), linear;
+    /* Reveal and tuck wait. The selection offset (margin) does not. */
+    transition-delay: var(--light-action-delay, 500ms), 0s, 0s;
     transition-behavior: allow-discrete;
   }
   /* Flat edge toward the tile. Hidden plates sit inside it; open plates clear it. */
@@ -335,12 +336,14 @@ export const LIGHT_TILES_CSS = `
     pointer-events: auto;
     transition-delay: 0s;
   }
-  /* The selection ring sits outside the tile, so a selected lip clears it. */
+  /* The selection ring sits outside the tile. Margin is not part of the
+     reveal delay, so the lips clear the ring as soon as the tile is selected
+     or released. */
   .simple-light-selector.active:not(.select-all-tile) .light-tile-actions-top {
-    transform: translateY(-6px);
+    margin-top: -6px;
   }
   .simple-light-selector.active:not(.select-all-tile) .light-tile-actions-bottom {
-    transform: translateY(6px);
+    margin-bottom: -6px;
   }
   .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
     .light-tile-actions-top {
