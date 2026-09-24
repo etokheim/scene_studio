@@ -1,5 +1,21 @@
 # Decisions
 
+## Scene base palette is a corner split button, not a preset
+
+- **Date:** 2026-09-24
+- **Supersedes in part:** “Color/kelvin mode selector matches huemane-light-card” — the bottom-right row is color variables only. Palettes are not hue presets.
+- **Supersedes in part:** “Palette variables” — the palette face is not added only when the selected pin already uses a palette.
+- **Decision:** The hue-preset track lists color variables only. A scene’s base palette is a split button in the used-items corner (theme and color-variable chips stay). The first half opens the new-scene palette dialog, including None. None is the starting choice when a scene is created with Custom. The second half opens that palette’s editor. The mode pill lists every disk the wheel can show (color, temperature, and palette when the scene has one). A mode none of the selected lights can use stays in the pill, dimmed, labeled “Not supported”. Brightness-only and on/off selections still replace the disks. Every stacked disk uses the same shadow. **Not built yet:** the split button. A simple scene can store it on `palette_id`. A circadian scene cannot. Do not write it onto the shared theme, and do not reuse the simple-scene field as one palette for the whole day. It has to be one palette per solar event on the scene. Reusing the create dialog must not mint a new scene or run the Custom create path.
+- **Why:** Palettes were a second kind of preset, and the pill hid disks the user still needed to see. The circadian store has no per-event palette, so the button cannot be wired without inventing that field.
+- **Do not reverse without user ask.**
+
+## A pin grows only after its dot has been painted
+
+- **Date:** 2026-09-24
+- **Decision:** Hover, click, tile selection, and group open/close share one pin grow: the `.pin-body` scale, played backwards on collapse. Add `.expanded` on a frame after the dot is painted. Do not move the pin in the SVG in that same turn. An already-open pin stays put while another dot grows. Group flights use that same duration and curve.
+- **Why:** The first hover, and any hover while another pin was open, moved the node in the same turn as the class change, so the scale transition never started. Group open used a different flight.
+- **Do not reverse without user ask.**
+
 ## Temperature bulbs use a palette disk only when it is all kelvin
 
 - **Date:** 2026-09-24
@@ -22,7 +38,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## First column is the scene list; library is a second tab
 
 - **Date:** 2026-09-24
-- **Decision:** The area rail opens on **Scenes**. Variables, palettes, and circadian themes share a **Library** tab. Editing a scene lists the theme, palettes, and variables it uses at the top left of the editor, over the corner so the list does not take a row in the editor column. Choosing one opens that item and switches the rail to the tab that lists it, scrolled so the item is in view. On a circadian scene the same list is its own row in the dial toolbar, above the time and play controls. The dial time, sun angle, and play control stay on the circadian readout; the readout node is created with the dial (the table chart that used to create it is gone).
+- **Decision:** The area rail opens on **Scenes**. With a scene selected, the rest of that column fades until the pointer is over the rail; the hover rule has to outrank the fade rule or the rows stay dim. Variables, palettes, and circadian themes share a **Library** tab. Editing a scene lists the theme, palettes, and variables it uses at the top left of the editor, over the corner so the list does not take a row in the editor column. Choosing one opens that item and switches the rail to the tab that lists it, scrolled so the item is in view. On a circadian scene the same list is its own row in the dial toolbar, above the time and play controls. The dial time, sun angle, and play control stay on the circadian readout; the readout node is created with the dial (the table chart that used to create it is gone).
 - **Why:** The scene list was buried under the library. Used items need a way back to their editors without hunting the column.
 - **Do not reverse without user ask.**
 
@@ -686,14 +702,16 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Palette variables (five slots, per-light assignment, mode pill)
 
 - **Date:** 2026-09-15
-- **Decision:** Color variables (`kind: color`) and palettes (`kind: palette`, always five slots) are separate library kinds. The area rail lists Variables, then Palettes, then Circadian themes. Editors are dedicated (`#variable/<id>|new` vs `#palette/<id>|new`) — no Color/Palette tabs that convert one into the other. A slot is a static color+brightness or a `variable_ref` to a **color** variable only (nested palettes are invalid). Applying a palette to a theme event, simple scene, or light stores the palette id; unpinned lights pick a rim slot with FNV-1a `hash(seed, entity_id) % 5` so adding a lamp does not reshuffle others. `assignment_seed` lives on the application site (theme event, simple scene, or light override). **Randomize** changes that seed and clears stored `palette_t`/`palette_r`. Dragging the palette wheel stores polar `palette_t` (around the rim) and `palette_r` (0 = white center, 1 = rim) while keeping `variable_ref`, so the pin stays linked to the palette. Brightness on the event/light can differ from the sampled slot. Every color wheel shows the exclusive color/kelvin mode pill; a third palette-wheel face appears only when the **selected** pin currently uses a palette.
+- **Superseded in part:** 2026-09-24 — the preset row is color variables only, and the mode pill lists every wheel disk, including ones the selection cannot use (“Scene base palette is a corner split button, not a preset”).
+- **Decision:** Color variables (`kind: color`) and palettes (`kind: palette`, always five slots) are separate library kinds. The area rail lists Variables, then Palettes, then Circadian themes. Editors are dedicated (`#variable/<id>|new` vs `#palette/<id>|new`) — no Color/Palette tabs that convert one into the other. A slot is a static color+brightness or a `variable_ref` to a **color** variable only (nested palettes are invalid). Applying a palette to a theme event, simple scene, or light stores the palette id; unpinned lights pick a rim slot with FNV-1a `hash(seed, entity_id) % 5` so adding a lamp does not reshuffle others. `assignment_seed` lives on the application site (theme event, simple scene, or light override). **Randomize** changes that seed and clears stored `palette_t`/`palette_r`. Dragging the palette wheel stores polar `palette_t` (around the rim) and `palette_r` (0 = white center, 1 = rim) while keeping `variable_ref`, so the pin stays linked to the palette. Brightness on the event/light can differ from the sampled slot. The mode pill and the preset row are in “Scene base palette is a corner split button, not a preset”.
 - **Why:** Multi-light scenes need several related hues from one named token without each lamp sharing one solid. Hash+seed is stable; the polar wheel is how the user pins a blend between those five rim colors.
 - **Do not reverse without user ask.**
 
 ## Color/kelvin mode selector matches huemane-light-card
 
 - **Date:** 2026-09-16
-- **Decision:** The wheel mode control is the Hue/huemane pill: 48px capsule (`8px` padding, `8px` gap, `0px 2px 3px` shadow, `--surface-2` / `#242022`), 32px wrappers with 24px faces, 2px white ring when active. Color and kelvin faces use the PNGs from `etokheim/huemane-light-card`. It sits in `.hue-wheel-chrome` **bottom-left**; variable swatches stay **bottom-right** in the same chrome. A third 24px face (palette conic) is added only when the selected pin uses a palette. Do not overlay a larger custom pill on the disk.
+- **Superseded in part:** 2026-09-24 — see “Scene base palette is a corner split button, not a preset” for the preset row and the mode pill.
+- **Decision:** The wheel mode control is the Hue/huemane pill: 48px capsule (`8px` padding, `8px` gap, `0px 2px 3px` shadow, `--surface-2` / `#242022`), 32px wrappers with 24px faces, 2px white ring when active. Color and kelvin faces use the PNGs from `etokheim/huemane-light-card`. It sits in `.hue-wheel-chrome` **bottom-left**; color-variable swatches stay **bottom-right**. Do not overlay a larger custom pill on the disk.
 - **Why:** That control is already the house language for switching wheels; a top-centered 36px version read as a different widget.
 - **Do not reverse without user ask.**
 
@@ -883,8 +901,9 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Light strip motion, mode pill, and one legend
 
 - **Date:** 2026-09-22
-- **Decision:** Reordering the light strip (simple editor and circadian dial) animates tiles and group labels from their previous positions. The mode pill lists a color or kelvin mode only when at least one selected light supports it; with nothing selected it still lists every mode the scene’s lights support. The dial legend is removed from the sun path whenever the clock is rebuilt. Switching between a scene and a circadian scene must leave one strip.
-- **Why:** Grouping moves tiles between buckets, and that jump read as a glitch. The pill was offering disks the selected bulbs cannot use. The legend node stayed on the sun path after its reference was cleared, so the next editor appended another strip.
+- **Superseded in part:** 2026-09-24 — the mode pill no longer hides a disk the selection cannot use. See “Scene base palette is a corner split button, not a preset”.
+- **Decision:** Reordering the light strip (simple editor and circadian dial) animates tiles and group labels from their previous positions. The dial legend is removed from the sun path whenever the clock is rebuilt. Switching between a scene and a circadian scene must leave one strip.
+- **Why:** Grouping moves tiles between buckets, and that jump read as a glitch. The legend node stayed on the sun path after its reference was cleared, so the next editor appended another strip.
 - **Do not reverse without user ask.**
 
 ## Kelvin track drag, live groups, and level-only lights
