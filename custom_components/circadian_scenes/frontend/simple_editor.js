@@ -10,7 +10,7 @@ import {
 } from "./color_ui.js";
 import { scaledCardRgb } from "./card_mesh.js";
 import { galleryPalette, paletteSlotSignature } from "./gallery.js";
-import { PALETTE_SLOT_COUNT, variableIsPalette } from "./palette.js";
+import { PALETTE_SLOT_COUNT, paletteIsTemperatureOnly, variableIsPalette } from "./palette.js";
 import {
   LIGHT_TILES_CSS,
   TILE_BRIGHTNESS_WHEEL_STEP,
@@ -401,11 +401,16 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     };
   };
 
-  const paletteIdSet = () =>
+  const paletteVars = () => (panel._variables || []).filter((item) => variableIsPalette(item));
+  const paletteIdSet = () => new Set(paletteVars().map((item) => item.id));
+  const tempOnlyPaletteIdSet = () =>
     new Set(
-      (panel._variables || []).filter((item) => variableIsPalette(item)).map((item) => item.id)
+      paletteVars()
+        .filter((item) => paletteIsTemperatureOnly(item, panel._variables))
+        .map((item) => item.id)
     );
-  const groupOf = (eid) => lightTileColorGroup(drafts[eid], groupCaps(eid), paletteIdSet());
+  const groupOf = (eid) =>
+    lightTileColorGroup(drafts[eid], groupCaps(eid), paletteIdSet(), tempOnlyPaletteIdSet());
   const lightIsUnavailable = (eid) => {
     const st = panel._hass?.states?.[eid];
     return !st || st.state === "unavailable";

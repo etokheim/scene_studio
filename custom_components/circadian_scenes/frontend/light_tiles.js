@@ -1309,19 +1309,22 @@ const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness", "onoff"];
 
 /**
  * Bucket a stored light draft. A palette reference groups lights that can
- * show that color. On/off, temperature, and brightness bulbs stay in their
- * own groups: their state can follow the palette, but it cannot be drawn
- * on the palette disk.
+ * be drawn on that disk: color bulbs on any palette, temperature bulbs only
+ * when every slot is kelvin. A mixed palette leaves temperature bulbs in
+ * the temperature group. On/off and brightness bulbs stay in their own groups.
  * When caps are known and the bulb cannot do color or kelvin, a stale
  * color_temp draft still belongs in the brightness group.
  */
-export function lightTileColorGroup(draft, caps, paletteIds) {
+export function lightTileColorGroup(draft, caps, paletteIds, tempOnlyPaletteIds) {
   const ref = draft?.variable_ref;
   const linked = Boolean(ref && paletteIds?.has?.(ref));
-  const canDrawPalette = caps?.known
+  const canDrawColor = caps?.known
     ? Boolean(caps.hasColor)
     : !["color_temp", "white", "onoff", "brightness"].includes(draft?.color_mode);
-  if (linked && canDrawPalette) {
+  const tempOnlyBulb = caps?.known
+    ? Boolean(caps.hasTemp) && !caps.hasColor
+    : draft?.color_mode === "color_temp";
+  if (linked && (canDrawColor || (tempOnlyBulb && tempOnlyPaletteIds?.has?.(ref)))) {
     return `palette:${ref}`;
   }
   if (caps?.known && !caps.hasColor) {

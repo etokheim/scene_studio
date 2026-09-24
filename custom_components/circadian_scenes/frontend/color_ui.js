@@ -3,6 +3,7 @@
 
 import {
   assignmentTR,
+  paletteIsTemperatureOnly,
   paletteSwatchCss,
   samplePaletteWheel,
   variableIsPalette,
@@ -2583,14 +2584,29 @@ function createSceneColorWheel({
 
   let diskFocus = "color";
 
+  const onPaletteDisk = (draft, caps) => {
+    const variable = paletteForDraft(draft);
+    if (!variableIsPalette(variable)) {
+      return false;
+    }
+    if (caps?.hasColor) {
+      return true;
+    }
+    return Boolean(
+      caps?.hasTemp &&
+        !caps.hasColor &&
+        paletteIsTemperatureOnly(variable, paletteCatalog())
+    );
+  };
+
   const showingPalette = () => {
     const { scenes, activeId } = getState();
-    const draft = scenes.find((row) => row.id === activeId)?.draft;
+    const scene = scenes.find((row) => row.id === activeId);
     const locked = lockedUiMode();
     if (locked === "color" || locked === "temp") {
       return false;
     }
-    return variableIsPalette(paletteForDraft(draft));
+    return onPaletteDisk(scene?.draft, capsOf(scene || {}));
   };
 
   const currentGeom = () => {
@@ -2603,7 +2619,7 @@ function createSceneColorWheel({
     for (const scene of scenes || []) {
       const caps = capsOf(scene);
       const variable = paletteForDraft(scene?.draft);
-      const onPalette = variableIsPalette(variable);
+      const onPalette = onPaletteDisk(scene?.draft, caps);
       if (onPalette) {
         showPalette = true;
       } else if (draftWheelMode(scene?.draft, caps.hasColor, caps.hasTemp) === "color" && caps.hasColor) {
@@ -2709,7 +2725,7 @@ function createSceneColorWheel({
     bgPalette.hidden = !palLive;
     if (palLive) {
       const variable = paletteForDraft(
-        (getState().scenes || []).find((row) => variableIsPalette(paletteForDraft(row.draft)))?.draft
+        (getState().scenes || []).find((row) => onPaletteDisk(row.draft, capsOf(row)))?.draft
       );
       if (variable) {
         drawImageTo(bgPalette, drawPaletteWheelImage(variable, paletteCatalog()));
@@ -2958,7 +2974,7 @@ function createSceneColorWheel({
   const positionForDraft = (draft, markerMode, geom, radius, entityId) => {
     const cx = radius;
     const variable = paletteForDraft(draft);
-    if (variableIsPalette(variable) && bandLive(geom.palette)) {
+    if (markerMode === "palette" && variableIsPalette(variable) && bandLive(geom.palette)) {
       const auto = assignmentTR(entityId || "", seedNow());
       const t = draft.palette_t ?? auto.t;
       const r = draft.palette_r ?? auto.r;
@@ -2984,7 +3000,19 @@ function createSceneColorWheel({
       );
       return { x: cx + rel.x, y: cx + rel.y, rgb: mixed };
     }
-    const kelvin = draft.color_temp_kelvin ?? 2700;
+    let kelvin = draft.color_temp_kelvin;
+    if (kelvin == null && variableIsPalette(variable)) {
+      const auto = assignmentTR(entityId || "", seedNow());
+      const sampled = samplePaletteWheel(
+        variable,
+        draft.palette_t ?? auto.t,
+        draft.palette_r ?? auto.r,
+        paletteCatalog(),
+        draftRgb
+      );
+      kelvin = approxKelvinFromRgb(sampled.rgb, tempMin, tempMax);
+    }
+    kelvin = kelvin ?? 2700;
     const rel = placeTempInAnnulus(
       kelvin,
       geom.temp.inner,
@@ -3028,6 +3056,12 @@ function createSceneColorWheel({
       const sample = hueTempAt(cx, cy, band.outer, tempMin, tempMax);
       if (sample) {
         applyTempToDraft(draft, sample.kelvin);
+        const linked = paletteForDraft(draft);
+        if (variableIsPalette(linked) && !paletteIsTemperatureOnly(linked, paletteCatalog())) {
+          delete draft.variable_ref;
+          delete draft.palette_t;
+          delete draft.palette_r;
+        }
       }
     }
     return limited;
@@ -3157,15 +3191,14 @@ function createSceneColorWheel({
     const { scenes, activeId } = state;
     const item = scenes.find((row) => row.id === activeId);
     const draft = item?.draft;
-    const palVar = paletteForDraft(draft);
-    const pal = variableIsPalette(palVar);
+    const pal = onPaletteDisk(draft, capsOf(item || {}));
     const selected = selectedIdsOf(state)
       .map((id) => scenes.find((row) => row.id === id))
       .filter(Boolean)
       .map((row) => ({
         hasColor: capsOf(row).hasColor,
         hasTemp: capsOf(row).hasTemp,
-        palette: variableIsPalette(paletteForDraft(row.draft)),
+        palette: onPaletteDisk(row.draft, capsOf(row)),
       }));
     const modes = wheelPillModes(selected, {
       hasColor,
@@ -3643,7 +3676,7 @@ function createSceneColorWheel({
         marker.g.style.display = "none";
         continue;
       }
-      const markerMode = variableIsPalette(paletteForDraft(scene.draft))
+      const markerMode = onPaletteDisk(scene.draft, caps)
         ? "palette"
         : draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.g.classList.remove("grouped", "group-member", "drop-target");

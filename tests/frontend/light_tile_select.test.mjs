@@ -65,6 +65,16 @@ test("color mode buckets follow the strip order", () => {
     ),
     "temp"
   );
+  const tempOnly = new Set(["pal-1"]);
+  assert.equal(
+    lightTileColorGroup(
+      { variable_ref: "pal-1", color_mode: "color_temp" },
+      { known: true, hasColor: false, hasTemp: true },
+      palettes,
+      tempOnly
+    ),
+    "palette:pal-1"
+  );
   assert.equal(
     lightTileColorGroup(
       { variable_ref: "pal-1", color_mode: "brightness" },

@@ -30,7 +30,7 @@ import {
   galleryPalette,
   gallerySections,
 } from "./gallery.js";
-import { defaultPaletteSlots, samplePaletteWheel, variableIsPalette } from "./palette.js";
+import { defaultPaletteSlots, paletteIsTemperatureOnly, samplePaletteWheel, variableIsPalette } from "./palette.js";
 import {
   isoYear,
   daysInYear,
@@ -18152,8 +18152,12 @@ class CircadianScenesPanel extends HTMLElement {
     const entries = (this._lightNameLabels || []).filter(
       (entry) => entry.selector && entry.light && !entry.light.removed && !entry.light.suggested
     );
-    const paletteIds = new Set(
-      (this._variables || []).filter((item) => variableIsPalette(item)).map((item) => item.id)
+    const paletteVars = (this._variables || []).filter((item) => variableIsPalette(item));
+    const paletteIds = new Set(paletteVars.map((item) => item.id));
+    const tempOnlyPaletteIds = new Set(
+      paletteVars
+        .filter((item) => paletteIsTemperatureOnly(item, this._variables))
+        .map((item) => item.id)
     );
     const bucketOf = (entry) =>
       entry.selector.classList.contains("unavailable")
@@ -18161,7 +18165,8 @@ class CircadianScenesPanel extends HTMLElement {
         : lightTileColorGroup(
             this._legendGroupDraft(entry.light),
             this._legendTileCaps(entry.light.entity_id),
-            paletteIds
+            paletteIds,
+            tempOnlyPaletteIds
           );
     const signature = entries
       .map((entry) => `${entry.light.entity_id}:${bucketOf(entry)}`)

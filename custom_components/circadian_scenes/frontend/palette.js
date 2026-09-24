@@ -6,6 +6,30 @@ export function variableIsPalette(variable) {
   return Boolean(variable && (variable.kind === "palette" || variable.slots));
 }
 
+/** Kelvin slot. A hue or RGB channel means this slot is not temperature. */
+export function slotIsTemperature(color) {
+  if (!color || typeof color !== "object") {
+    return false;
+  }
+  if (color.hs_color || color.rgb_color || color.rgbw_color || color.rgbww_color || color.xy_color) {
+    return false;
+  }
+  return color.color_mode === "color_temp" || color.color_temp_kelvin != null;
+}
+
+/** True when every slot resolves to kelvin, so a temperature bulb can sit on the disk. */
+export function paletteIsTemperatureOnly(palette, variables) {
+  if (!variableIsPalette(palette)) {
+    return false;
+  }
+  for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
+    if (!slotIsTemperature(resolveSlot(palette, i, variables))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function assignmentSlot(entityId, seed) {
   let h = (2166136261 ^ (Number(seed) || 0)) >>> 0;
   const bytes = new TextEncoder().encode(String(entityId || ""));

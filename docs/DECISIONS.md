@@ -1,5 +1,13 @@
 # Decisions
 
+## Temperature bulbs use a palette disk only when it is all kelvin
+
+- **Date:** 2026-09-24
+- **Supersedes in part:** “Palette lights share a named group and the palette disk” — a palette reference no longer puts every linked bulb in that group.
+- **Decision:** Color bulbs linked to a palette stay in that palette’s group and on its disk. Temperature-only bulbs join that group only when every palette slot is kelvin. On a mixed palette they stay in the temperature group and on the temperature disk; dragging there stores kelvin and drops the palette link. On/off and brightness bulbs never join a palette group.
+- **Why:** A temperature bulb cannot show the RGB parts of a mixed disk, and approximating those parts while dragging hides the palette the other lights are using.
+- **Do not reverse without user ask.**
+
 ## Palette lights share a named group and the palette disk
 
 - **Date:** 2026-09-24
