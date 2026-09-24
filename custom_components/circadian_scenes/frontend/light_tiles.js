@@ -224,12 +224,18 @@ export const LIGHT_TILES_CSS = `
   .simple-light-frame::after {
     content: "";
     position: absolute;
-    /* Sit outside the tile, and above the action plates where they overlap. */
-    inset: -4px;
+    /* Flush with the tile until the tile is selected, then grow outward.
+       Radius tracks the outset so the gap stays even at the corners:
+       tile radius 24, padding edge is 2px out, inset -4px is 6px out. */
+    inset: 2px;
     z-index: 5;
-    border-radius: 32px;
+    border-radius: 24px;
     border: 2px solid transparent;
     pointer-events: none;
+    transition:
+      inset 280ms cubic-bezier(0.22, 1.2, 0.36, 1),
+      border-radius 280ms cubic-bezier(0.22, 1.2, 0.36, 1),
+      border-color 200ms ease;
   }
   .simple-light-frame:has(.simple-light-tile.jelly-snap) {
     animation: light-tile-jelly 480ms cubic-bezier(0.22, 1.55, 0.36, 1);
@@ -238,6 +244,8 @@ export const LIGHT_TILES_CSS = `
     transform: scale(0.95);
   }
   .simple-light-selector.active:not(.select-all-tile) .simple-light-frame::after {
+    inset: -4px;
+    border-radius: 30px;
     border-color: var(
       --hue-light-on-color,
       var(--hue-light-on-background, #ffda95)
@@ -326,6 +334,13 @@ export const LIGHT_TILES_CSS = `
     transform: translateY(0);
     pointer-events: auto;
     transition-delay: 0s;
+  }
+  /* The selection ring sits outside the tile, so a selected lip clears it. */
+  .simple-light-selector.active:not(.select-all-tile) .light-tile-actions-top {
+    transform: translateY(-6px);
+  }
+  .simple-light-selector.active:not(.select-all-tile) .light-tile-actions-bottom {
+    transform: translateY(6px);
   }
   .light-tiles.select-mode .simple-light-selector.active:not(:hover):not(:focus-visible):not(:has(:focus-visible))
     .light-tile-actions-top {

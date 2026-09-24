@@ -3697,7 +3697,7 @@ function createSceneColorWheel({
         }
         const count = fan.ids.length;
         const ang = (index / count) * Math.PI * 2 - Math.PI / 2;
-        const dist = count > 1 ? 56 : 48;
+        const dist = count > 1 ? 56 : 0;
         const fanExpanded = id === hoverId || selectedIds.includes(id);
         placeMarker(
           marker,
@@ -4447,6 +4447,9 @@ function createSceneColorWheel({
     if (!id) {
       return;
     }
+    // One peeled pin, on its own color. Leaving the previous selection
+    // detached fanned those dots off the disk when the next light was chosen.
+    detached.clear();
     detached.add(id);
     sync();
   };
