@@ -3878,7 +3878,7 @@ function createSceneColorWheel({
       const pos = positionForDraft(
         scene.draft,
         markerMode,
-        nextGeom,
+        geom,
         radius,
         entityIdOf(scene)
       );
