@@ -828,21 +828,24 @@ function splitIdsByWheelMode(ids, mode, supports) {
 }
 
 /**
- * Mode-pill entries. A mode is listed when at least one selected light can use it.
- * An empty selection uses the wheel-level fallback (every member).
+ * Mode-pill entries. Offer every disk the wheel can show. A mode the
+ * selected lights cannot use stays listed and marked unsupported.
+ * An empty selection treats the wheel fallback as supported.
  */
 function wheelPillModes(lights, fallback = {}) {
   const rows = lights || [];
+  const selected = rows.length ? rows : null;
+  const entries = [
+    ["color", Boolean(fallback.hasColor), (row) => row?.hasColor],
+    ["temp", Boolean(fallback.hasTemp), (row) => row?.hasTemp],
+    ["palette", Boolean(fallback.palette), (row) => row?.palette],
+  ];
   const modes = [];
-  const source = rows.length ? rows : [fallback];
-  if (source.some((row) => row?.hasColor)) {
-    modes.push("color");
-  }
-  if (source.some((row) => row?.hasTemp)) {
-    modes.push("temp");
-  }
-  if (source.some((row) => row?.palette)) {
-    modes.push("palette");
+  for (const [mode, roomHas, supports] of entries) {
+    const supported = selected ? selected.some(supports) : roomHas;
+    if (roomHas || supported) {
+      modes.push({ mode, supported });
+    }
   }
   return modes;
 }
@@ -3200,12 +3203,17 @@ function createSceneColorWheel({
         hasTemp: capsOf(row).hasTemp,
         palette: onPaletteDisk(row.draft, capsOf(row)),
       }));
+    const sceneHasPalette = (scenes || []).some((row) =>
+      variableIsPalette(paletteForDraft(row.draft))
+    );
     const modes = wheelPillModes(selected, {
       hasColor,
       hasTemp,
-      palette: pal,
+      palette: sceneHasPalette || pal,
     });
-    modePill.hidden = modes.length < 2;
+    modePill.hidden =
+      (selected.length > 0 && selected.every((row) => !row.hasColor && !row.hasTemp)) ||
+      modes.length < 2;
     randomizeBtn.hidden = !pal || typeof onRandomizeSeed !== "function";
     if (modePill.hidden) {
       return;
@@ -3217,39 +3225,48 @@ function createSceneColorWheel({
       : locked === "color" || locked === "temp"
         ? locked
         : draftWheelMode(draft, caps.hasColor, caps.hasTemp);
-    for (const mode of modes) {
+    const palVar =
+      paletteForDraft(draft) ||
+      paletteCatalog().find((variable) => variableIsPalette(variable));
+    const unsupported = t("frontend.lights.mode_not_supported", "Not supported");
+    for (const entry of modes) {
+      const mode = entry.mode;
       const wrap = document.createElement("button");
       wrap.type = "button";
       wrap.className = "wheel-wrapper";
       wrap.setAttribute("aria-pressed", mode === current ? "true" : "false");
-      if (mode === current) {
+      if (mode === current && entry.supported) {
         wrap.classList.add("active");
+      }
+      if (!entry.supported) {
+        wrap.setAttribute("aria-disabled", "true");
       }
       const name = document.createElement("span");
       name.className = "wheel-mode-name";
-      name.textContent =
+      const label =
         mode === "temp"
           ? t("frontend.lights.group_temp", "Temperature")
           : mode === "palette"
             ? t("frontend.naming.palette", "Palette")
             : t("frontend.lights.group_color", "Color");
+      name.textContent = entry.supported ? label : `${label} (${unsupported})`;
+      wrap.title = name.textContent;
       const face = document.createElement("span");
       face.className = `wheel wheel-mode-${mode}`;
       if (mode === "color") {
         face.style.backgroundImage = `url(${MODE_COLOR_ICON})`;
       } else if (mode === "temp") {
         face.style.backgroundImage = `url(${MODE_TEMP_ICON})`;
-      } else {
+      } else if (palVar) {
         face.style.backgroundImage = "none";
-        face.style.background = paletteSwatchCss(
-          palVar,
-          paletteCatalog(),
-          draftRgb
-        );
+        face.style.background = paletteSwatchCss(palVar, paletteCatalog(), draftRgb);
       }
       wrap.append(name, face);
-        wrap.addEventListener("click", (ev) => {
+      wrap.addEventListener("click", (ev) => {
         ev.stopPropagation();
+        if (!entry.supported) {
+          return;
+        }
         if (mode === "palette") {
           lockUiMode("palette");
           sync();
@@ -3316,6 +3333,9 @@ function createSceneColorWheel({
     const palette = typeof getPalette === "function" ? getPalette() || [] : [];
     presetTrack.setAttribute("aria-label", "Variables");
     for (const variable of palette) {
+      if (variableIsPalette(variable)) {
+        continue;
+      }
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "hue-preset";

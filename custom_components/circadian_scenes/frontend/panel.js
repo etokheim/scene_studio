@@ -2246,6 +2246,17 @@ class CircadianScenesPanel extends HTMLElement {
         .wheel-mode-pill .wheel-wrapper.active {
           border-color: #fff;
         }
+        .wheel-mode-pill .wheel-wrapper[aria-disabled="true"] {
+          width: auto;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          opacity: 0.4;
+          cursor: default;
+        }
+        .wheel-mode-pill .wheel-wrapper[aria-disabled="true"] .wheel-mode-name {
+          display: block;
+        }
         .wheel-mode-pill .wheel {
           display: block;
           width: 24px;
@@ -2367,9 +2378,10 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-wheel-layer.is-front {
           z-index: 3;
         }
-        .hue-wheel-canvas.is-stacked .hue-wheel-layer.is-front {
-          /* Screen-space size scales with the disk; keep values large so the
-             inner mixed disk still casts a heavy shade onto the outer ring. */
+        .hue-wheel-layer.is-back,
+        .hue-wheel-layer.is-mid,
+        .hue-wheel-layer.is-front {
+          /* Same shade on every disk so an overlap reads as a separate layer. */
           box-shadow:
             0 18px 48px rgba(0, 0, 0, 0.55),
             0 6px 16px rgba(0, 0, 0, 0.4);

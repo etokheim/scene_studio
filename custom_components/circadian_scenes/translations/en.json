@@ -266,6 +266,7 @@
       "tiles_hint_brightness": "Drag or scroll on the light tiles to change the brightness",
       "tiles_hint_pick": "Select a solar event or a light to edit it, or drag the sun to preview the lights at a time",
       "settings_named": "Settings for {name}",
+      "mode_not_supported": "Not supported",
       "group_color": "Color",
       "group_temp": "Temperature",
       "group_white": "White",

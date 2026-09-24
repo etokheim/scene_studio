@@ -110,7 +110,7 @@ export const LANDING_CSS = `
     ) {
       opacity: 0.38;
     }
-    .area-rail:hover .area-rail-body :is(
+    .area-rail:hover .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
       .floor-label,
       .area-head,
       .area-empty,

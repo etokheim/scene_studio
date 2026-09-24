@@ -162,7 +162,7 @@ test("after a drag, only lights that left the selection stay detached", () => {
   );
 });
 
-test("the mode pill lists only modes the selected lights support", () => {
+test("the mode pill lists every wheel disk and marks unsupported ones", () => {
   assert.deepEqual(
     wheelPillModes(
       [
@@ -171,20 +171,31 @@ test("the mode pill lists only modes the selected lights support", () => {
       ],
       { hasColor: true, hasTemp: true }
     ),
-    ["color"]
+    [
+      { mode: "color", supported: true },
+      { mode: "temp", supported: false },
+    ]
   );
   assert.deepEqual(
     wheelPillModes(
       [
         { hasColor: true, hasTemp: false },
         { hasColor: false, hasTemp: true, palette: true },
-      ]
+      ],
+      { hasColor: true, hasTemp: true, palette: true }
     ),
-    ["color", "temp", "palette"]
+    [
+      { mode: "color", supported: true },
+      { mode: "temp", supported: true },
+      { mode: "palette", supported: true },
+    ]
   );
   assert.deepEqual(
     wheelPillModes([], { hasColor: true, hasTemp: true, palette: false }),
-    ["color", "temp"]
+    [
+      { mode: "color", supported: true },
+      { mode: "temp", supported: true },
+    ]
   );
 });
 
