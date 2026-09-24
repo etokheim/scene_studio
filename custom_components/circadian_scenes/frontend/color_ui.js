@@ -3977,9 +3977,19 @@ function createSceneColorWheel({
     }
     if (hoverId) {
       const hovered = markers.get(hoverId);
-      if (hovered && hovered.g.style.display !== "none") {
+      if (hovered && hovered.g.style.display !== "none" && svg.lastChild !== hovered.g) {
+        // Reparenting after .expanded is set drops the scale transition, so
+        // collapse first, raise the pin, then expand against a flushed layout.
+        const wasExpanded = hovered.g.classList.contains("expanded");
+        if (wasExpanded) {
+          hovered.g.classList.remove("expanded");
+        }
         suppressHover = true;
         svg.appendChild(hovered.g);
+        if (wasExpanded) {
+          hovered.g.getBoundingClientRect();
+          hovered.g.classList.add("expanded");
+        }
       }
       queueHoverCheck();
     }
