@@ -12,6 +12,7 @@ import {
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
   lightCanUsePalette,
+  focusedDiskGeom,
   wheelPillModes,
   wheelStandIn,
   groupRingPoints,
@@ -357,4 +358,48 @@ test("a color bulb can join any palette; a temperature bulb only an all-kelvin o
   assert.equal(lightCanUsePalette(tempBulb, mixed, []), false);
   assert.equal(lightCanUsePalette(tempBulb, kelvin, []), true);
   assert.equal(lightCanUsePalette({ hasColor: false, hasTemp: false }, kelvin, []), false);
+});
+
+test("palette sits inside the kelvin ring when no light is in color mode", () => {
+  const radius = 200;
+  const innerFrac = 0.81;
+  const geom = focusedDiskGeom(radius, {
+    showTemp: true,
+    showColor: false,
+    showPalette: true,
+    focus: "palette",
+    innerFrac,
+  });
+  assert.equal(geom.temp.outer, radius);
+  assert.ok(geom.temp.inner > geom.palette.outer - 1);
+  assert.ok(geom.palette.outer < radius - 1);
+  assert.ok(geom.palette.inner <= 1);
+  assert.ok(geom.color.outer - geom.color.inner < 2);
+});
+
+test("three disks keep kelvin outside and the focused disk innermost", () => {
+  const radius = 200;
+  const innerFrac = 0.81;
+  const colorFront = focusedDiskGeom(radius, {
+    showTemp: true,
+    showColor: true,
+    showPalette: true,
+    focus: "color",
+    innerFrac,
+  });
+  assert.equal(colorFront.front, "color");
+  assert.equal(colorFront.temp.outer, radius);
+  assert.ok(colorFront.palette.outer < colorFront.temp.inner + 1);
+  assert.ok(colorFront.color.outer < colorFront.palette.outer);
+  assert.ok(colorFront.color.inner <= 1);
+  const paletteFront = focusedDiskGeom(radius, {
+    showTemp: true,
+    showColor: true,
+    showPalette: true,
+    focus: "palette",
+    innerFrac,
+  });
+  assert.equal(paletteFront.front, "palette");
+  assert.ok(paletteFront.palette.outer < paletteFront.color.outer);
+  assert.equal(paletteFront.temp.outer, radius);
 });

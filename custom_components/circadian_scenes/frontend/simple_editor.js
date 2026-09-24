@@ -565,6 +565,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       lightWheelCaps(panel._hass?.states?.[scene.id]?.attributes || {}),
     getAssignmentSeed: () => Number(panel._formData?.assignment_seed) || 0,
     getAssignmentEntityId: (scene) => scene.id,
+    getBasePalette: () => {
+      const id = paletteBaseId();
+      return id ? variables.find((item) => item.id === id) || null : null;
+    },
     onRandomizeSeed: () => {
       const seed = (Math.random() * 0xffffffff) >>> 0;
       panel._beginSimpleUndo?.();

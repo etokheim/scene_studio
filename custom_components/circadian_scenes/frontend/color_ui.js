@@ -2384,6 +2384,7 @@ function createSceneColorWheel({
   getCapabilities,
   getAssignmentSeed,
   getAssignmentEntityId,
+  getBasePalette,
   onRandomizeSeed,
   showPath = true,
   groupNearby = false,
@@ -2601,10 +2602,19 @@ function createSceneColorWheel({
   const paletteForDraft = (draft) =>
     paletteCatalog().find((item) => item.id === draft?.variable_ref);
 
-  const wheelPalette = () =>
-    (getState().scenes || [])
+  const wheelPalette = () => {
+    const fromDraft = (getState().scenes || [])
       .map((row) => paletteForDraft(row?.draft))
-      .find((item) => variableIsPalette(item)) || null;
+      .find((item) => variableIsPalette(item));
+    if (fromDraft) {
+      return fromDraft;
+    }
+    if (typeof getBasePalette !== "function") {
+      return null;
+    }
+    const base = getBasePalette();
+    return variableIsPalette(base) ? base : null;
+  };
 
   const entityIdOf = (scene) =>
     typeof getAssignmentEntityId === "function"
@@ -2645,16 +2655,26 @@ function createSceneColorWheel({
     const radius = radiusPx();
     const { scenes, activeId } = getState();
     const innerFrac = cssFrac(stage, "--wheel-mixed-inner", WHEEL_MIXED_INNER_FRAC);
+    const palette = wheelPalette();
+    const catalog = paletteCatalog();
     let showColor = false;
-    let showPalette = false;
+    let anyCanPalette = false;
+    let anyTemp = Boolean(hasTemp);
     let activeMode = null;
     for (const scene of scenes || []) {
       const caps = capsOf(scene);
-      const variable = paletteForDraft(scene?.draft);
+      if (caps.hasTemp) {
+        anyTemp = true;
+      }
+      if (lightCanUsePalette(caps, palette, catalog)) {
+        anyCanPalette = true;
+      }
       const onPalette = onPaletteDisk(scene?.draft, caps);
-      if (onPalette) {
-        showPalette = true;
-      } else if (draftWheelMode(scene?.draft, caps.hasColor, caps.hasTemp) === "color" && caps.hasColor) {
+      if (
+        !onPalette &&
+        draftWheelMode(scene?.draft, caps.hasColor, caps.hasTemp) === "color" &&
+        caps.hasColor
+      ) {
         showColor = true;
       }
       if (scene?.id === activeId) {
@@ -2663,12 +2683,14 @@ function createSceneColorWheel({
           : draftWheelMode(scene?.draft, caps.hasColor, caps.hasTemp);
       }
     }
+    // Base palette stays up when any light can use it, even if none is on it yet.
+    const showPalette = Boolean(palette) && anyCanPalette;
     if (activeMode === "palette" || activeMode === "color") {
       diskFocus = activeMode;
     }
     const focus = showPalette && showColor ? diskFocus : showPalette ? "palette" : "color";
     return focusedDiskGeom(radius, {
-      showTemp: hasTemp,
+      showTemp: anyTemp,
       showColor: showColor && hasColor,
       showPalette,
       focus,
@@ -2722,10 +2744,25 @@ function createSceneColorWheel({
       el.style.webkitMaskImage = "";
       el.style.maskImage = "";
       el.style.transform = "";
+      el.style.clipPath = "";
+      el.style.webkitClipPath = "";
       return;
     }
     const innerFrac = band.inner / radius;
     const outerFrac = band.outer / radius;
+    const isBack = role === "back";
+    // A non-back disk must not paint out to the canvas edge. An inner disk is
+    // scaled so its rim stays saturated; the clip is the full local circle and
+    // the scale shrinks it. A ring is not scaled, so the clip is its outer edge.
+    const clipPct = band.inner <= 1 && band.outer < radius - 1 ? 50 : outerFrac * 50;
+    if (!isBack && outerFrac < 0.999) {
+      const clip = `circle(${clipPct}% at 50% 50%)`;
+      el.style.clipPath = clip;
+      el.style.webkitClipPath = clip;
+    } else {
+      el.style.clipPath = "";
+      el.style.webkitClipPath = "";
+    }
     if (band.inner <= 1 && band.outer < radius - 1) {
       // Scale the full disk so the rim matches the inner overlay (do not also
       // mask — mask is pre-transform and would shrink twice).
@@ -2756,9 +2793,7 @@ function createSceneColorWheel({
     const palLive = bandLive(geom.palette);
     bgPalette.hidden = !palLive;
     if (palLive) {
-      const variable = paletteForDraft(
-        (getState().scenes || []).find((row) => onPaletteDisk(row.draft, capsOf(row)))?.draft
-      );
+      const variable = wheelPalette();
       if (variable) {
         drawImageTo(bgPalette, drawPaletteWheelImage(variable, paletteCatalog()));
       }
@@ -3233,9 +3268,7 @@ function createSceneColorWheel({
 
   const convertDraftTo = (draft, next, caps) => {
     if (next === "palette") {
-      const variable = (getState().scenes || [])
-        .map((scene) => paletteForDraft(scene.draft))
-        .find((item) => variableIsPalette(item));
+      const variable = wheelPalette();
       if (!variable) {
         return false;
       }
@@ -3281,9 +3314,7 @@ function createSceneColorWheel({
         // Capability, not "already on the disk". A color bulb can join any palette.
         palette: lightCanUsePalette(capsOf(row), wheelPalette(), paletteCatalog()),
       }));
-    const sceneHasPalette = (scenes || []).some((row) =>
-      variableIsPalette(paletteForDraft(row.draft))
-    );
+    const sceneHasPalette = variableIsPalette(wheelPalette());
     const modes = wheelPillModes(selected, {
       hasColor,
       hasTemp,
@@ -4802,6 +4833,7 @@ export {
   splitIdsByWheelMode,
   disksUnsupportedByDrag,
   lightCanUsePalette,
+  focusedDiskGeom,
   wheelPillModes,
   wheelStandIn,
   kelvinTrackDragPoint,
