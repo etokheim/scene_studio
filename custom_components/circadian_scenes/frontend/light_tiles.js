@@ -1308,17 +1308,26 @@ export function playLightTileJelly(tile) {
 const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness", "onoff"];
 
 /**
- * Bucket a stored light draft. A palette reference wins over color mode
- * so those lights share a group named for the palette.
+ * Bucket a stored light draft. A palette reference groups lights that can
+ * show that color. On/off, temperature, and brightness bulbs stay in their
+ * own groups: their state can follow the palette, but it cannot be drawn
+ * on the palette disk.
  * When caps are known and the bulb cannot do color or kelvin, a stale
  * color_temp draft still belongs in the brightness group.
  */
 export function lightTileColorGroup(draft, caps, paletteIds) {
   const ref = draft?.variable_ref;
-  if (ref && paletteIds?.has?.(ref)) {
+  const linked = Boolean(ref && paletteIds?.has?.(ref));
+  const canDrawPalette = caps?.known
+    ? Boolean(caps.hasColor)
+    : !["color_temp", "white", "onoff", "brightness"].includes(draft?.color_mode);
+  if (linked && canDrawPalette) {
     return `palette:${ref}`;
   }
-  if (caps?.known && !caps.hasColor && !caps.hasTemp) {
+  if (caps?.known && !caps.hasColor) {
+    if (caps.hasTemp) {
+      return "temp";
+    }
     if (draft?.color_mode === "white") {
       return "white";
     }
