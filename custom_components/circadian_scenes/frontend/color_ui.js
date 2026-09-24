@@ -3700,7 +3700,10 @@ function createSceneColorWheel({
         ? "palette"
         : draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.g.classList.remove("grouped", "group-member", "drop-target");
-      if (expanded && svg.lastChild !== marker.g) {
+      const wasExpanded = marker.g.classList.contains("expanded");
+      // Raise a dot before it grows. Moving an already-open pin would land
+      // after that and cancel the new pin's scale transition.
+      if (expanded && !wasExpanded && svg.lastChild !== marker.g) {
         svg.appendChild(marker.g);
       }
       marker.g.classList.toggle("expanded", expanded);
@@ -3976,21 +3979,6 @@ function createSceneColorWheel({
       hoverId = null;
     }
     if (hoverId) {
-      const hovered = markers.get(hoverId);
-      if (hovered && hovered.g.style.display !== "none" && svg.lastChild !== hovered.g) {
-        // Reparenting after .expanded is set drops the scale transition, so
-        // collapse first, raise the pin, then expand against a flushed layout.
-        const wasExpanded = hovered.g.classList.contains("expanded");
-        if (wasExpanded) {
-          hovered.g.classList.remove("expanded");
-        }
-        suppressHover = true;
-        svg.appendChild(hovered.g);
-        if (wasExpanded) {
-          hovered.g.getBoundingClientRect();
-          hovered.g.classList.add("expanded");
-        }
-      }
       queueHoverCheck();
     }
   };
