@@ -3541,7 +3541,9 @@ class CircadianScenesPanel extends HTMLElement {
           margin-right: calc(-1 * var(--scene-sidebar-gutter));
           width: calc(100% + var(--scene-sidebar-gutter));
           padding-right: var(--scene-sidebar-gutter);
-          /* FAB clearance under the light list (~156px). */
+          /* Dial pages keep FAB clearance. A workspace page must not: the
+             pad shrinks the flex content box while the workspace is sized to
+             the shell, so overflow:hidden clips the scenes list and editor. */
           padding-bottom: 156px;
           box-sizing: border-box;
           position: relative;
@@ -3555,6 +3557,9 @@ class CircadianScenesPanel extends HTMLElement {
         }
         /* Clip X on the wide page. Horizon may bleed under the frosted rail;
            height is capped in _layoutClockHorizonBack. */
+        .page:has(.workspace) {
+          padding-bottom: 0;
+        }
         .page:has(.workspace),
         .page.dial-wide {
           overflow-x: clip;
