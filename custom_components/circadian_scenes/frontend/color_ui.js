@@ -3073,6 +3073,7 @@ function createSceneColorWheel({
       requestAnimationFrame(() => {
         pinExpandJobs.delete(g);
         g.classList.add("expanded");
+        g.parentNode?.appendChild(g);
       })
     );
   };
@@ -4117,6 +4118,16 @@ function createSceneColorWheel({
       groupRing.style.display = "none";
     }
     onClusters?.(pinClusters.map((group) => [...group]));
+    // Document order paints later dots over an earlier teardrop. Expanded
+    // pins (and drop targets) go last so the pin covers every dot.
+    for (const marker of markers.values()) {
+      if (
+        marker.g.classList.contains("expanded") ||
+        marker.g.classList.contains("drop-target")
+      ) {
+        svg.appendChild(marker.g);
+      }
+    }
     for (const [id, marker] of markers) {
       if (!seen.has(id)) {
         marker.g.remove();

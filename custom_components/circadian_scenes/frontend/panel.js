@@ -2462,6 +2462,8 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .hue-wheel-svg .gm.expanded,
         .hue-wheel-svg .gm.drop-target {
+          /* Above every resting dot. SVG paint order still follows the tree,
+             so sync() also moves these groups to the end. */
           z-index: 2;
         }
         .hue-wheel-svg.pin-drag .gm {

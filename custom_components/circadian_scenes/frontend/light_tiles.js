@@ -322,6 +322,11 @@ export const LIGHT_TILES_CSS = `
     background-position: bottom;
     transform: translateY(calc(var(--light-action-outset) * -1));
   }
+  /* A side with no button has no plate. An empty one still paints its fill. */
+  .light-tile-actions-top:empty,
+  .light-tile-actions-bottom:empty {
+    display: none;
+  }
   .simple-light-selector:hover .light-tile-actions-top,
   .simple-light-selector:hover .light-tile-actions-bottom,
   .simple-light-selector.active .light-tile-actions-top,

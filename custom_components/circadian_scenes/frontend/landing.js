@@ -357,9 +357,11 @@ export const LANDING_CSS = `
       background: var(--primary-background-color);
     }
     .sticky-bg-area {
+      /* 16px past the title. 50% − 8px is still halfway down the title itself. */
+      bottom: -16px;
       background: linear-gradient(
         to bottom,
-        color-mix(in srgb, var(--primary-background-color) 92%, transparent) 50%,
+        color-mix(in srgb, var(--primary-background-color) 92%, transparent) calc(50% - 8px),
         transparent 100%
       );
       opacity: 1;

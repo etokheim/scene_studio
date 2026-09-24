@@ -1946,6 +1946,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     hasTemp: true,
     tempMin: 2000,
     tempMax: 6500,
+    showPath: false,
     getPalette: () =>
       (panel._variables || []).filter((item) => !variableIsPalette(item)),
     onAddPalette: (draft) => panel._addVariableFromCurrentDraft(draft),
@@ -1978,6 +1979,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   let scrubSync = 0;
   const syncTiles = () => {
     const keepLeft = scroller.scrollLeft;
+    tiles.classList.toggle("select-mode", selectedIds.size > 1);
     tiles.replaceChildren();
     const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
     for (const id of ids) {
@@ -2015,10 +2017,22 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
         const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
         allSelector.style.setProperty("--hue-light-on-background", wash);
         allSelector.style.setProperty("--hue-light-on-color", wash);
-      } else {
-        allSelector.style.removeProperty("--hue-light-on-background");
-        allSelector.style.removeProperty("--hue-light-on-color");
+        allSelector.style.setProperty("--hue-light-on-text-color", "#fff");
       }
+      const caption = mode
+        ? panel._t("frontend.lights.n_selected", "{count} selected", {
+            count: selectedIds.size,
+          })
+        : panel._t("frontend.lights.select_all", "Select all");
+      for (const name of allSelector.querySelectorAll(".simple-light-name")) {
+        name.textContent = caption;
+      }
+      allSelector.setAttribute(
+        "aria-label",
+        mode
+          ? `${caption}, ${panel._t("frontend.lights.deselect", "Deselect")}`
+          : caption
+      );
     };
     const paintSlot = (id) => {
       const sel = tiles.querySelector(
@@ -2058,6 +2072,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
         return;
       }
       selectedIds = selectedIds.size > 1 ? new Set() : new Set(ids);
+      revealLightActionsNow(tiles);
       wheel.sync();
       syncTiles();
     };
@@ -2251,6 +2266,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
             return;
           }
           selectedIds = new Set([id]);
+          revealLightActionsNow(tiles);
           wheel.sync();
           syncTiles();
         };
