@@ -25,8 +25,15 @@ export const LANDING_CSS = `
     background-size: cover;
     background-position: center;
     pointer-events: none;
-    opacity: 0.2;
+    opacity: 0;
     filter: blur(48px);
+    transition: opacity 480ms ease;
+  }
+  .scene-cover.is-shown {
+    opacity: 0.2;
+  }
+  .scene-cover.is-leaving {
+    opacity: 0;
   }
   .area-rail {
     width: ${AREA_RAIL_PX}px;

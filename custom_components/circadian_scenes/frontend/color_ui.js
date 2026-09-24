@@ -4271,8 +4271,12 @@ function createSceneColorWheel({
     }
     if (!drag.frozenGeom) {
       drag.frozenGeom = currentGeom();
+      // Other pins stay in this coordinate space. A live radius read mid-drag
+      // shifts them, and pointerup then snaps them back.
+      drag.frozenRadius = radius;
     }
     const geom = drag.frozenGeom;
+    const pinRadius = drag.frozenRadius || radius;
     const pt = pointFromEvent(ev);
     const x = pt.x - drag.grabX;
     const y = pt.y - drag.grabY;
@@ -4406,14 +4410,25 @@ function createSceneColorWheel({
         continue;
       }
       const caps = capsOf(scene);
-      const otherMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
+      // Palette lights store an rgb snapshot. draftWheelMode would read that as
+      // the color disk and slide those pins until the drag ends.
+      const otherMode = onPaletteDisk(scene.draft, caps)
+        ? "palette"
+        : draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       const pos = positionForDraft(
         scene.draft,
         otherMode,
         geom,
-        radius,
+        pinRadius,
         entityIdOf(scene)
       );
+      if (
+        Number.isFinite(other.x) &&
+        Number.isFinite(other.y) &&
+        Math.hypot(other.x - pos.x, other.y - pos.y) < 0.5
+      ) {
+        continue;
+      }
       other.g.style.color = rgbCss(pos.rgb);
       other.icon.style.fill = pinForeground(pos.rgb);
       placeMarker(other, pos.x, pos.y, false);

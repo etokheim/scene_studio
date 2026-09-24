@@ -5396,11 +5396,48 @@ class CircadianScenesPanel extends HTMLElement {
     this._areaRailUserScrolled = false;
   }
 
+  _crossfadeSceneCover(page, previous) {
+    const next = page?.querySelector(".scene-cover");
+    const prevUrl = previous?.style.backgroundImage || "";
+    const nextUrl = next?.style.backgroundImage || "";
+    const reduced = this._prefersReducedMotion();
+    if (previous && prevUrl && prevUrl !== nextUrl && !reduced) {
+      previous.classList.remove("is-leaving");
+      previous.classList.add("is-shown");
+      if (next) {
+        page.insertBefore(previous, next);
+      } else {
+        page.prepend(previous);
+      }
+      const drop = () => previous.remove();
+      previous.addEventListener("transitionend", drop, { once: true });
+      window.setTimeout(drop, 700);
+      requestAnimationFrame(() => previous.classList.add("is-leaving"));
+    }
+    if (!next) {
+      return;
+    }
+    if (reduced || (prevUrl && prevUrl === nextUrl)) {
+      next.classList.add("is-shown");
+      return;
+    }
+    requestAnimationFrame(() => next.classList.add("is-shown"));
+  }
+
   _mountWorkspacePage(page, { resetStageScroll = true } = {}) {
     this._captureAreaRailScroll();
     const overlay = this._outgoingStageLayer;
     overlay?.remove();
+    const covers = [...(this._contentEl?.querySelectorAll(".scene-cover") || [])];
+    const previous = covers.find((cover) => !cover.classList.contains("is-leaving"));
+    previous?.remove();
+    for (const cover of covers) {
+      if (cover !== previous) {
+        cover.remove();
+      }
+    }
     this._contentEl.replaceChildren(page);
+    this._crossfadeSceneCover(page, previous);
     this._bindAreaRailScroll(this._visibleRailBody(page));
     if (resetStageScroll) {
       const scroll = page.querySelector(".stage-scroll");
