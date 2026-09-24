@@ -2357,43 +2357,52 @@ class CircadianScenesPanel extends HTMLElement {
           filter: blur(54px) saturate(1.45);
           opacity: 0.55;
         }
+        .hue-wheel-disk {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 1;
+        }
         .hue-wheel-layer {
           position: absolute;
           left: 0;
           top: 0;
-          z-index: 1;
+          width: 100%;
+          height: 100%;
           pointer-events: none;
           transform-origin: center center;
           transition:
             transform 280ms cubic-bezier(0.2, 0, 0, 1),
-            box-shadow 280ms cubic-bezier(0.2, 0, 0, 1),
-            filter 280ms cubic-bezier(0.2, 0, 0, 1),
-            opacity 180ms ease,
             mask-image 280ms cubic-bezier(0.2, 0, 0, 1),
             -webkit-mask-image 280ms cubic-bezier(0.2, 0, 0, 1);
         }
-        .hue-wheel-layer.is-mid {
+        .hue-wheel-disk.is-mid {
           z-index: 2;
         }
-        .hue-wheel-layer.is-front {
+        .hue-wheel-disk.is-front {
           z-index: 3;
         }
-        .hue-wheel-layer.is-back,
-        .hue-wheel-layer.is-mid,
-        .hue-wheel-layer.is-front {
-          /* Same shade on every disk so an overlap reads as a separate layer. */
-          box-shadow:
-            0 18px 48px rgba(0, 0, 0, 0.55),
-            0 6px 16px rgba(0, 0, 0, 0.4);
+        .hue-wheel-disk.is-back,
+        .hue-wheel-disk.is-mid,
+        .hue-wheel-disk.is-front {
+          /* Shadow on the wrapper. A filter on the clipped canvas is masked
+             away, so the overlap has no edge. */
+          filter:
+            drop-shadow(0 18px 28px rgba(0, 0, 0, 0.55))
+            drop-shadow(0 6px 10px rgba(0, 0, 0, 0.4));
         }
-        .hue-wheel-layer.is-back {
+        .hue-wheel-disk.is-back {
           z-index: 1;
         }
-        :host(:not([data-dark-mode])) .hue-wheel-canvas.is-stacked .hue-wheel-layer.is-back,
-        :host(:not([data-dark-mode])) .hue-wheel-canvas:not(.is-stacked) .hue-wheel-layer.is-front {
-          filter: drop-shadow(0 18px 42px rgba(0, 0, 0, 0.18));
+        :host(:not([data-dark-mode])) .hue-wheel-disk.is-back,
+        :host(:not([data-dark-mode])) .hue-wheel-disk.is-mid,
+        :host(:not([data-dark-mode])) .hue-wheel-disk.is-front {
+          filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.22));
         }
-        .hue-wheel-layer.is-drag-unavailable {
+        .hue-wheel-disk.is-drag-unavailable {
           opacity: 0.18;
         }
         .hue-wheel-svg {

@@ -2405,6 +2405,12 @@ function createSceneColorWheel({
   glow.setAttribute("aria-hidden", "true");
   glow.width = HUE_WHEEL_RENDER;
   glow.height = HUE_WHEEL_RENDER;
+  const diskOf = (canvas, kind) => {
+    const disk = document.createElement("div");
+    disk.className = `hue-wheel-disk hue-wheel-disk-${kind}`;
+    disk.appendChild(canvas);
+    return disk;
+  };
   const bgTemp = document.createElement("canvas");
   bgTemp.className = "hue-wheel-layer hue-wheel-temp";
   bgTemp.width = HUE_WHEEL_RENDER;
@@ -2417,6 +2423,9 @@ function createSceneColorWheel({
   bgPalette.className = "hue-wheel-layer hue-wheel-palette";
   bgPalette.width = HUE_WHEEL_RENDER;
   bgPalette.height = HUE_WHEEL_RENDER;
+  const tempDisk = diskOf(bgTemp, "temp");
+  const colorDisk = diskOf(bgColor, "color");
+  const paletteDisk = diskOf(bgPalette, "palette");
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "hue-wheel-svg");
   svg.innerHTML = `
@@ -2448,7 +2457,7 @@ function createSceneColorWheel({
   groupRing.setAttribute("filter", "url(#se-group-shadow)");
   groupRing.style.display = "none";
   svg.appendChild(groupRing);
-  canvasWrap.append(glow, bgTemp, bgColor, bgPalette, svg);
+  canvasWrap.append(glow, tempDisk, colorDisk, paletteDisk, svg);
   const face = document.createElement("div");
   face.className = "hue-wheel-face";
   const floatReadout = document.createElement("div");
@@ -2714,20 +2723,27 @@ function createSceneColorWheel({
     }
   };
 
-  const paintGlow = (front) => {
-    const url = drawHueWheelImage(
-      front === "color" && hasTemp ? "temp" : hasColor ? "color" : "temp",
-      tempMin,
-      tempMax
+  const paintGlow = (mode) => {
+    if (mode === "palette") {
+      const variable = wheelPalette();
+      if (variable) {
+        drawImageTo(glow, drawPaletteWheelImage(variable, paletteCatalog()));
+        return;
+      }
+    }
+    drawImageTo(
+      glow,
+      drawHueWheelImage(mode === "temp" ? "temp" : "color", tempMin, tempMax)
     );
-    drawImageTo(glow, url);
   };
 
   const applyLayer = (el, band, radius, role) => {
+    const host = el.parentElement;
     const live = bandLive(band);
-    el.classList.toggle("is-front", role === "front" && live);
-    el.classList.toggle("is-mid", role === "mid" && live);
-    el.classList.toggle("is-back", role === "back" && live);
+    host.classList.toggle("is-front", role === "front" && live);
+    host.classList.toggle("is-mid", role === "mid" && live);
+    host.classList.toggle("is-back", role === "back" && live);
+    host.hidden = !live;
     el.hidden = !live;
     if (!live || !radius) {
       el.style.webkitMaskImage = "";
@@ -2770,16 +2786,23 @@ function createSceneColorWheel({
     if (!radius) {
       return;
     }
-    const key = `${geom.front}|${geom.color.outer}|${geom.temp.outer}|${geom.palette?.outer}`;
+    const glowMode =
+      ["temp", "palette", "color"].find((name) => geom.role?.[name] === "back") ||
+      geom.front;
+    const paletteId = wheelPalette()?.id || "";
+    const key = `${geom.front}|${geom.color.outer}|${geom.temp.outer}|${geom.palette?.outer}|${glowMode}|${paletteId}`;
     const stacked =
       [geom.color, geom.temp, geom.palette].filter((band) => bandLive(band)).length > 1;
     canvasWrap.classList.toggle("is-stacked", stacked);
     applyLayer(bgColor, geom.color, radius, geom.role?.color);
     applyLayer(bgTemp, geom.temp, radius, geom.role?.temp);
     applyLayer(bgPalette, geom.palette || { inner: radius, outer: radius }, radius, geom.role?.palette);
-    bgColor.hidden = !hasColor || !bandLive(geom.color);
-    bgTemp.hidden = !hasTemp || !bandLive(geom.temp);
+    bgColor.parentElement.hidden = !hasColor || !bandLive(geom.color);
+    bgColor.hidden = bgColor.parentElement.hidden;
+    bgTemp.parentElement.hidden = !hasTemp || !bandLive(geom.temp);
+    bgTemp.hidden = bgTemp.parentElement.hidden;
     const palLive = bandLive(geom.palette);
+    bgPalette.parentElement.hidden = !palLive;
     bgPalette.hidden = !palLive;
     if (palLive) {
       const variable = wheelPalette();
@@ -2789,7 +2812,7 @@ function createSceneColorWheel({
     }
     if (key !== lastGeomKey) {
       lastGeomKey = key;
-      paintGlow(geom.role?.temp === "back" ? "temp" : geom.front === "palette" ? "color" : geom.front);
+      paintGlow(glowMode);
     }
     const dragging = Boolean(drag?.moved);
     const palette = wheelPalette();
@@ -2802,15 +2825,15 @@ function createSceneColorWheel({
         canPalette: lightCanUsePalette(caps, palette, catalog),
       };
     });
-    bgColor.classList.toggle(
+    bgColor.parentElement.classList.toggle(
       "is-drag-unavailable",
       dragging && hasColor && !bgColor.hidden && fade.color
     );
-    bgTemp.classList.toggle(
+    bgTemp.parentElement.classList.toggle(
       "is-drag-unavailable",
       dragging && hasTemp && !bgTemp.hidden && fade.temp
     );
-    bgPalette.classList.toggle(
+    bgPalette.parentElement.classList.toggle(
       "is-drag-unavailable",
       dragging && !bgPalette.hidden && fade.palette
     );
