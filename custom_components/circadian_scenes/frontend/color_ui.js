@@ -1458,8 +1458,57 @@ function wheelStackGeom(radius, kind, peekFrac, mixedInnerFrac, gapFrac) {
     kind,
     color: { inner: 0, outer: colorOuter },
     temp: { inner: colorOuter + gap, outer: radius },
+    palette: { inner: radius, outer: radius },
     front: "color",
+    role: { color: "front", temp: "back" },
   };
+}
+
+/** Back disk is full size. Each disk in front of it is a smaller overlay. */
+function focusedDiskGeom(radius, { showTemp, showColor, showPalette, focus, innerFrac }) {
+  const hidden = { inner: radius, outer: radius };
+  const bands = { temp: hidden, color: hidden, palette: hidden };
+  const colors = [];
+  if (showColor) {
+    colors.push("color");
+  }
+  if (showPalette) {
+    colors.push("palette");
+  }
+  const frontName =
+    colors.length === 2 ? (focus === "palette" ? "palette" : "color") : colors[0] || null;
+  const order = [];
+  if (showTemp) {
+    order.push("temp");
+  }
+  if (colors.length === 2) {
+    order.push(frontName === "palette" ? "color" : "palette", frontName);
+  } else if (frontName) {
+    order.push(frontName);
+  }
+  const role = {};
+  if (!order.length) {
+    bands.color = { inner: 0, outer: radius };
+    role.color = "front";
+    return { kind: "stack", ...bands, front: "color", role };
+  }
+  if (order.length === 1) {
+    bands[order[0]] = { inner: 0, outer: radius };
+    role[order[0]] = "front";
+    return { kind: "stack", ...bands, front: order[0], role };
+  }
+  let outer = radius;
+  for (let i = 0; i < order.length; i += 1) {
+    const name = order[i];
+    const innermost = i === order.length - 1;
+    const nextOuter = innermost ? outer : outer * innerFrac;
+    bands[name] = innermost
+      ? { inner: 0, outer: nextOuter }
+      : { inner: nextOuter, outer };
+    role[name] = innermost ? "front" : i === 0 ? "back" : "mid";
+    outer = nextOuter;
+  }
+  return { kind: "stack", ...bands, front: frontName || order[order.length - 1], role };
 }
 
 function bandLive(band) {
@@ -2532,6 +2581,8 @@ function createSceneColorWheel({
   const seedNow = () =>
     typeof getAssignmentSeed === "function" ? Number(getAssignmentSeed()) || 0 : 0;
 
+  let diskFocus = "color";
+
   const showingPalette = () => {
     const { scenes, activeId } = getState();
     const draft = scenes.find((row) => row.id === activeId)?.draft;
@@ -2544,18 +2595,37 @@ function createSceneColorWheel({
 
   const currentGeom = () => {
     const radius = radiusPx();
-    const { scenes } = getState();
-    if (showingPalette()) {
-      return wheelStackGeom(radius, "color-only", 0, 1, 0);
+    const { scenes, activeId } = getState();
+    const innerFrac = cssFrac(stage, "--wheel-mixed-inner", WHEEL_MIXED_INNER_FRAC);
+    let showColor = false;
+    let showPalette = false;
+    let activeMode = null;
+    for (const scene of scenes || []) {
+      const caps = capsOf(scene);
+      const variable = paletteForDraft(scene?.draft);
+      const onPalette = variableIsPalette(variable);
+      if (onPalette) {
+        showPalette = true;
+      } else if (draftWheelMode(scene?.draft, caps.hasColor, caps.hasTemp) === "color" && caps.hasColor) {
+        showColor = true;
+      }
+      if (scene?.id === activeId) {
+        activeMode = onPalette
+          ? "palette"
+          : draftWheelMode(scene?.draft, caps.hasColor, caps.hasTemp);
+      }
     }
-    const kind = pinStackKind(scenes, hasColor, hasTemp, capsOf);
-    return wheelStackGeom(
-      radius,
-      kind,
-      cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC),
-      cssFrac(stage, "--wheel-mixed-inner", WHEEL_MIXED_INNER_FRAC),
-      cssFrac(stage, "--wheel-mixed-gap", WHEEL_MIXED_GAP_FRAC)
-    );
+    if (activeMode === "palette" || activeMode === "color") {
+      diskFocus = activeMode;
+    }
+    const focus = showPalette && showColor ? diskFocus : showPalette ? "palette" : "color";
+    return focusedDiskGeom(radius, {
+      showTemp: hasTemp,
+      showColor: showColor && hasColor,
+      showPalette,
+      focus,
+      innerFrac,
+    });
   };
 
   const drawImageTo = (canvas, url) => {
@@ -2594,10 +2664,11 @@ function createSceneColorWheel({
     drawImageTo(glow, url);
   };
 
-  const applyLayer = (el, band, radius, isFront) => {
+  const applyLayer = (el, band, radius, role) => {
     const live = bandLive(band);
-    el.classList.toggle("is-front", Boolean(isFront && live));
-    el.classList.toggle("is-back", Boolean(!isFront && live));
+    el.classList.toggle("is-front", role === "front" && live);
+    el.classList.toggle("is-mid", role === "mid" && live);
+    el.classList.toggle("is-back", role === "back" && live);
     el.hidden = !live;
     if (!live || !radius) {
       el.style.webkitMaskImage = "";
@@ -2625,36 +2696,30 @@ function createSceneColorWheel({
     if (!radius) {
       return;
     }
-    const key = `${geom.kind}|${geom.color.inner}|${geom.color.outer}|${geom.temp.inner}|${geom.temp.outer}`;
-    const stacked = bandLive(geom.color) && bandLive(geom.temp);
+    const key = `${geom.front}|${geom.color.outer}|${geom.temp.outer}|${geom.palette?.outer}`;
+    const stacked =
+      [geom.color, geom.temp, geom.palette].filter((band) => bandLive(band)).length > 1;
     canvasWrap.classList.toggle("is-stacked", stacked);
-    applyLayer(bgColor, geom.color, radius, geom.front === "color");
-    applyLayer(bgTemp, geom.temp, radius, geom.front === "temp");
-    const pal = showingPalette();
-    bgPalette.hidden = !pal;
-    bgColor.hidden = pal || !hasColor || !bandLive(geom.color);
-    bgTemp.hidden = pal || !hasTemp || !bandLive(geom.temp);
-    if (pal) {
-      bgPalette.classList.add("is-front");
-      bgPalette.style.transform = "";
-      bgPalette.style.webkitMaskImage = "";
-      bgPalette.style.maskImage = "";
-      const { scenes, activeId } = getState();
-      const draft = scenes.find((row) => row.id === activeId)?.draft;
-      const variable = paletteForDraft(draft);
+    applyLayer(bgColor, geom.color, radius, geom.role?.color);
+    applyLayer(bgTemp, geom.temp, radius, geom.role?.temp);
+    applyLayer(bgPalette, geom.palette || { inner: radius, outer: radius }, radius, geom.role?.palette);
+    bgColor.hidden = !hasColor || !bandLive(geom.color);
+    bgTemp.hidden = !hasTemp || !bandLive(geom.temp);
+    const palLive = bandLive(geom.palette);
+    bgPalette.hidden = !palLive;
+    if (palLive) {
+      const variable = paletteForDraft(
+        (getState().scenes || []).find((row) => variableIsPalette(paletteForDraft(row.draft)))?.draft
+      );
       if (variable) {
         drawImageTo(bgPalette, drawPaletteWheelImage(variable, paletteCatalog()));
-        paintGlow("color");
-      }
-      lastGeomKey = "";
-    } else {
-      bgPalette.classList.remove("is-front");
-      if (key !== lastGeomKey) {
-        lastGeomKey = key;
-        paintGlow(geom.front);
       }
     }
-    const dragging = Boolean(drag?.moved && !pal);
+    if (key !== lastGeomKey) {
+      lastGeomKey = key;
+      paintGlow(geom.role?.temp === "back" ? "temp" : geom.front === "palette" ? "color" : geom.front);
+    }
+    const dragging = Boolean(drag?.moved);
     const fade = disksUnsupportedByDrag(dragging ? drag.ids : [], (id) => {
       const scene = (getState().scenes || []).find((row) => row.id === id);
       return scene ? capsOf(scene) : {};
@@ -2893,11 +2958,11 @@ function createSceneColorWheel({
   const positionForDraft = (draft, markerMode, geom, radius, entityId) => {
     const cx = radius;
     const variable = paletteForDraft(draft);
-    if (showingPalette() && variableIsPalette(variable)) {
+    if (variableIsPalette(variable) && bandLive(geom.palette)) {
       const auto = assignmentTR(entityId || "", seedNow());
       const t = draft.palette_t ?? auto.t;
       const r = draft.palette_r ?? auto.r;
-      const rel = relFromPaletteTR(t, r, geom.color.outer || radius);
+      const rel = relFromPaletteTR(t, r, geom.palette.outer || radius);
       const sampled = samplePaletteWheel(
         variable,
         t,
@@ -2937,7 +3002,7 @@ function createSceneColorWheel({
     const cx = limited.x - radius;
     const cy = limited.y - radius;
     const variable = paletteForDraft(draft);
-    if (showingPalette() && variableIsPalette(variable)) {
+    if (mode === "palette" && variableIsPalette(variable)) {
       const { t, r } = paletteTRFromRel(cx, cy, band.outer);
       draft.palette_t = t;
       draft.palette_r = r;
@@ -2982,21 +3047,16 @@ function createSceneColorWheel({
 
   const regionAt = (x, y, geom, radius) => {
     const r = Math.hypot(x - radius, y - radius);
-    const inColor =
-      bandLive(geom.color) && r <= geom.color.outer + 2 && r >= geom.color.inner - 2;
-    const inTemp =
-      bandLive(geom.temp) && r <= geom.temp.outer + 2 && r >= geom.temp.inner - 2;
-    if (inColor && inTemp) {
-      return geom.front;
-    }
-    if (inColor) {
-      return "color";
-    }
-    if (inTemp) {
-      return "temp";
-    }
-    if (r <= radius + 2) {
-      return geom.front;
+    const hit = (band) =>
+      bandLive(band) && r <= band.outer + 2 && r >= Math.max(0, (band.inner || 0) - 2);
+    const rank = { front: 0, mid: 1, back: 2 };
+    const names = ["palette", "color", "temp"].sort(
+      (a, b) => (rank[geom.role?.[a]] ?? 9) - (rank[geom.role?.[b]] ?? 9)
+    );
+    for (const name of names) {
+      if (hit(geom[name])) {
+        return name;
+      }
     }
     return null;
   };
@@ -3005,6 +3065,17 @@ function createSceneColorWheel({
     const caps = capsOf(item);
     const r = Math.hypot(x - radius, y - radius);
     const hyst = Math.max(6, radius * cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC) * 0.45);
+    if (pinMode === "palette" && bandLive(geom.palette) && r > geom.palette.outer + hyst) {
+      if (bandLive(geom.color) && r <= geom.color.outer + 2) {
+        return "color";
+      }
+      if (caps.hasTemp && bandLive(geom.temp)) {
+        return "temp";
+      }
+    }
+    if (pinMode === "color" && bandLive(geom.palette) && r < geom.palette.outer - hyst) {
+      return "palette";
+    }
     if (pinMode === "color" && caps.hasTemp && bandLive(geom.temp)) {
       const intoTemp =
         r > geom.color.outer + hyst &&
@@ -3033,7 +3104,7 @@ function createSceneColorWheel({
   // After a peek swap the pointer still sits on the new outer rim, which is
   // the other wheel — require an interior visit before converting again.
   const pointerInModeInterior = (r, geom, pinMode) => {
-    const band = pinMode === "color" ? geom.color : geom.temp;
+    const band = pinMode === "palette" ? geom.palette : pinMode === "color" ? geom.color : geom.temp;
     if (!bandLive(band)) {
       return false;
     }
@@ -3047,6 +3118,20 @@ function createSceneColorWheel({
   };
 
   const convertDraftTo = (draft, next, caps) => {
+    if (next === "palette") {
+      const variable = (getState().scenes || [])
+        .map((scene) => paletteForDraft(scene.draft))
+        .find((item) => variableIsPalette(item));
+      if (!variable) {
+        return false;
+      }
+      applyVariableToDraft(draft, variable, {
+        entityId: "",
+        seed: seedNow(),
+        catalog: paletteCatalog(),
+      });
+      return true;
+    }
     delete draft.variable_ref;
     delete draft.palette_t;
     delete draft.palette_r;
@@ -3558,7 +3643,9 @@ function createSceneColorWheel({
         marker.g.style.display = "none";
         continue;
       }
-      const markerMode = draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
+      const markerMode = variableIsPalette(paletteForDraft(scene.draft))
+        ? "palette"
+        : draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.g.classList.remove("grouped", "group-member", "drop-target");
       if (expanded && svg.lastChild !== marker.g) {
         svg.appendChild(marker.g);
@@ -4005,7 +4092,7 @@ function createSceneColorWheel({
         }
       }
     }
-    const band = pinMode === "color" ? geom.color : geom.temp;
+    const band = pinMode === "palette" ? geom.palette : pinMode === "color" ? geom.color : geom.temp;
     if (!bandLive(band)) {
       return;
     }
@@ -4316,7 +4403,7 @@ function createSceneColorWheel({
       pinMode = "color";
     }
     startDrag(ev, item.id, 0, 0, pinMode);
-    const band = pinMode === "color" ? geom.color : geom.temp;
+    const band = pinMode === "palette" ? geom.palette : pinMode === "color" ? geom.color : geom.temp;
     if (!bandLive(band)) {
       return;
     }

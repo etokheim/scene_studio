@@ -2361,8 +2361,11 @@ class CircadianScenesPanel extends HTMLElement {
             mask-image 280ms cubic-bezier(0.2, 0, 0, 1),
             -webkit-mask-image 280ms cubic-bezier(0.2, 0, 0, 1);
         }
-        .hue-wheel-layer.is-front {
+        .hue-wheel-layer.is-mid {
           z-index: 2;
+        }
+        .hue-wheel-layer.is-front {
+          z-index: 3;
         }
         .hue-wheel-canvas.is-stacked .hue-wheel-layer.is-front {
           /* Screen-space size scales with the disk; keep values large so the
@@ -2388,7 +2391,7 @@ class CircadianScenesPanel extends HTMLElement {
           width: 100%;
           height: 100%;
           overflow: visible;
-          z-index: 3;
+          z-index: 4;
           color: white;
         }
         .hue-wheel-paths {
