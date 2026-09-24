@@ -104,8 +104,8 @@ export const LANDING_CSS = `
   }
   @media (hover: hover) and (pointer: fine) {
     .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
-      .floor-block > .floor-label > *,
-      .floor-block .area-head > *,
+      .floor-block > .floor-label > :not(.sticky-bg),
+      .floor-block .area-head > :not(.sticky-bg),
       .area-empty,
       .var-row,
       .theme-row,
@@ -115,8 +115,8 @@ export const LANDING_CSS = `
       opacity: 0.38;
     }
     .area-rail:hover .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
-      .floor-block > .floor-label > *,
-      .floor-block .area-head > *,
+      .floor-block > .floor-label > :not(.sticky-bg),
+      .floor-block .area-head > :not(.sticky-bg),
       .area-empty,
       .var-row,
       .theme-row,
@@ -253,7 +253,8 @@ export const LANDING_CSS = `
     margin: 0;
     padding: 0 8px 0 12px;
     border: 0;
-    background: var(--primary-background-color);
+    background: none;
+    container-type: scroll-state;
     color: var(--secondary-text-color);
     cursor: pointer;
     text-align: left;
@@ -277,20 +278,50 @@ export const LANDING_CSS = `
     gap: 8px;
     margin: 0 4px 8px;
   }
+  /* 8px under the floor title scrolls away, so a stuck area sits flush against it. */
   .floor-areas {
-    padding: 0 8px 0 12px;
+    padding: 8px 8px 0 12px;
   }
   .floor-block .area-head {
     position: sticky;
-    top: 40px;
+    top: 32px;
     z-index: 3;
-    margin: 8px 0;
+    margin: 0 -8px 8px -12px;
+    width: calc(100% + 20px);
     padding: 0 8px 0 12px;
-    background: linear-gradient(
-      to bottom,
-      var(--primary-background-color) 50%,
-      transparent 100%
-    );
+    box-sizing: border-box;
+    background: none;
+    container-type: scroll-state;
+  }
+  .library-block > .area-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: 0 -8px 8px -12px;
+    width: calc(100% + 20px);
+    padding: 4px 8px 4px 12px;
+    box-sizing: border-box;
+    background: none;
+    container-type: scroll-state;
+  }
+  .sticky-bg {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  @container scroll-state(stuck: top) {
+    .sticky-bg-floor,
+    .sticky-bg-library {
+      background: var(--primary-background-color);
+    }
+    .sticky-bg-area {
+      background: linear-gradient(
+        to bottom,
+        var(--primary-background-color) 50%,
+        transparent 100%
+      );
+    }
   }
   .area-head h2 {
     font-size: 16px;
@@ -806,7 +837,19 @@ function makeStageCol() {
   return { stage, bg, scroll };
 }
 
+function stickyBg(kind) {
+  const bg = document.createElement("span");
+  bg.className = `sticky-bg sticky-bg-${kind}`;
+  bg.setAttribute("aria-hidden", "true");
+  return bg;
+}
+
 function sceneCoverUrl(panel) {
+  const builtinFor = (builtin) =>
+    builtin && galleryPalette(builtin) ? galleryCoverUrl(builtin) : "";
+  if (panel._view === "palette") {
+    return builtinFor(panel._variableDraft?.builtin_id);
+  }
   if (panel._view !== "edit") {
     return "";
   }
@@ -835,7 +878,7 @@ function renderFloorBlock(panel, floor, byArea) {
   const name = document.createElement("span");
   name.textContent =
     floor.name || panel._t("frontend.common.other_areas", "Other areas");
-  toggle.append(chevron, name);
+  toggle.append(stickyBg("floor"), chevron, name);
   const areas = document.createElement("div");
   areas.className = "floor-areas";
   areas.hidden = Boolean(collapsed);
@@ -869,6 +912,7 @@ function renderAreaBlock(panel, area, scenes) {
     panel._t("frontend.actions.add_scene", "Add scene")
   );
   head.append(
+    stickyBg("area"),
     title,
     panel._areaCreateDropdown(add, { areaId: area.id, areaName: area.name })
   );
@@ -1143,8 +1187,7 @@ function renderLibrary(panel, { compact } = {}) {
     ev.stopPropagation();
     panel._openCreateVariableDialog();
   });
-  varHead.append(varLabel, addVar);
-  wrap.appendChild(varHead);
+  varHead.append(stickyBg("library"), varLabel, addVar);
 
   const varRow = document.createElement("div");
   varRow.className = "var-row";
@@ -1165,7 +1208,7 @@ function renderLibrary(panel, { compact } = {}) {
     chip.addEventListener("click", () => panel._openVariableEditor(variable));
     varRow.appendChild(chip);
   }
-  wrap.appendChild(varRow);
+  wrap.appendChild(libraryBlock(varHead, varRow));
 
   const palHead = document.createElement("div");
   palHead.className = "area-head";
@@ -1180,8 +1223,7 @@ function renderLibrary(panel, { compact } = {}) {
     ev.stopPropagation();
     panel._openCreatePaletteDialog();
   });
-  palHead.append(palLabel, addPal);
-  wrap.appendChild(palHead);
+  palHead.append(stickyBg("library"), palLabel, addPal);
 
   const palRow = document.createElement("div");
   palRow.className = "var-row";
@@ -1192,7 +1234,7 @@ function renderLibrary(panel, { compact } = {}) {
     });
     palRow.appendChild(chip);
   }
-  wrap.appendChild(palRow);
+  wrap.appendChild(libraryBlock(palHead, palRow));
 
   const themeHead = document.createElement("div");
   themeHead.className = "area-head";
@@ -1207,8 +1249,7 @@ function renderLibrary(panel, { compact } = {}) {
     ev.stopPropagation();
     panel._openCreateThemeDialog();
   });
-  themeHead.append(themeLabel, addTheme);
-  wrap.appendChild(themeHead);
+  themeHead.append(stickyBg("library"), themeLabel, addTheme);
 
   const themeRow = document.createElement("div");
   themeRow.className = "theme-row";
@@ -1230,8 +1271,15 @@ function renderLibrary(panel, { compact } = {}) {
     chip.addEventListener("click", () => panel._openThemeEditor(theme));
     themeRow.appendChild(chip);
   }
-  wrap.appendChild(themeRow);
+  wrap.appendChild(libraryBlock(themeHead, themeRow));
   return wrap;
+}
+
+function libraryBlock(head, body) {
+  const block = document.createElement("div");
+  block.className = "library-block";
+  block.append(head, body);
+  return block;
 }
 
 export function renderSceneUsed(panel) {

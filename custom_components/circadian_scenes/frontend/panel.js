@@ -6565,9 +6565,12 @@ class CircadianScenesPanel extends HTMLElement {
     const split = !this._narrow;
     this._contentEl.classList.toggle("workspace-split", split);
     this._parkSunPath();
+    const isPalette = this._view === "palette";
+    const working = this._variableDraft || this._variableWorkingCopy(null);
+    working.kind = isPalette ? "palette" : "color";
+    this._variableDraft = working;
     const page = renderLanding(this, { includeStage: true });
     const stage = page.querySelector(".stage-col");
-    const isPalette = this._view === "palette";
     const host = document.createElement("div");
     host.className = isPalette ? "simple-editor-host" : "library-editor";
     if (this._error) {
@@ -6576,9 +6579,6 @@ class CircadianScenesPanel extends HTMLElement {
       error.textContent = this._error;
       host.appendChild(error);
     }
-    const working = this._variableDraft || this._variableWorkingCopy(null);
-    working.kind = isPalette ? "palette" : "color";
-    this._variableDraft = working;
     if (isPalette) {
       if (this._narrow) {
         this._contentEl.classList.remove("workspace-split");
