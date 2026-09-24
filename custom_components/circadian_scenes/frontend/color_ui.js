@@ -2688,6 +2688,8 @@ function createSceneColorWheel({
     typeof getAssignmentSeed === "function" ? Number(getAssignmentSeed()) || 0 : 0;
 
   let diskFocus = "color";
+  let diskFocusHold = false;
+  let diskPress = null;
 
   const onPaletteDisk = (draft, caps) =>
     lightCanUsePalette(caps, paletteForDraft(draft), paletteCatalog());
@@ -2736,12 +2738,14 @@ function createSceneColorWheel({
     }
     // Base palette stays up when any light can use it, even if none is on it yet.
     const showPalette = Boolean(palette) && anyCanPalette;
-    if (activeMode === "palette" || activeMode === "color") {
-      // Focus follows the active light after the pin is released. Updating it
-      // while the pointer is down would restack the disks mid-drag.
-      if (!drag || !drag.moved) {
-        diskFocus = activeMode;
-      }
+    if (
+      !diskFocusHold &&
+      (activeMode === "palette" || activeMode === "color") &&
+      (!drag || !drag.moved)
+    ) {
+      // Focus follows the active light after the pin is released. A click on
+      // a disk holds focus there until the next pin drop.
+      diskFocus = activeMode;
     }
     const focus = showPalette && showColor ? diskFocus : showPalette ? "palette" : "color";
     return focusedDiskGeom(radius, {
@@ -4515,6 +4519,10 @@ function createSceneColorWheel({
         detached.add(id);
       }
       lockUiMode(drag.mode);
+      if (drag.mode === "palette" || drag.mode === "color") {
+        diskFocus = drag.mode;
+        diskFocusHold = false;
+      }
     }
     const releasedMode = drag.mode;
     drag = null;
@@ -4597,10 +4605,59 @@ function createSceneColorWheel({
       }
       return;
     }
+    const geom = currentGeom();
+    const hit = regionAt(pt.x, pt.y, geom, radius);
+    if (hit === "color" || hit === "palette") {
+      ev.preventDefault();
+      const pointerId = ev.pointerId;
+      const startX = ev.clientX;
+      const startY = ev.clientY;
+      const onUp = (up) => {
+        if (up.pointerId !== pointerId) {
+          return;
+        }
+        clearDiskPress();
+        if (Math.hypot(up.clientX - startX, up.clientY - startY) >= PIN_DRAG_THRESHOLD_PX) {
+          return;
+        }
+        diskFocus = hit;
+        diskFocusHold = true;
+        sync();
+      };
+      const onMove = (mv) => {
+        if (mv.pointerId !== pointerId || !moveOnEmptyDisk) {
+          return;
+        }
+        if (Math.hypot(mv.clientX - startX, mv.clientY - startY) < PIN_DRAG_THRESHOLD_PX) {
+          return;
+        }
+        clearDiskPress();
+        beginEmptyDrag(ev, pt, radius);
+      };
+      diskPress = { onMove, onUp };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+      return;
+    }
     if (!moveOnEmptyDisk) {
       onSelect?.(null);
       return;
     }
+    beginEmptyDrag(ev, pt, radius);
+  });
+
+  const clearDiskPress = () => {
+    if (!diskPress) {
+      return;
+    }
+    window.removeEventListener("pointermove", diskPress.onMove);
+    window.removeEventListener("pointerup", diskPress.onUp);
+    window.removeEventListener("pointercancel", diskPress.onUp);
+    diskPress = null;
+  };
+
+  const beginEmptyDrag = (ev, pt, radius) => {
     const { scenes, activeId } = getState();
     const item = scenes.find((row) => row.id === activeId);
     if (!item) {
@@ -4643,7 +4700,7 @@ function createSceneColorWheel({
     layoutLayers(currentGeom());
     syncPath(currentGeom(), radius);
     emitChange({ dragging: true, fromPalette: showingPalette() });
-  });
+  };
 
   const setMode = (next, { convertDraft = false } = {}) => {
     if (next === "palette") {
@@ -4745,6 +4802,7 @@ function createSceneColorWheel({
       window.removeEventListener("pointercancel", modifyPress.onUp);
       modifyPress = null;
     }
+    clearDiskPress();
     if (glow.parentElement !== canvasWrap) {
       canvasWrap.insertBefore(glow, canvasWrap.firstChild);
     }

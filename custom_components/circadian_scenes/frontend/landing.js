@@ -16,6 +16,15 @@ export const LANDING_CSS = `
     min-height: 0;
     gap: 0;
     overflow: hidden;
+    position: relative;
+  }
+  .scene-cover {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    pointer-events: none;
   }
   .area-rail {
     width: ${AREA_RAIL_PX}px;
@@ -697,6 +706,13 @@ function iconButton(iconName, label) {
 export function renderLanding(panel, { includeStage = true } = {}) {
   const page = document.createElement("div");
   page.className = "workspace";
+  const coverUrl = sceneCoverUrl(panel);
+  if (coverUrl) {
+    const cover = document.createElement("div");
+    cover.className = "scene-cover";
+    cover.style.backgroundImage = `url("${coverUrl}")`;
+    page.appendChild(cover);
+  }
 
   const rail = document.createElement("div");
   rail.className = "area-rail";
@@ -789,6 +805,22 @@ function makeStageCol() {
   scroll.className = "stage-scroll";
   stage.append(bg, scroll);
   return { stage, bg, scroll };
+}
+
+function sceneCoverUrl(panel) {
+  if (panel._view !== "edit") {
+    return "";
+  }
+  const paletteId = panel._formData?.palette_id;
+  if (!paletteId) {
+    return "";
+  }
+  const variable = (panel._variables || []).find((item) => item.id === paletteId);
+  const builtin = variable?.builtin_id;
+  if (!builtin || !galleryPalette(builtin)) {
+    return "";
+  }
+  return galleryCoverUrl(builtin);
 }
 
 function renderFloorBlock(panel, floor, byArea) {
