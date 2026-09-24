@@ -336,6 +336,32 @@ test("an outer kelvin drag stays on the track and resists the color disk", () =>
   assert.ok(Math.abs(three.y - radius) < 1.5);
 });
 
+test("an overlapped kelvin track reaches both temperature ends", () => {
+  const radius = 200;
+  const inner = 162;
+  const outer = 200;
+  const mid = (inner + outer) / 2;
+  const ends = [
+    { y: radius - outer, kelvin: 2000 },
+    { y: radius + outer, kelvin: 6535 },
+  ];
+  for (const end of ends) {
+    const pin = kelvinTrackDragPoint({
+      x: radius,
+      y: end.y,
+      radius,
+      inner,
+      outer,
+      colorLive: false,
+      tempMin: 2000,
+      tempMax: 6535,
+      canColor: false,
+    });
+    assert.equal(pin.kelvin, end.kelvin);
+    assert.ok(Math.abs(Math.hypot(pin.x - radius, pin.y - radius) - mid) < 1.5);
+  }
+});
+
 test("a drag fades a disk none of the dragged lights can use", () => {
   const caps = {
     a: { hasColor: true, hasTemp: false, canPalette: true },

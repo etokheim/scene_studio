@@ -1358,13 +1358,28 @@ function hueColorAt(x, y, radius) {
   return { rgb: hsv2rgb(hue, saturation, value), hsv: [hue, saturation, value] };
 }
 
-function hueTempAt(x, y, radius, tempMin, tempMax) {
+function kelvinTrackSpan(inner, outer) {
+  // An overlapped kelvin disk keeps the pin on the ring centerline, inset from
+  // the rim. Map the full temperature range onto that track. A full disk still
+  // uses its own edge.
+  if (inner > 0 && outer > inner + 1) {
+    return (inner + outer) / 2;
+  }
+  return outer;
+}
+
+function hueTempAt(x, y, radius, tempMin, tempMax, span = radius) {
   const [r] = xy2polar(x, y);
   if (r - 2 > radius) {
     return null;
   }
-  const rowLength = 2 * radius;
-  const n = (y + radius) / rowLength;
+  const reach = span > 0 ? span : radius;
+  let n = (y + reach) / (2 * reach);
+  if (n < 0) {
+    n = 0;
+  } else if (n > 1) {
+    n = 1;
+  }
   const kelvin = Math.round(hueCurveScale(n, tempMin, tempMax));
   return { rgb: hueTempToRgb(kelvin), kelvin };
 }
@@ -1376,15 +1391,16 @@ function coordinatesForColor(hue, saturation, radius) {
   return { x: Math.round(x), y: Math.round(y) };
 }
 
-function coordinatesForTemp(kelvin, radius, tempMin, tempMax) {
+function coordinatesForTemp(kelvin, radius, tempMin, tempMax, span = radius) {
   let k = kelvin;
   if (k < tempMin) {
     k = tempMin;
   } else if (k > tempMax) {
     k = tempMax;
   }
+  const reach = span > 0 ? span : radius;
   const n = inverseHueCurveScale(k, tempMin, tempMax);
-  const y = Math.round(n * 2 * radius - radius);
+  const y = Math.round(n * 2 * reach - reach);
   const maxX = Math.ceil(Math.sqrt(Math.max(0, radius * radius - y * y)));
   return { x: 0, y, maxX };
 }
@@ -1577,7 +1593,8 @@ function placeTempInAnnulus(
   side = 1,
   anchorX = null
 ) {
-  const coords = coordinatesForTemp(kelvin, outer, tempMin, tempMax);
+  const span = kelvinTrackSpan(inner, outer);
+  const coords = coordinatesForTemp(kelvin, outer, tempMin, tempMax, span);
   if (!(inner > 0)) {
     // A full kelvin disk only encodes temperature in Y. Keep the drop's X
     // instead of snapping every pin onto the vertical center.
@@ -1597,7 +1614,8 @@ function placeTempInAnnulus(
   // recreated. A refresh has no remembered side and uses the right half.
   const mid = (inner + outer) / 2;
   let y = coords.y;
-  const maxY = Math.max(0, mid - 0.5);
+  // The track poles are the temperature ends. Do not pull them inward.
+  const maxY = Math.max(0, mid);
   y = Math.max(-maxY, Math.min(maxY, y));
   const sign = side < 0 ? -1 : 1;
   const x = sign * Math.sqrt(Math.max(0, mid * mid - y * y));
@@ -1647,7 +1665,7 @@ function kelvinTrackDragPoint({
     px = (relX / dist) * mid;
     py = (relY / dist) * mid;
   }
-  const sample = hueTempAt(px, py, outer, tempMin, tempMax);
+  const sample = hueTempAt(px, py, outer, tempMin, tempMax, mid);
   if (!sample) {
     return null;
   }
@@ -1708,10 +1726,11 @@ function annulusMask(innerFrac, outerFrac) {
   return `radial-gradient(farthest-side, transparent ${inner}%, #000 ${inner}%, #000 ${outer}%, transparent ${outer}%)`;
 }
 
-function drawHueWheelImage(mode, tempMin, tempMax) {
+function drawHueWheelImage(mode, tempMin, tempMax, spanFrac = 1) {
+  const frac = mode === "temp" && spanFrac > 0 ? spanFrac : 1;
   const key =
     mode === "temp"
-      ? `temp:${HUE_WHEEL_RENDER}:${tempMin}:${tempMax}`
+      ? `temp:${HUE_WHEEL_RENDER}:${tempMin}:${tempMax}:${frac}`
       : `color:${HUE_WHEEL_RENDER}`;
   const cached = _hueWheelImageCache.get(key);
   if (cached) {
@@ -1722,6 +1741,7 @@ function drawHueWheelImage(mode, tempMin, tempMax) {
   canvas.height = HUE_WHEEL_RENDER;
   const ctx = canvas.getContext("2d");
   const radius = HUE_WHEEL_RENDER / 2;
+  const span = radius * frac;
   const image = ctx.createImageData(HUE_WHEEL_RENDER, HUE_WHEEL_RENDER);
   const data = image.data;
   for (let x = -radius; x < radius; x++) {
@@ -1729,7 +1749,7 @@ function drawHueWheelImage(mode, tempMin, tempMax) {
       const sample =
         mode === "color"
           ? hueColorAt(x, y, radius)
-          : hueTempAt(x, y, radius, tempMin, tempMax);
+          : hueTempAt(x, y, radius, tempMin, tempMax, span);
       if (!sample) {
         continue;
       }
@@ -2723,7 +2743,7 @@ function createSceneColorWheel({
     }
   };
 
-  const paintGlow = (mode) => {
+  const paintGlow = (mode, spanFrac) => {
     if (mode === "palette") {
       const variable = wheelPalette();
       if (variable) {
@@ -2733,7 +2753,12 @@ function createSceneColorWheel({
     }
     drawImageTo(
       glow,
-      drawHueWheelImage(mode === "temp" ? "temp" : "color", tempMin, tempMax)
+      drawHueWheelImage(
+        mode === "temp" ? "temp" : "color",
+        tempMin,
+        tempMax,
+        mode === "temp" ? spanFrac : 1
+      )
     );
   };
 
@@ -2789,8 +2814,13 @@ function createSceneColorWheel({
     const glowMode =
       ["temp", "palette", "color"].find((name) => geom.role?.[name] === "back") ||
       geom.front;
+    const tempSpan = kelvinTrackSpan(geom.temp.inner, geom.temp.outer);
+    const spanFrac =
+      geom.temp.outer > 1
+        ? Math.round((tempSpan / geom.temp.outer) * 10000) / 10000
+        : 1;
     const paletteId = wheelPalette()?.id || "";
-    const key = `${geom.front}|${geom.color.outer}|${geom.temp.outer}|${geom.palette?.outer}|${glowMode}|${paletteId}`;
+    const key = `${geom.front}|${geom.color.outer}|${geom.temp.outer}|${geom.palette?.outer}|${glowMode}|${paletteId}|${spanFrac}`;
     const stacked =
       [geom.color, geom.temp, geom.palette].filter((band) => bandLive(band)).length > 1;
     canvasWrap.classList.toggle("is-stacked", stacked);
@@ -2812,7 +2842,11 @@ function createSceneColorWheel({
     }
     if (key !== lastGeomKey) {
       lastGeomKey = key;
-      paintGlow(glowMode);
+      paintGlow(glowMode, spanFrac);
+      if (hasTemp && bandLive(geom.temp)) {
+        drawImageTo(bgTemp, drawHueWheelImage("temp", tempMin, tempMax, spanFrac));
+        painted.temp = true;
+      }
     }
     const dragging = Boolean(drag?.moved);
     const palette = wheelPalette();
@@ -3170,7 +3204,14 @@ function createSceneColorWheel({
         applyColorToDraft(draft, sample.rgb, sample.hsv);
       }
     } else {
-      const sample = hueTempAt(cx, cy, band.outer, tempMin, tempMax);
+      const sample = hueTempAt(
+        cx,
+        cy,
+        band.outer,
+        tempMin,
+        tempMax,
+        kelvinTrackSpan(band.inner, band.outer)
+      );
       if (sample) {
         applyTempToDraft(draft, sample.kelvin);
         const linked = paletteForDraft(draft);
