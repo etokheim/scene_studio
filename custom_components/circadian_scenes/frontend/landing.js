@@ -4,6 +4,7 @@ import { createSimpleCardMesh } from "./card_mesh.js";
 import { swatchRgb, variableSwatchCss } from "./color_ui.js";
 import { galleryCoverUrl, galleryPalette } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, resolveSlot, variableIsPalette } from "./palette.js";
+import { sceneLibraryUses } from "./scene_used.js";
 
 const AREA_RAIL_PX = 340;
 
@@ -23,16 +24,16 @@ export const LANDING_CSS = `
     min-height: 0;
     height: 100%;
     border-right: 1px solid var(--divider-color);
-    padding: 12px 8px 24px 12px;
+    padding: 0;
     box-sizing: border-box;
     /* Sit above dial horizon/vignette; frost so that wash still reads through. */
     position: relative;
     z-index: 8;
     isolation: isolate;
-    overflow-x: hidden;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
     background: color-mix(
       in srgb,
       var(--primary-background-color) 58%,
@@ -63,8 +64,42 @@ export const LANDING_CSS = `
   }
   /* Selected scene stays put. The rest of the column fades until the pointer
      is over the column, so the open scene is easy to find. */
+  .area-rail-tabs {
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 8px 12px 0;
+  }
+  .area-rail-tab {
+    appearance: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--secondary-text-color);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 10px 10px;
+    cursor: pointer;
+  }
+  .area-rail-tab[aria-selected="true"] {
+    color: var(--primary-text-color);
+    border-bottom-color: var(--primary-color);
+  }
+  .area-rail-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 4px 8px 24px 12px;
+  }
+  .area-rail-body[hidden] {
+    display: none;
+  }
   @media (hover: hover) and (pointer: fine) {
-    .area-rail:has(.scene-card.selected):not(:hover) :is(
+    .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
       .floor-label,
       .area-head,
       .area-empty,
@@ -75,6 +110,62 @@ export const LANDING_CSS = `
     ) {
       opacity: 0.38;
     }
+    .area-rail:hover .area-rail-body :is(
+      .floor-label,
+      .area-head,
+      .area-empty,
+      .var-row,
+      .theme-row,
+      .library-hint,
+      .scene-card:not(.selected)
+    ) {
+      opacity: 1;
+    }
+  }
+  .scene-used {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    flex: 1 0 100%;
+    min-width: 0;
+    padding: 0 0 4px;
+  }
+  .simple-editor > .scene-used {
+    padding: 12px 16px 0;
+  }
+  .scene-used-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 2px 2px;
+    border: 0;
+    background: transparent;
+    color: var(--primary-text-color);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    max-width: 100%;
+  }
+  .scene-used-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .scene-used-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  }
+  .scene-used-swatch.cover {
+    width: 28px;
+    height: 18px;
+    border-radius: 4px;
+    object-fit: cover;
   }
   .stage-col {
     flex: 1 1 auto;
@@ -550,7 +641,34 @@ export function renderLanding(panel, { includeStage = true } = {}) {
 
   const rail = document.createElement("div");
   rail.className = "area-rail";
-  rail.appendChild(renderLibrary(panel, { compact: true }));
+  const tabs = document.createElement("div");
+  tabs.className = "area-rail-tabs";
+  tabs.setAttribute("role", "tablist");
+  const tab = panel._railTab === "library" ? "library" : "scenes";
+  for (const [id, label] of [
+    ["scenes", panel._t("frontend.library.tab_scenes", "Scenes")],
+    ["library", panel._t("frontend.library.tab_library", "Library")],
+  ]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "area-rail-tab";
+    button.dataset.tab = id;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", id === tab ? "true" : "false");
+    button.textContent = label;
+    button.addEventListener("click", () => panel._setRailTab(id));
+    tabs.appendChild(button);
+  }
+  const scenesBody = document.createElement("div");
+  scenesBody.className = "area-rail-body";
+  scenesBody.dataset.tab = "scenes";
+  scenesBody.hidden = tab !== "scenes";
+  const libraryBody = document.createElement("div");
+  libraryBody.className = "area-rail-body";
+  libraryBody.dataset.tab = "library";
+  libraryBody.hidden = tab !== "library";
+  libraryBody.appendChild(renderLibrary(panel, { compact: true }));
+  rail.append(tabs, scenesBody, libraryBody);
 
   const floors = panel._floors || [];
   const items = panel._items || [];
@@ -570,7 +688,7 @@ export function renderLanding(panel, { includeStage = true } = {}) {
       "frontend.empty.no_areas",
       "No Home Assistant areas yet. Add floors and areas in Settings, then come back."
     );
-    rail.appendChild(empty);
+    scenesBody.appendChild(empty);
   }
 
   for (const floor of floors) {
@@ -579,20 +697,15 @@ export function renderLanding(panel, { includeStage = true } = {}) {
     label.textContent =
       floor.name ||
       panel._t("frontend.common.other_areas", "Other areas");
-    rail.appendChild(label);
+    scenesBody.appendChild(label);
     for (const area of floor.areas || []) {
-      rail.appendChild(renderAreaBlock(panel, area, byArea.get(area.id) || []));
+      scenesBody.appendChild(
+        renderAreaBlock(panel, area, byArea.get(area.id) || [])
+      );
     }
   }
 
   if (panel._narrow) {
-    if (panel._view === "variables") {
-      const library = document.createElement("div");
-      library.className = "library-col";
-      library.appendChild(renderLibrary(panel, { compact: false }));
-      page.appendChild(library);
-      return page;
-    }
     page.appendChild(rail);
     return page;
   }
@@ -837,6 +950,7 @@ export function createPaletteChip(palette, catalog, { selected = false, onClick 
   const chip = document.createElement("button");
   chip.type = "button";
   chip.className = "var-chip";
+  chip.dataset.itemId = palette?.id || "";
   if (selected) {
     chip.classList.add("selected");
   }
@@ -923,6 +1037,7 @@ function renderLibrary(panel, { compact } = {}) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "var-chip";
+    chip.dataset.itemId = variable.id;
     if (panel._view === "variable" && panel._variableId === variable.id) {
       chip.classList.add("selected");
     }
@@ -986,6 +1101,7 @@ function renderLibrary(panel, { compact } = {}) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "theme-chip";
+    chip.dataset.itemId = theme.id;
     chip.dataset.themeId = theme.id;
     if (panel._view === "theme" && panel._themeId === theme.id) {
       chip.classList.add("selected");
@@ -1001,4 +1117,66 @@ function renderLibrary(panel, { compact } = {}) {
   }
   wrap.appendChild(themeRow);
   return wrap;
+}
+
+export function renderSceneUsed(panel) {
+  if (panel._view !== "edit" || !panel._formData) {
+    return null;
+  }
+  const uses = sceneLibraryUses({
+    scene: panel._formData,
+    theme: panel._themeDraft,
+    themes: panel._themes,
+    variables: panel._variables,
+  });
+  if (!uses.length) {
+    return null;
+  }
+  const row = document.createElement("div");
+  row.className = "scene-used";
+  for (const item of uses) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "scene-used-chip";
+    const swatch = document.createElement(item.kind === "palette" ? "span" : "span");
+    swatch.className = "scene-used-swatch";
+    const name = document.createElement("span");
+    if (item.kind === "theme") {
+      const theme = (panel._themes || []).find((entry) => entry.id === item.id);
+      name.textContent = theme?.name || item.id;
+      swatch.style.background = theme
+        ? themeConic(theme, panel._variables || [])
+        : "";
+      button.addEventListener("click", () => panel._go(`theme/${item.id}`));
+    } else {
+      const variable = (panel._variables || []).find((entry) => entry.id === item.id);
+      name.textContent = variable?.name || item.id;
+      const cover = galleryPalette(variable?.builtin_id);
+      if (cover) {
+        const photo = document.createElement("img");
+        photo.className = "scene-used-swatch cover";
+        photo.alt = "";
+        photo.src = galleryCoverUrl(cover.id);
+        button.appendChild(photo);
+      } else if (variableIsPalette(variable)) {
+        swatch.style.background = variableSwatchCss(
+          { ...(variable?.slots?.[0]?.color || {}), brightness: variable?.slots?.[0]?.brightness },
+          panel._variables
+        );
+        button.appendChild(swatch);
+      } else {
+        swatch.style.background = variableSwatchCss(variable, panel._variables);
+        button.appendChild(swatch);
+      }
+      const hash = item.kind === "palette" ? "palette" : "variable";
+      button.addEventListener("click", () => panel._go(`${hash}/${item.id}`));
+    }
+    if (!button.querySelector(".scene-used-swatch")) {
+      button.appendChild(swatch);
+    }
+    button.appendChild(name);
+    button.setAttribute("aria-label", name.textContent);
+    row.appendChild(button);
+  }
+  return row;
 }

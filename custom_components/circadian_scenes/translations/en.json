@@ -37,6 +37,8 @@
       "hint": "Changing a variable or theme updates scenes that still use it. Lights change on the next activate or automatic update — not instantly.",
       "variables": "Variables",
       "palettes": "Palettes",
+      "tab_scenes": "Scenes",
+      "tab_library": "Library",
       "themes": "Circadian themes",
       "variable_edit_hint": "Color and brightness are shared by every theme or light that still uses this variable.",
       "palette_edit_hint": "A palette is five colors. Lights that use it pick a slot; changing the palette updates those lights the next time a scene runs.",

@@ -60,6 +60,7 @@ import {
   LANDING_CSS,
   createPaletteChip,
   renderLanding,
+  renderSceneUsed,
   applyRampBackground,
   previewRampsForTheme,
   themeConic,
@@ -4332,6 +4333,7 @@ class CircadianScenesPanel extends HTMLElement {
 
   async _syncHashOnce() {
     const hash = (window.location.hash || "#").replace(/^#/, "");
+    this._noteRailTabForHash(hash);
     const current = this._currentHash();
     if (
       hash !== current &&
@@ -5185,7 +5187,7 @@ class CircadianScenesPanel extends HTMLElement {
       const hostH = this.clientHeight || window.innerHeight;
       const available = Math.max(120, Math.floor(hostH - (contentTop - hostTop)));
       workspace.style.height = `${available}px`;
-      this._bindAreaRailScroll(workspace.querySelector(".area-rail"));
+      this._bindAreaRailScroll(this._visibleRailBody(workspace));
       this._syncStageFaceMax();
       this._bindStageScrollLayout(workspace.querySelector(".stage-scroll"));
     } else if (workspace) {
@@ -5193,21 +5195,30 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._syncEditorChrome();
     requestAnimationFrame(() => {
-      this._restoreAreaRailScroll(workspace?.querySelector(".area-rail"));
+      this._restoreAreaRailScroll(this._visibleRailBody(workspace));
       this._syncStageFaceMax();
       this._layoutDialChromeFn?.();
     });
   }
 
+  _visibleRailBody(root) {
+    const scope = root || this._contentEl;
+    return scope?.querySelector(".area-rail-body:not([hidden])") || null;
+  }
+
   _captureAreaRailScroll() {
-    const rail = this._contentEl?.querySelector(".area-rail");
+    const rail = this._visibleRailBody();
     if (rail && !this._areaRailRestoring) {
-      this._areaRailScrollTop = rail.scrollTop;
+      const tab = rail.dataset.tab || "scenes";
+      this._railScrollTop = this._railScrollTop || {};
+      this._railScrollTop[tab] = rail.scrollTop;
     }
   }
 
-  _revealSelectedSceneInRail(rail) {
-    const card = rail.querySelector(".scene-card.selected");
+  _revealSelectedInRail(rail) {
+    const card = rail.querySelector(
+      ".scene-card.selected, .var-chip.selected, .theme-chip.selected"
+    );
     if (!card || rail.clientHeight < 40) {
       return false;
     }
@@ -5224,7 +5235,9 @@ class CircadianScenesPanel extends HTMLElement {
         Math.max(pad, (rail.clientHeight - cardRect.height) / 2);
       rail.scrollTop = Math.max(0, target);
     }
-    this._areaRailScrollTop = rail.scrollTop;
+    const tab = rail.dataset.tab || "scenes";
+    this._railScrollTop = this._railScrollTop || {};
+    this._railScrollTop[tab] = rail.scrollTop;
     this._areaRailDidReveal = true;
     return true;
   }
@@ -5233,13 +5246,17 @@ class CircadianScenesPanel extends HTMLElement {
     if (!rail) {
       return;
     }
+    const tab = rail.dataset.tab || "scenes";
     const apply = () => {
-      if (!this._areaRailUserScrolled) {
-        this._revealSelectedSceneInRail(rail);
+      if (this._areaRailForceReveal || !this._areaRailUserScrolled) {
+        if (this._revealSelectedInRail(rail)) {
+          this._areaRailForceReveal = false;
+        }
         return;
       }
-      if (this._areaRailScrollTop != null) {
-        rail.scrollTop = this._areaRailScrollTop;
+      const top = this._railScrollTop?.[tab];
+      if (top != null) {
+        rail.scrollTop = top;
       }
     };
     this._areaRailRestoring = true;
@@ -5269,11 +5286,45 @@ class CircadianScenesPanel extends HTMLElement {
         return;
       }
       this._areaRailUserScrolled = true;
-      this._areaRailScrollTop = rail.scrollTop;
+      const tab = rail.dataset.tab || "scenes";
+      this._railScrollTop = this._railScrollTop || {};
+      this._railScrollTop[tab] = rail.scrollTop;
     };
     this._areaRailBound = rail;
     rail.addEventListener("scroll", this._onAreaRailScroll, { passive: true });
     this._restoreAreaRailScroll(rail);
+  }
+
+  _setRailTab(tab) {
+    if (tab !== "library" && tab !== "scenes") {
+      return;
+    }
+    this._captureAreaRailScroll();
+    this._railTab = tab;
+    const rail = this._contentEl?.querySelector(".area-rail");
+    if (!rail) {
+      return;
+    }
+    for (const body of rail.querySelectorAll(".area-rail-body")) {
+      body.hidden = body.dataset.tab !== tab;
+    }
+    for (const button of rail.querySelectorAll(".area-rail-tab")) {
+      button.setAttribute(
+        "aria-selected",
+        button.dataset.tab === tab ? "true" : "false"
+      );
+    }
+    const body = rail.querySelector(`.area-rail-body[data-tab="${tab}"]`);
+    this._areaRailBound = null;
+    this._areaRailUserScrolled = false;
+    this._bindAreaRailScroll(body);
+  }
+
+  _noteRailTabForHash(hash) {
+    const library = /^(variable|palette|theme|variables)(\/|$)/.test(hash || "");
+    this._railTab = library ? "library" : "scenes";
+    this._areaRailForceReveal = true;
+    this._areaRailUserScrolled = false;
   }
 
   _mountWorkspacePage(page, { resetStageScroll = true } = {}) {
@@ -5281,7 +5332,7 @@ class CircadianScenesPanel extends HTMLElement {
     const overlay = this._outgoingStageLayer;
     overlay?.remove();
     this._contentEl.replaceChildren(page);
-    this._bindAreaRailScroll(page.querySelector(".area-rail"));
+    this._bindAreaRailScroll(this._visibleRailBody(page));
     if (resetStageScroll) {
       const scroll = page.querySelector(".stage-scroll");
       if (scroll) {
@@ -8248,6 +8299,7 @@ class CircadianScenesPanel extends HTMLElement {
   _saveSoon() {
     this._stampHistoryAfter();
     this._syncSaveFab();
+    this._syncSceneUsed();
     if (this._historyRestoring) {
       return;
     }
@@ -10760,6 +10812,7 @@ class CircadianScenesPanel extends HTMLElement {
       this._simpleMembers = lists.members;
       const glowHost = null;
       renderSimpleEditor(this, host, { glowHost });
+      this._syncSceneUsed();
       this._syncWorkspaceScrollport();
       this._playSimpleEnterIfNeeded(host);
       return;
@@ -14964,6 +15017,39 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockScrubRail.style.marginTop = "";
   }
 
+  _ensureHoverReadout() {
+    if (this._hoverReadout) {
+      return this._hoverReadout;
+    }
+    const readout = document.createElement("div");
+    readout.className = "sun-hover-readout";
+    readout.setAttribute("aria-live", "polite");
+    this._hoverReadout = readout;
+    return readout;
+  }
+
+  _syncSceneUsed() {
+    const strip = renderSceneUsed(this);
+    const simple = this.shadowRoot?.querySelector(".simple-editor");
+    const chrome = this._toolbarChrome;
+    const host = simple || (this._view === "edit" && this._formData?.kind !== "simple" ? chrome : null);
+    const previous = this.shadowRoot?.querySelector(".scene-used");
+    if (!host) {
+      previous?.remove();
+      return;
+    }
+    if (!strip) {
+      previous?.remove();
+      return;
+    }
+    if (previous && previous.parentNode === host) {
+      previous.replaceWith(strip);
+    } else {
+      previous?.remove();
+      host.prepend(strip);
+    }
+  }
+
   _drawSunPath() {
     if (this._view === "theme") {
       /* Theme editor uses the same dial as circadian scenes. */
@@ -14987,8 +15073,10 @@ class CircadianScenesPanel extends HTMLElement {
         }
       }
       this._syncEditorChrome();
+      this._ensureHoverReadout();
       this._syncYearScrubLayout();
       this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
+      this._syncSceneUsed();
       return;
     }
     const { events } = this._sunPath;
@@ -15022,8 +15110,10 @@ class CircadianScenesPanel extends HTMLElement {
       this._sunPathEl.appendChild(this._clockLegendEl);
     }
     this._syncEditorChrome();
+    this._ensureHoverReadout();
     this._syncYearScrubLayout();
     this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
+    this._syncSceneUsed();
     this._displayedSunPath = this._sunPath;
     this._restoreHeldTileScroll();
   }
