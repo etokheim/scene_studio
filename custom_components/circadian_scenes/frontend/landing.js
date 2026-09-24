@@ -294,26 +294,35 @@ export const LANDING_CSS = `
     display: none;
   }
   .area-block { margin-bottom: 18px; }
+  .scene-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
   .area-head {
     display: flex;
     align-items: center;
     gap: 8px;
     margin: 0 4px 8px;
   }
-  /* 8px under the floor title scrolls away, so a stuck area sits flush against it. */
+  /* No extra gap under the floor title. A stuck area still sits flush at top: 32px. */
   .floor-areas {
-    padding: 8px 8px 0 12px;
+    padding: 0 8px 0 12px;
   }
   .floor-block .area-head {
     position: sticky;
     top: 32px;
     z-index: 3;
-    margin: 0 -8px 8px -12px;
+    margin: 0 -8px 0 -12px;
     width: calc(100% + 20px);
-    padding: 0 8px 0 12px;
+    padding: 0 0 0 12px;
     box-sizing: border-box;
     background: none;
+    overflow: visible;
     container-type: scroll-state;
+  }
+  .floor-block .area-head .area-add {
+    margin-block: -8px;
   }
   .library-block > .area-head {
     position: sticky;
@@ -340,9 +349,9 @@ export const LANDING_CSS = `
   }
   @container scroll-state(stuck: top) {
     .sticky-bg-floor {
-      background: color-mix(in srgb, var(--primary-background-color) 80%, transparent);
+      background: color-mix(in srgb, var(--primary-background-color) 92%, transparent);
       opacity: 1;
-      transition: opacity 3500ms;
+      transition: opacity 350ms;
     }
     .sticky-bg-library {
       background: var(--primary-background-color);
@@ -350,11 +359,11 @@ export const LANDING_CSS = `
     .sticky-bg-area {
       background: linear-gradient(
         to bottom,
-        color-mix(in srgb, var(--primary-background-color) 80%, transparent) 50%,
+        color-mix(in srgb, var(--primary-background-color) 92%, transparent) 50%,
         transparent 100%
       );
       opacity: 1;
-      transition: opacity 3500ms;
+      transition: opacity 350ms;
     }
   }
   .area-head h2 {
@@ -396,11 +405,10 @@ export const LANDING_CSS = `
        stays behind every .scene-card (shared stacking, glow z-index 0). */
     overflow: visible;
     box-sizing: border-box;
-    padding: 4px 0;
   }
   .scene-card-slot .card-glow {
     position: absolute;
-    inset: 4px 0;
+    inset: 0;
     z-index: 0;
     width: auto;
     height: auto;
@@ -964,9 +972,12 @@ function renderAreaBlock(panel, area, scenes) {
     );
     return block;
   }
+  const cards = document.createElement("div");
+  cards.className = "scene-cards";
   for (const scene of scenes) {
-    block.appendChild(renderSceneCard(panel, scene));
+    cards.appendChild(renderSceneCard(panel, scene));
   }
+  block.appendChild(cards);
   return block;
 }
 

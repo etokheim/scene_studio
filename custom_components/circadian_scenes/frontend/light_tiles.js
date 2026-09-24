@@ -29,6 +29,7 @@ export const LIGHT_TILES_CSS = `
     gap: 18px;
     width: max-content;
     margin-inline: auto;
+    padding: 0 24px;
     flex: 0 0 auto;
     position: relative;
     --light-action-delay: 500ms;
