@@ -17,6 +17,7 @@ import {
   wheelStandIn,
   groupRingPoints,
   kelvinTrackDragPoint,
+  diskHop,
   placeTempInAnnulus,
 } from "../../custom_components/circadian_scenes/frontend/color_ui.js";
 
@@ -360,6 +361,38 @@ test("an overlapped kelvin track reaches both temperature ends", () => {
     assert.equal(pin.kelvin, end.kelvin);
     assert.ok(Math.abs(Math.hypot(pin.x - radius, pin.y - radius) - mid) < 1.5);
   }
+});
+
+test("a pin resists at every disk edge and hops one disk at a time", () => {
+  const geom = focusedDiskGeom(200, {
+    showTemp: true,
+    showColor: true,
+    showPalette: true,
+    focus: "color",
+    innerFrac: 0.81,
+  });
+  const hyst = 8;
+  const canUse = () => true;
+  const paletteOuter = geom.palette.outer;
+  assert.equal(diskHop(geom, "temp", paletteOuter - hyst + 1, hyst, canUse), "temp");
+  assert.equal(diskHop(geom, "temp", paletteOuter - hyst - 1, hyst, canUse), "palette");
+  const colorOuter = geom.color.outer;
+  assert.equal(diskHop(geom, "palette", colorOuter - hyst + 1, hyst, canUse), "palette");
+  assert.equal(diskHop(geom, "palette", colorOuter - hyst - 1, hyst, canUse), "color");
+  assert.equal(diskHop(geom, "color", colorOuter + hyst - 1, hyst, canUse), "color");
+  assert.equal(diskHop(geom, "color", colorOuter + hyst + 1, hyst, canUse), "palette");
+  assert.equal(
+    diskHop(geom, "palette", paletteOuter + hyst + 1, hyst, canUse),
+    "temp"
+  );
+  assert.equal(
+    diskHop(geom, "temp", colorOuter - hyst + 1, hyst, (name) => name !== "palette"),
+    "temp"
+  );
+  assert.equal(
+    diskHop(geom, "temp", colorOuter - hyst - 1, hyst, (name) => name !== "palette"),
+    "color"
+  );
 });
 
 test("a drag fades a disk none of the dragged lights can use", () => {

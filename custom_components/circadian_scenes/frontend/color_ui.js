@@ -1557,6 +1557,39 @@ function focusedDiskGeom(radius, { showTemp, showColor, showPalette, focus, inne
   return { kind: "stack", ...bands, front: frontName || order[order.length - 1], role };
 }
 
+function diskHop(geom, pinMode, r, hyst, canUse) {
+  // One step inward or outward. The pin stays on its disk until the pointer
+  // is past the shared edge by `hyst`, then it may hop to the next disk it
+  // can use. The wheel stack itself does not change here.
+  const names = ["palette", "color", "temp"].filter((name) => bandLive(geom[name]));
+  names.sort((a, b) => geom[a].outer - geom[b].outer);
+  const index = names.indexOf(pinMode);
+  if (index < 0) {
+    return pinMode;
+  }
+  let inward = null;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (canUse(names[i])) {
+      inward = names[i];
+      break;
+    }
+  }
+  let outward = null;
+  for (let i = index + 1; i < names.length; i += 1) {
+    if (canUse(names[i])) {
+      outward = names[i];
+      break;
+    }
+  }
+  if (inward && r < geom[inward].outer - hyst) {
+    return inward;
+  }
+  if (outward && r > geom[pinMode].outer + hyst && r <= geom[outward].outer + 2) {
+    return outward;
+  }
+  return pinMode;
+}
+
 function bandLive(band) {
   return band && band.outer > band.inner + 1;
 }
@@ -2704,7 +2737,11 @@ function createSceneColorWheel({
     // Base palette stays up when any light can use it, even if none is on it yet.
     const showPalette = Boolean(palette) && anyCanPalette;
     if (activeMode === "palette" || activeMode === "color") {
-      diskFocus = activeMode;
+      // Focus follows the active light after the pin is released. Updating it
+      // while the pointer is down would restack the disks mid-drag.
+      if (!drag || !drag.moved) {
+        diskFocus = activeMode;
+      }
     }
     const focus = showPalette && showColor ? diskFocus : showPalette ? "palette" : "color";
     return focusedDiskGeom(radius, {
@@ -3257,66 +3294,17 @@ function createSceneColorWheel({
     const caps = capsOf(item);
     const r = Math.hypot(x - radius, y - radius);
     const hyst = Math.max(6, radius * cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC) * 0.45);
-    if (pinMode === "palette" && bandLive(geom.palette) && r > geom.palette.outer + hyst) {
-      if (bandLive(geom.color) && r <= geom.color.outer + 2) {
-        return "color";
+    const palette = wheelPalette();
+    const catalog = paletteCatalog();
+    return diskHop(geom, pinMode, r, hyst, (name) => {
+      if (name === "palette") {
+        return lightCanUsePalette(caps, palette, catalog);
       }
-      if (caps.hasTemp && bandLive(geom.temp)) {
-        return "temp";
+      if (name === "color") {
+        return Boolean(caps.hasColor);
       }
-    }
-    if (
-      pinMode !== "palette" &&
-      bandLive(geom.palette) &&
-      lightCanUsePalette(caps, wheelPalette(), paletteCatalog())
-    ) {
-      const pal = geom.palette;
-      const inner = pal.inner || 0;
-      const inBand =
-        inner > 1 ? r >= inner + hyst && r <= pal.outer + 2 : r <= pal.outer - hyst;
-      if (inBand) {
-        return "palette";
-      }
-    }
-    if (pinMode === "color" && caps.hasTemp && bandLive(geom.temp)) {
-      const intoTemp =
-        r > geom.color.outer + hyst &&
-        r >= geom.temp.inner - hyst &&
-        r <= geom.temp.outer + 2;
-      if (intoTemp) {
-        return "temp";
-      }
-    }
-    if (pinMode === "temp" && caps.hasColor && bandLive(geom.color)) {
-      const intoColorDisk =
-        r < geom.temp.inner - hyst &&
-        r <= geom.color.outer + hyst &&
-        r >= geom.color.inner;
-      const intoColorPeek =
-        r > geom.temp.outer + hyst &&
-        r <= geom.color.outer + 2 &&
-        r >= geom.color.inner - 2;
-      if (intoColorDisk || intoColorPeek) {
-        return "color";
-      }
-    }
-    return pinMode;
-  };
-
-  // After a peek swap the pointer still sits on the new outer rim, which is
-  // the other wheel — require an interior visit before converting again.
-  const pointerInModeInterior = (r, geom, pinMode) => {
-    const band = pinMode === "palette" ? geom.palette : pinMode === "color" ? geom.color : geom.temp;
-    if (!bandLive(band)) {
-      return false;
-    }
-    const width = band.outer - band.inner;
-    const peek = Math.max(
-      4,
-      radiusPx() * cssFrac(stage, "--wheel-peek", WHEEL_PEEK_FRAC)
-    );
-    const pad = Math.min(width * 0.35, Math.max(8, peek * 0.5));
-    return r >= band.inner + pad && r <= band.outer - pad;
+      return Boolean(caps.hasTemp);
+    });
   };
 
   const convertDraftTo = (draft, next, caps) => {
@@ -3893,7 +3881,7 @@ function createSceneColorWheel({
       const pos = positionForDraft(
         scene.draft,
         markerMode,
-        geom,
+        nextGeom,
         radius,
         entityIdOf(scene)
       );
@@ -4280,44 +4268,41 @@ function createSceneColorWheel({
     if (!item) {
       return;
     }
-    const geom = currentGeom();
+    if (!drag.frozenGeom) {
+      drag.frozenGeom = currentGeom();
+    }
+    const geom = drag.frozenGeom;
     const pt = pointFromEvent(ev);
     const x = pt.x - drag.grabX;
     const y = pt.y - drag.grabY;
     const r = Math.hypot(x - radius, y - radius);
     let pinMode = drag.mode;
     let converted = false;
-    if (drag.mustEnterHome && pointerInModeInterior(r, geom, pinMode)) {
-      drag.mustEnterHome = false;
-    }
-    if (!drag.mustEnterHome && !showingPalette()) {
-      const nextMode = maybeConvertDrag(item, x, y, geom, radius, pinMode);
-      if (nextMode !== pinMode) {
-        converted = true;
-        pinMode = nextMode;
-        drag.mode = nextMode;
-        drag.mustEnterHome = true;
-        const { keep, drop } = splitCompatible(drag.ids, pinMode);
-        if (drop.length) {
-          drag.ids = keep;
-          for (const id of drop) {
-            detached.add(id);
-          }
-          emitChange({ dragging: true, deselected: drop, ids: keep });
+    const nextMode = maybeConvertDrag(item, x, y, geom, radius, pinMode);
+    if (nextMode !== pinMode) {
+      converted = true;
+      pinMode = nextMode;
+      drag.mode = nextMode;
+      const { keep, drop } = splitCompatible(drag.ids, pinMode);
+      if (drop.length) {
+        drag.ids = keep;
+        for (const id of drop) {
+          detached.add(id);
         }
-        if (pinMode === "palette") {
-          lockUiMode("palette");
-          const joinIds = drag.ids?.length ? drag.ids : [item.id];
-          for (const id of joinIds) {
-            const row = scenes.find((scene) => scene.id === id);
-            if (!row?.draft) {
-              continue;
-            }
-            const rowCaps = capsOf(row);
-            if (!onPaletteDisk(row.draft, rowCaps)) {
-              convertDraftTo(row.draft, "palette", rowCaps);
-            }
-          }
+        emitChange({ dragging: true, deselected: drop, ids: keep });
+      }
+      const joinIds = drag.ids?.length ? drag.ids : [item.id];
+      for (const id of joinIds) {
+        const row = scenes.find((scene) => scene.id === id);
+        if (!row?.draft) {
+          continue;
+        }
+        const rowCaps = capsOf(row);
+        const current = onPaletteDisk(row.draft, rowCaps)
+          ? "palette"
+          : draftWheelMode(row.draft, rowCaps.hasColor, rowCaps.hasTemp);
+        if (current !== pinMode) {
+          convertDraftTo(row.draft, pinMode, rowCaps);
         }
       }
     }
@@ -4401,15 +4386,16 @@ function createSceneColorWheel({
       } else if (row !== item) {
         applyAtBand(row.draft, x, y, radius, pinMode, band);
       }
-      delete row.draft.variable_ref;
-      delete row.draft.palette_t;
-      delete row.draft.palette_r;
+      if (pinMode !== "palette") {
+        delete row.draft.variable_ref;
+        delete row.draft.palette_t;
+        delete row.draft.palette_r;
+      }
       moved.add(id);
       placeDragPin(row);
     }
     showFloatReadout(item.draft, limited.x, limited.y, pinMode);
-    const nextGeom = currentGeom();
-    layoutLayers(nextGeom);
+    layoutLayers(geom);
     for (const scene of scenes) {
       if (moved.has(scene.id)) {
         continue;
@@ -4423,7 +4409,7 @@ function createSceneColorWheel({
       const pos = positionForDraft(
         scene.draft,
         otherMode,
-        nextGeom,
+        geom,
         radius,
         entityIdOf(scene)
       );
@@ -4431,7 +4417,7 @@ function createSceneColorWheel({
       other.icon.style.fill = pinForeground(pos.rgb);
       placeMarker(other, pos.x, pos.y, false);
     }
-    syncPath(nextGeom, radius);
+    syncPath(geom, radius);
     const sim = [];
     for (const scene of scenes) {
       const pin = markers.get(scene.id);
@@ -4531,7 +4517,9 @@ function createSceneColorWheel({
       for (const id of staySplit) {
         detached.add(id);
       }
+      lockUiMode(drag.mode);
     }
+    const releasedMode = drag.mode;
     drag = null;
     hideFloatReadout();
     window.removeEventListener("pointermove", onPointerMove);
@@ -4543,7 +4531,12 @@ function createSceneColorWheel({
         composed: true,
       })
     );
-    emitChange({ dragging: false, final: true, ids: finishedIds });
+    emitChange({
+      dragging: false,
+      final: true,
+      ids: finishedIds,
+      fromPalette: releasedMode === "palette",
+    });
     sync();
   };
 
@@ -4570,7 +4563,6 @@ function createSceneColorWheel({
       grabX,
       grabY,
       mode,
-      mustEnterHome: false,
       moved: false,
       startX: ev.clientX,
       startY: ev.clientY,
@@ -4890,6 +4882,7 @@ export {
   wheelPillModes,
   wheelStandIn,
   kelvinTrackDragPoint,
+  diskHop,
   detachedAfterDrag,
   pinPressAction,
   groupRingPoints,

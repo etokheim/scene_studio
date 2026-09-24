@@ -1,5 +1,13 @@
 # Decisions
 
+## Disk focus changes when the pin is released
+
+- **Date:** 2026-09-24
+- **Supersedes in part:** “Circadian editor uses one Huemane hue wheel per focused lamp” — a hop no longer restacks the disks while the pointer is down, and the next hop does not wait for an interior visit.
+- **Decision:** Crossing from one disk to the next resists by the same inset past the shared edge, including palette. The pin may hop during the drag. The disk stack and which disk is in front stay as they were until the pointer is released. On release, the disk under the pin takes focus and the others animate into the new stack.
+- **Why:** Restacking on the way across moved the edges under the pointer, so the resistance only existed for the first hop.
+- **Do not reverse without user ask.**
+
 ## Scene base palette is a corner split button, not a preset
 
 - **Date:** 2026-09-24
