@@ -235,12 +235,54 @@ export const LANDING_CSS = `
     color: var(--secondary-text-color);
     margin: 16px 4px 8px;
   }
+  /* Floor titles collapse their areas. The title sticks for the whole floor;
+     each area name sticks just under it until the next area pushes it away. */
+  .floor-block {
+    margin-top: 8px;
+  }
+  .floor-block > .floor-label {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    height: 36px;
+    margin: 0;
+    padding: 0 2px;
+    border: 0;
+    background: color-mix(in srgb, var(--primary-background-color) 88%, transparent);
+    color: var(--secondary-text-color);
+    cursor: pointer;
+    text-align: left;
+    box-sizing: border-box;
+  }
+  .floor-block > .floor-label ha-icon {
+    --mdc-icon-size: 18px;
+    flex: 0 0 auto;
+    transition: transform 160ms ease;
+  }
+  .floor-block > .floor-label[aria-expanded="false"] ha-icon {
+    transform: rotate(-90deg);
+  }
+  .floor-areas[hidden] {
+    display: none;
+  }
   .area-block { margin-bottom: 18px; }
   .area-head {
     display: flex;
     align-items: center;
     gap: 8px;
     margin: 0 4px 8px;
+  }
+  .floor-block .area-head {
+    position: sticky;
+    top: 36px;
+    z-index: 3;
+    margin: 0 0 8px;
+    padding: 4px 4px;
+    background: color-mix(in srgb, var(--primary-background-color) 88%, transparent);
   }
   .area-head h2 {
     font-size: 16px;
@@ -709,17 +751,7 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   }
 
   for (const floor of floors) {
-    const label = document.createElement("div");
-    label.className = "floor-label";
-    label.textContent =
-      floor.name ||
-      panel._t("frontend.common.other_areas", "Other areas");
-    scenesBody.appendChild(label);
-    for (const area of floor.areas || []) {
-      scenesBody.appendChild(
-        renderAreaBlock(panel, area, byArea.get(area.id) || [])
-      );
-    }
+    scenesBody.appendChild(renderFloorBlock(panel, floor, byArea));
   }
 
   if (panel._narrow) {
@@ -757,6 +789,41 @@ function makeStageCol() {
   scroll.className = "stage-scroll";
   stage.append(bg, scroll);
   return { stage, bg, scroll };
+}
+
+function renderFloorBlock(panel, floor, byArea) {
+  const block = document.createElement("div");
+  block.className = "floor-block";
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "floor-label";
+  const collapsed = panel._collapsedFloors?.has(floor.id);
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  const chevron = document.createElement("ha-icon");
+  chevron.setAttribute("icon", "mdi:chevron-down");
+  const name = document.createElement("span");
+  name.textContent =
+    floor.name || panel._t("frontend.common.other_areas", "Other areas");
+  toggle.append(chevron, name);
+  const areas = document.createElement("div");
+  areas.className = "floor-areas";
+  areas.hidden = Boolean(collapsed);
+  for (const area of floor.areas || []) {
+    areas.appendChild(renderAreaBlock(panel, area, byArea.get(area.id) || []));
+  }
+  toggle.addEventListener("click", () => {
+    const set = panel._collapsedFloors || (panel._collapsedFloors = new Set());
+    const next = !set.has(floor.id);
+    if (next) {
+      set.add(floor.id);
+    } else {
+      set.delete(floor.id);
+    }
+    toggle.setAttribute("aria-expanded", next ? "false" : "true");
+    areas.hidden = next;
+  });
+  block.append(toggle, areas);
+  return block;
 }
 
 function renderAreaBlock(panel, area, scenes) {

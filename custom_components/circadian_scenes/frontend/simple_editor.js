@@ -63,6 +63,9 @@ export const SIMPLE_EDITOR_CSS = `
     padding: 40px 0 16px;
     box-sizing: border-box;
     gap: 16px;
+    /* The tile strip's bleed padding hangs out of this box. Clip it so that
+       padding cannot scroll the stage before the disk hits its minimum. */
+    overflow: clip;
   }
   .simple-wheels {
     display: flex;

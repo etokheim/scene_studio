@@ -5525,8 +5525,22 @@ class CircadianScenesPanel extends HTMLElement {
     if (isDial && this._dateToolbar?.isConnected) {
       toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
     }
+    const used = box.querySelector(".sun-toolbar-chrome > .scene-used");
+    if (used) {
+      toolbarH += Math.ceil(used.getBoundingClientRect().height) || 0;
+      const chrome = used.parentElement;
+      const gap = chrome ? parseFloat(getComputedStyle(chrome).rowGap || getComputedStyle(chrome).gap) : 0;
+      toolbarH += Number.isFinite(gap) ? gap : 0;
+    }
     const budgetH = editor && !clock ? visibleH : scrollH;
-    const available = budgetH - stripH - overhead - toolbarH;
+    // Tile-strip padding is cancelled by a negative margin, so it sits outside
+    // the editor box and still lengthens the scrollport. Shrink the face by
+    // that spill before the page is allowed to scroll.
+    const laidOut = editor && !clock ? editor : clock;
+    const spill = laidOut
+      ? Math.max(0, box.scrollHeight - laidOut.offsetHeight)
+      : 0;
+    const available = budgetH - stripH - overhead - toolbarH - spill;
     const size = Math.max(
       1,
       Math.floor(Math.min(widthCap, Math.max(minPx, available)))
