@@ -72,8 +72,8 @@ export const LANDING_CSS = `
   .area-rail :is(
     .floor-label,
     .area-head,
-    .floor-block > .floor-label > *,
-    .floor-block .area-head > *,
+    .floor-block > .floor-label > :not(.sticky-bg),
+    .floor-block .area-head > :not(.sticky-bg),
     .area-empty,
     .var-row,
     .theme-row,
@@ -317,17 +317,29 @@ export const LANDING_CSS = `
     z-index: -1;
     pointer-events: none;
   }
+  /* Floor and area fills fade in only after the title sticks. Leaving is instant. */
+  .sticky-bg-floor,
+  .sticky-bg-area {
+    opacity: 0;
+    transition: opacity 0s;
+  }
   @container scroll-state(stuck: top) {
-    .sticky-bg-floor,
+    .sticky-bg-floor {
+      background: color-mix(in srgb, var(--primary-background-color) 80%, transparent);
+      opacity: 1;
+      transition: opacity 3500ms;
+    }
     .sticky-bg-library {
       background: var(--primary-background-color);
     }
     .sticky-bg-area {
       background: linear-gradient(
         to bottom,
-        var(--primary-background-color) 50%,
+        color-mix(in srgb, var(--primary-background-color) 80%, transparent) 50%,
         transparent 100%
       );
+      opacity: 1;
+      transition: opacity 3500ms;
     }
   }
   .area-head h2 {
