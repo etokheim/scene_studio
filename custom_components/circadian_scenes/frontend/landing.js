@@ -25,7 +25,7 @@ export const LANDING_CSS = `
     background-size: cover;
     background-position: center;
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.2;
     filter: blur(48px);
   }
   .area-rail {
@@ -65,6 +65,8 @@ export const LANDING_CSS = `
   .area-rail :is(
     .floor-label,
     .area-head,
+    .floor-block > .floor-label > *,
+    .floor-block .area-head > *,
     .area-empty,
     .var-row,
     .theme-row,
@@ -102,6 +104,8 @@ export const LANDING_CSS = `
   }
   @media (hover: hover) and (pointer: fine) {
     .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
+      .floor-block > .floor-label > *,
+      .floor-block .area-head > *,
       .area-empty,
       .var-row,
       .theme-row,
@@ -111,6 +115,8 @@ export const LANDING_CSS = `
       opacity: 0.38;
     }
     .area-rail:hover .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
+      .floor-block > .floor-label > *,
+      .floor-block .area-head > *,
       .area-empty,
       .var-row,
       .theme-row,
@@ -253,17 +259,6 @@ export const LANDING_CSS = `
     text-align: left;
     box-sizing: border-box;
   }
-  .floor-block > .floor-label::after,
-  .floor-block .area-head::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 100%;
-    height: 16px;
-    background: linear-gradient(to bottom, var(--primary-background-color), transparent);
-    pointer-events: none;
-  }
   .floor-block > .floor-label ha-icon {
     --mdc-icon-size: 18px;
     flex: 0 0 auto;
@@ -291,7 +286,11 @@ export const LANDING_CSS = `
     z-index: 3;
     margin: 8px 0;
     padding: 0 8px 0 12px;
-    background: var(--primary-background-color);
+    background: linear-gradient(
+      to bottom,
+      var(--primary-background-color) 50%,
+      transparent 100%
+    );
   }
   .area-head h2 {
     font-size: 16px;
