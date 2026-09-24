@@ -2435,6 +2435,10 @@ class CircadianScenesPanel extends HTMLElement {
             transform 480ms cubic-bezier(0.22, 1.15, 0.36, 1),
             color 360ms ease;
         }
+        .hue-wheel-svg .gm.expanded,
+        .hue-wheel-svg .gm.drop-target {
+          z-index: 2;
+        }
         .hue-wheel-svg.pin-drag .gm {
           transition: none;
         }

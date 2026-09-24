@@ -2826,7 +2826,8 @@ function createSceneColorWheel({
       marker.x = home.x;
       marker.y = home.y;
       marker.g.style.display = "";
-      marker.g.classList.add("expanded", "group-member");
+      setPinExpanded(marker.g, false);
+      marker.g.classList.add("group-member");
       marker.g.classList.remove("grouped");
       const scene = scenes.find((row) => row.id === id);
       if (scene) {
@@ -2842,8 +2843,8 @@ function createSceneColorWheel({
       const anim = marker.g.animate(
         [{ transform: captured && captured !== "none" ? captured : to }, { transform: to }],
         {
-          duration: 480,
-          easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
+          duration: PIN_GROW_MS,
+          easing: PIN_GROW_EASE,
           fill: "both",
         }
       );
@@ -2889,6 +2890,33 @@ function createSceneColorWheel({
       return;
     }
     flyPinsHome(ids, home, from);
+  };
+
+  const PIN_GROW_MS = 520;
+  const PIN_GROW_EASE = "cubic-bezier(0.34, 1.56, 0.64, 1)";
+  const pinExpandJobs = new Map();
+  const setPinExpanded = (g, on) => {
+    const job = pinExpandJobs.get(g);
+    if (job) {
+      cancelAnimationFrame(job);
+      pinExpandJobs.delete(g);
+    }
+    if (!on) {
+      g.classList.remove("expanded");
+      return;
+    }
+    if (g.classList.contains("expanded")) {
+      return;
+    }
+    // The class has to land on a frame after the dot was painted. Adding it
+    // in the same turn as the first hover skips the scale transition.
+    pinExpandJobs.set(
+      g,
+      requestAnimationFrame(() => {
+        pinExpandJobs.delete(g);
+        g.classList.add("expanded");
+      })
+    );
   };
 
   const placeMarker = (marker, x, y, opts) => {
@@ -3700,13 +3728,7 @@ function createSceneColorWheel({
         ? "palette"
         : draftWheelMode(scene.draft, caps.hasColor, caps.hasTemp);
       marker.g.classList.remove("grouped", "group-member", "drop-target");
-      const wasExpanded = marker.g.classList.contains("expanded");
-      // Raise a dot before it grows. Moving an already-open pin would land
-      // after that and cancel the new pin's scale transition.
-      if (expanded && !wasExpanded && svg.lastChild !== marker.g) {
-        svg.appendChild(marker.g);
-      }
-      marker.g.classList.toggle("expanded", expanded);
+      setPinExpanded(marker.g, expanded);
       marker.g.classList.toggle("active", active && expanded);
       marker.g.classList.toggle("preview", preview);
       const mdi = pinIconOf(scene);
@@ -3806,7 +3828,7 @@ function createSceneColorWheel({
           leadMarker.g.classList.remove("group-member");
           // The count lives on the teardrop. The resting dot stays empty.
           leadMarker.icon.textContent = expandGroup ? String(group.length) : "";
-          leadMarker.g.classList.toggle("expanded", expandGroup);
+          setPinExpanded(leadMarker.g, expandGroup);
           leadMarker.hit.style.display = "";
           if (leadMarker.g.parentNode !== svg) {
             svg.appendChild(leadMarker.g);
@@ -3875,8 +3897,11 @@ function createSceneColorWheel({
       const placeOpenMember = (row, x, y, expanded, instant) => {
         row.marker.g.classList.add("group-member");
         row.marker.g.classList.remove("grouped");
-        row.marker.g.classList.toggle("expanded", expanded);
         row.marker.g.style.display = "";
+        if (row.marker.g.parentNode !== svg) {
+          svg.appendChild(row.marker.g);
+        }
+        setPinExpanded(row.marker.g, expanded);
         row.marker.hit.style.display = "";
         const scene = (getState().scenes || []).find(
           (item) => item.id === row.marker.sceneId
@@ -3930,8 +3955,8 @@ function createSceneColorWheel({
             const anim = marker.g.animate(
               [{ transform: pinAt(fromX, fromY) }, { transform: pinAt(toX, toY) }],
               {
-                duration: 480,
-                easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
+                duration: PIN_GROW_MS,
+                easing: PIN_GROW_EASE,
                 fill: "both",
               }
             );
@@ -3949,8 +3974,9 @@ function createSceneColorWheel({
       } else {
         for (const row of members) {
           if (row.marker.flying) {
-            row.marker.g.classList.add("group-member", "expanded");
+            row.marker.g.classList.add("group-member");
             row.marker.g.classList.remove("grouped");
+            setPinExpanded(row.marker.g, true);
             row.marker.g.style.display = "";
             if (row.marker.g.parentNode !== svg) {
               svg.appendChild(row.marker.g);
