@@ -28,7 +28,7 @@ from .native_scene import (
     scene_entity_payload,
 )
 from .preview import load_native_scenes
-from .store import CircadianScenesStore
+from .store import SceneStudioStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ async def async_delete_managed_yaml(hass: HomeAssistant, config_ids: list[str]) 
         return removed
 
 
-async def async_freeze_migrate(hass: HomeAssistant, store: CircadianScenesStore) -> int:
+async def async_freeze_migrate(hass: HomeAssistant, store: SceneStudioStore) -> int:
     """Inline native scenes into the store and delete managed YAML.
 
     Returns the number of circadian configs that were rewritten.

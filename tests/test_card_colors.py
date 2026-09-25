@@ -1,6 +1,6 @@
 """Scene-card swatches scale chromatic RGB by each light's brightness."""
 
-from custom_components.circadian_scenes.snapshots import swatch_rgb
+from custom_components.scene_studio.snapshots import swatch_rgb
 
 
 def test_on_full_brightness_keeps_chroma():

@@ -19,7 +19,7 @@ import {
   kelvinTrackDragPoint,
   diskHop,
   placeTempInAnnulus,
-} from "../../custom_components/circadian_scenes/frontend/color_ui.js";
+} from "../../custom_components/scene_studio/frontend/color_ui.js";
 
 const supports =
   (caps) =>

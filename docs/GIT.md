@@ -1,4 +1,4 @@
-# Git workflow for Circadian Scenes
+# Git workflow for Scene Studio
 
 ## Branches
 
@@ -20,7 +20,7 @@ After clone, check out `dev` before starting work (`git checkout dev`). GitHubâ€
 
 ## What is versioned
 
-- Integration: `custom_components/circadian_scenes/`
+- Integration: `custom_components/scene_studio/`
 - Agent instructions: `AGENTS.md`, `.cursor/`, `docs/`
 - Local sandbox **starter** YAML: `dev/config/configuration.yaml`, `packages/`, `area_map.yaml`, `apply_area_map.py`, plus empty `automations.yaml` / `scripts.yaml`
 - Tooling: `docker-compose.yml`, `pyproject.toml`, `DEVELOPMENT.md`, CI under `.github/`
@@ -34,11 +34,11 @@ After clone, check out `dev` before starting work (`git checkout dev`). GitHubâ€
 
 ## Clone
 
-Public origin: [`etokheim/circadian_scenes`](https://github.com/etokheim/circadian_scenes).
+Public origin: [`etokheim/scene_studio`](https://github.com/etokheim/scene_studio).
 
 ```bash
-git clone git@github.com:etokheim/circadian_scenes.git
-cd circadian_scenes
+git clone git@github.com:etokheim/scene_studio.git
+cd scene_studio
 git checkout dev
 ```
 

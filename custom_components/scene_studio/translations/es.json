@@ -1,21 +1,21 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Circadian Scenes ya está configurado",
-      "single_instance_allowed": "Circadian Scenes ya está configurado. Ábrelo desde la barra lateral para añadir escenas."
+      "already_configured": "Scene Studio ya está configurado",
+      "single_instance_allowed": "Scene Studio ya está configurado. Ábrelo desde la barra lateral para añadir escenas."
     },
     "error": {
       "unknown": "Error inesperado"
     },
     "step": {
       "user": {
-        "title": "Circadian Scenes",
-        "description": "Añade Circadian Scenes a la barra lateral. Crea y edita habitaciones desde ahí: una integración, tantas áreas como necesites. Luz diurna que sigue el sol entre tus escenas."
+        "title": "Scene Studio",
+        "description": "Añade Scene Studio a la barra lateral. Crea y edita habitaciones desde ahí: una integración, tantas áreas como necesites. Luz diurna que sigue el sol entre tus escenas."
       }
     }
   },
   "frontend": {
-    "title": "Circadian Scenes",
+    "title": "Scene Studio",
     "tabs": {
       "extrapolation": "Escenas circadianas",
       "created": "Escenas creadas"
@@ -23,11 +23,11 @@
     "empty": {
       "extrapolation": "Aún no hay escenas circadianas. Crea una para iluminar una habitación según el sol.",
       "extrapolation_title": "Empieza a iluminar con el sol",
-      "extrapolation_body": "Circadian Scenes mezcla las luces de la habitación entre eventos solares — amanecer civil, orto, mediodía, ocaso y crepúsculo — para que brillo y color sigan el día.",
+      "extrapolation_body": "Scene Studio mezcla las luces de la habitación entre eventos solares — amanecer civil, orto, mediodía, ocaso y crepúsculo — para que brillo y color sigan el día.",
       "extrapolation_example": "Crea una escena para una habitación, asigna escenas nativas a cada evento solar y actívala. Las actualizaciones automáticas opcionales siguen ajustando las luces a intervalos después.",
-      "created": "Aún no hay escenas nativas creadas por Circadian Scenes. Aparecen aquí con Configuración automática o Crear nueva escena.",
+      "created": "Aún no hay escenas nativas creadas por Scene Studio. Aparecen aquí con Configuración automática o Crear nueva escena.",
       "created_title": "Aún no hay escenas creadas",
-      "created_body": "Las escenas nativas de Home Assistant creadas por Circadian Scenes aparecen aquí — desde Configuración automática o Crear nueva escena en un evento solar.",
+      "created_body": "Las escenas nativas de Home Assistant creadas por Scene Studio aparecen aquí — desde Configuración automática o Crear nueva escena en un evento solar.",
       "learn_more": "Más información"
     },
     "list": {
@@ -83,7 +83,7 @@
     },
     "save_warn": {
       "title": "¿Actualizar escenas externas?",
-      "text": "Guardar cambiará estas escenas de Home Assistant que no creó Circadian Scenes: {scenes}.",
+      "text": "Guardar cambiará estas escenas de Home Assistant que no creó Scene Studio: {scenes}.",
       "dont_warn": "No avisar de nuevo",
       "save": "Guardar cambios"
     },

@@ -20,6 +20,7 @@ from .const import (
     AREA,
     AUTOMATICALLY_UPDATE_LIGHTS,
     CATEGORY,
+    DATA_STORE,
     DEFAULT_SCENE_NAME,
     DEFAULT_VARIABLE_COLORS,
     DESCRIPTION,
@@ -28,23 +29,21 @@ from .const import (
     KIND_CIRCADIAN,
     KIND_SIMPLE,
     LABELS,
-    LEGACY_STORE_KEY,
+    LEGACY_STORE_KEYS,
     SCENE_DAWN,
     SCENE_DAWN_SUNRISE_SUNSET,
     SCENE_DUSK,
-    DATA_STORE,
     SCENE_DUSK_MINIMUM_TIME_OF_DAY,
     SCENE_KEYS,
-    SETTINGS_DUSK_MINIMUM_TIME_OF_DAY,
     SCENE_NAME,
     SCENE_NOON,
     SCENE_SUNRISE,
     SCENE_SUNSET,
+    SETTINGS_DUSK_MINIMUM_TIME_OF_DAY,
     SOLAR_EVENTS,
     STORE_KEY,
     VARIABLE_REF,
 )
-
 from .palette import KIND_PALETTE, normalize_palette_slots, optional_builtin_id
 
 _LOGGER = logging.getLogger(__name__)
@@ -522,7 +521,7 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
 
 
 class _ScenesStore(Store):
-    """HA Store that migrates circadian_scenes.scenes between major versions."""
+    """HA Store that migrates scene_studio.scenes between major versions."""
 
     async def _async_migrate_func(
         self,
@@ -534,14 +533,16 @@ class _ScenesStore(Store):
         return _migrate_store(old_major_version, old_data)
 
 
-class CircadianScenesStore:
+class SceneStudioStore:
     """Load and persist circadian scene configs, variables, and themes."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the store."""
         self.hass = hass
         self._store = _ScenesStore(hass, STORAGE_VERSION, STORE_KEY)
-        self._legacy_store = _ScenesStore(hass, STORAGE_VERSION, LEGACY_STORE_KEY)
+        self._legacy_stores = [
+            _ScenesStore(hass, STORAGE_VERSION, key) for key in LEGACY_STORE_KEYS
+        ]
         self.variables: dict[str, dict[str, Any]] = {}
         self.themes: dict[str, dict[str, Any]] = {}
         self.scenes: dict[str, dict[str, Any]] = {}
@@ -551,18 +552,21 @@ class CircadianScenesStore:
         self.pending_hide_sync = False
 
     async def async_load(self) -> None:
-        """Load from disk (migrate from scene_extrapolation.scenes once)."""
+        """Load from disk (migrate from an older domain's store once)."""
         data = await self._store.async_load()
         if not data:
-            legacy = await self._legacy_store.async_load()
-            if legacy:
+            for legacy_store, legacy_key in zip(self._legacy_stores, LEGACY_STORE_KEYS):
+                legacy = await legacy_store.async_load()
+                if not legacy:
+                    continue
                 _LOGGER.info(
                     "Migrating store from %s to %s",
-                    LEGACY_STORE_KEY,
+                    legacy_key,
                     STORE_KEY,
                 )
                 data = legacy
                 await self._store.async_save(legacy)
+                break
         raw = data or {}
 
         # --- Variables ---

@@ -75,9 +75,9 @@ import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./si
 import { snapshotWheelEditor, applyWheelMorph } from "./wheel_morph.js";
 import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
-const DOMAIN = "circadian_scenes";
-const PANEL_URL_PATH = "circadian_scenes";
-const LEGACY_DOMAIN = "scene_extrapolation";
+const DOMAIN = "scene_studio";
+const PANEL_URL_PATH = "scene_studio";
+const LEGACY_DOMAINS = ["circadian_scenes", "scene_extrapolation"];
 const SECONDS_PER_DAY = 24 * 3600;
 /* Clock overlay viewBox is 200×200. Planet (rings) sits inside a circular
    sun path whose radius scales with the day's peak elevation. */
@@ -248,7 +248,7 @@ const HELPERS = {
     "Leave empty to create a native scene automatically for this event",
 };
 
-class CircadianScenesPanel extends HTMLElement {
+class SceneStudioPanel extends HTMLElement {
   constructor() {
     super();
     this._hass = undefined;
@@ -8317,7 +8317,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (learnMore) {
       const link = document.createElement("a");
       link.className = "learn-more";
-      link.href = "https://github.com/etokheim/circadian_scenes";
+      link.href = "https://github.com/etokheim/scene_studio";
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.textContent = this._t("frontend.empty.learn_more", "Learn more");
@@ -9331,7 +9331,9 @@ class CircadianScenesPanel extends HTMLElement {
 
   _legacyLiveEditStorageKey() {
     const user = this._hass?.user?.id || "anon";
-    return `${LEGACY_DOMAIN}.liveEdit.v${LIVE_EDIT_STORAGE_VERSION}.${user}`;
+    return LEGACY_DOMAINS.map(
+      (domain) => `${domain}.liveEdit.v${LIVE_EDIT_STORAGE_VERSION}.${user}`
+    );
   }
 
   _roomPreviewStorageKey() {
@@ -9341,7 +9343,9 @@ class CircadianScenesPanel extends HTMLElement {
 
   _legacyRoomPreviewStorageKey() {
     const user = this._hass?.user?.id || "anon";
-    return `${LEGACY_DOMAIN}.roomPreview.v${ROOM_PREVIEW_STORAGE_VERSION}.${user}`;
+    return LEGACY_DOMAINS.map(
+      (domain) => `${domain}.roomPreview.v${ROOM_PREVIEW_STORAGE_VERSION}.${user}`
+    );
   }
 
   _externalSceneWarnStorageKey() {
@@ -9351,7 +9355,10 @@ class CircadianScenesPanel extends HTMLElement {
 
   _legacyExternalSceneWarnStorageKey() {
     const user = this._hass?.user?.id || "anon";
-    return `${LEGACY_DOMAIN}.externalSceneWarn.v${EXTERNAL_SCENE_WARN_STORAGE_VERSION}.${user}`;
+    return LEGACY_DOMAINS.map(
+      (domain) =>
+        `${domain}.externalSceneWarn.v${EXTERNAL_SCENE_WARN_STORAGE_VERSION}.${user}`
+    );
   }
 
   _readLocalStorage(key, legacyKey) {
@@ -9360,15 +9367,20 @@ class CircadianScenesPanel extends HTMLElement {
       if (raw != null) {
         return raw;
       }
-      if (!legacyKey) {
-        return null;
+      const legacyKeys = Array.isArray(legacyKey)
+        ? legacyKey
+        : legacyKey
+          ? [legacyKey]
+          : [];
+      for (const candidate of legacyKeys) {
+        const legacy = window.localStorage.getItem(candidate);
+        if (legacy == null) {
+          continue;
+        }
+        window.localStorage.setItem(key, legacy);
+        return legacy;
       }
-      const legacy = window.localStorage.getItem(legacyKey);
-      if (legacy == null) {
-        return null;
-      }
-      window.localStorage.setItem(key, legacy);
-      return legacy;
+      return null;
     } catch (_err) {
       return null;
     }
@@ -9520,7 +9532,7 @@ class CircadianScenesPanel extends HTMLElement {
       const text = document.createElement("p");
       text.textContent = this._t(
         "frontend.save_warn.text",
-        "Saving will change these Home Assistant scenes that were not created by Circadian Scenes: {scenes}.",
+        "Saving will change these Home Assistant scenes that were not created by Scene Studio: {scenes}.",
         { scenes: sceneNames.join(", ") }
       );
       const row = document.createElement("label");
@@ -9594,13 +9606,17 @@ class CircadianScenesPanel extends HTMLElement {
 
   _legacyDraftStorageKey(sceneKey = this._editId || "new") {
     const user = this._hass?.user?.id || "anon";
-    return `${LEGACY_DOMAIN}.draft.v1.${user}.${sceneKey}`;
+    return LEGACY_DOMAINS.map(
+      (domain) => `${domain}.draft.v1.${user}.${sceneKey}`
+    );
   }
 
   _clearPersistedDraft(sceneKey) {
     try {
       window.localStorage.removeItem(this._draftStorageKey(sceneKey));
-      window.localStorage.removeItem(this._legacyDraftStorageKey(sceneKey));
+      for (const key of this._legacyDraftStorageKey(sceneKey)) {
+        window.localStorage.removeItem(key);
+      }
     } catch (_err) {
       // Ignore leftover-key cleanup failures.
     }
@@ -11677,7 +11693,7 @@ class CircadianScenesPanel extends HTMLElement {
     if (!this._headerEl) {
       return;
     }
-    const integration = this._t("frontend.title", "Circadian Scenes");
+    const integration = this._t("frontend.title", "Scene Studio");
     if (this._narrow && this._view === "edit") {
       this._headerEl.textContent = this._editorSceneTitle();
       return;
@@ -19442,6 +19458,6 @@ function sameLocation(a, b) {
   );
 }
 
-if (!customElements.get("circadian-scenes-panel")) {
-  customElements.define("circadian-scenes-panel", CircadianScenesPanel);
+if (!customElements.get("scene-studio-panel")) {
+  customElements.define("scene-studio-panel", SceneStudioPanel);
 }

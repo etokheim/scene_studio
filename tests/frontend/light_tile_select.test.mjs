@@ -14,7 +14,7 @@ import {
   selectAllOnOffState,
   selectAllTileAction,
   tileSelectionAfterClick,
-} from "../../custom_components/circadian_scenes/frontend/light_tiles.js";
+} from "../../custom_components/scene_studio/frontend/light_tiles.js";
 
 const ids = ["a", "b", "c", "d"];
 

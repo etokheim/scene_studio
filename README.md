@@ -1,9 +1,9 @@
-![Circadian Scenes Hero](images/Hero.png)
+![Scene Studio Hero](images/Hero.png)
 
-# Circadian Scenes
+# Scene Studio
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
-[![GitHub release](https://img.shields.io/github/release/etokheim/circadian_scenes.svg)](https://github.com/etokheim/circadian_scenes/releases)
+[![GitHub release](https://img.shields.io/github/release/etokheim/scene_studio.svg)](https://github.com/etokheim/scene_studio/releases)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/etokheim)
 
 Daylight that follows the sun between your scenes. The integration builds a Home Assistant scene that blends your day and evening looks from the sun’s cycle — cool by day, warm toward dusk — so activating it lights the room the way you want for *now*.
@@ -14,32 +14,36 @@ Daylight that follows the sun between your scenes. The integration builds a Home
 
 ## Install
 
-1. Install via [HACS](https://hacs.xyz/) (search **Circadian Scenes**), or copy `custom_components/circadian_scenes` into your config.
+1. Install via [HACS](https://hacs.xyz/) (search **Scene Studio**), or copy `custom_components/scene_studio` into your config.
 2. Restart Home Assistant.
-3. Add the integration once: **Settings → Devices & services → Add integration → Circadian Scenes**.
-4. Open **Circadian Scenes** from the sidebar to create and edit rooms.
+3. Add the integration once: **Settings → Devices & services → Add integration → Scene Studio**.
+4. Open **Scene Studio** from the sidebar to create and edit rooms.
 
 You do **not** add a new integration entry for each room — one instance covers every circadian scene.
 
+### Upgrading from Circadian Scenes
+
+The domain and GitHub repo are now `scene_studio` (was `circadian_scenes`). After updating:
+
+1. Remove the old **Circadian Scenes** config entry if Home Assistant still lists it.
+2. Add **Scene Studio** once.
+3. Room configs migrate from `circadian_scenes.scenes` to `scene_studio.scenes` when the new store is empty. Re-link HACS to [etokheim/scene_studio](https://github.com/etokheim/scene_studio) if needed.
+
 ### Upgrading from Scene Extrapolation
 
-v4 renames the integration domain and GitHub repo (`scene_extrapolation` → `circadian_scenes`). After updating:
-
-1. Remove the old **Scene Extrapolation** / broken config entry if Home Assistant still lists it.
-2. Add **Circadian Scenes** once (same as a fresh install).
-3. Room configs migrate automatically from the old store key (`scene_extrapolation.scenes` → `circadian_scenes.scenes`). Re-link HACS to the new repository if needed.
+v4 renamed `scene_extrapolation` to `circadian_scenes`. If that store is the only one present, Scene Studio still copies `scene_extrapolation.scenes` into `scene_studio.scenes`. Remove the old config entry and add **Scene Studio** once.
 
 ## Setup
 
 Create two (or more) **native** Home Assistant scenes for an area: how the room should look by day, and how it should look in the evening. You can also pin looks to dawn, sunrise, noon, sunset, and dusk.
 
-Then, in the Circadian Scenes sidebar, add a circadian scene for that area and assign those native scenes to the solar events you care about.
+Then, in the Scene Studio sidebar, add a circadian scene for that area and assign those native scenes to the solar events you care about.
 
 You might already have fixed scenes like this:
 
 ![Illustration - Scenes with hard transitions](images/Example%20-%20Fixed.png)
 
-Circadian Scenes blends between them so the room looks right whenever you activate it:
+Scene Studio blends between them so the room looks right whenever you activate it:
 
 ![Illustration - Scenes with soft transitions](images/Example%20-%20Blurred.png)
 
@@ -85,7 +89,7 @@ Time total applying scene:              866.3ms
 | [Circadian Lighting](https://github.com/claytonjn/hass-circadian_lighting) | Drives lights/groups directly; richer options; large community. |
 | [Adaptive Lighting](https://github.com/basnijholt/adaptive-lighting) | Continuous CT/brightness without scene knots. |
 
-Circadian Scenes stays scene-based on purpose: predictable, easy to combine with motion and schedules, and automatic light updates that can skip overridden lamps.
+Scene Studio stays scene-based on purpose: predictable, easy to combine with motion and schedules, and automatic light updates that can skip overridden lamps.
 
 ## Extend it
 
@@ -100,11 +104,11 @@ The color wheel is based on the wheel in [Hue Like Light Card](https://github.co
 
 ## Support
 
-If Circadian Scenes saves you setup time or makes your evenings nicer, you can [buy me a coffee](https://buymeacoffee.com/etokheim):
+If Scene Studio saves you setup time or makes your evenings nicer, you can [buy me a coffee](https://buymeacoffee.com/etokheim):
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/etokheim)
 
-Issues and ideas: [GitHub Issues](https://github.com/etokheim/circadian_scenes/issues).
+Issues and ideas: [GitHub Issues](https://github.com/etokheim/scene_studio/issues).
 
 ## Q&A
 

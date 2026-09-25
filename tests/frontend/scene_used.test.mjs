@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   sceneLibraryUses,
   scenesUsingLibraryItem,
-} from "../../custom_components/circadian_scenes/frontend/scene_used.js";
+} from "../../custom_components/scene_studio/frontend/scene_used.js";
 
 test("a circadian scene lists its theme, palette, and linked variable", () => {
   const uses = sceneLibraryUses({

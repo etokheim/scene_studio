@@ -14,7 +14,7 @@ from .resolve import (
     build_simple_snapshot,
     resolve_membership,
 )
-from .store import CircadianScenesStore
+from .store import SceneStudioStore
 
 
 def supported_modes(hass: HomeAssistant, entity_id: str) -> set[str] | None:
@@ -42,7 +42,7 @@ def modes_map(hass: HomeAssistant, entity_ids: list[str]) -> dict[str, set[str] 
 
 def circadian_anchor(
     hass: HomeAssistant,
-    store: CircadianScenesStore,
+    store: SceneStudioStore,
     scene: dict[str, Any],
     event: str,
 ) -> dict[str, Any]:
@@ -65,7 +65,7 @@ def circadian_anchor(
 
 def simple_anchor(
     hass: HomeAssistant,
-    store: CircadianScenesStore,
+    store: SceneStudioStore,
     scene: dict[str, Any],
 ) -> dict[str, Any]:
     """In-memory scene dict for a simple scene."""
@@ -99,7 +99,7 @@ def swatch_rgb(entity: dict[str, Any]) -> list[int]:
 
 def card_colors(
     hass: HomeAssistant,
-    store: CircadianScenesStore,
+    store: SceneStudioStore,
     scene: dict[str, Any],
 ) -> dict[str, Any]:
     """Resolved RGB for scene-card backgrounds."""
@@ -127,8 +127,7 @@ def card_colors(
         }
         for eid in members:
             stops = [
-                swatch_rgb(per_event[event].get(eid) or {})
-                for event in SOLAR_EVENTS
+                swatch_rgb(per_event[event].get(eid) or {}) for event in SOLAR_EVENTS
             ]
             ramps.append({"entity_id": eid, "stops": stops})
     return {"kind": scene.get("kind") or KIND_CIRCADIAN, "ramps": ramps}

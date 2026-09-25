@@ -1,8 +1,9 @@
-"""Constants for the Circadian Scenes integration."""
+"""Constants for the Scene Studio integration."""
 
-DOMAIN = "circadian_scenes"
-# Pre-rename domain — used to migrate Store + entity registry once.
-LEGACY_DOMAIN = "scene_extrapolation"
+DOMAIN = "scene_studio"
+# Previous domains, newest first. Store, entity registry, and panel
+# localStorage migrate once from each. Config entries do not.
+LEGACY_DOMAINS = ("circadian_scenes", "scene_extrapolation")
 AREA = "area"
 SCENE_NAME = "scene_name"
 DESCRIPTION = "description"
@@ -26,7 +27,7 @@ AUTOMATICALLY_UPDATE_LIGHTS = "automatically_update_lights"
 # Default friendly name when area is unknown; prefer "{area} Circadian" in the panel.
 DEFAULT_SCENE_NAME = "Circadian"
 
-PANEL_URL_PATH = "circadian_scenes"
+PANEL_URL_PATH = "scene_studio"
 
 DATA_STORE = "store"
 DATA_ENTITIES = "entities"
@@ -34,7 +35,7 @@ DATA_ADD_ENTITIES = "add_entities"
 DATA_CONFIG_ENTRY = "config_entry"
 
 STORE_KEY = f"{DOMAIN}.scenes"
-LEGACY_STORE_KEY = f"{LEGACY_DOMAIN}.scenes"
+LEGACY_STORE_KEYS = tuple(f"{domain}.scenes" for domain in LEGACY_DOMAINS)
 
 # Legacy tuple — still used by the v3→v4 migrator.
 SCENE_KEYS = (

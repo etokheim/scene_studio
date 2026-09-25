@@ -1,4 +1,4 @@
-"""WebSocket API for the Circadian Scenes panel."""
+"""WebSocket API for the Scene Studio panel."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from .preview import build_preview
 from .scene import async_create_or_update_entity, async_remove_entity
 from .snapshots import card_colors
 from .solar import build_sun_path
-from .store import CircadianScenesStore, to_form_data
+from .store import SceneStudioStore, to_form_data
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_areas)
 
 
-def _store(hass: HomeAssistant) -> CircadianScenesStore:
+def _store(hass: HomeAssistant) -> SceneStudioStore:
     return hass.data[DOMAIN][DATA_STORE]
 
 

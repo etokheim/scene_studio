@@ -1,9 +1,9 @@
 {
-  "domain": "circadian_scenes",
-  "name": "Circadian Scenes",
+  "domain": "scene_studio",
+  "name": "Scene Studio",
   "config_flow": true,
-  "documentation": "https://github.com/etokheim/circadian_scenes/blob/master/README.md",
-  "issue_tracker": "https://github.com/etokheim/circadian_scenes/issues",
+  "documentation": "https://github.com/etokheim/scene_studio/blob/master/README.md",
+  "issue_tracker": "https://github.com/etokheim/scene_studio/issues",
   "version": "6.0.0",
   "requirements": [],
   "ssdp": [],

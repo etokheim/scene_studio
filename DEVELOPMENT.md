@@ -35,8 +35,8 @@ docker compose start
 
 After that:
 
-1. **Settings → Devices & services → Add integration → Circadian Scenes** (once; the form is empty)
-2. Open **Circadian Scenes** in the sidebar
+1. **Settings → Devices & services → Add integration → Scene Studio** (once; the form is empty)
+2. Open **Scene Studio** in the sidebar
 3. **Add** a scene (area + native dag/kveld/natt scenes)
 4. Activate the generated `scene.*` from **Developer tools → States**
 
@@ -86,4 +86,4 @@ To let Cursor agents call the sandbox REST API, create a long-lived token in the
 
 ## Agent UI login (optional)
 
-Same `secrets.yaml` holds `sandbox_ha_username` and `sandbox_ha_password` for Chrome DevTools MCP against `http://127.0.0.1:8123/circadian_scenes`. If those keys are missing, agents should ask. Do not commit `secrets.yaml`.
+Same `secrets.yaml` holds `sandbox_ha_username` and `sandbox_ha_password` for Chrome DevTools MCP against `http://127.0.0.1:8123/scene_studio`. If those keys are missing, agents should ask. Do not commit `secrets.yaml`.

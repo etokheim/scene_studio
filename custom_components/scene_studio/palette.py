@@ -122,9 +122,12 @@ def resolve_slot(
         out["brightness"] = color["brightness"]
     else:
         out["brightness"] = 255
-    if not out.get("color_mode") and not out.get("hs_color") and not out.get(
-        "rgb_color"
-    ) and out.get("color_temp_kelvin") is None:
+    if (
+        not out.get("color_mode")
+        and not out.get("hs_color")
+        and not out.get("rgb_color")
+        and out.get("color_temp_kelvin") is None
+    ):
         out.update(_EMPTY_SLOT)
     return out
 
@@ -191,7 +194,9 @@ def normalize_palette_slots(raw: Any) -> list[dict[str, Any]]:
     slots_in = list(raw or [])
     out: list[dict[str, Any]] = []
     for i in range(PALETTE_SLOT_COUNT):
-        item = slots_in[i] if i < len(slots_in) and isinstance(slots_in[i], dict) else {}
+        item = (
+            slots_in[i] if i < len(slots_in) and isinstance(slots_in[i], dict) else {}
+        )
         if item.get(VARIABLE_REF):
             out.append({VARIABLE_REF: item[VARIABLE_REF]})
             continue
@@ -202,7 +207,10 @@ def normalize_palette_slots(raw: Any) -> list[dict[str, Any]]:
                 for k, v in (color or {}).items()
                 if k not in ("brightness", VARIABLE_REF, "slots", "kind", "color")
             },
-            "brightness": item.get("brightness", color.get("brightness", 255) if isinstance(color, dict) else 255),
+            "brightness": item.get(
+                "brightness",
+                color.get("brightness", 255) if isinstance(color, dict) else 255,
+            ),
         }
         if not slot["color"]:
             hue = (i / PALETTE_SLOT_COUNT) * 360.0

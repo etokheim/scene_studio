@@ -1130,7 +1130,7 @@ function renderEmptyHero(panel) {
     paragraphs: [
       panel._t(
         "frontend.empty.extrapolation_body",
-        "Circadian Scenes blend your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day."
+        "Scene Studio blend your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day."
       ),
       panel._t(
         "frontend.empty.auto_configure_body",
@@ -1160,7 +1160,7 @@ function renderSelectEmpty(panel) {
     paragraphs: [
       panel._t(
         "frontend.empty.extrapolation_body",
-        "Circadian Scenes blend your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day."
+        "Scene Studio blend your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day."
       ),
       panel._t(
         "frontend.empty.select_scene_body",

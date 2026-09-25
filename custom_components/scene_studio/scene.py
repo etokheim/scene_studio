@@ -66,8 +66,8 @@ from .extrapolation_math import (
 )
 from .native_scene import scenes_in_area
 from .snapshots import circadian_anchor, simple_anchor
-from .store import dusk_minimum_seconds
 from .solar import EVENT_ORDER, dusk_start_seconds
+from .store import dusk_minimum_seconds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ class CircadianScene(Scene):
         self._attr_icon = _configured_icon(scene_config, "mdi:auto-fix")
         self._attr_name = name
         self._attr_unique_id = scene_config["id"]
-        self._attr_integration = "circadian_scenes"
+        self._attr_integration = "scene_studio"
         self._brightness_modifier = 0
         self._transition_percent_manual = False
         self._manual_transition_percent = None
@@ -590,7 +590,7 @@ class CircadianScene(Scene):
             self._unsub_light_tracking()
             self._automatically_update_lights_armed = False
             # scene.turn_on already records via Scene._async_activate; this
-            # covers circadian_scenes.turn_on. Auto-update ticks must not
+            # covers scene_studio.turn_on. Auto-update ticks must not
             # record or we would steal "last activated" from another scene.
             if hasattr(self, "_async_record_activation"):
                 self._async_record_activation()
@@ -1010,7 +1010,7 @@ class SimpleScene(Scene):
         self._attr_icon = _configured_icon(scene_config, "mdi:palette")
         self._attr_name = name
         self._attr_unique_id = scene_config["id"]
-        self._attr_integration = "circadian_scenes"
+        self._attr_integration = "scene_studio"
         self._area_id = scene_config.get(AREA)
 
     @property

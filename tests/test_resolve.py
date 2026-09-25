@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.circadian_scenes.const import VARIABLE_REF
-from custom_components.circadian_scenes.resolve import (
+from custom_components.scene_studio.const import VARIABLE_REF
+from custom_components.scene_studio.resolve import (
     _adapt_color_for_modes,
     build_circadian_event_snapshot,
     build_simple_snapshot,
@@ -356,7 +356,10 @@ class TestBuildSimpleSnapshot:
             "id": "pal",
             "kind": "palette",
             "slots": [
-                {"color": {"color_mode": "hs", "hs_color": [i * 72, 80]}, "brightness": 200}
+                {
+                    "color": {"color_mode": "hs", "hs_color": [i * 72, 80]},
+                    "brightness": 200,
+                }
                 for i in range(5)
             ],
         }

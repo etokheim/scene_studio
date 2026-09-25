@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from custom_components.circadian_scenes.migrate_native import (
+from custom_components.scene_studio.migrate_native import (
     freeze_scene_overrides,
     infer_membership,
     needs_native_freeze,

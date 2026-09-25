@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from custom_components.circadian_scenes.const import VARIABLE_REF
-from custom_components.circadian_scenes.palette import (
+from custom_components.scene_studio.const import VARIABLE_REF
+from custom_components.scene_studio.palette import (
     assignment_slot,
     assignment_t_r,
     normalize_palette_slots,
@@ -11,7 +11,7 @@ from custom_components.circadian_scenes.palette import (
     resolve_palette_color,
     sample_palette_wheel,
 )
-from custom_components.circadian_scenes.resolve import (
+from custom_components.scene_studio.resolve import (
     build_circadian_event_snapshot,
     resolve_variable,
 )
@@ -92,7 +92,7 @@ class TestResolvePalette:
 
 
 def resolve_slot_via(pal, index, variables):
-    from custom_components.circadian_scenes.palette import resolve_slot
+    from custom_components.scene_studio.palette import resolve_slot
 
     return resolve_slot(pal, index, variables)
 

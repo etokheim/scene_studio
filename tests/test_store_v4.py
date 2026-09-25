@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.circadian_scenes.const import (
+from custom_components.scene_studio.const import (
     AUTOMATICALLY_UPDATE_LIGHTS,
     KIND_CIRCADIAN,
     KIND_SIMPLE,
@@ -17,8 +17,8 @@ from custom_components.circadian_scenes.const import (
     SOLAR_EVENTS,
     VARIABLE_REF,
 )
-from custom_components.circadian_scenes.store import (
-    CircadianScenesStore,
+from custom_components.scene_studio.store import (
+    SceneStudioStore,
     _migrate_v3_to_v4,
     normalize_circadian_scene,
     normalize_scene,
@@ -258,8 +258,8 @@ class TestMigrateV3ToV4:
         assert result["scenes"] == []
 
 
-def _bare_store() -> CircadianScenesStore:
-    store = CircadianScenesStore.__new__(CircadianScenesStore)
+def _bare_store() -> SceneStudioStore:
+    store = SceneStudioStore.__new__(SceneStudioStore)
     store.variables = {}
     store.themes = {}
     store.scenes = {}
@@ -316,7 +316,7 @@ def test_scene_memory_rolls_back_when_save_fails():
 
 class TestStripSceneDuskMinimum:
     def test_lifts_first_scene_value_and_strips(self):
-        from custom_components.circadian_scenes.store import strip_scene_dusk_minimum
+        from custom_components.scene_studio.store import strip_scene_dusk_minimum
 
         scenes = {
             "a": {
@@ -334,7 +334,7 @@ class TestStripSceneDuskMinimum:
         assert SCENE_DUSK_MINIMUM_TIME_OF_DAY not in scenes["b"]
 
     def test_returns_none_when_absent(self):
-        from custom_components.circadian_scenes.store import strip_scene_dusk_minimum
+        from custom_components.scene_studio.store import strip_scene_dusk_minimum
 
         scenes = {"a": {"kind": KIND_CIRCADIAN}}
         assert strip_scene_dusk_minimum(scenes) is None

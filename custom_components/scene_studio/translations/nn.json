@@ -1,21 +1,21 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Circadian Scenes er allereie konfigurert",
-      "single_instance_allowed": "Circadian Scenes er allereie konfigurert. Opne den frå sidemenyen for å leggje til scener."
+      "already_configured": "Scene Studio er allereie konfigurert",
+      "single_instance_allowed": "Scene Studio er allereie konfigurert. Opne den frå sidemenyen for å leggje til scener."
     },
     "error": {
       "unknown": "Uventa feil"
     },
     "step": {
       "user": {
-        "title": "Circadian Scenes",
-        "description": "Legg Circadian Scenes til i sidemenyen. Opprett og rediger rom derfrå — éi integrasjon, så mange soner du treng. Dagslys som følgjer sola mellom scenene dine."
+        "title": "Scene Studio",
+        "description": "Legg Scene Studio til i sidemenyen. Opprett og rediger rom derfrå — éi integrasjon, så mange soner du treng. Dagslys som følgjer sola mellom scenene dine."
       }
     }
   },
   "frontend": {
-    "title": "Circadian Scenes",
+    "title": "Scene Studio",
     "tabs": {
       "extrapolation": "Circadian-scener",
       "created": "Oppretta scener"
@@ -23,11 +23,11 @@
     "empty": {
       "extrapolation": "Ingen circadian-scener enno. Opprett éi for å styre belysninga etter sola.",
       "extrapolation_title": "Byrja å lyse med sola",
-      "extrapolation_body": "Circadian Scenes blandar lyset i rommet mellom solhendingar — daggry, soloppgang, middag, solnedgang og skumring — så lysstyrke og farge følgjer dagen.",
+      "extrapolation_body": "Scene Studio blandar lyset i rommet mellom solhendingar — daggry, soloppgang, middag, solnedgang og skumring — så lysstyrke og farge følgjer dagen.",
       "extrapolation_example": "Opprett ei scene for eit rom, tilordne native scener til kvar solhending, og aktiver ho. Valfrie automatiske oppdateringar justerer lysa med jamne mellomrom etterpå.",
-      "created": "Ingen native scener oppretta av Circadian Scenes enno. Dei viser her når du brukar Automatisk oppsett eller Opprett ny scene.",
+      "created": "Ingen native scener oppretta av Scene Studio enno. Dei viser her når du brukar Automatisk oppsett eller Opprett ny scene.",
       "created_title": "Ingen oppretta scener enno",
-      "created_body": "Native Home Assistant-scener oppretta av Circadian Scenes viser her — frå Automatisk oppsett eller Opprett ny scene på ei solhending.",
+      "created_body": "Native Home Assistant-scener oppretta av Scene Studio viser her — frå Automatisk oppsett eller Opprett ny scene på ei solhending.",
       "learn_more": "Les meir"
     },
     "list": {
@@ -83,7 +83,7 @@
     },
     "save_warn": {
       "title": "Oppdatere eksterne scener?",
-      "text": "Lagring endrar desse Home Assistant-scenene som ikkje vart oppretta av Circadian Scenes: {scenes}.",
+      "text": "Lagring endrar desse Home Assistant-scenene som ikkje vart oppretta av Scene Studio: {scenes}.",
       "dont_warn": "Ikkje åtvar igjen",
       "save": "Lagre endringar"
     },

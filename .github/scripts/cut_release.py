@@ -16,9 +16,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CHANGELOG = ROOT / "CHANGELOG.md"
-MANIFEST = ROOT / "custom_components/circadian_scenes/manifest.json"
-PANEL = ROOT / "custom_components/circadian_scenes/panel.py"
-NOTES = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "circadian_scenes_release_notes.md"
+MANIFEST = ROOT / "custom_components/scene_studio/manifest.json"
+PANEL = ROOT / "custom_components/scene_studio/panel.py"
+NOTES = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "scene_studio_release_notes.md"
 
 UNRELEASED_RE = re.compile(
     r"^## \[Unreleased\]\s*\n(?P<body>.*?)(?=^## \[)",
@@ -185,7 +185,7 @@ def main() -> int:
 
     notes_body = clean_unreleased_body(body)
     NOTES.write_text(
-        f"# Circadian Scenes {version}\n\n{notes_body}", encoding="utf-8"
+        f"# Scene Studio {version}\n\n{notes_body}", encoding="utf-8"
     )
     write_github_output(outputs)
     return 0

@@ -10,7 +10,7 @@ description: >-
 
 # Home Assistant API (Docker sandbox)
 
-This repo talks to the **local Circadian Scenes sandbox**, not the live home `/config`. Prefer the REST API for authoritative state over guessing from YAML alone.
+This repo talks to the **local Scene Studio sandbox**, not the live home `/config`. Prefer the REST API for authoritative state over guessing from YAML alone.
 
 ## Auth (required)
 
@@ -26,9 +26,9 @@ This repo talks to the **local Circadian Scenes sandbox**, not the live home `/c
 
 ## Panel UI (Chrome DevTools MCP)
 
-Verify Circadian Scenes in Chrome DevTools MCP, not a Cursor-owned HA tab ([`.cursor/rules/no-browser-reload.mdc`](../../rules/no-browser-reload.mdc)):
+Verify Scene Studio in Chrome DevTools MCP, not a Cursor-owned HA tab ([`.cursor/rules/no-browser-reload.mdc`](../../rules/no-browser-reload.mdc)):
 
-1. `http://127.0.0.1:8123/circadian_scenes`
+1. `http://127.0.0.1:8123/scene_studio`
 2. Login with `sandbox_ha_username` / `sandbox_ha_password` from `secrets.yaml` when the authorize form appears.
 3. After `PANEL_ASSET_REV` + `docker compose restart`, use a **normal** reload (`ignoreCache` off) and confirm the `panel.js` URL rev before judging layout.
 
@@ -117,8 +117,8 @@ Official reference: [REST API](https://developers.home-assistant.io/docs/api/res
 |------|--------|
 | Current entity/device state, attributes, last_changed | REST API |
 | Fire a service / validate a template quickly | REST API |
-| Circadian Scenes sidebar panel layout, CSS, chart | Chrome DevTools MCP on the sandbox (`http://127.0.0.1:8123/circadian_scenes`); login keys in `secrets.yaml` |
-| How the integration is authored | `custom_components/circadian_scenes/` |
+| Scene Studio sidebar panel layout, CSS, chart | Chrome DevTools MCP on the sandbox (`http://127.0.0.1:8123/scene_studio`); login keys in `secrets.yaml` |
+| How the integration is authored | `custom_components/scene_studio/` |
 | How the sandbox home is authored | `dev/config/` starter YAML |
 
 ## Safety

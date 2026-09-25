@@ -1,21 +1,21 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Circadian Scenes ist bereits konfiguriert",
-      "single_instance_allowed": "Circadian Scenes ist bereits konfiguriert. Öffne es in der Seitenleiste, um Szenen hinzuzufügen."
+      "already_configured": "Scene Studio ist bereits konfiguriert",
+      "single_instance_allowed": "Scene Studio ist bereits konfiguriert. Öffne es in der Seitenleiste, um Szenen hinzuzufügen."
     },
     "error": {
       "unknown": "Unerwarteter Fehler"
     },
     "step": {
       "user": {
-        "title": "Circadian Scenes",
-        "description": "Fügt Circadian Scenes zur Seitenleiste hinzu. Erstelle und bearbeite Räume dort — eine Integration, so viele Bereiche wie nötig. Tageslicht, das der Sonne zwischen deinen Szenen folgt."
+        "title": "Scene Studio",
+        "description": "Fügt Scene Studio zur Seitenleiste hinzu. Erstelle und bearbeite Räume dort — eine Integration, so viele Bereiche wie nötig. Tageslicht, das der Sonne zwischen deinen Szenen folgt."
       }
     }
   },
   "frontend": {
-    "title": "Circadian Scenes",
+    "title": "Scene Studio",
     "tabs": {
       "extrapolation": "Circadian-Szenen",
       "created": "Erstellte Szenen"
@@ -23,11 +23,11 @@
     "empty": {
       "extrapolation": "Noch keine Circadian-Szenen. Erstelle eine, um einen Raum nach der Sonne zu beleuchten.",
       "extrapolation_title": "Mit der Sonne beleuchten",
-      "extrapolation_body": "Circadian Scenes blendet die Lichter eines Raums zwischen Sonnenereignissen — Morgendämmerung, Sonnenaufgang, Mittag, Sonnenuntergang und Abenddämmerung — sodass Helligkeit und Farbe dem Tag folgen.",
+      "extrapolation_body": "Scene Studio blendet die Lichter eines Raums zwischen Sonnenereignissen — Morgendämmerung, Sonnenaufgang, Mittag, Sonnenuntergang und Abenddämmerung — sodass Helligkeit und Farbe dem Tag folgen.",
       "extrapolation_example": "Erstelle eine Szene für einen Raum, weise native Szenen den Sonnenereignissen zu und aktiviere sie. Optionale automatische Updates passen die Lichter danach im Intervall an.",
-      "created": "Noch keine von Circadian Scenes erstellten nativen Szenen. Sie erscheinen hier bei Automatischem Setup oder Neue Szene erstellen.",
+      "created": "Noch keine von Scene Studio erstellten nativen Szenen. Sie erscheinen hier bei Automatischem Setup oder Neue Szene erstellen.",
       "created_title": "Noch keine erstellten Szenen",
-      "created_body": "Native Home-Assistant-Szenen von Circadian Scenes erscheinen hier — aus dem Automatischen Setup oder Neue Szene erstellen an einem Sonnenereignis.",
+      "created_body": "Native Home-Assistant-Szenen von Scene Studio erscheinen hier — aus dem Automatischen Setup oder Neue Szene erstellen an einem Sonnenereignis.",
       "learn_more": "Mehr erfahren"
     },
     "list": {
@@ -83,7 +83,7 @@
     },
     "save_warn": {
       "title": "Externe Szenen aktualisieren?",
-      "text": "Speichern ändert diese Home-Assistant-Szenen, die nicht von Circadian Scenes erstellt wurden: {scenes}.",
+      "text": "Speichern ändert diese Home-Assistant-Szenen, die nicht von Scene Studio erstellt wurden: {scenes}.",
       "dont_warn": "Nicht erneut warnen",
       "save": "Änderungen speichern"
     },

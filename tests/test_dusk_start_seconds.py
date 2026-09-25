@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from custom_components.circadian_scenes.solar import (
+from custom_components.scene_studio.solar import (
     SECONDS_PER_DAY,
     _format_time,
     dusk_start_seconds,

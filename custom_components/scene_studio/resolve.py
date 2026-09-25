@@ -292,7 +292,9 @@ def build_simple_snapshot(
         var_brightness = color_part.pop("brightness", None)
         state_dict = {
             "state": raw.get("state", "on"),
-            "brightness": raw.get("brightness", var_brightness if var_brightness is not None else 255),
+            "brightness": raw.get(
+                "brightness", var_brightness if var_brightness is not None else 255
+            ),
             **color_part,
         }
         entities[eid] = _adapt_color_for_modes(state_dict, modes.get(eid))

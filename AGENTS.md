@@ -1,6 +1,6 @@
-# Agent notes (Circadian Scenes)
+# Agent notes (Scene Studio)
 
-Custom Home Assistant integration in `custom_components/circadian_scenes/`. This is **not** the live `/config` + Heim dashboard. Keep this file short; durable rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+Custom Home Assistant integration in `custom_components/scene_studio/`. This is **not** the live `/config` + Heim dashboard. Keep this file short; durable rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## Must do
 
@@ -10,7 +10,7 @@ Custom Home Assistant integration in `custom_components/circadian_scenes/`. This
 - **The main column is the editor** — scenes, variables, palettes, and themes open in `.stage-col`, not dialogs. See [`.cursor/rules/editor-in-main-column.mdc`](.cursor/rules/editor-in-main-column.mdc).
 - **HA Jinja templates** — follow [`.cursor/skills/home-assistant-templates/SKILL.md`](.cursor/skills/home-assistant-templates/SKILL.md); update that skill when you find new quirks.
 - **HA REST API** — local sandbox at `http://127.0.0.1:8123`; auth via `cursor_ha_token` in `dev/config/secrets.yaml`. See [`.cursor/skills/home-assistant-api/SKILL.md`](.cursor/skills/home-assistant-api/SKILL.md).
-- **Panel UI checks** — Chrome DevTools MCP at `/circadian_scenes`, not a new Cursor HA tab. Sandbox login keys `sandbox_ha_username` / `sandbox_ha_password` in the same secrets file; ask if missing. See [`.cursor/rules/no-browser-reload.mdc`](.cursor/rules/no-browser-reload.mdc).
+- **Panel UI checks** — Chrome DevTools MCP at `/scene_studio`, not a new Cursor HA tab. Sandbox login keys `sandbox_ha_username` / `sandbox_ha_password` in the same secrets file; ask if missing. See [`.cursor/rules/no-browser-reload.mdc`](.cursor/rules/no-browser-reload.mdc).
 - **Git** — day-to-day work is on `dev`. A PR to `master` is a release. See [`docs/GIT.md`](docs/GIT.md).
 - **Releases** — [`.cursor/skills/prepare-release-pr/SKILL.md`](.cursor/skills/prepare-release-pr/SKILL.md) (translations + changelog, then PR). Merging to `master` runs [`.github/workflows/release.yml`](.github/workflows/release.yml). Sidebar/store is a minor with automatic migration, not a breaking reconfigure.
 - **Translations** — during development, add keys to `en.json` only. nb/nn/de/es are one pass in the release PR — [`.cursor/skills/panel-translations/SKILL.md`](.cursor/skills/panel-translations/SKILL.md).
@@ -21,8 +21,8 @@ Custom Home Assistant integration in `custom_components/circadian_scenes/`. This
 ## Local sandbox
 
 - Docker + starter YAML: [`DEVELOPMENT.md`](DEVELOPMENT.md). Python changes need `docker compose restart`.
-- Integration code: [`custom_components/circadian_scenes/`](custom_components/circadian_scenes/). Runtime files under `dev/config/` are gitignored except the committed starter YAML. Do not commit or rewrite `dev/config/scenes.yaml` unless the user explicitly asks.
+- Integration code: [`custom_components/scene_studio/`](custom_components/scene_studio/). Runtime files under `dev/config/` are gitignored except the committed starter YAML. Do not commit or rewrite `dev/config/scenes.yaml` unless the user explicitly asks.
 
 ## Git remote
 
-Public origin: [`etokheim/circadian_scenes`](https://github.com/etokheim/circadian_scenes). Workflow: [`docs/GIT.md`](docs/GIT.md).
+Public origin: [`etokheim/scene_studio`](https://github.com/etokheim/scene_studio). Workflow: [`docs/GIT.md`](docs/GIT.md).

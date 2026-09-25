@@ -5,7 +5,7 @@ import {
   meshColors,
   sampleMeshColor,
   scaledCardRgb,
-} from "../../custom_components/circadian_scenes/frontend/card_mesh.js";
+} from "../../custom_components/scene_studio/frontend/card_mesh.js";
 
 test("card dots scale chromatic rgb by brightness", () => {
   assert.deepEqual(

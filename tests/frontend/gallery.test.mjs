@@ -5,7 +5,7 @@ import {
   galleryCopyName,
   galleryPalette,
   paletteSlotSignature,
-} from "../../custom_components/circadian_scenes/frontend/gallery.js";
+} from "../../custom_components/scene_studio/frontend/gallery.js";
 
 test("a repeated picture palette gets the next free name", () => {
   assert.equal(galleryCopyName("Mantel", []), "Mantel");

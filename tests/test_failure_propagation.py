@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock
 import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
-from custom_components.circadian_scenes import _validate_turn_on_parameters
-from custom_components.circadian_scenes.apply_entities import (
+from custom_components.scene_studio import _validate_turn_on_parameters
+from custom_components.scene_studio.apply_entities import (
     apply_entities_parallel,
     apply_single_entity,
 )
-from custom_components.circadian_scenes.extrapolation_math import (
+from custom_components.scene_studio.extrapolation_math import (
     current_sun_event_index,
     extrapolate_number,
     scene_keys_from_day_percent,

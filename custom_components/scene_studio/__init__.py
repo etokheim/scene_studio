@@ -1,4 +1,4 @@
-"""The Circadian Scenes integration (domain: circadian_scenes)."""
+"""The Scene Studio integration (domain: scene_studio)."""
 
 from __future__ import annotations
 
@@ -19,12 +19,12 @@ from .const import (
     DATA_ENTITIES,
     DATA_STORE,
     DOMAIN,
-    LEGACY_DOMAIN,
+    LEGACY_DOMAINS,
     SCENE_NAME,
 )
 from .migrate_native import async_freeze_migrate
 from .panel import async_setup_panel, async_unload_panel
-from .store import CircadianScenesStore
+from .store import SceneStudioStore
 from .websocket_api import async_setup_websocket
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def _validate_turn_on_parameters(
     transition: float,
     transition_percent: float | None,
 ) -> None:
-    """Raise a service error for invalid Circadian Scenes activation input."""
+    """Raise a service error for invalid Scene Studio activation input."""
     if not -100 <= brightness_modifier <= 100:
         raise ServiceValidationError(
             "Brightness modifier must be between -100 and 100, "
@@ -101,7 +101,7 @@ async def async_setup(hass, config):
                     break
             else:
                 raise ServiceValidationError(
-                    f"Scene entity {entity_id!r} is not owned by Circadian Scenes"
+                    f"Scene entity {entity_id!r} is not owned by Scene Studio"
                 )
 
     hass.services.async_register(
@@ -113,7 +113,7 @@ async def async_setup(hass, config):
                 vol.Required("entity_id"): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="scene",
-                        integration="circadian_scenes",
+                        integration="scene_studio",
                         multiple=True,
                     )
                 ),
@@ -173,25 +173,25 @@ def _purge_legacy_platform_entities(hass: HomeAssistant) -> int:
     registry = er.async_get(hass)
     removed = 0
     for entry in list(registry.entities.values()):
-        if entry.platform != LEGACY_DOMAIN:
+        if entry.platform not in LEGACY_DOMAINS:
             continue
         registry.async_remove(entry.entity_id)
         removed += 1
     if removed:
         _LOGGER.info(
-            "Removed %s entity registry entries from legacy platform %s",
+            "Removed %s entity registry entries from legacy platforms %s",
             removed,
-            LEGACY_DOMAIN,
+            ", ".join(LEGACY_DOMAINS),
         )
     return removed
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Set up Circadian Scenes from a config entry."""
+    """Set up Scene Studio from a config entry."""
     domain_data = hass.data.setdefault(
         DOMAIN,
         {
-            DATA_STORE: CircadianScenesStore(hass),
+            DATA_STORE: SceneStudioStore(hass),
             DATA_ENTITIES: {},
             DATA_ADD_ENTITIES: None,
             DATA_CONFIG_ENTRY: None,
@@ -202,7 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         },
     )
 
-    store: CircadianScenesStore = domain_data[DATA_STORE]
+    store: SceneStudioStore = domain_data[DATA_STORE]
     if not domain_data["store_loaded"]:
         await store.async_load()
         domain_data["store_loaded"] = True
@@ -259,7 +259,7 @@ async def _async_normalize_primary_entry(hass: HomeAssistant, entry_id: str) -> 
         hass.config_entries.async_update_entry(
             entry,
             unique_id=DOMAIN,
-            title="Circadian Scenes",
+            title="Scene Studio",
             data={},
             options={},
         )
