@@ -1,5 +1,13 @@
 # Decisions
 
+## Circadian palette belongs to the solar event
+
+- **Date:** 2026-09-25
+- **Supersedes in part:** “Theme split and palette mode button” — the light sidebar no longer opens the palette list.
+- **Decision:** In the circadian editor a palette is chosen on the solar event, not on a light. The light’s color wheel offers palette mode only when that event already has a palette, and it uses that palette. The name-scene button paints above the light tiles. Around the dial, the brightness span is half of 92px on a phone-sized face and three quarters on a desktop face, and the hour numerals are 8% of the face width.
+- **Why:** A light was able to pick its own palette. A fixed brightness span and two label sizes left the dial small on a phone and awkward in between.
+- **Do not reverse without user ask.**
+
 ## Narrow editor fills the screen; the wheel does not scroll the page
 
 - **Date:** 2026-09-25

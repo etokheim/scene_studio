@@ -1131,9 +1131,6 @@ class SceneStudioPanel extends HTMLElement {
             max-width: min(96vh, var(--dial-face-max, 96vh));
             margin-inline: -24px;
           }
-          .clock-hour-label {
-            font-size: 32px;
-          }
         }
         /* Sunrise/sunset shadow + glow sit behind the planet (back-most).
            Sized in JS to cover the full panel (under the sidebar).
@@ -1802,7 +1799,7 @@ class SceneStudioPanel extends HTMLElement {
           transform: translate(-50%, -50%);
           font-family: "Iowan Old Style", "Palatino Linotype", Palatino,
             "Times New Roman", Times, serif;
-          font-size: 32px;
+          font-size: var(--clock-hour-size, 32px);
           font-weight: 400;
           font-variant-numeric: tabular-nums;
           letter-spacing: 0.02em;
@@ -1815,11 +1812,6 @@ class SceneStudioPanel extends HTMLElement {
               color-mix(in srgb, var(--primary-background-color) 25%, transparent),
             0 1px 6px
               color-mix(in srgb, var(--primary-background-color) 25%, transparent);
-        }
-        @media (min-width: 871px) {
-          .clock-hour-label {
-            font-size: 48px;
-          }
         }
         .clock-event-layer {
           position: absolute;
@@ -3027,7 +3019,7 @@ class SceneStudioPanel extends HTMLElement {
             var(--ha-border-radius-2xl, 28px)
           );
           position: absolute;
-          z-index: 7;
+          z-index: 16;
           top: calc(var(--header-height, 64px) + 16px);
           right: calc(16px + var(--safe-area-inset-right, 0px));
           width: var(--scene-sidebar-width, 375px);
@@ -4551,7 +4543,8 @@ class SceneStudioPanel extends HTMLElement {
               var(--scene-sidebar-gutter)
           );
           bottom: calc(16px + var(--safe-area-inset-bottom, 0px));
-          z-index: 6;
+          /* Above the light-tile strip (z-index 12). The event sidebar stays higher. */
+          z-index: 13;
           --ha-button-box-shadow: var(--ha-box-shadow-l);
           transform-origin: bottom right;
           transition:
@@ -8393,6 +8386,18 @@ class SceneStudioPanel extends HTMLElement {
       tempMin: 2000,
       tempMax: 6500,
       ...this._wheelPalette(),
+      getBasePalette: () => {
+        const base = this._sceneBasePalette?.();
+        if (!base?.palette_id) {
+          return null;
+        }
+        return (this._variables || []).find((item) => item.id === base.palette_id) || null;
+      },
+      onPickPalette: async () => {
+        await this._pickSceneBasePalette();
+        wheelCtl?.sync();
+      },
+      onEditPalette: (id) => this._go(`palette/${id}`),
       getState: () => ({
         scenes: events.map((item, index) => ({
           id: item.id,
@@ -13928,8 +13933,6 @@ class SceneStudioPanel extends HTMLElement {
           }
           return (this._variables || []).find((item) => item.id === base.palette_id) || null;
         },
-        onPickPalette: () => this._pickSceneBasePalette(),
-        onEditPalette: (id) => this._go(`palette/${id}`),
         getAssignmentEntityId: () => light.entity_id,
         getAssignmentSeed: () => {
           const draft = currentDraft();
@@ -18967,21 +18970,25 @@ class SceneStudioPanel extends HTMLElement {
         return;
       }
       // Cardinal numerals sit on the old 6h tick tips (near the face edge).
-      // Brightness 0% is the sun path; 100% is path + CLOCK_EVENT_GAP.
+      // Size follows the face so widths between phone and desktop are not a step.
+      const labelFontPx = Math.round(w * 0.08);
+      face.style.setProperty("--clock-hour-size", `${labelFontPx}px`);
+      // Brightness 0% is the sun path. 100% is a shorter span on a smaller face
+      // (half of 92px on a phone dial, three quarters on a desktop dial) so the
+      // core can use the space the span used to reserve.
+      const gapT = Math.min(1, Math.max(0, (w - 360) / (800 - 360)));
+      const eventGap = CLOCK_EVENT_GAP_FROM_PATH_PX * (0.5 + 0.25 * gapT);
       const tickOuterPad = w >= 871 ? 10 : 6;
-      const labelFontPx = w >= 871 ? 48 : 32;
       const labelPad =
         tickOuterPad + labelFontPx * 0.42 - CLOCK_HOUR_LABEL_OUTSET_PX;
       const narrowFace = window.matchMedia("(max-width: 870px)").matches;
       const chromeFloor = Math.ceil(tickOuterPad + labelFontPx * 0.42 + 4);
-      let chromePx = narrowFace
-        ? chromeFloor
-        : Math.max(CLOCK_CHROME_PX, chromeFloor);
+      let chromePx = chromeFloor;
       const pathR = this._clockSunPathRadius();
       const pathFrac = pathR / 100;
       const half = w / 2;
       const btnClear = CLOCK_EVENT_BTN_PX / 2 + 2;
-      const outerNeed = CLOCK_EVENT_GAP_FROM_PATH_PX + btnClear;
+      const outerNeed = eventGap + btnClear;
       if (pathFrac > 0 && half > outerNeed) {
         const chromeForBri = Math.ceil(half - (half - outerNeed) / pathFrac);
         const maxChrome = Math.max(0, Math.floor((w - 80) / 2));
@@ -19013,7 +19020,7 @@ class SceneStudioPanel extends HTMLElement {
         label.style.top = `${50 + sin * labelR}%`;
       }
       const pathPx = pathFrac * (coreW / 2);
-      let r1Px = pathPx + CLOCK_EVENT_GAP_FROM_PATH_PX;
+      let r1Px = pathPx + eventGap;
       if (r1Px + btnClear > half) {
         r1Px = half - btnClear;
       }
