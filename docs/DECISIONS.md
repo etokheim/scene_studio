@@ -962,6 +962,14 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Forcing a horizontal switch to 130×320 drew the thumb as a full-height column on the right. Rebuilding the strip on every disk click replayed the Select all fill transition.
 - **Do not reverse without user ask.**
 
+## Wheel aside follows the light-list gutter
+
+- **Date:** 2026-09-25
+- **Supersedes in part:** “Landscape wheel chrome” — the vertical mode and variable column is no longer an aspect-ratio query.
+- **Decision:** The disks stay centered in the editor column. When the gutter beside that centered disk is at least 240px, the light list is absolutely placed in the right gutter and does not move the disks. Otherwise the light list stays under the disks, and the color modes and variables stack in a column centered on the disk, starting 200px right of its center. Labels sit to the right of each dot. The color modes stick to the top of that column, with a gap and a rule above the variables. A selected dot keeps the same 2px gap before its white ring as the horizontal row. A click on a variable applies it to the selected lights and does not clear that selection. A click on a pin only selects it; the color changes after the pointer moves past the drag threshold. A collapsed group dot scales with its count, up to four times.
+- **Why:** The aspect-ratio switch put the names in the corner of the wheel box, and a click was already writing a color.
+- **Do not reverse without user ask.**
+
 ## Landscape wheel chrome
 
 - **Date:** 2026-09-23

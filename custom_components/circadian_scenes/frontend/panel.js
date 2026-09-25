@@ -2535,6 +2535,12 @@ class CircadianScenesPanel extends HTMLElement {
           opacity: 1;
           transition: opacity 280ms ease 240ms;
         }
+        .hue-wheel-svg .gm.grouped:not(.expanded) .pin-dot,
+        .hue-wheel-svg .gm.grouped:not(.expanded) .pin-hit {
+          transform-box: fill-box;
+          transform-origin: center;
+          scale: var(--group-scale, 1);
+        }
         .hue-wheel-svg .gm.expanded .pin-dot,
         .hue-wheel-svg .gm.drop-target .pin-dot {
           opacity: 0;
@@ -3763,11 +3769,9 @@ class CircadianScenesPanel extends HTMLElement {
           max-width: min(100%, ${WHEEL_FACE_MAX_PX}px, calc(100cqb - 64px));
           height: auto;
         }
-        /* Landscape wheel container: mode toggles and variables stack from the
-           disk's top-right. 200px column + 16px gap. A portrait viewport keeps
-           the horizontal row under the disk even when the wheel box is wide. */
-        @media (orientation: landscape) {
-        @container wheel (aspect-ratio > 1 / 1) {
+        /* Vertical modes and variables when the light list cannot sit in the
+           right gutter. The list is centered on the disk, 200px right of center. */
+        .simple-editor.chrome-aside {
           .hue-wheel-face {
             position: relative;
             display: flex;
@@ -3784,15 +3788,17 @@ class CircadianScenesPanel extends HTMLElement {
           }
           .hue-wheel-chrome {
             position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
+            top: 50%;
+            left: calc(50% + 200px);
+            right: auto;
+            bottom: auto;
+            transform: translateY(-50%);
             z-index: 4;
             flex-direction: column;
-            align-items: flex-end;
+            align-items: flex-start;
             justify-content: flex-start;
             width: 200px;
-            max-width: 200px;
+            max-width: min(200px, calc(50% - 16px));
             height: auto;
             max-height: 100%;
             min-height: 0;
@@ -3834,12 +3840,19 @@ class CircadianScenesPanel extends HTMLElement {
             );
           }
           .hue-wheel-mode-cluster {
-            align-items: flex-end;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            align-items: flex-start;
             width: 100%;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--divider-color);
+            background: var(--primary-background-color, var(--card-background-color));
           }
           .wheel-mode-pill {
             flex-direction: column;
-            align-items: flex-end;
+            align-items: flex-start;
             width: auto;
             max-width: 100%;
             height: auto;
@@ -3855,7 +3868,7 @@ class CircadianScenesPanel extends HTMLElement {
             display: flex;
             flex-direction: row;
             align-items: center;
-            justify-content: flex-end;
+            justify-content: flex-start;
             gap: 8px;
             padding: 0;
             border-color: transparent;
@@ -3866,7 +3879,7 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 1;
           }
           .wheel-mode-pill .wheel-wrapper.active .wheel {
-            box-shadow: 0 0 0 2px #fff;
+            box-shadow: 0 0 0 2px transparent, 0 0 0 4px #fff;
           }
           .wheel-mode-pill .wheel-wrapper.palette-active {
             width: auto;
@@ -3875,7 +3888,10 @@ class CircadianScenesPanel extends HTMLElement {
           .wheel-mode-pill .wheel-wrapper.active .wheel-mode-name {
             font-weight: 700;
           }
-          .wheel-mode-pill .wheel-wrapper.palette-active .wheel-mode-name {
+          .wheel-mode-pill .wheel-wrapper .wheel {
+            order: 0;
+          }
+          .wheel-mode-pill .wheel-wrapper .wheel-mode-name {
             order: 1;
           }
           .wheel-mode-pill .wheel-wrapper.palette-active .wheel-palette-edit {
@@ -3883,16 +3899,13 @@ class CircadianScenesPanel extends HTMLElement {
             width: auto;
             margin-inline-start: 4px;
           }
-          .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
-            order: 3;
-          }
           .wheel-mode-name {
             display: block;
-            text-align: end;
+            text-align: start;
           }
           .hue-presets {
             flex-direction: column;
-            align-items: flex-end;
+            align-items: flex-start;
             justify-content: flex-start;
             width: 100%;
             max-width: 200px;
@@ -3908,7 +3921,7 @@ class CircadianScenesPanel extends HTMLElement {
           }
           .hue-presets-track {
             flex-direction: column;
-            align-items: flex-end;
+            align-items: flex-start;
             width: 100%;
             max-width: 100%;
             overflow: visible;
@@ -3921,7 +3934,7 @@ class CircadianScenesPanel extends HTMLElement {
             max-width: 100%;
             height: 36px;
             border-radius: 18px;
-            flex-direction: row-reverse;
+            flex-direction: row;
             justify-content: flex-start;
             gap: 8px;
             padding: 2px 2px 2px 10px;
@@ -3933,20 +3946,19 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 1;
           }
           .hue-preset.active .hue-preset-swatch {
-            box-shadow: 0 0 0 2px #fff;
+            box-shadow: 0 0 0 2px transparent, 0 0 0 4px #fff;
           }
           .hue-preset.active .hue-preset-name {
             font-weight: 700;
           }
           .hue-preset.add {
-            align-self: flex-end;
+            align-self: flex-start;
           }
           .hue-preset-name {
             display: block;
             max-width: 148px;
-            text-align: end;
+            text-align: start;
           }
-        }
         }
         .stage-bg .hue-wheel-glow {
           position: absolute;

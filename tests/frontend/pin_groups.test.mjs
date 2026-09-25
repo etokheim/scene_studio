@@ -154,7 +154,7 @@ test("a short press on a stack fans; a longer move commits", () => {
   );
   assert.equal(
     pinPressAction({ moved: false, travel: 0, stacked: false }),
-    "commit"
+    "select"
   );
 });
 

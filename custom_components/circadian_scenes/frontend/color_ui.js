@@ -921,10 +921,10 @@ function detachedAfterDrag(detachedIds, finishedIds) {
   return [...detachedIds].filter((id) => !finished.has(id));
 }
 
-/** A short press on a stack opens the group. Movement past the threshold is a drag. */
+/** A short press on a stack opens the group. A short press otherwise only selects. Movement past the threshold writes the color. */
 function pinPressAction({ moved, travel, stacked }) {
-  if (!moved && travel < PIN_DRAG_THRESHOLD_PX && stacked) {
-    return "fan";
+  if (!moved && travel < PIN_DRAG_THRESHOLD_PX) {
+    return stacked ? "fan" : "select";
   }
   return "commit";
 }
@@ -3555,17 +3555,25 @@ function createSceneColorWheel({
       if (active?.draft?.variable_ref === variable.id) {
         btn.classList.add("active");
       }
-      btn.addEventListener("click", () => {
-        if (!active?.draft) {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const stateNow = getState();
+        const picked = selectedIdsOf(stateNow)
+          .map((id) => stateNow.scenes.find((row) => row.id === id))
+          .filter((row) => row?.draft);
+        const targets = picked.length ? picked : active?.draft ? [active] : [];
+        if (!targets.length) {
           return;
         }
-        applyVariableToDraft(active.draft, variable, {
-          entityId: entityIdOf(active),
-          seed: seedNow(),
-          catalog: palette,
-        });
+        for (const row of targets) {
+          applyVariableToDraft(row.draft, variable, {
+            entityId: entityIdOf(row),
+            seed: seedNow(),
+            catalog: palette,
+          });
+        }
         lockUiMode(variableIsPalette(variable) ? "palette" : null);
-        const marker = markers.get(active.id);
+        const marker = active ? markers.get(active.id) : null;
         if (marker) {
           marker.g.classList.add("glide");
           clearTimeout(glideTimer);
@@ -3996,6 +4004,14 @@ function createSceneColorWheel({
               drag?.moved && (drag.ids || []).some((id) => group.includes(id))
             ) ||
             group.some((id) => selectedIds.includes(id));
+          if (expandGroup) {
+            leadMarker.g.style.removeProperty("--group-scale");
+          } else {
+            leadMarker.g.style.setProperty(
+              "--group-scale",
+              String(Math.min(4, group.length))
+            );
+          }
           if (leadMarker.fo) {
             leadMarker.fo.style.display = "none";
           }
@@ -4558,13 +4574,27 @@ function createSceneColorWheel({
     const stacked = (drag.cluster || []).length > 1 && !detached.has(drag.sceneId);
     marker?.g.classList.remove("drag");
     svg.classList.remove("pin-drag");
-    if (
-      pinPressAction({
-        moved: drag.moved,
-        travel,
-        stacked,
-      }) === "fan"
-    ) {
+    const press = pinPressAction({
+      moved: drag.moved,
+      travel,
+      stacked,
+    });
+    if (press === "select") {
+      drag = null;
+      hideFloatReadout();
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      stage.dispatchEvent(
+        new CustomEvent("slider-interaction-stop", {
+          bubbles: true,
+          composed: true,
+        })
+      );
+      sync();
+      return;
+    }
+    if (press === "fan") {
       openGroup = [...(drag.cluster || [])];
       groupHome = {
         x: marker?.x,

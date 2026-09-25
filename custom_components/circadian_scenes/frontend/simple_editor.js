@@ -39,6 +39,28 @@ import {
   wheelDeltaToPercent,
 } from "./light_tiles.js";
 
+/** Lights sit in the right gutter only when that gutter clears the disk. Otherwise modes and variables stack beside it. */
+function bindWheelAside(editor) {
+  const LIGHT_ASIDE_MIN = 240;
+  const apply = () => {
+    const col = editor.clientWidth;
+    const height = editor.clientHeight;
+    if (!col || !height) {
+      return;
+    }
+    const disk = Math.min(col, height, 650);
+    const gutter = (col - disk) / 2;
+    const aside = gutter >= LIGHT_ASIDE_MIN;
+    editor.classList.toggle("lights-aside", aside);
+    editor.classList.toggle("chrome-aside", !aside);
+  };
+  editor._wheelAside?.disconnect();
+  const observer = new ResizeObserver(apply);
+  observer.observe(editor);
+  editor._wheelAside = observer;
+  apply();
+}
+
 export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
   .simple-editor-host {
@@ -66,6 +88,20 @@ export const SIMPLE_EDITOR_CSS = `
     /* The tile strip's bleed padding hangs out of this box. Clip it so that
        padding cannot scroll the stage before the disk hits its minimum. */
     overflow: clip;
+  }
+  .simple-editor.lights-aside .light-tiles-block {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    z-index: 4;
+    width: max(240px, calc((100% - min(100%, 650px)) / 2));
+    max-width: calc(50% - 16px);
+    justify-content: center;
+    pointer-events: none;
+  }
+  .simple-editor.lights-aside .light-tiles-block > * {
+    pointer-events: auto;
   }
   .simple-wheels {
     display: flex;
@@ -1807,6 +1843,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   };
   panel._simpleEditorRefresh = refreshFromPanel;
   host.replaceChildren(wrap);
+  bindWheelAside(wrap);
   refreshFromPanel();
   const clearLightSelection = () => {
     if (!selectedIds.size && !touchSelectMode) {
@@ -2391,6 +2428,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   wrap.append(wheels, tileBlock);
   syncTiles();
   host.replaceChildren(wrap);
+  bindWheelAside(wrap);
   wheel.sync();
   if (glowHost && typeof wheel.attachGlow === "function") {
     panel._simpleWheelGlowLayout = wheel.attachGlow(glowHost);
