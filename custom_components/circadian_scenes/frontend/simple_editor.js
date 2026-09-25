@@ -2018,7 +2018,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     getPalette: () =>
       (panel._variables || []).filter((item) => !variableIsPalette(item)),
     onAddPalette: (draft) => panel._addVariableFromCurrentDraft(draft),
-    addVariableLabel: panel._t("frontend.library.add_new_variable", "Add new variable"),
+    addVariableLabel: panel._t("frontend.library.add_variable", "Add variable"),
   });
   wheels.appendChild(wheel.el);
 

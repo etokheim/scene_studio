@@ -2435,7 +2435,7 @@ function createSceneColorWheel({
   onChange,
   getPalette,
   onAddPalette,
-  addVariableLabel = "Add new variable",
+  addVariableLabel = "Add variable",
   getCapabilities,
   getAssignmentSeed,
   getAssignmentEntityId,
@@ -3414,6 +3414,7 @@ function createSceneColorWheel({
       }
       if (!entry.supported && !offerPalette) {
         wrap.setAttribute("aria-disabled", "true");
+        wrap.classList.add("mode-unsupported");
       }
       const name = document.createElement("span");
       name.className = "wheel-mode-name";
@@ -3426,9 +3427,8 @@ function createSceneColorWheel({
       if (offerPalette && !palVar) {
         name.textContent = t("frontend.dialogs.scene_palette_select", "Select a palette");
       } else {
-        name.textContent = entry.supported ? label : `${label} (${unsupported})`;
+        name.textContent = label;
       }
-      wrap.title = name.textContent;
       const face = document.createElement("span");
       face.className = `wheel wheel-mode-${mode}`;
       if (mode === "color") {
@@ -3443,6 +3443,26 @@ function createSceneColorWheel({
         face.classList.add("palette-add-mark");
       }
       wrap.append(name, face);
+      if (!entry.supported && !offerPalette) {
+        const tip = document.createElement("ha-tooltip");
+        tip.placement = "right";
+        tip.textContent = unsupported;
+        wrap.id = `wheel-mode-${mode}`;
+        wrap.appendChild(tip);
+        const bindTip = () => {
+          const root = wrap.getRootNode();
+          if (typeof root?.getElementById !== "function") {
+            return;
+          }
+          tip.setAttribute("for", wrap.id);
+        };
+        if (wrap.isConnected) {
+          bindTip();
+        } else {
+          queueMicrotask(bindTip);
+        }
+        wrap._modeTip = tip;
+      }
       if (wrap.classList.contains("palette-active") && palVar) {
         const edit = document.createElement("span");
         edit.className = "wheel-palette-edit";
@@ -3468,6 +3488,10 @@ function createSceneColorWheel({
           return;
         }
         if (!entry.supported && !offerPalette) {
+          wrap.focus();
+          if (wrap._modeTip && "open" in wrap._modeTip) {
+            wrap._modeTip.open = true;
+          }
           return;
         }
         lockUiMode(mode);

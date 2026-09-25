@@ -2296,15 +2296,13 @@ class CircadianScenesPanel extends HTMLElement {
           height: 16px;
         }
         .wheel-mode-pill .wheel-wrapper[aria-disabled="true"] {
-          width: auto;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          opacity: 0.4;
           cursor: default;
         }
-        .wheel-mode-pill .wheel-wrapper[aria-disabled="true"] .wheel-mode-name {
-          display: block;
+        .wheel-mode-pill .wheel-wrapper.mode-unsupported .wheel {
+          filter: grayscale(1);
+        }
+        .wheel-mode-pill .wheel-wrapper.mode-unsupported .wheel-mode-name {
+          text-decoration: line-through;
         }
         .wheel-mode-pill .wheel {
           display: block;
@@ -2835,6 +2833,7 @@ class CircadianScenesPanel extends HTMLElement {
           --mdc-icon-size: 14px;
           width: 14px;
           height: 14px;
+          transform: translateY(-2px);
         }
         .light-brightness-graph {
           position: relative;
@@ -3942,13 +3941,45 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 0.75;
             overflow: visible;
           }
+          .wheel-mode-pill .wheel-wrapper:hover,
           .wheel-mode-pill .wheel-wrapper.active {
             border-color: transparent;
             opacity: 1;
           }
+          .wheel-mode-pill .wheel-wrapper.active {
+            gap: 10px;
+          }
+          .wheel-mode-pill .wheel-wrapper {
+            transform-origin: 14px center;
+            transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+          }
+          .wheel-mode-pill .wheel-wrapper:hover {
+            transform: translateX(-1.6px) scale(1.08);
+          }
+          .wheel-mode-pill .wheel-wrapper.active {
+            transform: translateX(-3.8px) scale(1.08);
+          }
+          .wheel-mode-pill .wheel-wrapper:active {
+            transform: translateX(0.8px) scale(0.96);
+          }
+          .wheel-mode-pill .wheel-wrapper.active:active {
+            transform: translateX(-1.1px) scale(0.96);
+          }
+          .wheel-mode-pill .wheel-wrapper .wheel {
+            position: relative;
+          }
           .wheel-mode-pill .wheel-wrapper.active .wheel {
-            outline: 2px solid #fff;
-            outline-offset: 2px;
+            outline: none;
+          }
+          .wheel-mode-pill .wheel-wrapper.active .wheel::after {
+            content: "";
+            position: absolute;
+            inset: -4px;
+            border-radius: inherit;
+            border: 2px solid #fff;
+            opacity: 0.75;
+            pointer-events: none;
+            animation: hue-preset-ring-in 180ms cubic-bezier(0.2, 0, 0, 1);
           }
           .wheel-mode-pill .wheel-wrapper.palette-active {
             width: auto;
@@ -4018,18 +4049,21 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 1;
           }
           .hue-preset.active {
-            gap: 12px;
+            gap: 10px;
+            transform: translateX(-3.8px) scale(1.08);
           }
           .hue-preset {
             transform-origin: 14px center;
             transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
           }
-          .hue-preset:hover,
-          .hue-preset.active {
-            transform: scale(1.08);
+          .hue-preset:hover {
+            transform: translateX(-1.6px) scale(1.08);
           }
           .hue-preset:active {
-            transform: scale(0.96);
+            transform: translateX(0.8px) scale(0.96);
+          }
+          .hue-preset.active:active {
+            transform: translateX(-1.1px) scale(0.96);
           }
           .hue-preset.active .hue-preset-swatch {
             outline: none;
@@ -4074,9 +4108,7 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 0.75;
           }
         }
-        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .wheel-mode-pill .wheel-wrapper.active .wheel {
-          outline-color: var(--primary-color);
-        }
+        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .wheel-mode-pill .wheel-wrapper.active .wheel::after,
         :host(:not([data-dark-mode])) .simple-editor.chrome-aside .hue-preset.active .hue-preset-swatch::after {
           border-color: var(--primary-color);
         }
@@ -6067,7 +6099,7 @@ class CircadianScenesPanel extends HTMLElement {
     return {
       getPalette: () => this._variables || [],
       onAddPalette: (draft) => this._addVariableFromCurrentDraft(draft),
-      addVariableLabel: this._t("frontend.library.add_new_variable", "Add new variable"),
+      addVariableLabel: this._t("frontend.library.add_variable", "Add variable"),
     };
   }
 

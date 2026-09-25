@@ -136,11 +136,12 @@ export function paletteSwatchCss(palette, variables, draftRgb) {
   for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
     const slot = resolveSlot(palette, i, variables);
     const rgb = rgbFromColor(slot, draftRgb) || [200, 200, 200];
-    const start = (i / PALETTE_SLOT_COUNT) * 100;
-    const end = ((i + 1) / PALETTE_SLOT_COUNT) * 100;
-    stops.push(`rgb(${rgb[0]},${rgb[1]},${rgb[2]}) ${start}% ${end}%`);
+    stops.push(`rgb(${rgb[0]},${rgb[1]},${rgb[2]}) ${(i / PALETTE_SLOT_COUNT) * 100}%`);
   }
-  return `conic-gradient(${stops.join(", ")})`;
+  const first = resolveSlot(palette, 0, variables);
+  const rgb0 = rgbFromColor(first, draftRgb) || [200, 200, 200];
+  stops.push(`rgb(${rgb0[0]},${rgb0[1]},${rgb0[2]}) 100%`);
+  return `radial-gradient(circle, #fff 0%, rgb(255 255 255 / 0) 100%), conic-gradient(from 0deg, ${stops.join(", ")})`;
 }
 
 export function defaultPaletteSlots() {
