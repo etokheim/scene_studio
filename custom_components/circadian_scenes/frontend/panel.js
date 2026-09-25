@@ -2775,6 +2775,7 @@ class CircadianScenesPanel extends HTMLElement {
           -webkit-appearance: none;
         }
         .hue-preset-swatch {
+          position: relative;
           display: block;
           width: 24px;
           height: 24px;
@@ -2814,6 +2815,10 @@ class CircadianScenesPanel extends HTMLElement {
           justify-content: center;
           background: transparent;
           border-color: transparent;
+          opacity: 0.4;
+        }
+        .hue-preset.add:hover {
+          opacity: 1;
         }
         .hue-preset-add-face {
           box-sizing: border-box;
@@ -2822,14 +2827,14 @@ class CircadianScenesPanel extends HTMLElement {
           width: 24px;
           height: 24px;
           border-radius: 50%;
-          border: 1px dashed
-            color-mix(in srgb, var(--primary-text-color) 40%, transparent);
+          border: 2px dashed
+            color-mix(in srgb, var(--primary-text-color) 55%, transparent);
           flex: 0 0 auto;
         }
         .hue-preset.add ha-icon {
-          --mdc-icon-size: 18px;
-          width: 18px;
-          height: 18px;
+          --mdc-icon-size: 14px;
+          width: 14px;
+          height: 14px;
         }
         .light-brightness-graph {
           position: relative;
@@ -4007,19 +4012,45 @@ class CircadianScenesPanel extends HTMLElement {
             border-color: transparent;
             opacity: 0.75;
           }
+          .hue-preset:not(.add):hover,
           .hue-preset.active {
             border-color: transparent;
             opacity: 1;
           }
+          .hue-preset:not(.add) .hue-preset-swatch {
+            transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+          }
+          .hue-preset:not(.add):hover .hue-preset-swatch,
+          .hue-preset:not(.add).active .hue-preset-swatch {
+            transform: scale(1.08);
+          }
+          .hue-preset:not(.add):active .hue-preset-swatch {
+            transform: scale(0.96);
+          }
           .hue-preset.active .hue-preset-swatch {
-            outline: 2px solid #fff;
-            outline-offset: 2px;
+            outline: none;
+          }
+          .hue-preset.active .hue-preset-swatch::after {
+            content: "";
+            position: absolute;
+            inset: -4px;
+            border-radius: inherit;
+            border: 2px solid #fff;
+            pointer-events: none;
+            animation: hue-preset-ring-in 180ms cubic-bezier(0.2, 0, 0, 1);
           }
           .hue-preset.active .hue-preset-name {
             font-weight: 700;
           }
           .hue-preset.add {
             align-self: flex-start;
+            width: auto;
+            max-width: 100%;
+            height: 36px;
+            padding: 4px 0;
+            justify-content: flex-start;
+            gap: 8px;
+            border-radius: 18px;
           }
           .hue-preset-name {
             display: block;
@@ -4028,9 +4059,21 @@ class CircadianScenesPanel extends HTMLElement {
             text-align: start;
           }
         }
-        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .wheel-mode-pill .wheel-wrapper.active .wheel,
-        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .hue-preset.active .hue-preset-swatch {
+        @keyframes hue-preset-ring-in {
+          from {
+            transform: scale(0.72);
+            opacity: 0;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .wheel-mode-pill .wheel-wrapper.active .wheel {
           outline-color: var(--primary-color);
+        }
+        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .hue-preset.active .hue-preset-swatch::after {
+          border-color: var(--primary-color);
         }
         .stage-bg .hue-wheel-glow {
           position: absolute;
