@@ -39,9 +39,33 @@ import {
   wheelDeltaToPercent,
 } from "./light_tiles.js";
 
-/** Modes and variables stack beside the disk when the right gutter is wide enough. The light list stays under the disks. */
+/** Width of the vertical mode/variable column, including the offset ring. */
+function verticalChromeWidth(editor, chrome) {
+  if (editor.classList.contains("chrome-aside") && chrome?.offsetWidth) {
+    return chrome.offsetWidth;
+  }
+  const names = chrome?.querySelectorAll(".wheel-mode-name, .hue-preset-name");
+  if (!names?.length) {
+    return 160;
+  }
+  const probe = editor.ownerDocument.createElement("span");
+  probe.style.cssText =
+    "position:absolute;visibility:hidden;white-space:nowrap;font-size:13px;line-height:1.2;";
+  editor.appendChild(probe);
+  let text = 0;
+  for (const name of names) {
+    probe.textContent = name.textContent;
+    probe.style.fontWeight = name.closest(".active, .palette-active") ? "700" : "400";
+    text = Math.max(text, probe.offsetWidth);
+  }
+  probe.remove();
+  return text + 24 + 8 + 16;
+}
+
+/** Modes and variables stack beside the disk while they can sit 48–80px past its edge. The light list stays under the disks. */
 function bindWheelAside(editor) {
-  const LIGHT_ASIDE_MIN = 240;
+  const GAP_MAX = 80;
+  const GAP_MIN = 48;
   const apply = () => {
     const col = editor.clientWidth;
     const height = editor.clientHeight;
@@ -50,15 +74,24 @@ function bindWheelAside(editor) {
     }
     const canvas = editor.querySelector(".hue-wheel-canvas");
     const face = editor.querySelector(".hue-wheel-face");
+    const chrome = editor.querySelector(".hue-wheel-chrome");
     const disk = canvas?.offsetWidth || Math.min(col, height, 650);
-    const gutter = (col - disk) / 2;
+    const half = disk / 2;
+    const room = Math.max(0, (face?.clientWidth || col) / 2 - half);
+    const listW = verticalChromeWidth(editor, chrome);
+    const gap = Math.min(GAP_MAX, room - listW);
+    let aside = gap >= GAP_MIN;
     editor.classList.remove("lights-aside");
-    const aside = gutter >= LIGHT_ASIDE_MIN;
     editor.classList.toggle("chrome-aside", aside);
-    if (aside && face) {
-      const half = disk / 2;
-      const room = Math.max(0, face.clientWidth / 2 - half);
-      const gap = Math.max(12, Math.min(200, room - 168));
+    if (aside && face && chrome?.offsetWidth) {
+      const fitted = Math.min(GAP_MAX, room - chrome.offsetWidth);
+      aside = fitted >= GAP_MIN;
+      editor.classList.toggle("chrome-aside", aside);
+      if (aside) {
+        face.style.setProperty("--wheel-half", `${half}px`);
+        face.style.setProperty("--chrome-gap", `${fitted}px`);
+      }
+    } else if (aside && face) {
       face.style.setProperty("--wheel-half", `${half}px`);
       face.style.setProperty("--chrome-gap", `${gap}px`);
     }
