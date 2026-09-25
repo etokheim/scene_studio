@@ -947,7 +947,7 @@ export function captureLightStripLayout(root) {
 }
 
 /** FLIP tiles and group labels into their new strip positions. */
-export function playLightStripLayout(root, before) {
+export function playLightStripLayout(root, before, { matchedOnly = false } = {}) {
   if (!root || !before?.size) {
     return;
   }
@@ -958,6 +958,9 @@ export function playLightStripLayout(root, before) {
     const key = el.dataset.stripKey;
     const prev = key ? before.get(key) : null;
     if (!prev || prev.width < 1) {
+      if (matchedOnly) {
+        continue;
+      }
       el.animate([{ opacity: 0 }, { opacity: 1 }], {
         duration: 180,
         easing: "ease-out",

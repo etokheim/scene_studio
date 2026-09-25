@@ -64,6 +64,7 @@ import {
   renderPaletteUsed,
   renderLibraryUsedBy,
   PALETTE_RANDOMIZE_ICON,
+  sceneCoverUrl,
   applyRampBackground,
   previewRampsForTheme,
   themeConic,
@@ -71,6 +72,7 @@ import {
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
+import { snapshotWheelEditor, applyWheelMorph } from "./wheel_morph.js";
 import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
 const DOMAIN = "circadian_scenes";
@@ -4960,12 +4962,15 @@ class CircadianScenesPanel extends HTMLElement {
     if (this._view === "theme") {
       return "dial";
     }
-    if (this._view === "variable" || this._view === "palette") {
-      return "simple";
+    if (this._view === "variable") {
+      return "library";
+    }
+    if (this._view === "palette") {
+      return "wheel";
     }
     if (this._view === "edit") {
       if (this._formData?.kind === "simple") {
-        return "simple";
+        return "wheel";
       }
       return "dial";
     }
@@ -4975,12 +4980,12 @@ class CircadianScenesPanel extends HTMLElement {
   _motionKindForSceneId(sceneId) {
     const item = (this._items || []).find((scene) => scene.id === sceneId);
     if (item?.kind === "simple") {
-      return "simple";
+      return "wheel";
     }
     if (item) {
       return "dial";
     }
-    return this._formData?.kind === "simple" ? "simple" : "dial";
+    return this._formData?.kind === "simple" ? "wheel" : "dial";
   }
 
   _motionKindForHash(hash) {
@@ -4988,8 +4993,11 @@ class CircadianScenesPanel extends HTMLElement {
     if (value.startsWith("theme/")) {
       return "dial";
     }
-    if (value.startsWith("variable/") || value.startsWith("palette/")) {
-      return "simple";
+    if (value.startsWith("variable/")) {
+      return "library";
+    }
+    if (value.startsWith("palette/")) {
+      return "wheel";
     }
     const edit = value.match(/^edit\/(.+)$/);
     if (edit) {
@@ -5170,10 +5178,14 @@ class CircadianScenesPanel extends HTMLElement {
     } else if (to === "dial") {
       this._clockEnterPlayed = false;
     }
-    if (to === "simple" && from === "simple") {
+    if (to === "wheel" && from === "wheel") {
+      this._wheelMorph = true;
       this._simpleEnterPlayed = true;
-    } else if (to === "simple") {
+    } else if (to === "wheel") {
+      this._wheelMorph = false;
       this._simpleEnterPlayed = false;
+    } else {
+      this._wheelMorph = false;
     }
     this._emptyShouldEnter =
       to === "none" && (from !== "none" || !this._emptyEnterPlayed);
@@ -5374,8 +5386,116 @@ class CircadianScenesPanel extends HTMLElement {
     }
   }
 
+  _syncRailSelection() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+    for (const card of root.querySelectorAll(".scene-card")) {
+      const on = this._view === "edit" && card.dataset.sceneId === this._editId;
+      card.classList.toggle("selected", on);
+      card.parentElement?.classList.toggle("glow-on", on);
+    }
+    for (const chip of root.querySelectorAll(".var-chip")) {
+      const on =
+        (this._view === "palette" || this._view === "variable") &&
+        chip.dataset.itemId === this._variableId;
+      chip.classList.toggle("selected", on);
+    }
+  }
+
+  _crossfadeCoverInPlace(previousUrl) {
+    const page = this._contentEl?.querySelector(".workspace");
+    if (!page) {
+      return;
+    }
+    const url = sceneCoverUrl(this);
+    const nextUrl = url ? `url("${url}")` : "";
+    if ((previousUrl || "") === nextUrl) {
+      return;
+    }
+    const current = [...page.querySelectorAll(".scene-cover")].find(
+      (cover) => !cover.classList.contains("is-leaving")
+    );
+    if (this._prefersReducedMotion()) {
+      if (!nextUrl) {
+        current?.remove();
+        return;
+      }
+      if (!current) {
+        const cover = document.createElement("div");
+        cover.className = "scene-cover is-shown";
+        cover.style.backgroundImage = nextUrl;
+        page.prepend(cover);
+        return;
+      }
+      current.style.backgroundImage = nextUrl;
+      current.classList.add("is-shown");
+      return;
+    }
+    if (current) {
+      current.classList.add("is-leaving");
+      const drop = () => current.remove();
+      current.addEventListener("transitionend", drop, { once: true });
+      window.setTimeout(drop, 700);
+    }
+    if (!nextUrl) {
+      return;
+    }
+    const cover = document.createElement("div");
+    cover.className = "scene-cover";
+    cover.style.backgroundImage = nextUrl;
+    page.prepend(cover);
+    requestAnimationFrame(() => cover.classList.add("is-shown"));
+  }
+
+  _renderWheelMorph() {
+    const host = this.shadowRoot?.querySelector(".simple-editor-host");
+    if (this._error || !host?.isConnected || !host.querySelector(".simple-editor")) {
+      this._wheelMorph = false;
+      this._wheelMorphPins = null;
+      return false;
+    }
+    const palette = this._view === "palette";
+    const simple = this._view === "edit" && this._formData?.kind === "simple";
+    if (!palette && !simple) {
+      this._wheelMorph = false;
+      this._wheelMorphPins = null;
+      return false;
+    }
+    const snap = snapshotWheelEditor(this.shadowRoot);
+    this._wheelMorphPins = snap?.pins || null;
+    this._syncAppBarTitle();
+    this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
+    this._setEditorActions();
+    this._syncEditorChrome();
+    this._syncSaveFab();
+    this._contentEl.classList.add("wide");
+    this._parkSunPath();
+    this._setRailTab(palette ? "library" : "scenes");
+    this._syncRailSelection();
+    if (palette) {
+      renderPaletteEditor(this, host, { glowHost: null });
+    } else {
+      const lists = this._simpleMembershipLists();
+      this._simpleMembers = lists.members;
+      renderSimpleEditor(this, host, { glowHost: null });
+    }
+    this._syncSceneUsed();
+    this._syncWorkspaceScrollport();
+    applyWheelMorph(snap, this.shadowRoot);
+    this._crossfadeCoverInPlace(snap?.coverUrl || "");
+    this._wheelMorph = false;
+    this._simpleEnterPlayed = true;
+    return true;
+  }
+
   _render() {
     if (!this._built) {
+      return;
+    }
+    if (this._wheelMorph && this._renderWheelMorph()) {
+      this._surfaceKind = this._editorMotionKind();
       return;
     }
     if (this._view === "edit") {

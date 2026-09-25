@@ -39,6 +39,24 @@ import {
   wheelDeltaToPercent,
 } from "./light_tiles.js";
 
+function wheelPinMorph(panel, ids) {
+  const pins = panel._wheelMorphPins;
+  if (!pins) {
+    return { pinFlip: panel._wheelPinFlip || null, fadePinIds: null };
+  }
+  panel._wheelMorphPins = null;
+  const pinFlip = new Map();
+  const fadePinIds = new Set();
+  ids.forEach((id, i) => {
+    if (pins[i]) {
+      pinFlip.set(id, { x: pins[i].x, y: pins[i].y });
+    } else {
+      fadePinIds.add(id);
+    }
+  });
+  return { pinFlip, fadePinIds };
+}
+
 /** Width of the vertical mode/variable column, including the offset ring. */
 function verticalChromeWidth(editor, chrome) {
   if (editor.classList.contains("chrome-aside") && chrome?.offsetWidth) {
@@ -531,12 +549,14 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     peeledId,
   });
 
+  const pinMorph = wheelPinMorph(panel, members);
   const wheel = createSceneColorWheel({
     t: (key, fallback) => panel._t(key, fallback),
     getState,
     showPath: false,
     groupNearby: true,
-    pinFlip: panel._wheelPinFlip || null,
+    pinFlip: pinMorph.pinFlip,
+    fadePinIds: pinMorph.fadePinIds,
     getPinIcon: (scene) => entityMdiIcon(panel, scene.id),
     moveOnEmptyDisk: false,
     onClusters: (clusters) => {
@@ -1992,9 +2012,11 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     activeId: primaryId(),
     selectedIds: [...selectedIds],
   });
+  const pinMorph = wheelPinMorph(panel, ids);
   const wheel = createSceneColorWheel({
     t: (key, fallback) => panel._t(key, fallback),
-    pinFlip: panel._wheelPinFlip || null,
+    pinFlip: pinMorph.pinFlip,
+    fadePinIds: pinMorph.fadePinIds,
     getState,
     onSelect: (id, mods) => {
       if (id && (mods?.shiftKey || mods?.toggleKey)) {
@@ -2180,6 +2202,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   let scrubSync = 0;
   const syncTiles = () => {
     const keepLeft = scroller.scrollLeft;
+    const beforeLayout = captureLightStripLayout(tiles);
     tiles.classList.toggle("select-mode", selectedIds.size > 1);
     tiles.replaceChildren();
     const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
@@ -2521,6 +2544,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     scroller._groupTitleStick?.();
     stripShape = paletteStripShape();
     paintAll();
+    playLightStripLayout(tiles, beforeLayout);
   };
   const tileBlock = document.createElement("div");
   tileBlock.className = "light-tiles-block";

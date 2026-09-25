@@ -907,7 +907,7 @@ function stickyBg(kind) {
   return bg;
 }
 
-function sceneCoverUrl(panel) {
+export function sceneCoverUrl(panel) {
   const builtinFor = (builtin) =>
     builtin && galleryPalette(builtin) ? galleryCoverUrl(builtin) : "";
   if (panel._view === "palette") {

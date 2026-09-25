@@ -2424,6 +2424,31 @@ function captureWheelPinPositions(root) {
   return map;
 }
 
+/** Visible pins in paint order, for a wheel-to-wheel morph. */
+function captureWheelPinList(root) {
+  const list = [];
+  if (!root) {
+    return list;
+  }
+  for (const g of root.querySelectorAll(".hue-wheel-svg .gm")) {
+    if (g.style.display === "none") {
+      continue;
+    }
+    const match = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(
+      g.style.transform || ""
+    );
+    if (!match) {
+      continue;
+    }
+    list.push({
+      x: Number(match[1]) + PIN_TIP_X,
+      y: Number(match[2]) + PIN_TIP_Y,
+      clone: g.cloneNode(true),
+    });
+  }
+  return list;
+}
+
 function createSceneColorWheel({
   hasColor,
   hasTemp,
@@ -2449,6 +2474,7 @@ function createSceneColorWheel({
   onClusters,
   moveOnEmptyDisk = true,
   pinFlip = null,
+  fadePinIds = null,
   t = (_key, fallback) => fallback,
 }) {
   // Polar HSV + kelvin disks stacked (peek / mixed). Pins live on their mode.
@@ -3795,6 +3821,12 @@ function createSceneColorWheel({
           sceneId: scene.id,
         };
         markers.set(scene.id, marker);
+        if (fadePinIds?.has(scene.id)) {
+          g.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: 180,
+            easing: "ease-out",
+          });
+        }
         g.addEventListener("pointerenter", (ev) => {
           if (drag || suppressHover) {
             return;
@@ -5056,6 +5088,7 @@ export {
   drawHueWheelImage,
   createLightBrightnessGraph,
   captureWheelPinPositions,
+  captureWheelPinList,
   createSceneColorWheel,
   lightDraftFingerprint,
   HUE_WHEEL_RENDER,
