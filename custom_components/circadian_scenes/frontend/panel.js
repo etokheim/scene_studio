@@ -8756,7 +8756,6 @@ class CircadianScenesPanel extends HTMLElement {
     });
     if (customElements.get("ha-tooltip")) {
       const tip = document.createElement("ha-tooltip");
-      tip.setAttribute("for", button.id);
       tip.placement = "bottom";
       const label = document.createElement("span");
       label.textContent = `${button.label} `;
@@ -8765,6 +8764,20 @@ class CircadianScenesPanel extends HTMLElement {
       shortcut.textContent = this._shortcutLabel(undo ? "undo" : "redo");
       tip.append(label, shortcut);
       button.appendChild(tip);
+      // `for` looks up an id on the root node. A disconnected button is not a
+      // document, so set it only after the button is in the shadow root.
+      const bindTip = () => {
+        const root = button.getRootNode();
+        if (typeof root?.getElementById !== "function") {
+          return;
+        }
+        tip.setAttribute("for", button.id);
+      };
+      if (button.isConnected) {
+        bindTip();
+      } else {
+        queueMicrotask(bindTip);
+      }
     }
     return button;
   }
@@ -10558,7 +10571,7 @@ class CircadianScenesPanel extends HTMLElement {
       dialog.open = false;
     });
     save.addEventListener("click", async () => {
-      const name = (data.scene_name || "").trim();
+      const name = (nameInput.value || data.scene_name || "").trim();
       if (!name) {
         nameInput.reportValidity?.();
         return;
@@ -10577,6 +10590,13 @@ class CircadianScenesPanel extends HTMLElement {
           },
         });
         dialog.open = false;
+        if (this._editId === scene.id && this._formData) {
+          this._formData.scene_name = name;
+          this._formData.description = data.description;
+          this._formData.labels = data.labels;
+          this._formData.category = data.category || null;
+          this._formData.icon = data.icon || null;
+        }
         this._upsertSceneInList({
           ...scene,
           scene_name: name,
@@ -13781,7 +13801,7 @@ class CircadianScenesPanel extends HTMLElement {
     save.variant = "brand";
     save.textContent = rename ? "Rename" : "Save";
     save.addEventListener("click", async () => {
-      const name = (data.scene_name || "").trim();
+      const name = (nameInput.value || data.scene_name || "").trim();
       if (!name) {
         nameInput.reportValidity?.();
         return;

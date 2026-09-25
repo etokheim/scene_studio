@@ -35,6 +35,7 @@ export function sceneLibraryUses({ scene, theme, themes, variables }) {
       refs.add(entry.palette_id);
     }
   }
+  const basePalettes = new Set(refs);
   collectRefs(scene?.lights, refs);
   collectRefs(scene?.overrides, refs);
   const themeId = scene?.theme_id || (scene?.kind === "simple" ? null : "default");
@@ -61,6 +62,9 @@ export function sceneLibraryUses({ scene, theme, themes, variables }) {
   }
   for (const variable of variables || []) {
     if (!refs.has(variable.id)) {
+      continue;
+    }
+    if (variableIsPalette(variable) && !basePalettes.has(variable.id)) {
       continue;
     }
     used.push({

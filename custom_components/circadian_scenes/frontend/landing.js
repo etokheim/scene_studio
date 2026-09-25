@@ -1349,15 +1349,16 @@ export function renderSceneUsed(panel) {
   if (panel._view !== "edit" || !panel._formData) {
     return null;
   }
+  const simple = panel._formData?.kind === "simple";
   const uses = sceneLibraryUses({
     scene: panel._formData,
     theme: panel._themeDraft,
     themes: panel._themes,
     variables: panel._variables,
-  }).filter((item) => item.kind !== "theme");
+  }).filter((item) => (simple ? item.kind === "variable" : item.kind !== "theme"));
   const row = document.createElement("div");
   row.className = "scene-used";
-  row.appendChild(renderThemeSplit(panel));
+  row.appendChild(simple ? renderPaletteSplit(panel) : renderThemeSplit(panel));
   for (const item of uses) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1382,6 +1383,44 @@ export function renderSceneUsed(panel) {
     row.appendChild(button);
   }
   return row;
+}
+
+function renderPaletteSplit(panel) {
+  const split = document.createElement("div");
+  split.className = "scene-palette-split";
+  const paletteId = panel._formData?.palette_id || null;
+  const palette = paletteId
+    ? (panel._variables || []).find((entry) => entry.id === paletteId)
+    : null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "scene-used-chip";
+  const name = document.createElement("span");
+  if (!palette) {
+    button.classList.add("is-placeholder");
+    name.textContent = panel._t("frontend.dialogs.scene_palette_select", "Select a palette");
+  } else {
+    name.textContent = palette.name || paletteId;
+    appendPaletteFace(button, palette, panel._variables);
+  }
+  button.appendChild(name);
+  button.setAttribute("aria-label", name.textContent);
+  button.addEventListener("click", () => panel._pickSceneBasePalette?.());
+  split.appendChild(button);
+  if (palette) {
+    const edit = document.createElement("ha-icon-button");
+    edit.className = "scene-palette-edit";
+    edit.label = panel._t("frontend.dialogs.scene_palette_edit", "Edit palette");
+    const icon = document.createElement("ha-icon");
+    icon.setAttribute("icon", "mdi:pencil");
+    edit.appendChild(icon);
+    edit.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      panel._go(`palette/${palette.id}`);
+    });
+    split.appendChild(edit);
+  }
+  return split;
 }
 
 function renderThemeSplit(panel) {

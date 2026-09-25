@@ -25,7 +25,7 @@ test("a circadian scene lists its theme, palette, and linked variable", () => {
   });
   assert.deepEqual(
     uses.map((item) => item.id),
-    ["default", "wool", "dawn-var", "warm"]
+    ["default", "dawn-var", "warm"]
   );
 });
 
