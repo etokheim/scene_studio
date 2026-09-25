@@ -2712,6 +2712,27 @@ class SceneStudioPanel extends HTMLElement {
         .hue-palette-colors[hidden] {
           display: none !important;
         }
+        .hue-presets[hidden],
+        .hue-wheel-mode-cluster[hidden],
+        .hue-wheel-chrome[hidden] {
+          display: none !important;
+        }
+        .hue-wheel-mode-cluster,
+        .hue-presets {
+          transition:
+            opacity 180ms cubic-bezier(0.2, 0, 0, 1),
+            transform 180ms cubic-bezier(0.2, 0, 0, 1);
+        }
+        .simple-editor:not(.chrome-aside) .hue-wheel-mode-cluster:not(.is-shown) {
+          opacity: 0;
+          transform: translateX(-24px);
+          pointer-events: none;
+        }
+        .simple-editor:not(.chrome-aside) .hue-presets:not(.is-shown) {
+          opacity: 0;
+          transform: translateX(24px);
+          pointer-events: none;
+        }
         .hue-presets {
           box-sizing: border-box;
           display: flex;
@@ -3036,7 +3057,10 @@ class SceneStudioPanel extends HTMLElement {
           .sun-light-clock-rings,
           .scene-sidebar-body,
           .scene-sidebar-footer,
-          .hue-presets::after {
+          .hue-presets::after,
+          .hue-wheel-mode-cluster,
+          .hue-presets,
+          .hue-wheel-chrome {
             transition-duration: 1ms;
           }
         }
@@ -3877,13 +3901,27 @@ class SceneStudioPanel extends HTMLElement {
             height: auto;
             max-height: 100%;
             min-height: 0;
-          /* Room for the selection ring (4px outset + scale). overflow-x clips it otherwise. */
-          padding: 6px 4px 6px 14px;
-          box-sizing: border-box;
-          overflow-x: hidden;
+            /* Room for the selection ring (4px outset + scale). overflow-x clips it otherwise. */
+            padding: 6px 4px 6px 14px;
+            box-sizing: border-box;
+            overflow-x: hidden;
             overflow-y: auto;
             scrollbar-width: none;
             gap: 8px;
+            transition:
+              opacity 180ms cubic-bezier(0.2, 0, 0, 1),
+              transform 180ms cubic-bezier(0.2, 0, 0, 1);
+          }
+          .hue-wheel-chrome:not(.is-shown) {
+            opacity: 0;
+            transform: translateY(-50%) translateX(24px);
+            pointer-events: none;
+          }
+          .hue-wheel-mode-cluster,
+          .hue-presets {
+            opacity: 1;
+            transform: none;
+            pointer-events: auto;
           }
           .hue-wheel-chrome::-webkit-scrollbar {
             display: none;

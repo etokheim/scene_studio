@@ -20,7 +20,7 @@
 
 - **Date:** 2026-09-25
 - **Supersedes in part:** “Theme split and palette mode button” — the circadian used-items list is no longer a toolbar row. “First column is the scene list” — that row no longer pushes the dial.
-- **Decision:** Color-mode buttons and the variable list appear only after at least one light is selected. While palette mode is active, that palette’s five slots are a titled list above the variables, with a divider under the slots. Used-item chips are a vertical overlay at the top of the simple editor and just under the circadian toolbar, so they do not move the wheel or the dial. On a narrow panel, `.page` has no inline padding.
+- **Decision:** Color-mode buttons and the variable list appear only after at least one light is selected. They fade and travel 24px: in the horizontal bar, modes come from the left and variables from the right; beside the disk the whole column comes from the right. The reverse plays on the way out. The aside column uses the list’s intrinsic width, so narrowing the window returns to the horizontal bar. While palette mode is active, that palette’s five slots are a titled list above the variables, with a divider under the slots. Used-item chips are a vertical overlay at the top of the simple editor and just under the circadian toolbar, so they do not move the wheel or the dial. On a narrow panel, `.page` has no inline padding.
 - **Why:** The selection ring was clipped and the hover transform shoved the selected row. A palette disk had no slot list. The used-item row was still taking height on the dial, and the 12px page inset kept the mobile editor off the screen edge.
 - **Do not reverse without user ask.**
 

@@ -57,11 +57,10 @@ function wheelPinMorph(panel, ids) {
   return { pinFlip, fadePinIds };
 }
 
-/** Width of the vertical mode/variable column, including the offset ring. */
+/** Intrinsic width of the vertical mode/variable column, including the offset ring.
+ *  Do not use the live box: once aside, max-width shrinks that box with the
+ *  window, and the fit test would keep the column up as the screen narrows. */
 function verticalChromeWidth(editor, chrome) {
-  if (editor.classList.contains("chrome-aside") && chrome?.offsetWidth) {
-    return chrome.offsetWidth;
-  }
   const names = chrome?.querySelectorAll(".wheel-mode-name, .hue-preset-name");
   if (!names?.length) {
     return 160;
@@ -98,18 +97,10 @@ function bindWheelAside(editor) {
     const room = Math.max(0, (face?.clientWidth || col) / 2 - half);
     const listW = verticalChromeWidth(editor, chrome);
     const gap = Math.min(GAP_MAX, room - listW);
-    let aside = gap >= GAP_MIN;
+    const aside = gap >= GAP_MIN;
     editor.classList.remove("lights-aside");
     editor.classList.toggle("chrome-aside", aside);
-    if (aside && face && chrome?.offsetWidth) {
-      const fitted = Math.min(GAP_MAX, room - chrome.offsetWidth);
-      aside = fitted >= GAP_MIN;
-      editor.classList.toggle("chrome-aside", aside);
-      if (aside) {
-        face.style.setProperty("--wheel-half", `${half}px`);
-        face.style.setProperty("--chrome-gap", `${fitted}px`);
-      }
-    } else if (aside && face) {
+    if (aside && face) {
       face.style.setProperty("--wheel-half", `${half}px`);
       face.style.setProperty("--chrome-gap", `${gap}px`);
     }

@@ -3408,7 +3408,7 @@ function createSceneColorWheel({
       modes.length < 2;
     randomizeBtn.hidden =
       !lightsSelected || !pal || typeof onRandomizeSeed !== "function";
-    modeCluster.hidden = modePill.hidden && randomizeBtn.hidden;
+    wantModes = !(modePill.hidden && randomizeBtn.hidden);
     if (modePill.hidden) {
       return;
     }
@@ -3570,7 +3570,106 @@ function createSceneColorWheel({
     }
   };
 
+  let wantModes = false;
+  let wantPresets = false;
+  let chromePose = { modes: false, presets: false, vertical: false };
+
+  const dropScrollHint = () => {
+    presets.classList.remove("can-scroll-end");
+    chrome.classList.remove("can-scroll-start", "can-scroll-end");
+  };
+
+  const posePiece = (el, show, animate, afterHide) => {
+    el._chromeHide?.();
+    el._chromeHide = null;
+    if (show) {
+      el.hidden = false;
+      if (!animate) {
+        el.classList.add("is-shown");
+        return;
+      }
+      el.classList.remove("is-shown");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!el.hidden) {
+            el.classList.add("is-shown");
+          }
+        });
+      });
+      return;
+    }
+    el.classList.remove("is-shown");
+    const hide = () => {
+      if (el.classList.contains("is-shown")) {
+        return;
+      }
+      el.hidden = true;
+      dropScrollHint();
+      afterHide?.();
+      el.removeEventListener("transitionend", onEnd);
+      if (el._chromeHide === hide) {
+        el._chromeHide = null;
+      }
+    };
+    const onEnd = (ev) => {
+      if (ev.target !== el || ev.propertyName !== "opacity") {
+        return;
+      }
+      hide();
+    };
+    if (!animate) {
+      hide();
+      return;
+    }
+    el._chromeHide = hide;
+    el.addEventListener("transitionend", onEnd);
+    window.setTimeout(hide, 280);
+  };
+
+  const poseChrome = () => {
+    const editor = stage.closest(".simple-editor");
+    const vertical = Boolean(editor?.classList.contains("chrome-aside"));
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (
+      chromePose.modes === wantModes &&
+      chromePose.presets === wantPresets &&
+      chromePose.vertical === vertical
+    ) {
+      return;
+    }
+    const layoutChanged = chromePose.vertical !== vertical;
+    const modesAnimate = !reduced && !layoutChanged && chromePose.modes !== wantModes;
+    const presetsAnimate = !reduced && !layoutChanged && chromePose.presets !== wantPresets;
+    const columnWas = chromePose.modes || chromePose.presets;
+    const columnShow = wantModes || wantPresets;
+    const columnAnimate = !reduced && !layoutChanged && columnWas !== columnShow;
+    chromePose = { modes: wantModes, presets: wantPresets, vertical };
+    if (vertical) {
+      modeCluster.classList.add("is-shown");
+      presets.classList.add("is-shown");
+      if (columnShow) {
+        modeCluster.hidden = !wantModes;
+        presets.hidden = !wantPresets;
+      }
+      posePiece(chrome, columnShow, columnAnimate, () => {
+        if (!columnShow) {
+          modeCluster.hidden = true;
+          presets.hidden = true;
+        }
+      });
+      return;
+    }
+    chrome.hidden = false;
+    chrome.classList.add("is-shown");
+    posePiece(modeCluster, wantModes, modesAnimate);
+    posePiece(presets, wantPresets, presetsAnimate);
+  };
+
   const updatePresetOverflow = () => {
+    if (presets.hidden || chrome.hidden) {
+      dropScrollHint();
+      return;
+    }
     const vertical = getComputedStyle(chrome).flexDirection === "column";
     if (vertical) {
       const max = chrome.scrollHeight - chrome.clientHeight;
@@ -3640,14 +3739,13 @@ function createSceneColorWheel({
     const { scenes, activeId } = state;
     const active = scenes.find((item) => item.id === activeId);
     const palette = typeof getPalette === "function" ? getPalette() || [] : [];
-    const lightsSelected = selectedIdsOf(state).length > 0;
-    presets.hidden = !lightsSelected;
+    wantPresets = selectedIdsOf(state).length > 0;
     presetTrack.setAttribute(
       "aria-label",
       t("frontend.library.variables", "Variables")
     );
     syncPaletteColors();
-    if (!lightsSelected) {
+    if (!wantPresets) {
       return;
     }
     for (const variable of palette) {
@@ -4331,6 +4429,7 @@ function createSceneColorWheel({
     }
     syncPath(geom, radius);
     syncPresets();
+    poseChrome();
     if (!drag) {
       hideFloatReadout();
     }
