@@ -88,6 +88,9 @@ export const LANDING_CSS = `
     display: flex;
     flex: 0 0 auto;
     --header-height: 56px;
+    /* Opaque app-header surface. The rail below stays frosted; the tab bar
+       should read as the same bar as the HA header. */
+    background: var(--app-header-background-color, var(--sidebar-background-color));
   }
   .area-rail-tabs ha-tab {
     flex: 1 1 50%;
@@ -458,7 +461,8 @@ export const LANDING_CSS = `
   }
   @container scroll-state(stuck: top) {
     .sticky-bg-floor {
-      background: color-mix(in srgb, var(--primary-background-color) 92%, transparent);
+      /* Same surface as the app header and the library/scenes tab bar. */
+      background: var(--app-header-background-color, var(--sidebar-background-color));
       opacity: 1;
       transition: opacity 350ms;
     }
@@ -467,7 +471,7 @@ export const LANDING_CSS = `
       bottom: -16px;
       background: linear-gradient(
         to bottom,
-        color-mix(in srgb, var(--primary-background-color) 92%, transparent) calc(50% - 8px),
+        var(--app-header-background-color, var(--sidebar-background-color)) calc(50% - 8px),
         transparent 100%
       );
       opacity: 1;
@@ -939,7 +943,19 @@ export function paintThemeDial(el, theme, variables) {
     const layer = document.createElement("div");
     layer.className = "theme-dial-photo";
     layer.setAttribute("aria-hidden", "true");
-    layer.style.backgroundImage = `url("${galleryCoverUrl(cover)}")`;
+    const bri = Number(
+      themeEventResolved(theme?.events?.[arc.id], variables).brightness
+    );
+    const dim = Number.isFinite(bri)
+      ? 1 - Math.min(255, Math.max(0, bri)) / 255
+      : 0;
+    const url = galleryCoverUrl(cover);
+    // A black veil on the photo so brightness edits darken the preview.
+    // The conic underneath already tracks brightness, but the photo covers it.
+    layer.style.backgroundImage =
+      dim > 0
+        ? `linear-gradient(rgba(0, 0, 0, ${dim}), rgba(0, 0, 0, ${dim})), url("${url}")`
+        : `url("${url}")`;
     const start = (180 + arc.at * 360) % 360;
     const span = (arc.next - arc.at) * 360;
     const mask = `conic-gradient(from ${start}deg, #000 0deg, transparent ${span}deg, transparent 360deg)`;

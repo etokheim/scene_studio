@@ -5600,9 +5600,11 @@ class SceneStudioPanel extends HTMLElement {
           if (!this._themeDraft) {
             return;
           }
+          this._commitUndo();
           this._themeDraft.name = name;
           await this._saveThemeQuiet();
         } else if (this._variableDraft) {
+          this._commitUndo();
           this._variableDraft.name = name;
           await this._saveVariableQuiet();
         }
@@ -7630,6 +7632,7 @@ class SceneStudioPanel extends HTMLElement {
         this._variableId = null;
         this._variableDraft = this._variableWorkingCopy(null);
         this._error = null;
+        this._resetSession();
         this._render();
         return;
       }
@@ -7650,6 +7653,7 @@ class SceneStudioPanel extends HTMLElement {
       this._alignLibraryView(variable);
       this._variableDraft = this._variableWorkingCopy(variable);
       this._error = null;
+      this._resetSession();
       this._render();
       return;
     } catch (err) {
@@ -7721,6 +7725,9 @@ class SceneStudioPanel extends HTMLElement {
       }
       this._variables = list;
       this._alignLibraryView(saved);
+      if (this._view === "variable" || this._view === "palette") {
+        this._sessionBaseline = this._snapshotSession();
+      }
       const hash = this._canonicalLibraryHash(saved);
       if (this._currentHash() !== hash) {
         history.replaceState(null, "", this._hashHref(hash));
@@ -7807,6 +7814,7 @@ class SceneStudioPanel extends HTMLElement {
     );
     const bindBri = (value) => {
       if (Number.isFinite(value)) {
+        this._beginSimpleUndo();
         draft.brightness = value;
         this._saveSoon();
       }
@@ -7827,10 +7835,20 @@ class SceneStudioPanel extends HTMLElement {
         sequence: ["variable"],
         activeId: "variable",
       }),
-      onChange: () => {
-        delete draft.variable_ref;
-        wheel.sync();
-        this._saveSoon();
+      onChange: ({ dragging } = {}) => {
+        if (dragging) {
+          this._holdSimpleUndo(true);
+        }
+        try {
+          this._beginSimpleUndo();
+          delete draft.variable_ref;
+          wheel.sync();
+          this._saveSoon();
+        } finally {
+          if (!dragging) {
+            this._holdSimpleUndo(false);
+          }
+        }
       },
     });
     host.append(briInput, wheel.el);
@@ -8171,11 +8189,16 @@ class SceneStudioPanel extends HTMLElement {
       const light = (this._sunPath?.lights || []).find(
         (item) => item.entity_id === lightId
       );
-      const row = (light?.event_states || []).find(
-        (item) => item.event === eventId
-      );
-      if (row?.state?.brightness != null) {
-        return Number(row.state.brightness);
+      // Sun-path rows are the last server resolve. While a theme draft is
+      // open, lights with no override inherit that draft — including during
+      // a brightness scrub, before the path is fetched again.
+      if (!this._themeDraft) {
+        const row = (light?.event_states || []).find(
+          (item) => item.event === eventId
+        );
+        if (row?.state?.brightness != null) {
+          return Number(row.state.brightness);
+        }
       }
     }
     if (this._themeDraft) {
@@ -8262,7 +8285,8 @@ class SceneStudioPanel extends HTMLElement {
         ...this._themeEventDraft(eventId),
         brightness: value,
       };
-      delete draft.variable_ref;
+      // Brightness stays on the event. Dropping variable_ref here would
+      // detach a palette and the dial/tiles would stop following it.
       this._writeThemeEventFromDraft(eventId, draft);
       const hook = this._dialBrightnessHook;
       if (hook?.kind === "theme") {
@@ -8272,7 +8296,6 @@ class SceneStudioPanel extends HTMLElement {
           if (value > 0) {
             item.state = "on";
           }
-          delete item.variable_ref;
         }
         hook.sync?.();
       }
@@ -8368,6 +8391,11 @@ class SceneStudioPanel extends HTMLElement {
     });
     this._syncThemePreviewSurfaces();
     this._saveSoon();
+    const seconds =
+      this._clockSunDisplayedSeconds ??
+      this._clockStickySeconds ??
+      this._clockSunIdleSeconds();
+    this._updateLightNameBrightness(seconds);
   }
 
   _resampleDialFromLiveBrightness() {
@@ -8376,7 +8404,9 @@ class SceneStudioPanel extends HTMLElement {
     }
     const events = this._sunPath.events;
     const lights = this._sunPath.lights.map((light) => {
-      if (light.suggested || light.theme_ring) {
+      // Theme ring is the dial in the theme editor. Skipping it left the
+      // preview on the previous brightness for the whole scrub.
+      if (light.suggested) {
         return light;
       }
       const event_states = (light.event_states || []).map((row) => {
@@ -8466,6 +8496,12 @@ class SceneStudioPanel extends HTMLElement {
           merged.palette_r = themeEv.color.palette_r;
         }
         merged.assignment_seed = themeEv.assignment_seed;
+      }
+      if (this._themeDraft) {
+        const themeBri = Number(this._themeEventDraft(eventId).brightness);
+        if (Number.isFinite(themeBri)) {
+          merged.brightness = themeBri;
+        }
       }
       return merged;
     }
@@ -9901,6 +9937,7 @@ class SceneStudioPanel extends HTMLElement {
       form: structuredClone(this._formData),
       nativeDrafts: structuredClone(this._nativeDrafts),
       theme: this._themeDraft ? structuredClone(this._themeDraft) : null,
+      variable: this._variableDraft ? structuredClone(this._variableDraft) : null,
     };
   }
 
@@ -10291,13 +10328,24 @@ class SceneStudioPanel extends HTMLElement {
     } else {
       this._themeDraft = null;
     }
+    if (Object.prototype.hasOwnProperty.call(snapshot, "variable")) {
+      this._variableDraft = snapshot.variable
+        ? structuredClone(snapshot.variable)
+        : null;
+    }
     this._syncAppBarTitle();
     this._syncPreviewOverlay();
     this._sunPath = null;
     this._clearPreviewCache();
     this._syncUndoButtons();
     this._syncSaveFab();
-    if (remount && (this._view === "edit" || this._view === "theme")) {
+    if (
+      remount &&
+      (this._view === "edit" ||
+        this._view === "theme" ||
+        this._view === "palette" ||
+        this._view === "variable")
+    ) {
       this._render();
     }
   }
@@ -10393,7 +10441,12 @@ class SceneStudioPanel extends HTMLElement {
       await this._openHistoryTarget(entry.target);
       this._applySession(snap, { remount: false });
       await this._saveNow({ fromHistory: true });
-      if (this._view === "edit" || this._view === "theme") {
+      if (
+        this._view === "edit" ||
+        this._view === "theme" ||
+        this._view === "palette" ||
+        this._view === "variable"
+      ) {
         this._wheelPinFlip = captureWheelPinPositions(this.shadowRoot);
         this._render();
         this._wheelPinFlip = null;

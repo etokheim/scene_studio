@@ -2050,6 +2050,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     if (index < 0) {
       return;
     }
+    panel._beginSimpleUndo?.();
     working.slots[index] = draftToSlot(drafts[id]);
     panel._saveSoon();
   };
@@ -2079,23 +2080,32 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       }
       applySlotClick(id);
     },
-    onChange: ({ fromPalette, ids: writeIds } = {}) => {
-      const write = writeIds?.length ? writeIds : primaryId() ? [primaryId()] : [];
-      if (!write.length) {
-        return;
+    onChange: ({ dragging, fromPalette, ids: writeIds } = {}) => {
+      if (dragging) {
+        panel._holdSimpleUndo?.(true);
       }
-      for (const id of write) {
-        if (!drafts[id]) {
-          continue;
+      try {
+        const write = writeIds?.length ? writeIds : primaryId() ? [primaryId()] : [];
+        if (!write.length) {
+          return;
         }
-        if (!fromPalette) {
-          delete drafts[id].variable_ref;
-          delete drafts[id].palette_t;
-          delete drafts[id].palette_r;
+        for (const id of write) {
+          if (!drafts[id]) {
+            continue;
+          }
+          if (!fromPalette) {
+            delete drafts[id].variable_ref;
+            delete drafts[id].palette_t;
+            delete drafts[id].palette_r;
+          }
+          persistSlot(id);
         }
-        persistSlot(id);
+        refreshPaletteStrip();
+      } finally {
+        if (!dragging) {
+          panel._holdSimpleUndo?.(false);
+        }
       }
-      refreshPaletteStrip();
     },
     hasColor: true,
     hasTemp: true,
@@ -2385,6 +2395,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           drag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
           if (drag.axis === "y") {
             allTile.classList.add("dragging");
+            panel._holdSimpleUndo?.(true);
           }
           return;
         }
@@ -2408,7 +2419,11 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
         document.removeEventListener("pointerup", onUp);
         document.removeEventListener("pointercancel", onUp);
         const moved = drag.axis != null;
+        const wasVertical = drag.axis === "y";
         drag = null;
+        if (wasVertical) {
+          panel._holdSimpleUndo?.(false);
+        }
         window.setTimeout(() => allTile.classList.remove("dragging"), 250);
         if (moved) {
           allTile._lightTileSuppressTap = true;
@@ -2539,6 +2554,9 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           const wasVertical = slotDrag.axis === "y";
           const suppressTap = slotDrag.suppressTap;
           slotDrag = null;
+          if (wasVertical) {
+            panel._holdSimpleUndo?.(false);
+          }
           window.setTimeout(() => tile.classList.remove("dragging"), 250);
           if (wasVertical || suppressTap) {
             if (wasVertical) {
@@ -2562,6 +2580,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
             slotDrag.suppressTap = true;
             if (slotDrag.axis === "y") {
               tile.classList.add("dragging");
+              panel._holdSimpleUndo?.(true);
             }
             return;
           }
