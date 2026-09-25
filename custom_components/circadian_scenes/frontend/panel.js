@@ -2815,7 +2815,7 @@ class CircadianScenesPanel extends HTMLElement {
           justify-content: center;
           background: transparent;
           border-color: transparent;
-          opacity: 0.4;
+          opacity: 0.8;
         }
         .hue-preset.add:hover {
           opacity: 1;
@@ -4017,14 +4017,18 @@ class CircadianScenesPanel extends HTMLElement {
             border-color: transparent;
             opacity: 1;
           }
-          .hue-preset:not(.add) .hue-preset-swatch {
+          .hue-preset.active {
+            gap: 12px;
+          }
+          .hue-preset {
+            transform-origin: 14px center;
             transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
           }
-          .hue-preset:not(.add):hover .hue-preset-swatch,
-          .hue-preset:not(.add).active .hue-preset-swatch {
+          .hue-preset:hover,
+          .hue-preset.active {
             transform: scale(1.08);
           }
-          .hue-preset:not(.add):active .hue-preset-swatch {
+          .hue-preset:active {
             transform: scale(0.96);
           }
           .hue-preset.active .hue-preset-swatch {
@@ -4036,6 +4040,7 @@ class CircadianScenesPanel extends HTMLElement {
             inset: -4px;
             border-radius: inherit;
             border: 2px solid #fff;
+            opacity: 0.75;
             pointer-events: none;
             animation: hue-preset-ring-in 180ms cubic-bezier(0.2, 0, 0, 1);
           }
@@ -4066,7 +4071,7 @@ class CircadianScenesPanel extends HTMLElement {
           }
           to {
             transform: scale(1);
-            opacity: 1;
+            opacity: 0.75;
           }
         }
         :host(:not([data-dark-mode])) .simple-editor.chrome-aside .wheel-mode-pill .wheel-wrapper.active .wheel {
