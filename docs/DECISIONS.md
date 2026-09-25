@@ -11,7 +11,7 @@
 ## Narrow editor fills the screen; the wheel does not scroll the page
 
 - **Date:** 2026-09-25
-- **Decision:** On a narrow panel the simple editor and the circadian dial fill the shell. The light tiles stay at the bottom. The color wheel and the dial face grow into the space above those tiles and do not grow past it, so the page does not scroll. The disk keeps 24px above it and 16px at each side, and the horizontal preset row (48px plus the 16px gap) is not part of the disk, so rings and pins stay on screen and the presets sit above the tiles. When that group is shorter than the space, it is centered. The name-scene button floats over whatever is underneath. The list view still scrolls inside the rail.
+- **Decision:** On a narrow panel the simple editor and the circadian dial fill the shell. The light tiles stay at the bottom. The color wheel and the dial face grow into the space above those tiles and do not grow past it, so the page does not scroll. The disk keeps 24px above it and 16px at each side, and the horizontal preset row (48px plus the 16px gap) is not part of the disk, so rings and pins stay on screen and the presets sit above the tiles. The column gap under that row is 48px so a selected tile’s action plate clears the presets. When that group is shorter than the space, it is centered. The name-scene button floats over whatever is underneath. The list view still scrolls inside the rail.
 - **Why:** A fixed wheel left the tiles mid-page. Growing the disk to the raw leftover width clipped the rings and dropped the presets onto the tiles. Lifting the tiles for the name button left a gap the wheel should have used.
 - **Do not reverse without user ask.**
 

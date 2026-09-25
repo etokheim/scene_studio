@@ -116,6 +116,9 @@ export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
   :host([narrow]) .simple-editor {
     padding-top: 0;
+    /* Selected tiles slide a 36px plate up, plus 6px for the selection ring.
+       A 16px gap let that plate sit under the preset row. */
+    gap: 48px;
   }
   /* Inset so rings and pins stay on screen. The mode row (48) plus the stage
      gap (16) is kept out of the disk so presets sit under it, not on the tiles.
