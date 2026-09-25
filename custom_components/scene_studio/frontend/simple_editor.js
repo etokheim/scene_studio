@@ -117,14 +117,38 @@ export const SIMPLE_EDITOR_CSS = `
   :host([narrow]) .simple-editor {
     padding-top: 0;
   }
+  /* Inset so rings and pins stay on screen. The mode row (48) plus the stage
+     gap (16) is kept out of the disk so presets sit under it, not on the tiles.
+     Extra height centers that group; a short screen shrinks the disk instead. */
   :host([narrow]) .simple-wheels {
     min-height: 0;
     flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 24px 16px 0;
   }
-  :host([narrow]) .simple-editor .hue-wheel-canvas {
+  :host([narrow]) .simple-wheels .hue-wheel-stage {
+    height: auto;
+    max-height: 100%;
+    flex: 0 1 auto;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+  }
+  :host([narrow]) .simple-editor:not(.chrome-aside) .hue-wheel-canvas {
+    width: min(100cqi, calc(100cqb - 64px));
+    max-width: none;
+    height: auto;
+    flex: 0 0 auto;
+  }
+  :host([narrow]) .simple-editor.chrome-aside .hue-wheel-canvas {
     width: min(100cqi, 100cqb);
     max-width: none;
     height: auto;
+    flex: 0 0 auto;
   }
   :host([narrow]) .light-tiles-block {
     flex: 0 0 auto;

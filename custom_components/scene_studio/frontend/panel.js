@@ -3719,12 +3719,6 @@ class SceneStudioPanel extends HTMLElement {
           max-width: none;
           padding-bottom: 0;
         }
-        /* Name-scene button sits in the corner. Leave its box clear so it
-           does not cover the tile hint. A hidden button keeps the tiles on the edge. */
-        :host([narrow][fab-open]) .page:has(.content.wide),
-        :host([narrow][fab-open]) .page.dial-wide {
-          padding-bottom: 72px;
-        }
         :host([narrow]) .content.wide {
           flex: 1 1 auto;
           min-height: 0;
@@ -8983,7 +8977,6 @@ class SceneStudioPanel extends HTMLElement {
       this._fabHideTimer = undefined;
     }
     if (!node) {
-      this.removeAttribute("fab-open");
       this._fabEl.classList.add("is-hidden");
       this._fabHideTimer = window.setTimeout(() => {
         this._fabHideTimer = undefined;
@@ -8994,8 +8987,6 @@ class SceneStudioPanel extends HTMLElement {
       }, 200);
       return;
     }
-    this.setAttribute("fab-open", "");
-    /* :host(:has(.fab)) cannot see this shadow tree, so the page pad keys off the host. */
     this._fabEl.removeAttribute("hidden");
     this._fabEl.replaceChildren(node);
     this._fabEl.classList.add("is-hidden");
