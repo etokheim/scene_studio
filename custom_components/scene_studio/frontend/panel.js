@@ -104,9 +104,11 @@ const CLOCK_SCRUB_RAIL_PAD_PX = 16;
 /* Landscape rail needs room for empty left gutter + dial + rail; below this
    width keep the portrait toolbar (avoids empty “black bar” side columns). */
 const CLOCK_LANDSCAPE_SCRUB_MIN_WIDTH_PX = 900;
-/** Dial / color-wheel face floors; below these the stage column scrolls. */
-const DIAL_FACE_MIN_PX = 600;
+/** Color-wheel face floor; below this the stage column scrolls.
+ *  The dial uses the same floor so a short window pushes the light tiles
+ *  down instead of keeping a taller disk on screen. */
 const WHEEL_FACE_MIN_PX = 400;
+const DIAL_FACE_MIN_PX = WHEEL_FACE_MIN_PX;
 /** Color wheels (simple / variable) cap; the stage column stays full width. */
 const WHEEL_FACE_MAX_PX = 650;
 /* Rings host inset so CSS outer edge matches CLOCK_RINGS_OUTER in viewBox. */
@@ -648,6 +650,8 @@ class SceneStudioPanel extends HTMLElement {
           grid-column: 2;
           width: 100%;
           min-width: 0;
+          height: 100%;
+          align-self: stretch;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -1051,6 +1055,8 @@ class SceneStudioPanel extends HTMLElement {
           /* Flush under the app bar so horizon/bloom/ramp share one top edge
              (margin left a strip where only some bleed painted). */
           margin-top: 0;
+          display: flex;
+          flex-direction: column;
           /* Do not clip X here — mobile face uses width 100%+48px / −24px
              margin so ticks bleed past the column; page/dial-wide clips
              horizon bleed instead (overflow-x:hidden+visible Y → auto). */
@@ -1060,6 +1066,27 @@ class SceneStudioPanel extends HTMLElement {
           --dial-face-max: calc(
             100vh - var(--header-height, 64px) - 40px - 16px - 180px
           );
+        }
+        .sun-path.dial-view .sun-toolbar {
+          flex: 0 0 auto;
+        }
+        .sun-path.dial-view .sun-path-stage {
+          flex: 1 1 auto;
+          min-width: 0;
+          width: 100%;
+          min-height: min-content;
+        }
+        .sun-path.dial-view .sun-path-stage:not(.landscape-clock-scrub) {
+          display: flex;
+          flex-direction: column;
+        }
+        .sun-path.dial-view .sun-path-body {
+          flex: 1 1 auto;
+          min-height: min-content;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
         }
         .sun-light-clock {
           display: flex;
@@ -1075,15 +1102,27 @@ class SceneStudioPanel extends HTMLElement {
         }
         .sun-path.dial-view .sun-light-clock {
           position: relative;
-          /* Face size comes from --dial-face-max (fits light tiles above the
-             fold when it can; min-height 600px otherwise scrolls). */
-          min-height: 0;
+          /* Face size comes from --dial-face-max. The floor matches the color
+             wheel; below it the scrollport grows and the tiles move down.
+             min-height includes the 40px label pad and the 16px under the
+             face, so the square itself can stay at that floor. */
+          flex: 1 1 auto;
+          min-height: calc(${DIAL_FACE_MIN_PX}px + 40px + 16px);
+          min-width: 0;
+          width: 100%;
           gap: 16px;
           padding-bottom: 16px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          container-type: size;
         }
         .sun-path.dial-view .sun-light-clock-legend {
           position: relative;
-          /* Above dial labels (z-index 10) that overflow the face onto the tiles. */
+          /* Above dial labels (z-index 10) that overflow the face onto the tiles.
+             The stage grows above this strip, so the tiles sit on the bottom
+             until the dial floor makes the column scroll. */
           z-index: 12;
           width: 100%;
           max-width: none;
@@ -1107,7 +1146,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         .sun-light-clock-face {
           position: relative;
-          width: min(100%, var(--dial-face-max, 86vh));
+          width: min(100cqi, 100cqb, var(--dial-face-max, 86vh));
           max-width: min(100%, var(--dial-face-max, 86vh));
           aspect-ratio: 1;
           flex: 0 0 auto;
@@ -3678,6 +3717,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         .page-shell {
           box-sizing: border-box;
+          position: relative;
           width: 100%;
           height: 100%;
           min-height: 0;
@@ -3686,6 +3726,20 @@ class SceneStudioPanel extends HTMLElement {
           padding-right: var(--scene-sidebar-gutter);
           overflow-x: clip;
           overflow-y: hidden;
+        }
+        /* Narrow dial sky. Wide dials use .stage-bg, which sits outside
+           .stage-scroll. The page is the narrow scrollport, so the glow
+           cannot live in the face or it lengthens the scroll. */
+        .dial-sky {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          overflow: hidden;
+          pointer-events: none;
+        }
+        .page-shell > .page {
+          position: relative;
+          z-index: 1;
         }
         .page {
           --page-max-width: 1024px;
@@ -3707,9 +3761,20 @@ class SceneStudioPanel extends HTMLElement {
           min-height: 0;
           display: flex;
           flex-direction: column;
-          overflow: hidden;
           max-width: none;
           padding-bottom: 0;
+        }
+        /* The dial page also has an empty .content.wide, so :has(.content.wide)
+           matches it and is more specific than .page.dial-wide. Keep the clip
+           on :not(.dial-wide) or the dial never scrolls. */
+        :host([narrow]) .page:has(.content.wide):not(.dial-wide) {
+          overflow: hidden;
+        }
+        /* The dial page scrolls once the face hits the color-wheel floor.
+           The simple editor stays clipped and shrinks into the shell. */
+        :host([narrow]) .page.dial-wide {
+          overflow-x: clip;
+          overflow-y: auto;
         }
         :host([narrow]) .content.wide {
           flex: 1 1 auto;
@@ -3726,13 +3791,16 @@ class SceneStudioPanel extends HTMLElement {
           flex: none;
         }
         :host([narrow]) .page.dial-wide > .sun-path.dial-view {
-          flex: 1 1 auto;
-          min-height: 0;
+          flex: 1 0 auto;
+          min-height: 100%;
           min-width: 0;
           width: 100%;
           display: flex;
           flex-direction: column;
-          overflow: hidden;
+          /* Tile-strip bleed padding hangs out of the column. Clip it so that
+             padding is not extra scroll while the face still fits. Plates that
+             slide up over the dial stay inside this box. */
+          overflow: clip;
         }
         :host([narrow]) .sun-path.dial-view .sun-toolbar {
           flex: 0 0 auto;
@@ -3741,7 +3809,6 @@ class SceneStudioPanel extends HTMLElement {
         :host([narrow]) .sun-path.dial-view .sun-path-body,
         :host([narrow]) .sun-path.dial-view .sun-light-clock {
           flex: 1 1 auto;
-          min-height: 0;
           min-width: 0;
           width: 100%;
           display: flex;
@@ -3750,7 +3817,10 @@ class SceneStudioPanel extends HTMLElement {
         }
         :host([narrow]) .sun-path.dial-view .sun-light-clock {
           padding-top: 0;
-          justify-content: flex-start;
+          justify-content: center;
+          /* Border box includes the 16px under the face, so the square
+             itself still stops at the color-wheel floor. */
+          min-height: calc(${DIAL_FACE_MIN_PX}px + 16px);
           container-type: size;
         }
         :host([narrow]) .sun-path.dial-view .sun-light-clock-legend {
@@ -3759,8 +3829,12 @@ class SceneStudioPanel extends HTMLElement {
         }
         :host([narrow]) .sun-light-clock-face {
           flex: 0 0 auto;
+          /* The clock is the budget: it grows into leftover space and stops
+             at the color-wheel floor. --dial-face-max is the old fit-without-
+             scrolling estimate, and on a narrow page nothing measures a stage
+             to replace it, so it must not shrink the face below that floor. */
           width: min(100cqi, 100cqb);
-          max-width: none;
+          max-width: 100%;
           height: auto;
           max-height: none;
           margin-inline: 0;
@@ -3777,10 +3851,11 @@ class SceneStudioPanel extends HTMLElement {
           margin-right: calc(-1 * var(--scene-sidebar-gutter));
           width: calc(100% + var(--scene-sidebar-gutter));
           padding-right: var(--scene-sidebar-gutter);
-          /* Dial pages keep FAB clearance. A workspace page must not: the
-             pad shrinks the flex content box while the workspace is sized to
-             the shell, so overflow:hidden clips the scenes list and editor. */
-          padding-bottom: 156px;
+          /* No FAB pad. The name button floats, and a bottom pad would lift
+             the light tiles off the shell. Workspace pages also must not pad:
+             the pad shrinks the flex content box while the workspace is sized
+             to the shell, so overflow:hidden clips the scenes list and editor. */
+          padding-bottom: 0;
           box-sizing: border-box;
           position: relative;
           flex: 1 1 auto;
@@ -5378,6 +5453,16 @@ class SceneStudioPanel extends HTMLElement {
       : this._t("frontend.naming.circadian_fallback", "Circadian");
   }
 
+  /** Palette name, or "Name 2" when this area already has that scene name. */
+  _sceneNameFromPalette(areaId, palette) {
+    const base = String(palette?.name || "").trim() || this._untitledLabel();
+    const area = areaId || null;
+    const names = (this._items || [])
+      .filter((scene) => (scene.area || null) === area)
+      .map((scene) => String(scene.scene_name || "").trim());
+    return galleryCopyName(base, names);
+  }
+
   _suggestedLibraryName() {
     if (this._view === "palette") {
       return this._t("frontend.naming.palette", "Palette");
@@ -5719,6 +5804,36 @@ class SceneStudioPanel extends HTMLElement {
     return stage?.querySelector(":scope > .stage-bg") || null;
   }
 
+  _ensureDialSky() {
+    if (!this._narrow || !this._isDialView()) {
+      this._removeDialSky();
+      return null;
+    }
+    const shell = this.shadowRoot?.querySelector(".page-shell");
+    if (!shell) {
+      return null;
+    }
+    let sky = shell.querySelector(":scope > .dial-sky");
+    if (!sky) {
+      sky = document.createElement("div");
+      sky.className = "dial-sky";
+      shell.prepend(sky);
+    }
+    return sky;
+  }
+
+  _removeDialSky() {
+    const sky = this.shadowRoot?.querySelector(".page-shell > .dial-sky");
+    if (!sky) {
+      return;
+    }
+    const back = this._clockHorizonBackEl;
+    if (back && sky.contains(back)) {
+      back.remove();
+    }
+    sky.remove();
+  }
+
   _mountSunPath(stage) {
     if (!this._sunPathEl || !stage) {
       return;
@@ -5787,6 +5902,9 @@ class SceneStudioPanel extends HTMLElement {
       this._bindStageScrollLayout(workspace.querySelector(".stage-scroll"));
     } else if (workspace) {
       workspace.style.height = "";
+    } else if (this._narrow && this._isDialView()) {
+      const page = this.shadowRoot?.querySelector(".page.dial-wide");
+      this._bindStageScrollLayout(page);
     }
     this._syncEditorChrome();
     requestAnimationFrame(() => {
@@ -6084,12 +6202,16 @@ class SceneStudioPanel extends HTMLElement {
     }
     /* scene-used is an overlay. Its height must not shrink the dial. */
     const budgetH = editor && !clock ? visibleH : scrollH;
-    // Tile-strip padding is cancelled by a negative margin, so it sits outside
-    // the editor box and still lengthens the scrollport. Shrink the face by
-    // that spill before the page is allowed to scroll.
+    // Tile-strip padding hangs outside its margin box and lengthens the
+    // scrollport. For a dial the clock is only the face, so measuring spill
+    // from the clock also counted the toolbar and the tiles and pinned the
+    // face at its floor. The path is the whole column.
     const laidOut = editor && !clock ? editor : clock;
-    const spill = laidOut
-      ? Math.max(0, box.scrollHeight - laidOut.offsetHeight)
+    const spillTarget = isDial
+      ? box.querySelector(".sun-path.dial-view") || clock
+      : laidOut;
+    const spill = spillTarget
+      ? Math.max(0, box.scrollHeight - spillTarget.offsetHeight)
       : 0;
     const available = budgetH - stripH - overhead - toolbarH - spill;
     const size = Math.max(
@@ -6102,7 +6224,7 @@ class SceneStudioPanel extends HTMLElement {
     if (this._sunPathEl?.classList.contains("dial-view")) {
       this._sunPathEl.style.setProperty("--dial-face-max", nextFace);
     }
-    if (editor && !clock && prevFace !== nextFace) {
+    if (prevFace !== nextFace && (clock || (editor && !clock))) {
       const pass = (this._faceMaxPass || 0) + 1;
       if (pass <= 3) {
         this._faceMaxPass = pass;
@@ -6926,7 +7048,9 @@ class SceneStudioPanel extends HTMLElement {
           type: `${DOMAIN}/save`,
           data: {
             kind: "simple",
-            scene_name: this._untitledLabel(),
+            scene_name: choice.palette
+              ? this._sceneNameFromPalette(areaId, choice.palette)
+              : this._untitledLabel(),
             area: areaId || null,
             membership: { exclude: [], include: [] },
             lights,
@@ -15972,7 +16096,7 @@ class SceneStudioPanel extends HTMLElement {
     path.style.setProperty("--dial-timeline-h", `${toolbarH}px`);
 
     // Draft/location banners live in .stage-col above the scrollport.
-    // Face size (fits light tiles, min 600px) is _syncStageFaceMax.
+    // Face size (fits light tiles, same floor as the color wheel) is _syncStageFaceMax.
     const hostRect = this.getBoundingClientRect();
     const pathTop = path.getBoundingClientRect().top;
     const vignetteReach = Math.max(0, Math.round(pathTop - hostRect.top));
@@ -16695,11 +16819,20 @@ class SceneStudioPanel extends HTMLElement {
     }
     const stage = this._contentEl?.querySelector(".stage-col");
     const bg = this._stageBgEl(stage);
-    if (bg && back.parentNode !== bg) {
-      bg.appendChild(back);
+    // Wide: sky sits on .stage-bg, outside the stage scrollport. Narrow: the
+    // page itself scrolls, so the sky has to leave the face or the glow
+    // becomes extra scroll below the tiles.
+    if (bg) {
+      this._removeDialSky();
+    }
+    const sky = bg || this._ensureDialSky();
+    if (sky && back.parentNode !== sky) {
+      sky.appendChild(back);
+    } else if (!sky && face && back.parentNode !== face) {
+      face.appendChild(back);
     }
     const host = this.getBoundingClientRect();
-    const originRect = bg ? bg.getBoundingClientRect() : host;
+    const originRect = sky ? sky.getBoundingClientRect() : host;
     const clip = this._contentEl?.querySelector(".workspace")?.getBoundingClientRect() || host;
     const fr = face.getBoundingClientRect();
     if (fr.width < 8 || host.width < 8) {
@@ -18243,6 +18376,7 @@ class SceneStudioPanel extends HTMLElement {
     if (!keepOverlay) {
       this._clockHorizonBackEl?.remove();
       this._dropClockLegends();
+      this.shadowRoot?.querySelector(".page-shell > .dial-sky")?.remove();
     }
     this._clockHorizonBackEl = undefined;
     this._clockFaceEl = undefined;

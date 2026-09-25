@@ -11,8 +11,15 @@
 ## Narrow editor fills the screen; the wheel does not scroll the page
 
 - **Date:** 2026-09-25
-- **Decision:** On a narrow panel the simple editor and the circadian dial fill the shell. The light tiles stay at the bottom. The color wheel and the dial face grow into the space above those tiles and do not grow past it, so the page does not scroll. The disk keeps 16px at each side. On a phone the palette split and used-item chips are one horizontal strip above the disk, with 8px under the header, so the disk sits below them. Selecting a light fades that strip out and fades the color modes and variables into the same band, over the disk, so the disk does not move. That band stays horizontal for the whole narrow range. The beside-disk column is only for the wide stage; using it on a narrow panel made the presets jump as the window passed about 800px. Wider screens keep the chips as a vertical overlay. When the wheel group is shorter than the space above the tiles, it is centered. The name-scene button floats over whatever is underneath. The list view still scrolls inside the rail.
-- **Why:** A fixed wheel left the tiles mid-page. Growing the disk to the raw leftover width clipped the rings and dropped the presets onto the tiles. Lifting the tiles for the name button left a gap the wheel should have used.
+- **Decision:** On a narrow panel the simple editor and the circadian dial fill the shell. The light tiles stay at the bottom. The color wheel and the dial face grow into the space above those tiles. The color wheel does not grow past that space, so its page does not scroll. The dial uses the same 400px floor as the color wheel: once the face cannot shrink further, the column scrolls and the light tiles move down with it. The disk keeps 16px at each side. On a phone the palette split and used-item chips are one horizontal strip above the disk, with 8px under the header, so the disk sits below them. Selecting a light fades that strip out and fades the color modes and variables into the same band, over the disk, so the disk does not move. That band stays horizontal for the whole narrow range. The beside-disk column is only for the wide stage; using it on a narrow panel made the presets jump as the window passed about 800px. Wider screens keep the chips as a vertical overlay. When the wheel group is shorter than the space above the tiles, it is centered. The name-scene button floats over whatever is underneath. The list view still scrolls inside the rail.
+- **Why:** A fixed wheel left the tiles mid-page. Growing the disk to the raw leftover width clipped the rings and dropped the presets onto the tiles. Lifting the tiles for the name button left a gap the wheel should have used. The dial’s 600px floor scrolled sooner than the color wheel and left the tiles under the face instead of on the bottom of the column.
+- **Do not reverse without user ask.**
+
+## Scene from a palette takes the palette name
+
+- **Date:** 2026-09-25
+- **Decision:** A simple scene created from a palette is named with that palette’s name. If the area already has a scene with that name, the next one is “Name 2”, then “Name 3”. Another area can reuse the same name. Starting from none stays Untitled.
+- **Why:** The new scene was always Untitled, so the palette you just picked did not show up in the area list.
 - **Do not reverse without user ask.**
 
 ## Domain and repo rename to scene_studio

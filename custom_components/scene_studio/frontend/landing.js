@@ -329,6 +329,17 @@ export const LANDING_CSS = `
     flex: 0 0 auto;
     width: 100%;
   }
+  /* Fill the scrollport so the light tiles sit on the bottom. The column
+     grows past the port once the dial hits the same floor as the color wheel. */
+  .stage-scroll > .sun-path.dial-view {
+    flex: 1 0 auto;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    /* Tile bleed hangs below the column. Clip it so a tall stage does not
+       scroll until the face is actually at its floor. */
+    overflow: clip;
+  }
   .library-col {
     flex: 1 1 auto;
     min-width: 0;
