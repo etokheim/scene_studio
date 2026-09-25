@@ -648,33 +648,33 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       const id = paletteBaseId();
       return id ? variables.find((item) => item.id === id) || null : null;
     },
-    onRandomizeSeed: () => {
-      const seed = (Math.random() * 0xffffffff) >>> 0;
-      panel._beginSimpleUndo?.();
-      panel._formData = { ...panel._formData, assignment_seed: seed };
-      for (const eid of members) {
-        const draft = drafts[eid];
-        if (!draft) {
-          continue;
-        }
-        delete draft.palette_t;
-        delete draft.palette_r;
-        const linked = variables.find((item) => item.id === draft.variable_ref);
-        if (variableIsPalette(linked)) {
-          applyVariableToDraft(draft, linked, {
-            entityId: eid,
-            seed,
-            catalog: variables,
-          });
-        }
-        persistLight(eid);
-      }
-      wheel.sync();
-    },
     ...panel._wheelPalette(),
     onPickPalette: () => panel._pickSceneBasePalette?.(),
     onEditPalette: (id) => panel._go(`palette/${id}`),
   });
+  panel._randomizeScenePalette = () => {
+    const seed = (Math.random() * 0xffffffff) >>> 0;
+    panel._beginSimpleUndo?.();
+    panel._formData = { ...panel._formData, assignment_seed: seed };
+    for (const eid of members) {
+      const draft = drafts[eid];
+      if (!draft) {
+        continue;
+      }
+      delete draft.palette_t;
+      delete draft.palette_r;
+      const linked = variables.find((item) => item.id === draft.variable_ref);
+      if (variableIsPalette(linked)) {
+        applyVariableToDraft(draft, linked, {
+          entityId: eid,
+          seed,
+          catalog: variables,
+        });
+      }
+      persistLight(eid);
+    }
+    wheel.sync();
+  };
   wheels.appendChild(wheel.el);
   const levelHost = document.createElement("div");
   levelHost.className = "simple-level-host";

@@ -1345,6 +1345,8 @@ function libraryBlock(head, body) {
   return block;
 }
 
+export const PALETTE_RANDOMIZE_ICON = "mdi:shuffle";
+
 export function renderSceneUsed(panel) {
   if (panel._view !== "edit" || !panel._formData) {
     return null;
@@ -1408,6 +1410,17 @@ function renderPaletteSplit(panel) {
   button.addEventListener("click", () => panel._pickSceneBasePalette?.());
   split.appendChild(button);
   if (palette) {
+    const shuffle = document.createElement("ha-icon-button");
+    shuffle.className = "scene-palette-edit";
+    shuffle.label = panel._t("frontend.dialogs.scene_palette_randomize", "Randomize");
+    const shuffleIcon = document.createElement("ha-icon");
+    shuffleIcon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
+    shuffle.appendChild(shuffleIcon);
+    shuffle.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      panel._randomizeScenePalette?.();
+    });
+    split.appendChild(shuffle);
     const edit = document.createElement("ha-icon-button");
     edit.className = "scene-palette-edit";
     edit.label = panel._t("frontend.dialogs.scene_palette_edit", "Edit palette");

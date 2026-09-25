@@ -62,6 +62,7 @@ import {
   renderLanding,
   renderSceneUsed,
   renderLibraryUsedBy,
+  PALETTE_RANDOMIZE_ICON,
   applyRampBackground,
   previewRampsForTheme,
   themeConic,
@@ -6298,9 +6299,12 @@ class CircadianScenesPanel extends HTMLElement {
         randomize.className = "scene-palette-randomize";
         randomize.appearance = "plain";
         randomize.hidden = true;
-        randomize.textContent = this._t(
-          "frontend.dialogs.scene_palette_randomize",
-          "Randomize"
+        const randomizeIcon = document.createElement("ha-icon");
+        randomizeIcon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
+        randomizeIcon.slot = "icon";
+        randomize.appendChild(randomizeIcon);
+        randomize.append(
+          this._t("frontend.dialogs.scene_palette_randomize", "Randomize")
         );
         randomize.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -6337,9 +6341,12 @@ class CircadianScenesPanel extends HTMLElement {
       galleryRandomize.className = "scene-palette-randomize";
       galleryRandomize.appearance = "plain";
       galleryRandomize.hidden = true;
-      galleryRandomize.textContent = this._t(
-        "frontend.dialogs.scene_palette_randomize",
-        "Randomize"
+      const galleryRandomizeIcon = document.createElement("ha-icon");
+      galleryRandomizeIcon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
+      galleryRandomizeIcon.slot = "icon";
+      galleryRandomize.appendChild(galleryRandomizeIcon);
+      galleryRandomize.append(
+        this._t("frontend.dialogs.scene_palette_randomize", "Randomize")
       );
       galleryRandomize.addEventListener("click", (ev) => {
         ev.stopPropagation();
