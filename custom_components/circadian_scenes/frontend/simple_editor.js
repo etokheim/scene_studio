@@ -39,7 +39,7 @@ import {
   wheelDeltaToPercent,
 } from "./light_tiles.js";
 
-/** Modes and variables stack beside the disk when the right gutter cannot hold the light list. The list itself stays under the disks. */
+/** Modes and variables stack beside the disk when the right gutter is wide enough. The light list stays under the disks. */
 function bindWheelAside(editor) {
   const LIGHT_ASIDE_MIN = 240;
   const apply = () => {
@@ -51,7 +51,7 @@ function bindWheelAside(editor) {
     const disk = Math.min(col, height, 650);
     const gutter = (col - disk) / 2;
     editor.classList.remove("lights-aside");
-    editor.classList.toggle("chrome-aside", gutter < LIGHT_ASIDE_MIN);
+    editor.classList.toggle("chrome-aside", gutter >= LIGHT_ASIDE_MIN);
   };
   editor._wheelAside?.disconnect();
   const observer = new ResizeObserver(apply);

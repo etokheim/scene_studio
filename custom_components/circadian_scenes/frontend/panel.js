@@ -3763,8 +3763,7 @@ class CircadianScenesPanel extends HTMLElement {
           max-width: min(100%, ${WHEEL_FACE_MAX_PX}px, calc(100cqb - 64px));
           height: auto;
         }
-        /* Vertical modes and variables when the light list cannot sit in the
-           right gutter. The list is centered on the disk, 200px right of center. */
+        /* Vertical modes and variables when the gutter beside the disk is wide enough. */
         .simple-editor.chrome-aside {
           .hue-wheel-face {
             position: relative;
@@ -3842,7 +3841,7 @@ class CircadianScenesPanel extends HTMLElement {
             padding-bottom: 10px;
             margin-bottom: 12px;
             border-bottom: 1px solid var(--divider-color);
-            background: var(--primary-background-color, var(--card-background-color));
+            background: none;
           }
           .wheel-mode-pill {
             flex-direction: column;
