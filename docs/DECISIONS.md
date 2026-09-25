@@ -1022,6 +1022,14 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Why:** Animating `transform: rotate() scale()` on the SVG did not reverse, and appending the node on every move cancelled the transition before it could be seen. The return flight had no stored home, so leaving the group hid the members in place.
 - **Do not reverse without user ask.**
 
+## Picture palette catalog
+
+- **Date:** 2026-09-25
+- **Supersedes in part:** “Picture palettes” — the sections are no longer Hearth, Study, Dayroom, and Small hours, and the five colors are room lights for that group rather than samples of the photo.
+- **Decision:** The gallery is Daylight, Cozy, Evening, Night, Party, Romantic, Sunrise, and Neon, including Desert sunrise. Wood lamp keeps builtin id `wool` and City rain keeps `rain`, because those photos are the same files. Every other previous picture id is unused, including `blue-hour` (Harbor). The Lofoten picture is `blue-hour-reine`. A palette already copied from a removed picture keeps its colors; its photo and per-slot reset stop resolving.
+- **Why:** The pictures and the light colors were chosen together. Reusing an old id for a different photo would change reset on palettes people already saved.
+- **Do not reverse without user ask.**
+
 ## Picture palettes
 
 - **Date:** 2026-09-23
