@@ -3700,15 +3700,16 @@ function createSceneColorWheel({
     }
     const vertical = getComputedStyle(chrome).flexDirection === "column";
     if (vertical) {
-      const max = chrome.scrollHeight - chrome.clientHeight;
-      chrome.classList.toggle("can-scroll-start", max > 1 && chrome.scrollTop > 1);
-      chrome.classList.toggle(
+      const max = presets.scrollHeight - presets.clientHeight;
+      presets.classList.toggle("can-scroll-start", max > 1 && presets.scrollTop > 1);
+      presets.classList.toggle(
         "can-scroll-end",
-        max > 1 && chrome.scrollTop < max - 1
+        max > 1 && presets.scrollTop < max - 1
       );
-      presets.classList.remove("can-scroll-end");
+      chrome.classList.remove("can-scroll-start", "can-scroll-end");
       return;
     }
+    presets.classList.remove("can-scroll-start");
     chrome.classList.remove("can-scroll-start", "can-scroll-end");
     const maxScroll = presetTrack.scrollWidth - presetTrack.clientWidth;
     presets.classList.toggle(
@@ -5146,6 +5147,7 @@ function createSceneColorWheel({
   ro?.observe(canvasWrap);
   ro?.observe(presets);
   presetTrack.addEventListener("scroll", updatePresetOverflow, { passive: true });
+  presets.addEventListener("scroll", updatePresetOverflow, { passive: true });
   chrome.addEventListener("scroll", updatePresetOverflow, { passive: true });
   ro?.observe(chrome);
   paintWheels();

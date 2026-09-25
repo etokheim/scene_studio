@@ -1150,8 +1150,8 @@ class SceneStudioPanel extends HTMLElement {
           max-width: min(100%, var(--dial-face-max, 86vh));
           aspect-ratio: 1;
           flex: 0 0 auto;
-          /* Allow page scroll over the dial; only the sun/handle capture. */
-          touch-action: pan-y;
+          /* A finger on the dial scrubs bands. The page must not scroll too. */
+          touch-action: none;
           cursor: default;
           /* Visible so horizon glow/rays can bleed past the face. */
           overflow: visible;
@@ -2296,7 +2296,8 @@ class SceneStudioPanel extends HTMLElement {
           line-height: 1;
           background: transparent;
         }
-        .wheel-mode-pill .wheel-wrapper.palette-active {
+        .wheel-mode-pill .wheel-wrapper.palette-active,
+        :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.palette-active {
           width: 64px;
           display: flex;
           align-items: center;
@@ -2305,17 +2306,27 @@ class SceneStudioPanel extends HTMLElement {
           border-color: transparent;
           background: color-mix(in srgb, var(--primary-text-color) 12%, transparent);
         }
-        .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
+        .wheel-mode-pill .wheel-wrapper.palette-active .wheel,
+        :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
+          position: relative;
+          /* Same drop shadow as the other mode swatches. The selection ring is
+             the shared ::after, not a second stroke on the disc. */
           box-shadow:
-            0 0 0 2px #fff,
             0 1px 3px rgba(0, 0, 0, 0.4),
             inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
         }
-        :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
-          box-shadow:
-            0 0 0 2px var(--primary-color),
-            0 1px 3px rgba(0, 0, 0, 0.4),
-            inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
+        .wheel-mode-pill .wheel-wrapper.palette-active .wheel::after,
+        :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.palette-active .wheel::after {
+          content: "";
+          position: absolute;
+          inset: -4px;
+          border-radius: 50%;
+          border: 2px solid #fff;
+          opacity: 0.75;
+          pointer-events: none;
+        }
+        :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.palette-active .wheel::after {
+          border-color: var(--primary-color);
         }
         .wheel-palette-edit {
           display: flex;
@@ -3717,7 +3728,6 @@ class SceneStudioPanel extends HTMLElement {
         }
         .page-shell {
           box-sizing: border-box;
-          position: relative;
           width: 100%;
           height: 100%;
           min-height: 0;
@@ -3726,20 +3736,6 @@ class SceneStudioPanel extends HTMLElement {
           padding-right: var(--scene-sidebar-gutter);
           overflow-x: clip;
           overflow-y: hidden;
-        }
-        /* Narrow dial sky. Wide dials use .stage-bg, which sits outside
-           .stage-scroll. The page is the narrow scrollport, so the glow
-           cannot live in the face or it lengthens the scroll. */
-        .dial-sky {
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          overflow: hidden;
-          pointer-events: none;
-        }
-        .page-shell > .page {
-          position: relative;
-          z-index: 1;
         }
         .page {
           --page-max-width: 1024px;
@@ -4036,12 +4032,9 @@ class SceneStudioPanel extends HTMLElement {
             height: auto;
             max-height: 100%;
             min-height: 0;
-            /* Room for the selection ring (4px outset + scale). overflow-x clips it otherwise. */
             padding: 6px 4px 6px 14px;
             box-sizing: border-box;
-            overflow-x: hidden;
-            overflow-y: auto;
-            scrollbar-width: none;
+            overflow: visible;
             gap: 8px;
             transition:
               opacity 180ms cubic-bezier(0.2, 0, 0, 1),
@@ -4061,39 +4054,9 @@ class SceneStudioPanel extends HTMLElement {
           .hue-wheel-chrome::-webkit-scrollbar {
             display: none;
           }
-          /* Feather only the edge that still has something to scroll to. */
-          .hue-wheel-chrome.can-scroll-start {
-            -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px);
-            mask-image: linear-gradient(to bottom, transparent, #000 28px);
-          }
-          .hue-wheel-chrome.can-scroll-end {
-            -webkit-mask-image: linear-gradient(
-              to bottom,
-              #000 calc(100% - 28px),
-              transparent
-            );
-            mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
-          }
-          .hue-wheel-chrome.can-scroll-start.can-scroll-end {
-            -webkit-mask-image: linear-gradient(
-              to bottom,
-              transparent,
-              #000 28px,
-              #000 calc(100% - 28px),
-              transparent
-            );
-            mask-image: linear-gradient(
-              to bottom,
-              transparent,
-              #000 28px,
-              #000 calc(100% - 28px),
-              transparent
-            );
-          }
+          /* Color modes stay put. Only the variables (and palette colors) scroll. */
           .hue-wheel-mode-cluster {
-            position: sticky;
-            top: 0;
-            z-index: 2;
+            flex: 0 0 auto;
             align-items: flex-start;
             align-self: flex-start;
             width: max-content;
@@ -4204,12 +4167,48 @@ class SceneStudioPanel extends HTMLElement {
             height: auto;
             max-height: none;
             min-height: 0;
-            flex: 0 0 auto;
-            overflow: visible;
+            flex: 1 1 auto;
+            /* The ring sits in this padding so the scroller can clip without
+               eating it. The fade mask is this box, not the color modes. */
+            padding: 6px 4px 6px 0;
+            margin: 0 -4px 0 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            scrollbar-width: none;
             border-radius: 0;
             background: none;
             box-shadow: none;
-            padding: 0;
+          }
+          .hue-presets::-webkit-scrollbar {
+            display: none;
+          }
+          .hue-presets.can-scroll-start {
+            -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px);
+            mask-image: linear-gradient(to bottom, transparent, #000 28px);
+          }
+          .hue-presets.can-scroll-end {
+            -webkit-mask-image: linear-gradient(
+              to bottom,
+              #000 calc(100% - 28px),
+              transparent
+            );
+            mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+          }
+          .hue-presets.can-scroll-start.can-scroll-end {
+            -webkit-mask-image: linear-gradient(
+              to bottom,
+              transparent,
+              #000 28px,
+              #000 calc(100% - 28px),
+              transparent
+            );
+            mask-image: linear-gradient(
+              to bottom,
+              transparent,
+              #000 28px,
+              #000 calc(100% - 28px),
+              transparent
+            );
           }
           .hue-presets-track {
             flex-direction: column;
@@ -5802,36 +5801,6 @@ class SceneStudioPanel extends HTMLElement {
 
   _stageBgEl(stage) {
     return stage?.querySelector(":scope > .stage-bg") || null;
-  }
-
-  _ensureDialSky() {
-    if (!this._narrow || !this._isDialView()) {
-      this._removeDialSky();
-      return null;
-    }
-    const shell = this.shadowRoot?.querySelector(".page-shell");
-    if (!shell) {
-      return null;
-    }
-    let sky = shell.querySelector(":scope > .dial-sky");
-    if (!sky) {
-      sky = document.createElement("div");
-      sky.className = "dial-sky";
-      shell.prepend(sky);
-    }
-    return sky;
-  }
-
-  _removeDialSky() {
-    const sky = this.shadowRoot?.querySelector(".page-shell > .dial-sky");
-    if (!sky) {
-      return;
-    }
-    const back = this._clockHorizonBackEl;
-    if (back && sky.contains(back)) {
-      back.remove();
-    }
-    sky.remove();
   }
 
   _mountSunPath(stage) {
@@ -16819,20 +16788,18 @@ class SceneStudioPanel extends HTMLElement {
     }
     const stage = this._contentEl?.querySelector(".stage-col");
     const bg = this._stageBgEl(stage);
-    // Wide: sky sits on .stage-bg, outside the stage scrollport. Narrow: the
-    // page itself scrolls, so the sky has to leave the face or the glow
-    // becomes extra scroll below the tiles.
+    // Wide: the sky sits on .stage-bg so it can span the rail while the stage
+    // scrolls. Narrow: keep it in the face. Page-relative coordinates put the
+    // wash at the bottom of the screen instead of on the dial.
     if (bg) {
-      this._removeDialSky();
-    }
-    const sky = bg || this._ensureDialSky();
-    if (sky && back.parentNode !== sky) {
-      sky.appendChild(back);
-    } else if (!sky && face && back.parentNode !== face) {
+      if (back.parentNode !== bg) {
+        bg.appendChild(back);
+      }
+    } else if (face && back.parentNode !== face) {
       face.appendChild(back);
     }
     const host = this.getBoundingClientRect();
-    const originRect = sky ? sky.getBoundingClientRect() : host;
+    const originRect = (bg || face).getBoundingClientRect();
     const clip = this._contentEl?.querySelector(".workspace")?.getBoundingClientRect() || host;
     const fr = face.getBoundingClientRect();
     if (fr.width < 8 || host.width < 8) {
@@ -18376,7 +18343,6 @@ class SceneStudioPanel extends HTMLElement {
     if (!keepOverlay) {
       this._clockHorizonBackEl?.remove();
       this._dropClockLegends();
-      this.shadowRoot?.querySelector(".page-shell > .dial-sky")?.remove();
     }
     this._clockHorizonBackEl = undefined;
     this._clockFaceEl = undefined;
@@ -18780,11 +18746,14 @@ class SceneStudioPanel extends HTMLElement {
       }
       setHoveredRing(null);
     });
-    // Non-passive touchmove so preventDefault can block scroll on older engines.
+    // Non-passive touchmove so preventDefault can block scroll. Once the
+    // browser has committed to scrolling, the event is not cancelable.
     ringsHost.addEventListener(
       "touchmove",
       (ev) => {
-        ev.preventDefault();
+        if (ev.cancelable) {
+          ev.preventDefault();
+        }
       },
       { passive: false }
     );

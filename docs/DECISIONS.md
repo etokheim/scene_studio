@@ -1,5 +1,13 @@
 # Decisions
 
+## Dial touch does not scroll, and the sky stays on the dial
+
+- **Date:** 2026-09-25
+- **Supersedes in part:** the dial note that the canvas allows touch pan and only the sun handle uses `touch-action: none`.
+- **Decision:** The dial face uses `touch-action: none`. A touch that starts there scrubs light bands, and `preventDefault` runs only while the `touchmove` is still cancelable. On a narrow page the horizon wash stays inside the face and is positioned from that face, so its center is the dial. On a wide stage it stays on `.stage-bg` and tracks the face while the stage scrolls. Beside the disk, color modes stay fixed; only variables and palette colors scroll, and the fade mask belongs to that scroller. A selected palette uses the same selection ring as the other modes. Library section titles use the area-title ramp and stick flush to an unpadded rail.
+- **Why:** `touch-action: pan-y` let the page start scrolling, after which canceling `touchmove` was ignored. A page-sized sky layer with page coordinates put the wash under the light tiles on a phone. Sticky color modes and a padded library scrollport left the fade and the titles short of where they belong.
+- **Do not reverse without user ask.**
+
 ## Circadian palette belongs to the solar event
 
 - **Date:** 2026-09-25

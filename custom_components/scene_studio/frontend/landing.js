@@ -104,7 +104,9 @@ export const LANDING_CSS = `
     padding: 0 0 24px;
   }
   .area-rail-body[data-tab="library"] {
-    padding: 4px 8px 24px 12px;
+    /* No padding on the scrollport. A padded scrollport makes sticky titles
+       lock short of the top, with a gap above them. */
+    padding: 0 0 24px;
   }
   .area-rail-body[hidden] {
     display: none;
@@ -418,16 +420,27 @@ export const LANDING_CSS = `
   .floor-block .area-head .area-add {
     margin-block: -8px;
   }
+  .library-block {
+    padding: 0 8px 0 12px;
+  }
   .library-block > .area-head {
     position: sticky;
     top: 0;
     z-index: 3;
-    margin: 0 -8px 8px -12px;
+    margin: 0 -8px 0 -12px;
     width: calc(100% + 20px);
-    padding: 4px 8px 4px 12px;
+    padding: 0 8px 12px 12px;
     box-sizing: border-box;
     background: none;
+    overflow: visible;
     container-type: scroll-state;
+  }
+  .library-block > .area-head .floor-label {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--primary-text-color);
   }
   .sticky-bg {
     position: absolute;
@@ -446,9 +459,6 @@ export const LANDING_CSS = `
       background: color-mix(in srgb, var(--primary-background-color) 92%, transparent);
       opacity: 1;
       transition: opacity 350ms;
-    }
-    .sticky-bg-library {
-      background: var(--primary-background-color);
     }
     .sticky-bg-area {
       /* 16px past the title. 50% − 8px is still halfway down the title itself. */
@@ -1328,7 +1338,7 @@ function renderLibrary(panel, { compact } = {}) {
     ev.stopPropagation();
     panel._openCreateVariableDialog();
   });
-  varHead.append(stickyBg("library"), varLabel, addVar);
+  varHead.append(stickyBg("area"), varLabel, addVar);
 
   const varRow = document.createElement("div");
   varRow.className = "var-row";
@@ -1364,7 +1374,7 @@ function renderLibrary(panel, { compact } = {}) {
     ev.stopPropagation();
     panel._openCreatePaletteDialog();
   });
-  palHead.append(stickyBg("library"), palLabel, addPal);
+  palHead.append(stickyBg("area"), palLabel, addPal);
 
   const palRow = document.createElement("div");
   palRow.className = "var-row";
@@ -1390,7 +1400,7 @@ function renderLibrary(panel, { compact } = {}) {
     ev.stopPropagation();
     panel._openCreateThemeDialog();
   });
-  themeHead.append(stickyBg("library"), themeLabel, addTheme);
+  themeHead.append(stickyBg("area"), themeLabel, addTheme);
 
   const themeRow = document.createElement("div");
   themeRow.className = "theme-row";
