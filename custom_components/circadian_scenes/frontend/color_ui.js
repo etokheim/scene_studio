@@ -3981,6 +3981,11 @@ function createSceneColorWheel({
       }
     }
     if (groupNearby) {
+      for (const marker of markers.values()) {
+        marker.g.querySelector(".pin-dot-outline")?.setAttribute("r", "8");
+        marker.g.querySelector(".pin-dot-fill")?.setAttribute("r", "6");
+        marker.hit?.setAttribute("r", "20");
+      }
       const hidden = new Set();
       for (const group of pinClusters) {
         if (openGroup?.some((id) => group.includes(id))) {
@@ -4004,14 +4009,10 @@ function createSceneColorWheel({
               drag?.moved && (drag.ids || []).some((id) => group.includes(id))
             ) ||
             group.some((id) => selectedIds.includes(id));
-          if (expandGroup) {
-            leadMarker.g.style.removeProperty("--group-scale");
-          } else {
-            leadMarker.g.style.setProperty(
-              "--group-scale",
-              String(Math.min(4, group.length))
-            );
-          }
+          const dotScale = expandGroup ? 1 : Math.min(4, group.length);
+          leadMarker.g.querySelector(".pin-dot-outline")?.setAttribute("r", String(8 * dotScale));
+          leadMarker.g.querySelector(".pin-dot-fill")?.setAttribute("r", String(6 * dotScale));
+          leadMarker.hit?.setAttribute("r", String(20 * dotScale));
           if (leadMarker.fo) {
             leadMarker.fo.style.display = "none";
           }

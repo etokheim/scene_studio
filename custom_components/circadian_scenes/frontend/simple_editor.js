@@ -39,7 +39,7 @@ import {
   wheelDeltaToPercent,
 } from "./light_tiles.js";
 
-/** Lights sit in the right gutter only when that gutter clears the disk. Otherwise modes and variables stack beside it. */
+/** Modes and variables stack beside the disk when the right gutter cannot hold the light list. The list itself stays under the disks. */
 function bindWheelAside(editor) {
   const LIGHT_ASIDE_MIN = 240;
   const apply = () => {
@@ -50,9 +50,8 @@ function bindWheelAside(editor) {
     }
     const disk = Math.min(col, height, 650);
     const gutter = (col - disk) / 2;
-    const aside = gutter >= LIGHT_ASIDE_MIN;
-    editor.classList.toggle("lights-aside", aside);
-    editor.classList.toggle("chrome-aside", !aside);
+    editor.classList.remove("lights-aside");
+    editor.classList.toggle("chrome-aside", gutter < LIGHT_ASIDE_MIN);
   };
   editor._wheelAside?.disconnect();
   const observer = new ResizeObserver(apply);
@@ -88,20 +87,6 @@ export const SIMPLE_EDITOR_CSS = `
     /* The tile strip's bleed padding hangs out of this box. Clip it so that
        padding cannot scroll the stage before the disk hits its minimum. */
     overflow: clip;
-  }
-  .simple-editor.lights-aside .light-tiles-block {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    z-index: 4;
-    width: max(240px, calc((100% - min(100%, 650px)) / 2));
-    max-width: calc(50% - 16px);
-    justify-content: center;
-    pointer-events: none;
-  }
-  .simple-editor.lights-aside .light-tiles-block > * {
-    pointer-events: auto;
   }
   .simple-wheels {
     display: flex;

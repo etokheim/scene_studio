@@ -2535,12 +2535,6 @@ class CircadianScenesPanel extends HTMLElement {
           opacity: 1;
           transition: opacity 280ms ease 240ms;
         }
-        .hue-wheel-svg .gm.grouped:not(.expanded) .pin-dot,
-        .hue-wheel-svg .gm.grouped:not(.expanded) .pin-hit {
-          transform-box: fill-box;
-          transform-origin: center;
-          scale: var(--group-scale, 1);
-        }
         .hue-wheel-svg .gm.expanded .pin-dot,
         .hue-wheel-svg .gm.drop-target .pin-dot {
           opacity: 0;
