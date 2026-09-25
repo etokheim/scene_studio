@@ -796,6 +796,9 @@ class SceneStudioStore:
             "name": name,
             "events": events,
         }
+        builtin_id = optional_builtin_id(raw)
+        if builtin_id:
+            theme["builtin_id"] = builtin_id
         previous = deepcopy(self.themes.get(theme_id))
         self.themes[theme_id] = theme
         try:

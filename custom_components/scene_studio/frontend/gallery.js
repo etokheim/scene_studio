@@ -687,6 +687,124 @@ export function galleryCopyName(base, names) {
   return `${base} ${n}`;
 }
 
+const kelvinEvent = (kelvin, brightness) => ({
+  color: { color_mode: "color_temp", color_temp_kelvin: kelvin },
+  brightness,
+});
+
+const paletteEvent = (palette, brightness) => ({ palette, brightness });
+
+/** Shipped circadian themes. A palette event is copied with the theme. */
+export const THEME_PRESETS = [
+  {
+    id: "daylight",
+    nameKey: "frontend.gallery.theme_daylight",
+    name: "Daylight",
+    events: {
+      dawn: kelvinEvent(2200, 45),
+      sunrise: paletteEvent("pale-gold", 190),
+      noon: paletteEvent("linen-noon", 220),
+      sunset: paletteEvent("golden-hour", 150),
+      dusk: kelvinEvent(2000, 28),
+    },
+  },
+  {
+    id: "hearth",
+    nameKey: "frontend.gallery.theme_hearth",
+    name: "Hearth",
+    events: {
+      dawn: kelvinEvent(2400, 40),
+      sunrise: kelvinEvent(2700, 100),
+      noon: paletteEvent("rolling-gold", 200),
+      sunset: paletteEvent("last-of-the-sun", 160),
+      dusk: paletteEvent("low-flame", 70),
+    },
+  },
+  {
+    id: "blue-hour",
+    nameKey: "frontend.gallery.theme_blue_hour",
+    name: "Blue hour",
+    events: {
+      dawn: kelvinEvent(4800, 35),
+      sunrise: kelvinEvent(5200, 80),
+      noon: paletteEvent("snow-noon", 230),
+      sunset: paletteEvent("blue-hour-reine", 140),
+      dusk: paletteEvent("starlight", 36),
+    },
+  },
+];
+
+const themeById = new Map(THEME_PRESETS.map((item) => [item.id, item]));
+
+export function galleryThemes() {
+  return THEME_PRESETS;
+}
+
+export function galleryTheme(id) {
+  return themeById.get(id) || null;
+}
+
+function themeColorSignature(color, brightness) {
+  const hs = Array.isArray(color?.hs_color)
+    ? color.hs_color.map((n) => Math.round(Number(n)))
+    : null;
+  const kelvin =
+    color?.color_temp_kelvin == null ? null : Math.round(Number(color.color_temp_kelvin));
+  return JSON.stringify({
+    mode: color?.color_mode || "",
+    hs,
+    kelvin,
+    brightness: Math.round(Number(brightness)),
+  });
+}
+
+function themePaletteSignature(builtin, brightness, pinT, pinR, seed) {
+  const t = pinT == null || pinT === "" ? "" : Number(pinT);
+  const r = pinR == null || pinR === "" ? "" : Number(pinR);
+  const s = seed == null || seed === "" ? 0 : Number(seed);
+  return `palette:${builtin}|b:${Math.round(Number(brightness))}|t:${t}|r:${r}|seed:${s}`;
+}
+
+/** Stored theme event, or a preset event that still names a gallery palette. */
+export function themeEventSignature(event, variables) {
+  if (!event || typeof event !== "object") {
+    return "";
+  }
+  if (event.palette && !event.color) {
+    return themePaletteSignature(event.palette, event.brightness, null, null, 0);
+  }
+  const color = event.color || {};
+  if (color.variable_ref) {
+    const variable = (variables || []).find((item) => item.id === color.variable_ref);
+    return themePaletteSignature(
+      variable?.builtin_id || "",
+      event.brightness,
+      color.palette_t,
+      color.palette_r,
+      event.assignment_seed
+    );
+  }
+  return `color:${themeColorSignature(color, event.brightness)}`;
+}
+
+/** Sidebar draft for one solar event. Matches themeEventSignature when unchanged. */
+export function themeDraftSignature(draft, variables) {
+  if (!draft || typeof draft !== "object") {
+    return "";
+  }
+  if (draft.variable_ref) {
+    const variable = (variables || []).find((item) => item.id === draft.variable_ref);
+    return themePaletteSignature(
+      variable?.builtin_id || "",
+      draft.brightness,
+      draft.palette_t,
+      draft.palette_r,
+      draft.assignment_seed
+    );
+  }
+  return `color:${themeColorSignature(draft, draft.brightness)}`;
+}
+
 export function paletteSlotSignature(slot) {
   if (!slot || typeof slot !== "object") {
     return "";

@@ -283,10 +283,12 @@ export const LANDING_CSS = `
     white-space: nowrap;
   }
   .scene-used-swatch {
+    position: relative;
     width: 16px;
     height: 16px;
     border-radius: 50%;
     flex: 0 0 auto;
+    overflow: hidden;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
   }
   .scene-used-swatch.cover {
@@ -712,6 +714,7 @@ export const LANDING_CSS = `
     margin-left: -12px;
   }
   .theme-dial {
+    position: relative;
     width: 72px;
     height: 72px;
     border-radius: 50%;
@@ -722,6 +725,13 @@ export const LANDING_CSS = `
     background-repeat: no-repeat;
     background-position: center;
     background-size: 118% 118%;
+  }
+  .theme-dial-photo {
+    position: absolute;
+    inset: 0;
+    background-position: center;
+    background-size: cover;
+    pointer-events: none;
   }
   .theme-chip {
     display: flex;
@@ -808,7 +818,47 @@ export function applyRampBackground(el, ramps) {
 
 const THEME_CARD_EVENTS = ["dawn", "sunrise", "noon", "sunset", "dusk"];
 
+/* Same knots as themeConic: midnight at the bottom, noon at the top.
+   Each photo owns the arc from its event to the next, wrapping dusk→dawn. */
+const THEME_DIAL_STOPS = [
+  ["dusk", 0],
+  ["dawn", 0.23],
+  ["sunrise", 0.27],
+  ["noon", 0.5],
+  ["sunset", 0.79],
+  ["dusk", 0.87],
+  ["dusk", 1],
+];
+const THEME_DIAL_ARCS = [
+  { id: "dawn", at: 0.23, next: 0.27 },
+  { id: "sunrise", at: 0.27, next: 0.5 },
+  { id: "noon", at: 0.5, next: 0.79 },
+  { id: "sunset", at: 0.79, next: 0.87 },
+  { id: "dusk", at: 0.87, next: 1.23 },
+];
+
+function themeEventCoverId(ev, variables) {
+  if (ev?.palette && galleryPalette(ev.palette)) {
+    return ev.palette;
+  }
+  const ref = ev?.color?.variable_ref;
+  const variable = ref
+    ? (variables || []).find((item) => item.id === ref)
+    : null;
+  if (variableIsPalette(variable) && galleryPalette(variable.builtin_id)) {
+    return variable.builtin_id;
+  }
+  return null;
+}
+
 function themeEventResolved(ev, variables) {
+  if (ev?.palette && galleryPalette(ev.palette)) {
+    const slot = galleryPalette(ev.palette).slots[0];
+    return {
+      color: slot?.color || slot,
+      brightness: ev.brightness ?? slot?.brightness ?? 255,
+    };
+  }
   const ref = ev?.color?.variable_ref;
   const variable = ref
     ? (variables || []).find((item) => item.id === ref)
@@ -853,22 +903,50 @@ export function previewRampsForTheme(scene, theme, variables, overrides) {
 }
 
 export function themeConic(theme, variables) {
-  const events = THEME_CARD_EVENTS;
-  const colors = events.map((event) => {
+  const colorAt = (event) => {
     const { color, brightness } = themeEventResolved(
-      theme.events?.[event],
+      theme?.events?.[event],
       variables
     );
     if (!color) {
       return "#444";
     }
     return variableSwatchCss({ color, brightness });
-  });
-  const [dawn, sunrise, noon, sunset, dusk] = colors;
+  };
   // from 180deg: midnight at the bottom, noon at the top (same as the dial).
   // Place knots on the clock, not in equal pie slices, so dusk→dawn fills the
   // night arc out to the rim instead of leaving a dawn wedge on midnight.
-  return `conic-gradient(from 180deg, ${dusk} 0%, ${dawn} 23%, ${sunrise} 27%, ${noon} 50%, ${sunset} 79%, ${dusk} 87%, ${dusk} 100%)`;
+  const stops = THEME_DIAL_STOPS.map(
+    ([event, at]) => `${colorAt(event)} ${at * 100}%`
+  );
+  return `conic-gradient(from 180deg, ${stops.join(", ")})`;
+}
+
+/** Color conic, plus a palette photo on each event that has a gallery cover. */
+export function paintThemeDial(el, theme, variables) {
+  if (!el) {
+    return;
+  }
+  el.style.background = themeConic(theme, variables);
+  for (const layer of el.querySelectorAll(":scope > .theme-dial-photo")) {
+    layer.remove();
+  }
+  for (const arc of THEME_DIAL_ARCS) {
+    const cover = themeEventCoverId(theme?.events?.[arc.id], variables);
+    if (!cover) {
+      continue;
+    }
+    const layer = document.createElement("div");
+    layer.className = "theme-dial-photo";
+    layer.setAttribute("aria-hidden", "true");
+    layer.style.backgroundImage = `url("${galleryCoverUrl(cover)}")`;
+    const start = (180 + arc.at * 360) % 360;
+    const span = (arc.next - arc.at) * 360;
+    const mask = `conic-gradient(from ${start}deg, #000 0deg, transparent ${span}deg, transparent 360deg)`;
+    layer.style.webkitMaskImage = mask;
+    layer.style.maskImage = mask;
+    el.appendChild(layer);
+  }
 }
 
 function iconButton(iconName, label) {
@@ -1415,7 +1493,7 @@ function renderLibrary(panel, { compact } = {}) {
     }
     const dial = document.createElement("div");
     dial.className = "theme-dial";
-    dial.style.background = themeConic(theme, panel._variables || []);
+    paintThemeDial(dial, theme, panel._variables || []);
     const name = document.createElement("span");
     name.textContent = theme.name;
     chip.append(dial, name);
@@ -1592,7 +1670,7 @@ function renderThemeSplit(panel) {
     name.textContent = theme.name || themeId;
     const swatch = document.createElement("span");
     swatch.className = "scene-used-swatch";
-    swatch.style.background = themeConic(theme, panel._variables || []);
+    paintThemeDial(swatch, theme, panel._variables || []);
     button.appendChild(swatch);
   }
   button.appendChild(name);

@@ -289,6 +289,25 @@ def test_delete_variable_rejects_circadian_override_reference():
     asyncio.run(run())
 
 
+def test_theme_keeps_builtin_id():
+    async def run():
+        store = _bare_store()
+        events = {
+            event: {"color": {"hs_color": [0, 0]}, "brightness": 100}
+            for event in SOLAR_EVENTS
+        }
+        saved = await store.async_upsert_theme(
+            {"name": "Daylight", "builtin_id": " daylight ", "events": events}
+        )
+        assert saved["builtin_id"] == "daylight"
+        plain = await store.async_upsert_theme(
+            {"name": "Plain", "builtin_id": "  ", "events": events}
+        )
+        assert "builtin_id" not in plain
+
+    asyncio.run(run())
+
+
 def test_theme_event_shape_is_validated():
     async def run():
         store = _bare_store()

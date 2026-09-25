@@ -29,6 +29,10 @@ import {
   galleryCoverUrl,
   galleryPalette,
   gallerySections,
+  galleryTheme,
+  galleryThemes,
+  themeDraftSignature,
+  themeEventSignature,
 } from "./gallery.js";
 import { defaultPaletteSlots, paletteIsMixed, paletteIsTemperatureOnly, samplePaletteWheel, variableIsPalette } from "./palette.js";
 import {
@@ -67,7 +71,7 @@ import {
   sceneCoverUrl,
   applyRampBackground,
   previewRampsForTheme,
-  themeConic,
+  paintThemeDial,
 } from "./landing.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
@@ -2188,6 +2192,65 @@ class SceneStudioPanel extends HTMLElement {
           font-size: 13px;
           line-height: 1.4;
           color: var(--secondary-text-color);
+        }
+        .theme-event-restore {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0 0 12px;
+          padding: 8px 10px;
+          border: 0;
+          border-radius: 8px;
+          background: color-mix(
+            in srgb,
+            var(--primary-color) 14%,
+            var(--card-background-color)
+          );
+          color: var(--primary-text-color);
+          font: inherit;
+          font-size: 13px;
+          cursor: pointer;
+        }
+        .theme-event-restore[hidden] {
+          display: none;
+        }
+        .theme-event-restore ha-icon {
+          --mdc-icon-size: 18px;
+          color: var(--primary-color);
+        }
+        .scene-theme-choice {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          margin: 0;
+          padding: 6px;
+          border: 0;
+          border-radius: 12px;
+          background: none;
+          color: inherit;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .scene-theme-choice .theme-dial {
+          width: 48px;
+          height: 48px;
+          flex: 0 0 auto;
+          pointer-events: none;
+        }
+        .scene-theme-choice.selected .theme-dial {
+          outline: 3px solid var(--primary-color);
+          outline-offset: 3px;
+        }
+        .scene-gallery-card.scene-theme-card .theme-dial {
+          position: absolute;
+          width: 84px;
+          height: 84px;
+          left: 50%;
+          top: 42%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
         }
         .theme-edit-banner {
           color: var(--primary-text-color);
@@ -5452,14 +5515,21 @@ class SceneStudioPanel extends HTMLElement {
       : this._t("frontend.naming.circadian_fallback", "Circadian");
   }
 
-  /** Palette name, or "Name 2" when this area already has that scene name. */
-  _sceneNameFromPalette(areaId, palette) {
-    const base = String(palette?.name || "").trim() || this._untitledLabel();
+  /** Base name, or "Name 2" when this area already has that scene name. */
+  _sceneNameInArea(areaId, base) {
     const area = areaId || null;
     const names = (this._items || [])
       .filter((scene) => (scene.area || null) === area)
       .map((scene) => String(scene.scene_name || "").trim());
-    return galleryCopyName(base, names);
+    return galleryCopyName(
+      String(base || "").trim() || this._untitledLabel(),
+      names
+    );
+  }
+
+  /** Palette name, or "Name 2" when this area already has that scene name. */
+  _sceneNameFromPalette(areaId, palette) {
+    return this._sceneNameInArea(areaId, palette?.name);
   }
 
   _suggestedLibraryName() {
@@ -6649,7 +6719,7 @@ class SceneStudioPanel extends HTMLElement {
       for (const theme of this._themes || []) {
         const swatch = document.createElement("span");
         swatch.className = "scene-used-swatch";
-        swatch.style.background = themeConic(theme, this._variables || []);
+        paintThemeDial(swatch, theme, this._variables || []);
         addRow(theme.id, theme.name || theme.id, swatch);
       }
       dialog.appendChild(list);
@@ -6957,6 +7027,240 @@ class SceneStudioPanel extends HTMLElement {
     });
   }
 
+  async _copyGalleryPalette(paletteId) {
+    const source = galleryPalette(paletteId);
+    if (!source) {
+      throw new Error(`Palette ${paletteId} not found`);
+    }
+    const saved = await this._hass.callWS({
+      type: `${DOMAIN}/save_variable`,
+      data: {
+        name: galleryCopyName(
+          this._t(source.nameKey, source.name),
+          (this._variables || []).map((item) => item.name)
+        ),
+        kind: "palette",
+        slots: source.slots,
+        builtin_id: source.id,
+      },
+    });
+    const list = [...(this._variables || [])];
+    const index = list.findIndex((item) => item.id === saved.id);
+    if (index >= 0) {
+      list[index] = saved;
+    } else {
+      list.push(saved);
+    }
+    this._variables = list;
+    return saved;
+  }
+
+  async _copyThemePreset(preset) {
+    const events = {};
+    const copied = new Map();
+    for (const eventId of ["dawn", "sunrise", "noon", "sunset", "dusk"]) {
+      const spec = preset.events[eventId];
+      if (spec.palette) {
+        let paletteId = copied.get(spec.palette);
+        if (!paletteId) {
+          const palette = await this._copyGalleryPalette(spec.palette);
+          paletteId = palette.id;
+          copied.set(spec.palette, paletteId);
+        }
+        events[eventId] = {
+          color: { variable_ref: paletteId },
+          brightness: spec.brightness,
+          assignment_seed: 0,
+        };
+      } else {
+        events[eventId] = {
+          color: structuredClone(spec.color),
+          brightness: spec.brightness,
+        };
+      }
+    }
+    const saved = await this._hass.callWS({
+      type: `${DOMAIN}/save_theme`,
+      data: {
+        name: galleryCopyName(
+          this._t(preset.nameKey, preset.name),
+          (this._themes || []).map((item) => item.name)
+        ),
+        builtin_id: preset.id,
+        events,
+      },
+    });
+    this._adoptSavedTheme(saved);
+    return saved;
+  }
+
+  async _draftFromThemePresetEvent(spec, current) {
+    if (spec?.palette) {
+      const currentVar = (this._variables || []).find(
+        (item) => item.id === current?.variable_ref
+      );
+      const keep =
+        variableIsPalette(currentVar) && currentVar.builtin_id === spec.palette
+          ? currentVar
+          : (this._variables || []).find(
+              (item) =>
+                variableIsPalette(item) && item.builtin_id === spec.palette
+            );
+      const palette = keep || (await this._copyGalleryPalette(spec.palette));
+      return {
+        state: "on",
+        brightness: spec.brightness,
+        variable_ref: palette.id,
+        assignment_seed: 0,
+      };
+    }
+    return {
+      state: "on",
+      brightness: spec.brightness,
+      ...structuredClone(spec.color),
+    };
+  }
+
+  _chooseCircadianTheme() {
+    return new Promise((resolve) => {
+      this.shadowRoot.querySelector("ha-dialog.scene-theme-create-dialog")?.remove();
+      const dialog = document.createElement("ha-dialog");
+      dialog.className = "scene-palette-dialog scene-theme-create-dialog";
+      dialog.setAttribute(
+        "header-title",
+        this._t("frontend.dialogs.scene_theme_title", "New circadian scene")
+      );
+      dialog.open = true;
+      let settled = false;
+      let selectedKind = null;
+      let selectedId = null;
+      const finish = (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        dialog.open = false;
+        resolve(value);
+      };
+      const hint = document.createElement("p");
+      hint.className = "scene-palette-hint";
+      hint.textContent = this._t(
+        "frontend.dialogs.scene_theme_hint",
+        "Pick one of your themes, or start from a preset."
+      );
+      const list = document.createElement("div");
+      list.className = "scene-palette-list";
+      const themes = this._themes || [];
+      const choices = [];
+      const cards = [];
+      if (themes.length) {
+        const yours = document.createElement("p");
+        yours.className = "scene-gallery-label";
+        yours.textContent = this._t(
+          "frontend.dialogs.scene_theme_yours",
+          "Your themes"
+        );
+        list.appendChild(yours);
+      }
+      for (const theme of themes) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "scene-theme-choice";
+        const dial = document.createElement("div");
+        dial.className = "theme-dial";
+        paintThemeDial(dial, theme, this._variables || []);
+        const name = document.createElement("span");
+        name.textContent = theme.name || theme.id;
+        button.append(dial, name);
+        button.addEventListener("click", () => choose("user", theme.id));
+        list.appendChild(button);
+        choices.push({ id: theme.id, el: button });
+      }
+      const presetsLabel = document.createElement("p");
+      presetsLabel.className = "scene-gallery-label";
+      presetsLabel.textContent = this._t(
+        "frontend.dialogs.scene_theme_presets",
+        "Presets"
+      );
+      const grid = document.createElement("div");
+      grid.className = "scene-gallery-grid";
+      for (const preset of galleryThemes()) {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "scene-gallery-card scene-theme-card";
+        const dial = document.createElement("div");
+        dial.className = "theme-dial";
+        paintThemeDial(dial, preset, this._variables || []);
+        const name = document.createElement("span");
+        name.textContent = this._t(preset.nameKey, preset.name);
+        card.append(dial, name);
+        card.addEventListener("click", () => choose("preset", preset.id));
+        grid.appendChild(card);
+        cards.push({ id: preset.id, el: card });
+      }
+      list.append(presetsLabel, grid);
+      dialog.append(hint, list);
+      const footer = customElements.get("ha-dialog-footer")
+        ? document.createElement("ha-dialog-footer")
+        : document.createElement("div");
+      footer.slot = "footer";
+      const custom = document.createElement("ha-button");
+      custom.slot = "secondaryAction";
+      custom.appearance = "plain";
+      custom.textContent = this._t("frontend.dialogs.scene_palette_custom", "Custom");
+      const useBtn = document.createElement("ha-button");
+      useBtn.slot = "primaryAction";
+      useBtn.variant = "brand";
+      useBtn.disabled = true;
+      useBtn.toggleAttribute("disabled", true);
+      useBtn.textContent = this._t("frontend.dialogs.scene_theme_use", "Use theme");
+      const choose = (kind, id) => {
+        selectedKind = kind;
+        selectedId = id;
+        paintSelection();
+      };
+      const paintSelection = () => {
+        for (const row of choices) {
+          row.el.classList.toggle(
+            "selected",
+            selectedKind === "user" && row.id === selectedId
+          );
+        }
+        for (const card of cards) {
+          card.el.classList.toggle(
+            "selected",
+            selectedKind === "preset" && card.id === selectedId
+          );
+        }
+        const ready = Boolean(selectedKind && selectedId);
+        useBtn.disabled = !ready;
+        useBtn.toggleAttribute("disabled", !ready);
+      };
+      custom.addEventListener("click", () => finish({ custom: true }));
+      useBtn.addEventListener("click", () => {
+        if (selectedKind === "user") {
+          const theme = themes.find((item) => item.id === selectedId);
+          if (theme) {
+            finish({ theme });
+          }
+          return;
+        }
+        const preset = galleryTheme(selectedId);
+        if (preset) {
+          finish({ preset });
+        }
+      });
+      footer.append(custom, useBtn);
+      dialog.appendChild(footer);
+      paintSelection();
+      dialog.addEventListener("closed", () => {
+        dialog.remove();
+        finish(null);
+      });
+      this.shadowRoot.appendChild(dialog);
+    });
+  }
+
   async _createLibraryItem(kind, { fromDraft, areaId, areaName } = {}) {
     if (this._creatingLibrary) {
       return;
@@ -6968,13 +7272,22 @@ class SceneStudioPanel extends HTMLElement {
     const beforeTarget = this._historyTarget();
     try {
       if (kind === "scene") {
+        const choice = await this._chooseCircadianTheme();
+        if (!choice) {
+          return;
+        }
+        const theme = choice.preset
+          ? await this._copyThemePreset(choice.preset)
+          : choice.theme;
         const saved = await this._hass.callWS({
           type: `${DOMAIN}/save`,
           data: {
             kind: "circadian",
-            scene_name: this._untitledLabel(),
+            scene_name: choice.custom
+              ? this._sceneNameInArea(areaId, this._untitledLabel())
+              : this._sceneNameInArea(areaId, theme?.name),
             area: areaId || null,
-            theme_id: "default",
+            theme_id: choice.custom ? "default" : theme.id,
             membership: { exclude: [], include: [] },
             overrides: {},
             lights: {},
@@ -8400,6 +8713,49 @@ class SceneStudioPanel extends HTMLElement {
     );
     body.appendChild(hint);
 
+    const restoreBtn = document.createElement("button");
+    restoreBtn.type = "button";
+    restoreBtn.className = "theme-event-restore";
+    restoreBtn.hidden = true;
+    const restoreIcon = document.createElement("ha-icon");
+    restoreIcon.setAttribute("icon", "mdi:restore");
+    restoreIcon.setAttribute("aria-hidden", "true");
+    const restoreLabel = document.createElement("span");
+    restoreBtn.append(restoreIcon, restoreLabel);
+    const syncRestore = () => {
+      const spec = galleryTheme(this._themeDraft?.builtin_id)?.events?.[currentId];
+      const draft = drafts.get(currentId);
+      const diverged =
+        Boolean(spec) &&
+        themeDraftSignature(draft, this._variables) !== themeEventSignature(spec);
+      restoreBtn.hidden = !diverged;
+      const event = events.find((item) => item.id === currentId);
+      restoreLabel.textContent = this._t(
+        "frontend.gallery.reset_event",
+        "Reset {name} to the original",
+        { name: event?.name || currentId }
+      );
+    };
+    restoreBtn.addEventListener("click", async () => {
+      const spec = galleryTheme(this._themeDraft?.builtin_id)?.events?.[currentId];
+      if (!spec) {
+        return;
+      }
+      try {
+        drafts.set(
+          currentId,
+          await this._draftFromThemePresetEvent(spec, drafts.get(currentId))
+        );
+      } catch (err) {
+        this._error = err.message || String(err);
+        return;
+      }
+      persist();
+      wheelCtl?.sync();
+      brightnessGraphCtl?.sync();
+    });
+    body.appendChild(restoreBtn);
+
     let undoCommitted = false;
     const persist = ({ history = true } = {}) => {
       if (history && !undoCommitted) {
@@ -8409,6 +8765,7 @@ class SceneStudioPanel extends HTMLElement {
       for (const item of events) {
         this._writeThemeEventFromDraft(item.id, drafts.get(item.id));
       }
+      syncRestore();
       if (this._eventBrightnessIsLive()) {
         this._paintLiveEventBrightness();
         return;
@@ -8451,6 +8808,7 @@ class SceneStudioPanel extends HTMLElement {
         this._syncDuskMinimumSlot(duskSlot, eventId);
         wheelCtl?.sync();
         brightnessGraphCtl?.sync();
+        syncRestore();
       },
       onBrightness: (sceneId, brightness) => {
         const draft = drafts.get(sceneId);
@@ -8508,6 +8866,7 @@ class SceneStudioPanel extends HTMLElement {
         brightnessGraphCtl?.sync();
         wheelCtl?.sync();
         this._syncDuskMinimumSlot(duskSlot, eventId);
+        syncRestore();
       },
       onChange: ({ fromPalette } = {}) => {
         const draft = drafts.get(currentId);
@@ -8544,6 +8903,7 @@ class SceneStudioPanel extends HTMLElement {
     this._syncDuskMinimumSlot(duskSlot, currentId);
     wheelCtl.sync();
     brightnessGraphCtl.sync();
+    syncRestore();
   }
 
   _buildEmptyState({ icon, title, paragraphs, learnMore = false }) {
@@ -9532,7 +9892,7 @@ class SceneStudioPanel extends HTMLElement {
       `.theme-chip[data-theme-id="${CSS.escape(themeId)}"] .theme-dial`
     );
     if (chipDial) {
-      chipDial.style.background = themeConic(theme, variables);
+      paintThemeDial(chipDial, theme, variables);
     }
   }
 

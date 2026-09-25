@@ -30,6 +30,13 @@
 - **Why:** The new scene was always Untitled, so the palette you just picked did not show up in the area list.
 - **Do not reverse without user ask.**
 
+## Circadian scene from a theme takes the theme name
+
+- **Date:** 2026-09-25
+- **Decision:** Creating a circadian scene opens a theme picker: saved themes, then the shipped presets (Daylight, Hearth, Blue hour). A preset is copied into the library with `builtin_id`, and each palette it is based on is copied the same way picture palettes are. The scene is named with that theme’s name, then “Name 2” when the area already has it. Custom stays on the Default theme and is Untitled. A solar event that no longer matches its preset can be reset in the theme-event sidebar. The theme dial shows a palette’s picture on the arc from that event to the next, fading out along the arc.
+- **Why:** Circadian create skipped the picker and always started Untitled on Default. A copied theme needs the preset id so a later change to one event can be put back, and the picture already lives on the palette.
+- **Do not reverse without user ask.**
+
 ## Domain and repo rename to scene_studio
 
 - **Date:** 2026-09-25
