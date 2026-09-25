@@ -1,5 +1,12 @@
 # Decisions
 
+## Narrow editor fills the screen; the wheel does not scroll the page
+
+- **Date:** 2026-09-25
+- **Decision:** On a narrow panel the simple editor and the circadian dial fill the shell. The light tiles stay at the bottom. The color wheel and the dial face grow into the space above those tiles (`min` of that box’s width and height) and do not grow past it, so the page does not scroll. While the name-scene button is showing, the page keeps 72px under the tiles so that button does not cover the hint. The list view still scrolls inside the rail.
+- **Why:** A fixed wheel left the tiles mid-page with empty space below them. Letting the page grow so the user could scroll moved the tiles off the bottom instead of using that space for the wheel.
+- **Do not reverse without user ask.**
+
 ## Domain and repo rename to scene_studio
 
 - **Date:** 2026-09-25

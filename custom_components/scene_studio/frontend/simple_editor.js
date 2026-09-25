@@ -114,12 +114,22 @@ function bindWheelAside(editor) {
 
 export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
-  :host([narrow]) .simple-editor-host,
-  :host([narrow]) .simple-editor {
-    height: auto;
-  }
   :host([narrow]) .simple-editor {
     padding-top: 0;
+  }
+  :host([narrow]) .simple-wheels {
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+  :host([narrow]) .simple-editor .hue-wheel-canvas {
+    width: min(100cqi, 100cqb);
+    max-width: none;
+    height: auto;
+  }
+  :host([narrow]) .light-tiles-block {
+    flex: 0 0 auto;
+    margin-top: auto;
+    width: 100%;
   }
   .simple-editor-host {
     flex: 1 1 auto;

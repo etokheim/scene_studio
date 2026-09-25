@@ -3695,18 +3695,6 @@ class SceneStudioPanel extends HTMLElement {
           overflow-x: clip;
           overflow-y: hidden;
         }
-        /* Narrow editors are not a fixed workspace. Let the page grow so the
-           app-bar scroller can move the wheel and the light tiles. */
-        :host([narrow]) .page-shell {
-          height: auto;
-          min-height: 100%;
-          overflow-y: visible;
-        }
-        :host([narrow]) .page.dial-wide {
-          flex: none;
-          overflow: visible;
-          min-height: 0;
-        }
         .page {
           --page-max-width: 1024px;
           max-width: var(--page-max-width);
@@ -3716,9 +3704,80 @@ class SceneStudioPanel extends HTMLElement {
           box-sizing: border-box;
         }
         /* Narrow editors drop the area rail and mount straight in .page.
-           The 12px inset kept tiles and the dial off the screen edge. */
+           The 12px inset kept tiles and the dial off the screen edge.
+           The editor fills the shell: the wheel grows, the tiles stay at the bottom. */
         :host([narrow]) .page {
           padding-inline: 0;
+        }
+        :host([narrow]) .page:has(.content.wide),
+        :host([narrow]) .page.dial-wide {
+          flex: 1 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          max-width: none;
+          padding-bottom: 0;
+        }
+        /* Name-scene button sits in the corner. Leave its box clear so it
+           does not cover the tile hint. A hidden button keeps the tiles on the edge. */
+        :host([narrow][fab-open]) .page:has(.content.wide),
+        :host([narrow][fab-open]) .page.dial-wide {
+          padding-bottom: 72px;
+        }
+        :host([narrow]) .content.wide {
+          flex: 1 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 0;
+        }
+        /* Dial pages keep an empty .content beside the sun path. The fill
+           rule above would split the column with it and shrink the dial. */
+        :host([narrow]) .page.dial-wide > .content:empty {
+          display: none;
+          flex: none;
+        }
+        :host([narrow]) .page.dial-wide > .sun-path.dial-view {
+          flex: 1 1 auto;
+          min-height: 0;
+          min-width: 0;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        :host([narrow]) .sun-path.dial-view .sun-toolbar {
+          flex: 0 0 auto;
+        }
+        :host([narrow]) .sun-path.dial-view .sun-path-stage,
+        :host([narrow]) .sun-path.dial-view .sun-path-body,
+        :host([narrow]) .sun-path.dial-view .sun-light-clock {
+          flex: 1 1 auto;
+          min-height: 0;
+          min-width: 0;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        :host([narrow]) .sun-path.dial-view .sun-light-clock {
+          padding-top: 0;
+          justify-content: flex-start;
+          container-type: size;
+        }
+        :host([narrow]) .sun-path.dial-view .sun-light-clock-legend {
+          flex: 0 0 auto;
+          width: 100%;
+        }
+        :host([narrow]) .sun-light-clock-face {
+          flex: 0 0 auto;
+          width: min(100cqi, 100cqb);
+          max-width: none;
+          height: auto;
+          max-height: none;
+          margin-inline: 0;
         }
         /* Workspace (rail + .stage-col) always uses the full panel — same
            shell as the circadian dial, including simple/variable editors. */
@@ -5722,8 +5781,11 @@ class SceneStudioPanel extends HTMLElement {
   _syncWorkspaceScrollport() {
     const workspace = this._contentEl?.querySelector(".workspace");
     const scroller = this._appBarScroller();
+    const editorFills =
+      this._narrow &&
+      (this._contentEl?.classList.contains("wide") || this._isDialView());
     if (scroller) {
-      scroller.style.overflow = workspace ? "hidden" : "";
+      scroller.style.overflow = workspace || editorFills ? "hidden" : "";
     }
     if (workspace && this._contentEl) {
       const shell = this.shadowRoot?.querySelector(".page-shell");
@@ -8921,6 +8983,7 @@ class SceneStudioPanel extends HTMLElement {
       this._fabHideTimer = undefined;
     }
     if (!node) {
+      this.removeAttribute("fab-open");
       this._fabEl.classList.add("is-hidden");
       this._fabHideTimer = window.setTimeout(() => {
         this._fabHideTimer = undefined;
@@ -8931,6 +8994,8 @@ class SceneStudioPanel extends HTMLElement {
       }, 200);
       return;
     }
+    this.setAttribute("fab-open", "");
+    /* :host(:has(.fab)) cannot see this shadow tree, so the page pad keys off the host. */
     this._fabEl.removeAttribute("hidden");
     this._fabEl.replaceChildren(node);
     this._fabEl.classList.add("is-hidden");
