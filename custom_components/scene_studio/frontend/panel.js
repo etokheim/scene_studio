@@ -404,6 +404,7 @@ class SceneStudioPanel extends HTMLElement {
     const next = Boolean(value);
     const changed = next !== Boolean(this._narrow);
     this._narrow = next;
+    this.toggleAttribute("narrow", next);
     if (this._appBar) {
       this._appBar.narrow = next;
     }
@@ -2707,6 +2708,10 @@ class SceneStudioPanel extends HTMLElement {
         .hue-wheel-float-readout[hidden] {
           display: none !important;
         }
+        .hue-palette-colors,
+        .hue-palette-colors[hidden] {
+          display: none !important;
+        }
         .hue-presets {
           box-sizing: border-box;
           display: flex;
@@ -3674,6 +3679,11 @@ class SceneStudioPanel extends HTMLElement {
           padding-inline: 12px;
           box-sizing: border-box;
         }
+        /* Narrow editors drop the area rail and mount straight in .page.
+           The 12px inset kept tiles and the dial off the screen edge. */
+        :host([narrow]) .page {
+          padding-inline: 0;
+        }
         /* Workspace (rail + .stage-col) always uses the full panel — same
            shell as the circadian dial, including simple/variable editors. */
         .page:has(.workspace),
@@ -3867,9 +3877,10 @@ class SceneStudioPanel extends HTMLElement {
             height: auto;
             max-height: 100%;
             min-height: 0;
-            padding: 6px 4px 6px 6px;
-            box-sizing: border-box;
-            overflow-x: hidden;
+          /* Room for the selection ring (4px outset + scale). overflow-x clips it otherwise. */
+          padding: 6px 4px 6px 14px;
+          box-sizing: border-box;
+          overflow-x: hidden;
             overflow-y: auto;
             scrollbar-width: none;
             gap: 8px;
@@ -3945,8 +3956,10 @@ class SceneStudioPanel extends HTMLElement {
             overflow: visible;
           }
           .wheel-mode-pill .wheel-wrapper:hover,
+          .wheel-mode-pill .wheel-wrapper:active,
           .wheel-mode-pill .wheel-wrapper.active {
             border-color: transparent;
+            background-color: transparent;
             opacity: 1;
           }
           .wheel-mode-pill .wheel-wrapper.active {
@@ -3956,10 +3969,11 @@ class SceneStudioPanel extends HTMLElement {
             transform-origin: 14px center;
             transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
           }
-          .wheel-mode-pill .wheel-wrapper:hover {
+          .wheel-mode-pill .wheel-wrapper:hover:not(.active) {
             transform: translateX(-1.6px) scale(1.08);
           }
-          .wheel-mode-pill .wheel-wrapper.active {
+          .wheel-mode-pill .wheel-wrapper.active,
+          .wheel-mode-pill .wheel-wrapper.active:hover {
             transform: translateX(-3.8px) scale(1.08);
           }
           .wheel-mode-pill .wheel-wrapper:active {
@@ -3978,7 +3992,7 @@ class SceneStudioPanel extends HTMLElement {
             content: "";
             position: absolute;
             inset: -4px;
-            border-radius: inherit;
+            border-radius: 50%;
             border: 2px solid #fff;
             opacity: 0.75;
             pointer-events: none;
@@ -4053,14 +4067,17 @@ class SceneStudioPanel extends HTMLElement {
           }
           .hue-preset.active {
             gap: 10px;
-            transform: translateX(-3.8px) scale(1.08);
           }
           .hue-preset {
             transform-origin: 14px center;
             transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
           }
-          .hue-preset:hover {
+          .hue-preset:hover:not(.active) {
             transform: translateX(-1.6px) scale(1.08);
+          }
+          .hue-preset.active,
+          .hue-preset.active:hover {
+            transform: translateX(-3.8px) scale(1.08);
           }
           .hue-preset:active {
             transform: translateX(0.8px) scale(0.96);
@@ -4099,6 +4116,34 @@ class SceneStudioPanel extends HTMLElement {
             max-width: none;
             overflow: visible;
             text-align: start;
+          }
+          .hue-palette-colors:not([hidden]) {
+            display: flex !important;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            width: max-content;
+            max-width: 100%;
+            margin: 0 0 10px;
+            padding: 0 0 10px;
+            border-bottom: 1px solid var(--divider-color);
+          }
+          .hue-palette-colors-title {
+            margin: 2px 0 4px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--secondary-text-color);
+          }
+          .hue-palette-color {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            height: 36px;
+            max-width: 100%;
+            opacity: 0.9;
           }
         }
         @keyframes hue-preset-ring-in {
@@ -5935,13 +5980,7 @@ class SceneStudioPanel extends HTMLElement {
     if (isDial && this._dateToolbar?.isConnected) {
       toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
     }
-    const used = box.querySelector(".sun-toolbar-chrome > .scene-used");
-    if (used) {
-      toolbarH += Math.ceil(used.getBoundingClientRect().height) || 0;
-      const chrome = used.parentElement;
-      const gap = chrome ? parseFloat(getComputedStyle(chrome).rowGap || getComputedStyle(chrome).gap) : 0;
-      toolbarH += Number.isFinite(gap) ? gap : 0;
-    }
+    /* scene-used is an overlay. Its height must not shrink the dial. */
     const budgetH = editor && !clock ? visibleH : scrollH;
     // Tile-strip padding is cancelled by a negative margin, so it sits outside
     // the editor box and still lengthens the scrollport. Shrink the face by
@@ -7269,7 +7308,7 @@ class SceneStudioPanel extends HTMLElement {
     });
     briInput.addEventListener("change", () => bindBri(Number(briInput.value)));
     const wheel = createSceneColorWheel({
-      t: (key, fallback) => this._t(key, fallback),
+      t: (key, fallback, vars) => this._t(key, fallback, vars),
       pinFlip: this._wheelPinFlip || null,
       hasColor: true,
       hasTemp: true,
@@ -8238,7 +8277,7 @@ class SceneStudioPanel extends HTMLElement {
     });
     body.appendChild(brightnessGraphCtl.el);
     wheelCtl = createSceneColorWheel({
-      t: (key, fallback) => this._t(key, fallback),
+      t: (key, fallback, vars) => this._t(key, fallback, vars),
       pinFlip: this._wheelPinFlip || null,
       hasColor: true,
       hasTemp: true,
@@ -13766,7 +13805,7 @@ class SceneStudioPanel extends HTMLElement {
 
     if (hasColor || hasTemp) {
       wheelCtl = createSceneColorWheel({
-        t: (key, fallback) => this._t(key, fallback),
+        t: (key, fallback, vars) => this._t(key, fallback, vars),
         pinFlip: this._wheelPinFlip || null,
         hasColor,
         hasTemp,

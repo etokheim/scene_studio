@@ -135,19 +135,35 @@ export const LANDING_CSS = `
   }
   .scene-used {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 10px;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 2px;
     flex: 0 0 auto;
     align-self: flex-start;
     min-width: 0;
     max-width: 100%;
-    padding: 0 0 4px;
+    padding: 0;
   }
-  /* Own row under the time and play controls. Basis is width here. */
-  .sun-toolbar-chrome > .scene-used,
   .sun-toolbar-chrome > .library-used-by {
     flex: 1 0 100%;
+  }
+  /* Overlay under the time row. Out of flow so it does not shrink the dial. */
+  .sun-toolbar {
+    position: relative;
+  }
+  .sun-toolbar-chrome > .scene-used {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 4;
+    width: max-content;
+    max-width: min(240px, 46vw);
+    pointer-events: none;
+  }
+  .sun-toolbar-chrome > .scene-used .scene-used-chip,
+  .sun-toolbar-chrome > .scene-used .scene-palette-split {
+    pointer-events: auto;
   }
   .library-used-by {
     display: flex;

@@ -47,12 +47,6 @@ export const LIGHT_TILES_CSS = `
     .light-tiles {
       margin-inline: 0;
     }
-    /* The editor page keeps 12px of inline padding when the area rail is
-       hidden. Pull only the strip out so tiles can scroll to the screen edge. */
-    .page:not(:has(.workspace)) .light-tiles-block {
-      width: calc(100% + 24px);
-      margin-inline: -12px;
-    }
   }
   .light-mode-group {
     display: flex;

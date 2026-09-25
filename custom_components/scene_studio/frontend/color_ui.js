@@ -2,10 +2,12 @@
    Extracted from panel.js (no bundler; HA loads as ES modules). */
 
 import {
+  PALETTE_SLOT_COUNT,
   assignmentTR,
   paletteIsMixed,
   paletteIsTemperatureOnly,
   paletteSwatchCss,
+  resolveSlot,
   samplePaletteWheel,
   variableIsPalette,
 } from "./palette.js";
@@ -2551,10 +2553,13 @@ function createSceneColorWheel({
   chrome.className = "hue-wheel-chrome";
   const presets = document.createElement("div");
   presets.className = "hue-presets";
+  const paletteColors = document.createElement("div");
+  paletteColors.className = "hue-palette-colors";
+  paletteColors.hidden = true;
   const presetTrack = document.createElement("div");
   presetTrack.className = "hue-presets-track";
   presetTrack.setAttribute("role", "list");
-  presets.appendChild(presetTrack);
+  presets.append(paletteColors, presetTrack);
   chrome.append(presets);
   const modePill = document.createElement("div");
   modePill.className = "wheel-mode-pill";
@@ -3396,10 +3401,14 @@ function createSceneColorWheel({
       hasTemp,
       palette: sceneHasPalette || pal || typeof onPickPalette === "function",
     });
+    const lightsSelected = selected.length > 0;
     modePill.hidden =
-      (selected.length > 0 && selected.every((row) => !row.hasColor && !row.hasTemp)) ||
+      !lightsSelected ||
+      selected.every((row) => !row.hasColor && !row.hasTemp) ||
       modes.length < 2;
-    randomizeBtn.hidden = !pal || typeof onRandomizeSeed !== "function";
+    randomizeBtn.hidden =
+      !lightsSelected || !pal || typeof onRandomizeSeed !== "function";
+    modeCluster.hidden = modePill.hidden && randomizeBtn.hidden;
     if (modePill.hidden) {
       return;
     }
@@ -3581,12 +3590,66 @@ function createSceneColorWheel({
     );
   };
 
+  const syncPaletteColors = () => {
+    paletteColors.replaceChildren();
+    const state = getState();
+    const { scenes, activeId } = state;
+    const item = scenes.find((row) => row.id === activeId);
+    const locked = lockedUiMode();
+    const onPalette =
+      selectedIdsOf(state).length > 0 &&
+      (locked === "palette" ||
+        (locked !== "color" &&
+          locked !== "temp" &&
+          onPaletteDisk(item?.draft, capsOf(item || {}))));
+    const palette = wheelPalette();
+    if (!onPalette || !variableIsPalette(palette)) {
+      paletteColors.hidden = true;
+      return;
+    }
+    paletteColors.hidden = false;
+    const title = document.createElement("div");
+    title.className = "hue-palette-colors-title";
+    title.textContent = palette.name || t("frontend.naming.palette", "Palette");
+    paletteColors.appendChild(title);
+    const catalog = paletteCatalog();
+    const slots = palette.slots || [];
+    for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
+      const slot = resolveSlot(palette, i, catalog);
+      const ref = slots[i]?.variable_ref;
+      const linked = ref ? catalog.find((entry) => entry.id === ref) : null;
+      const row = document.createElement("div");
+      row.className = "hue-palette-color";
+      const swatch = document.createElement("span");
+      swatch.className = "hue-preset-swatch";
+      const rgb = swatchRgb(slot, slot.brightness);
+      swatch.style.background = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+      const name = document.createElement("span");
+      name.className = "hue-preset-name";
+      name.textContent =
+        linked?.name ||
+        `${t("frontend.library.slot", "Slot")} ${i + 1}`;
+      row.append(swatch, name);
+      paletteColors.appendChild(row);
+    }
+  };
+
   const syncPresets = () => {
     presetTrack.replaceChildren();
-    const { scenes, activeId } = getState();
+    const state = getState();
+    const { scenes, activeId } = state;
     const active = scenes.find((item) => item.id === activeId);
     const palette = typeof getPalette === "function" ? getPalette() || [] : [];
-    presetTrack.setAttribute("aria-label", "Variables");
+    const lightsSelected = selectedIdsOf(state).length > 0;
+    presets.hidden = !lightsSelected;
+    presetTrack.setAttribute(
+      "aria-label",
+      t("frontend.library.variables", "Variables")
+    );
+    syncPaletteColors();
+    if (!lightsSelected) {
+      return;
+    }
     for (const variable of palette) {
       if (variableIsPalette(variable)) {
         continue;
