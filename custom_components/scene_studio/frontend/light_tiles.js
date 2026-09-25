@@ -17,7 +17,8 @@ export const LIGHT_TILES_CSS = `
     overflow-y: hidden;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
+    /* pan-y so a vertical swipe on the strip scrolls the page. Tiles keep pan-x. */
+    touch-action: pan-x pan-y;
     position: relative;
     /* Above the hint, which sits later in the column and overlaps this padding. */
     z-index: 1;

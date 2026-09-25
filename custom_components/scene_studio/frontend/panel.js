@@ -3695,6 +3695,18 @@ class SceneStudioPanel extends HTMLElement {
           overflow-x: clip;
           overflow-y: hidden;
         }
+        /* Narrow editors are not a fixed workspace. Let the page grow so the
+           app-bar scroller can move the wheel and the light tiles. */
+        :host([narrow]) .page-shell {
+          height: auto;
+          min-height: 100%;
+          overflow-y: visible;
+        }
+        :host([narrow]) .page.dial-wide {
+          flex: none;
+          overflow: visible;
+          min-height: 0;
+        }
         .page {
           --page-max-width: 1024px;
           max-width: var(--page-max-width);
@@ -3829,6 +3841,9 @@ class SceneStudioPanel extends HTMLElement {
         .content.wide {
           width: 100%;
           box-sizing: border-box;
+          /* The shared content pad left a black band between the app bar and
+             the wheel glow. Bottom pad stays so the FAB does not cover tiles. */
+          padding-top: 0;
         }
         .content:has(.workspace) {
           flex: 1 1 auto;

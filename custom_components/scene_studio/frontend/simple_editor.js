@@ -114,6 +114,13 @@ function bindWheelAside(editor) {
 
 export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
+  :host([narrow]) .simple-editor-host,
+  :host([narrow]) .simple-editor {
+    height: auto;
+  }
+  :host([narrow]) .simple-editor {
+    padding-top: 0;
+  }
   .simple-editor-host {
     flex: 1 1 auto;
     min-width: 0;
