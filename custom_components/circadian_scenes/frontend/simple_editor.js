@@ -608,6 +608,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       wheel.sync();
     },
     ...panel._wheelPalette(),
+    onPickPalette: () => panel._pickSceneBasePalette?.(),
+    onEditPalette: (id) => panel._go(`palette/${id}`),
   });
   wheels.appendChild(wheel.el);
   const levelHost = document.createElement("div");

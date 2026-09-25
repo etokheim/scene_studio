@@ -8,9 +8,19 @@
 - **Why:** Restacking on the way across moved the edges under the pointer, so the resistance only existed for the first hop.
 - **Do not reverse without user ask.**
 
+## Theme split and palette mode button
+
+- **Date:** 2026-09-25
+- **Supersedes in part:** “Scene base palette is a corner split button, not a preset” — the corner split is the theme. The palette is a mode-pill button.
+- **Supersedes in part:** “First column is the scene list; library is a second tab” — the circadian used-items row sits under Play scene live.
+- **Decision:** Both scene editors show a theme split (name opens the theme list, pencil opens that theme) plus chips for palettes and variables the scene uses. On a circadian scene that row is under Play scene live. On a simple scene it stays in the corner. A simple scene may have no theme (`theme_id` null). A circadian scene always has one. The palette choice for the scene, or for the solar event in focus, is the palette face in the mode pill. With no palette it is a dashed “+” and opens the palette list immediately. With a palette, the first click activates that mode and the next click on the whole button opens the list. The pencil on the active button opens the palette editor. A circadian scene still stores one palette per solar event on `event_palettes`. Opening either list from the editor must not mint a scene. A variable, palette, or theme editor lists the scenes that use it as the same chips; choosing one opens that scene.
+- **Why:** The corner control was the palette, so the theme had no switcher, and a scene with no palette had no way to pick one from the mode row.
+- **Do not reverse without user ask.**
+
 ## Scene base palette is a corner split button, not a preset
 
 - **Date:** 2026-09-24
+- **Superseded in part:** 2026-09-25 — see “Theme split and palette mode button”. The per-event `event_palettes` field and the color-only preset row stay.
 - **Supersedes in part:** “Color/kelvin mode selector matches huemane-light-card” — the bottom-right row is color variables only. Palettes are not hue presets.
 - **Supersedes in part:** “Palette variables” — the palette face is not added only when the selected pin already uses a palette.
 - **Decision:** The hue-preset track lists color variables only. A scene’s base palette is a split button in the used-items corner (theme and color-variable chips stay). The first half opens the new-scene palette dialog, including None. None is the starting choice when a scene is created with Custom. On an existing scene, None clears that base palette. The second half opens that palette’s editor and is hidden when the base is None. The mode pill lists every disk the wheel can show (color, temperature, and palette when the scene has one). A mode none of the selected lights can use stays in the pill, dimmed, labeled “Not supported”. Brightness-only and on/off selections still replace the disks. Every stacked disk uses the same shadow. A simple scene stores the base on `palette_id` and `assignment_seed`. A circadian scene stores one palette per solar event on `event_palettes`, not on the shared theme and not in `palette_id`. Opening the dialog from the editor must not mint a scene or run the Custom create path.
@@ -54,7 +64,8 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## First column is the scene list; library is a second tab
 
 - **Date:** 2026-09-24
-- **Decision:** The area rail opens on **Scenes**. With a scene selected, the rest of that column fades until the pointer is over the rail; the hover rule has to outrank the fade rule or the rows stay dim. Variables, palettes, and circadian themes share a **Library** tab. Editing a scene lists the theme, palettes, and variables it uses at the top left of the editor, over the corner so the list does not take a row in the editor column. Choosing one opens that item and switches the rail to the tab that lists it, scrolled so the item is in view. On a circadian scene the same list is its own row in the dial toolbar, above the time and play controls. The dial time, sun angle, and play control stay on the circadian readout; the readout node is created with the dial (the table chart that used to create it is gone).
+- **Decision:** The area rail opens on **Scenes**. With a scene selected, the rest of that column fades until the pointer is over the rail; the hover rule has to outrank the fade rule or the rows stay dim. Variables, palettes, and circadian themes share a **Library** tab. Editing a scene lists the theme, palettes, and variables it uses at the top left of the editor, over the corner so the list does not take a row in the editor column. Choosing one opens that item and switches the rail to the tab that lists it, scrolled so the item is in view. On a circadian scene that list is its own row in the dial toolbar, under the time and play controls. The dial time, sun angle, and play control stay on the circadian readout; the readout node is created with the dial (the table chart that used to create it is gone).
+- **Superseded in part:** 2026-09-25 — the circadian used-items row sits under Play scene live. See “Theme split and palette mode button”.
 - **Why:** The scene list was buried under the library. Used items need a way back to their editors without hunting the column.
 - **Do not reverse without user ask.**
 

@@ -182,6 +182,8 @@
       "scene_palette_none": "None",
       "scene_palette_select": "Select a palette",
       "scene_palette_edit": "Edit palette",
+      "scene_theme_select": "Select a theme",
+      "scene_theme_edit": "Edit theme",
       "scene_palette_use": "Use palette",
       "scene_palette_randomize": "Randomize",
       "unsaved_title": "Unsaved changes",

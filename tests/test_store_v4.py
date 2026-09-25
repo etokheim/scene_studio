@@ -180,6 +180,7 @@ class TestToFormData:
         assert form["lights"] == {"light.a": {"state": "on"}}
         assert form["palette_id"] is None
         assert form["assignment_seed"] == 0
+        assert form["theme_id"] is None
         assert AUTOMATICALLY_UPDATE_LIGHTS not in form
 
     def test_palette_base_round_trip(self):

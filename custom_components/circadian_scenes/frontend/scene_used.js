@@ -30,10 +30,14 @@ export function sceneLibraryUses({ scene, theme, themes, variables }) {
   if (scene?.palette_id) {
     refs.add(scene.palette_id);
   }
+  for (const entry of Object.values(scene?.event_palettes || {})) {
+    if (entry?.palette_id) {
+      refs.add(entry.palette_id);
+    }
+  }
   collectRefs(scene?.lights, refs);
   collectRefs(scene?.overrides, refs);
-  const themeId =
-    scene?.kind === "simple" ? null : scene?.theme_id || "default";
+  const themeId = scene?.theme_id || (scene?.kind === "simple" ? null : "default");
   const themeRecord =
     theme && (!themeId || theme.id === themeId)
       ? theme
@@ -67,4 +71,21 @@ export function sceneLibraryUses({ scene, theme, themes, variables }) {
   const rank = { theme: 0, palette: 1, variable: 2 };
   used.sort((a, b) => rank[a.kind] - rank[b.kind]);
   return used;
+}
+
+/** Scenes whose library uses include this theme, palette, or color variable. */
+export function scenesUsingLibraryItem({ kind, id, scenes, themes, variables }) {
+  if (!id) {
+    return [];
+  }
+  const hits = [];
+  for (const scene of scenes || []) {
+    const themeId = scene.theme_id || (scene.kind === "simple" ? null : "default");
+    const theme = (themes || []).find((item) => item.id === themeId) || null;
+    const uses = sceneLibraryUses({ scene, theme, themes, variables });
+    if (uses.some((item) => item.kind === kind && item.id === id)) {
+      hits.push(scene);
+    }
+  }
+  return hits;
 }

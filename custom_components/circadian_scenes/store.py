@@ -287,6 +287,7 @@ def normalize_simple_scene(
         "lights": raw.get("lights") or {},
         "palette_id": raw.get("palette_id") or None,
         "assignment_seed": int(raw.get("assignment_seed") or 0),
+        "theme_id": raw.get("theme_id") or None,
     }
 
 
@@ -511,6 +512,7 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
         data["lights"] = item.get("lights") or {}
         data["palette_id"] = item.get("palette_id") or None
         data["assignment_seed"] = int(item.get("assignment_seed") or 0)
+        data["theme_id"] = item.get("theme_id") or None
     return data
 
 

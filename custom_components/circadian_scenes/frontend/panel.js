@@ -61,6 +61,7 @@ import {
   createPaletteChip,
   renderLanding,
   renderSceneUsed,
+  renderLibraryUsedBy,
   applyRampBackground,
   previewRampsForTheme,
   themeConic,
@@ -2247,6 +2248,43 @@ class CircadianScenesPanel extends HTMLElement {
         .wheel-mode-pill .wheel-wrapper.active {
           border-color: #fff;
         }
+        .wheel-mode-pill .wheel-wrapper.palette-add {
+          border: 1px dashed var(--secondary-text-color);
+        }
+        .wheel-mode-pill .wheel-wrapper.palette-add .palette-add-mark {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--primary-text-color);
+          font-size: 18px;
+          line-height: 1;
+          background: transparent;
+        }
+        .wheel-mode-pill .wheel-wrapper.palette-active {
+          width: 64px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0;
+          border-color: transparent;
+          background: color-mix(in srgb, var(--primary-text-color) 12%, transparent);
+        }
+        .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
+          box-shadow: 0 0 0 2px #fff;
+        }
+        .wheel-palette-edit {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 24px;
+          color: var(--primary-text-color);
+        }
+        .wheel-palette-edit ha-icon {
+          --mdc-icon-size: 16px;
+          width: 16px;
+          height: 16px;
+        }
         .wheel-mode-pill .wheel-wrapper[aria-disabled="true"] {
           width: auto;
           display: flex;
@@ -3146,6 +3184,29 @@ class CircadianScenesPanel extends HTMLElement {
         .scene-palette-none.selected {
           border-color: var(--primary-color);
         }
+        .scene-theme-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          max-height: min(480px, 60vh);
+          overflow: auto;
+        }
+        .scene-theme-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 10px;
+          border: 2px solid transparent;
+          border-radius: 10px;
+          background: none;
+          color: var(--primary-text-color);
+          font: inherit;
+          text-align: start;
+          cursor: pointer;
+        }
+        .scene-theme-row.selected {
+          border-color: var(--primary-color);
+        }
         .scene-palette-randomize[hidden] {
           display: none !important;
         }
@@ -3807,8 +3868,23 @@ class CircadianScenesPanel extends HTMLElement {
           .wheel-mode-pill .wheel-wrapper.active .wheel {
             box-shadow: 0 0 0 2px #fff;
           }
+          .wheel-mode-pill .wheel-wrapper.palette-active {
+            width: auto;
+            background: none;
+          }
           .wheel-mode-pill .wheel-wrapper.active .wheel-mode-name {
             font-weight: 700;
+          }
+          .wheel-mode-pill .wheel-wrapper.palette-active .wheel-mode-name {
+            order: 1;
+          }
+          .wheel-mode-pill .wheel-wrapper.palette-active .wheel-palette-edit {
+            order: 2;
+            width: auto;
+            margin-inline-start: 4px;
+          }
+          .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
+            order: 3;
           }
           .wheel-mode-name {
             display: block;
@@ -5964,7 +6040,104 @@ class CircadianScenesPanel extends HTMLElement {
     }
     scene.event_palettes = map;
     this._saveSoon();
+    this._syncOpenSceneWheel?.();
     this._syncSceneUsed();
+  }
+
+  async _pickSceneTheme() {
+    if (this._view !== "edit" || !this._formData) {
+      return;
+    }
+    const scene = this._formData;
+    const current = scene.theme_id || (scene.kind === "simple" ? null : "default");
+    const choice = await this._chooseSceneTheme({
+      themeId: current,
+      allowNone: scene.kind === "simple",
+    });
+    if (!choice) {
+      return;
+    }
+    this._applySceneTheme(choice.themeId);
+  }
+
+  _applySceneTheme(themeId) {
+    const scene = this._formData;
+    if (!scene) {
+      return;
+    }
+    const next = themeId || null;
+    if (scene.kind !== "simple" && !next) {
+      return;
+    }
+    const prev = scene.theme_id || (scene.kind === "simple" ? null : "default");
+    if (prev === next) {
+      this._syncSceneUsed();
+      return;
+    }
+    this._commitUndo();
+    scene.theme_id = next;
+    this._themeDraft = null;
+    this._saveSoon();
+    if (scene.kind === "simple") {
+      this._syncSceneUsed();
+      return;
+    }
+    void this._ensureThemeDraft().then(() => this._ensureSunPath());
+  }
+
+  _chooseSceneTheme({ themeId, allowNone } = {}) {
+    return new Promise((resolve) => {
+      this.shadowRoot.querySelector("ha-dialog.scene-theme-dialog")?.remove();
+      const dialog = document.createElement("ha-dialog");
+      dialog.className = "scene-theme-dialog";
+      dialog.setAttribute(
+        "header-title",
+        this._t("frontend.dialogs.scene_theme_select", "Select a theme")
+      );
+      dialog.open = true;
+      let settled = false;
+      const finish = (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        dialog.open = false;
+        resolve(value);
+      };
+      const list = document.createElement("div");
+      list.className = "scene-theme-list";
+      const addRow = (id, label, swatch) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "scene-theme-row";
+        if ((id || null) === (themeId || null)) {
+          button.classList.add("selected");
+        }
+        if (swatch) {
+          button.appendChild(swatch);
+        }
+        const name = document.createElement("span");
+        name.textContent = label;
+        button.appendChild(name);
+        button.addEventListener("click", () => finish({ themeId: id }));
+        list.appendChild(button);
+      };
+      if (allowNone) {
+        addRow(null, this._t("frontend.dialogs.scene_palette_none", "None"), null);
+      }
+      for (const theme of this._themes || []) {
+        const swatch = document.createElement("span");
+        swatch.className = "scene-used-swatch";
+        swatch.style.background = themeConic(theme, this._variables || []);
+        addRow(theme.id, theme.name || theme.id, swatch);
+      }
+      dialog.appendChild(list);
+      dialog.addEventListener("closed", () => {
+        dialog.remove();
+        finish(null);
+      });
+      this.shadowRoot.appendChild(dialog);
+    });
   }
 
   _chooseScenePalette({ areaId, mode, paletteId } = {}) {
@@ -5978,7 +6151,9 @@ class CircadianScenesPanel extends HTMLElement {
       dialog.className = "scene-palette-dialog";
       dialog.setAttribute(
         "header-title",
-        this._t("frontend.dialogs.scene_palette_title", "New scene")
+        mode === "edit"
+          ? this._t("frontend.dialogs.scene_palette_select", "Select a palette")
+          : this._t("frontend.dialogs.scene_palette_title", "New scene")
       );
       dialog.open = true;
       let settled = false;
@@ -6753,6 +6928,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       this._syncWorkspaceScrollport();
       this._playSimpleEnterIfNeeded(host);
+      this._syncLibraryUsedBy();
       return;
     }
     this._fillVariableEditor(host);
@@ -6767,6 +6943,7 @@ class CircadianScenesPanel extends HTMLElement {
     }
     this._syncWorkspaceScrollport();
     this._playSimpleEnterIfNeeded(host);
+    this._syncLibraryUsedBy();
   }
 
   _fillVariableEditor(host) {
@@ -13265,6 +13442,15 @@ class CircadianScenesPanel extends HTMLElement {
         tempMin: attrs.min_color_temp_kelvin || 2000,
         tempMax: attrs.max_color_temp_kelvin || 6500,
         ...this._wheelPalette(),
+        getBasePalette: () => {
+          const base = this._sceneBasePalette?.();
+          if (!base?.palette_id) {
+            return null;
+          }
+          return (this._variables || []).find((item) => item.id === base.palette_id) || null;
+        },
+        onPickPalette: () => this._pickSceneBasePalette(),
+        onEditPalette: (id) => this._go(`palette/${id}`),
         getAssignmentEntityId: () => light.entity_id,
         getAssignmentSeed: () => {
           const draft = currentDraft();
@@ -13326,6 +13512,11 @@ class CircadianScenesPanel extends HTMLElement {
         onChange: onWheelChange,
       });
       wheelMount.appendChild(wheelCtl.el);
+      this._syncOpenSceneWheel = () => {
+        if (wheelCtl?.el?.isConnected) {
+          wheelCtl.sync();
+        }
+      };
       wheelCtl.setMode(draftWheelMode(currentDraft(), hasColor, hasTemp), {
         convertDraft: false,
       });
@@ -15361,23 +15552,55 @@ class CircadianScenesPanel extends HTMLElement {
 
   _syncSceneUsed() {
     const strip = renderSceneUsed(this);
-    const simple = this.shadowRoot?.querySelector(".simple-editor");
+    const simple =
+      this._view === "edit" && this._formData?.kind === "simple"
+        ? this.shadowRoot?.querySelector(".simple-editor")
+        : null;
     const chrome = this._toolbarChrome;
-    const host = simple || (this._view === "edit" && this._formData?.kind !== "simple" ? chrome : null);
+    const host =
+      simple ||
+      (this._view === "edit" && this._formData?.kind !== "simple" ? chrome : null);
     const previous = this.shadowRoot?.querySelector(".scene-used");
-    if (!host) {
+    if (!host || !strip) {
       previous?.remove();
-      return;
-    }
-    if (!strip) {
-      previous?.remove();
-      return;
-    }
-    if (previous && previous.parentNode === host) {
+    } else if (previous && previous.parentNode === host) {
       previous.replaceWith(strip);
     } else {
       previous?.remove();
-      host.prepend(strip);
+      host.append(strip);
+    }
+    this._syncLibraryUsedBy();
+  }
+
+  _syncLibraryUsedBy() {
+    this.shadowRoot?.querySelector(".library-used-by")?.remove();
+    let kind = null;
+    let id = null;
+    let host = null;
+    if (this._view === "theme" && this._themeId) {
+      kind = "theme";
+      id = this._themeId;
+      host = this._toolbarChrome;
+    } else if (this._view === "palette" && this._variableId) {
+      kind = "palette";
+      id = this._variableId;
+      host = this.shadowRoot?.querySelector(".simple-editor");
+    } else if (this._view === "variable" && this._variableId) {
+      kind = "variable";
+      id = this._variableId;
+      host = this.shadowRoot?.querySelector(".library-editor");
+    }
+    if (!kind || !id || !host) {
+      return;
+    }
+    const row = renderLibraryUsedBy(this, { kind, id });
+    if (!row) {
+      return;
+    }
+    if (this._view === "theme") {
+      host.append(row);
+    } else {
+      host.prepend(row);
     }
   }
 

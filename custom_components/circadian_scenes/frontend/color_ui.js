@@ -2440,6 +2440,8 @@ function createSceneColorWheel({
   getAssignmentEntityId,
   getBasePalette,
   onRandomizeSeed,
+  onPickPalette,
+  onEditPalette,
   showPath = true,
   groupNearby = false,
   getPinIcon,
@@ -3311,7 +3313,11 @@ function createSceneColorWheel({
 
   const convertDraftTo = (draft, next, caps) => {
     if (next === "palette") {
-      const variable = wheelPalette();
+      const base =
+        typeof onPickPalette === "function" && typeof getBasePalette === "function"
+          ? getBasePalette()
+          : null;
+      const variable = variableIsPalette(base) ? base : wheelPalette();
       if (!variable) {
         return false;
       }
@@ -3361,7 +3367,7 @@ function createSceneColorWheel({
     const modes = wheelPillModes(selected, {
       hasColor,
       hasTemp,
-      palette: sceneHasPalette || pal,
+      palette: sceneHasPalette || pal || typeof onPickPalette === "function",
     });
     modePill.hidden =
       (selected.length > 0 && selected.every((row) => !row.hasColor && !row.hasTemp)) ||
@@ -3372,25 +3378,40 @@ function createSceneColorWheel({
     }
     const caps = capsOf(item || {});
     const locked = lockedUiMode();
-    const current = showingPalette()
-      ? "palette"
-      : locked === "color" || locked === "temp"
+    const current =
+      locked === "palette" || locked === "color" || locked === "temp"
         ? locked
-        : draftWheelMode(draft, caps.hasColor, caps.hasTemp);
+        : showingPalette()
+          ? "palette"
+          : draftWheelMode(draft, caps.hasColor, caps.hasTemp);
+    const basePalette =
+      typeof getBasePalette === "function" ? getBasePalette() : null;
     const palVar =
-      paletteForDraft(draft) ||
-      paletteCatalog().find((variable) => variableIsPalette(variable));
+      typeof onPickPalette === "function"
+        ? variableIsPalette(basePalette)
+          ? basePalette
+          : null
+        : sceneHasPalette
+          ? paletteForDraft(draft) || wheelPalette()
+          : null;
     const unsupported = t("frontend.lights.mode_not_supported", "Not supported");
     for (const entry of modes) {
       const mode = entry.mode;
+      const offerPalette = mode === "palette" && typeof onPickPalette === "function";
       const wrap = document.createElement("button");
       wrap.type = "button";
       wrap.className = "wheel-wrapper";
       wrap.setAttribute("aria-pressed", mode === current ? "true" : "false");
-      if (mode === current && entry.supported) {
+      if (offerPalette && !palVar) {
+        wrap.classList.add("palette-add");
+      }
+      if (mode === current && (entry.supported || (offerPalette && palVar))) {
         wrap.classList.add("active");
       }
-      if (!entry.supported) {
+      if (offerPalette && palVar && mode === current) {
+        wrap.classList.add("palette-active");
+      }
+      if (!entry.supported && !offerPalette) {
         wrap.setAttribute("aria-disabled", "true");
       }
       const name = document.createElement("span");
@@ -3401,7 +3422,11 @@ function createSceneColorWheel({
           : mode === "palette"
             ? t("frontend.naming.palette", "Palette")
             : t("frontend.lights.group_color", "Color");
-      name.textContent = entry.supported ? label : `${label} (${unsupported})`;
+      if (offerPalette && !palVar) {
+        name.textContent = t("frontend.dialogs.scene_palette_select", "Select a palette");
+      } else {
+        name.textContent = entry.supported ? label : `${label} (${unsupported})`;
+      }
       wrap.title = name.textContent;
       const face = document.createElement("span");
       face.className = `wheel wheel-mode-${mode}`;
@@ -3412,11 +3437,36 @@ function createSceneColorWheel({
       } else if (palVar) {
         face.style.backgroundImage = "none";
         face.style.background = paletteSwatchCss(palVar, paletteCatalog(), draftRgb);
+      } else if (offerPalette) {
+        face.textContent = "+";
+        face.classList.add("palette-add-mark");
       }
       wrap.append(name, face);
+      if (wrap.classList.contains("palette-active") && palVar) {
+        const edit = document.createElement("span");
+        edit.className = "wheel-palette-edit";
+        edit.setAttribute("aria-hidden", "true");
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("icon", "mdi:pencil");
+        edit.appendChild(icon);
+        edit.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          onEditPalette?.(palVar.id);
+        });
+        wrap.appendChild(edit);
+      }
+      const palettePressed = offerPalette && palVar && mode === current;
       wrap.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        if (!entry.supported) {
+        if (offerPalette && !palVar) {
+          onPickPalette();
+          return;
+        }
+        if (palettePressed) {
+          onPickPalette();
+          return;
+        }
+        if (!entry.supported && !offerPalette) {
           return;
         }
         lockUiMode(mode);

@@ -4,7 +4,7 @@ import { createSimpleCardMesh } from "./card_mesh.js";
 import { swatchRgb, variableSwatchCss } from "./color_ui.js";
 import { galleryCoverUrl, galleryPalette } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, resolveSlot, variableIsPalette } from "./palette.js";
-import { sceneLibraryUses } from "./scene_used.js";
+import { sceneLibraryUses, scenesUsingLibraryItem } from "./scene_used.js";
 
 const AREA_RAIL_PX = 340;
 
@@ -144,9 +144,25 @@ export const LANDING_CSS = `
     max-width: 100%;
     padding: 0 0 4px;
   }
-  /* Own row above the time and play controls. Basis is width here. */
-  .sun-toolbar-chrome > .scene-used {
+  /* Own row under the time and play controls. Basis is width here. */
+  .sun-toolbar-chrome > .scene-used,
+  .sun-toolbar-chrome > .library-used-by {
     flex: 1 0 100%;
+  }
+  .library-used-by {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 4px 0 0;
+  }
+  .simple-editor > .library-used-by,
+  .library-editor > .library-used-by {
+    position: relative;
+    width: 100%;
+    padding: 8px 16px 0;
   }
   /* Corner overlay. A flex basis of 100% in the column editor was the height,
      so the list stretched and pushed the wheel off the stage. */
@@ -1338,10 +1354,10 @@ export function renderSceneUsed(panel) {
     theme: panel._themeDraft,
     themes: panel._themes,
     variables: panel._variables,
-  }).filter((item) => item.kind !== "palette");
+  }).filter((item) => item.kind !== "theme");
   const row = document.createElement("div");
   row.className = "scene-used";
-  row.appendChild(renderBasePaletteSplit(panel));
+  row.appendChild(renderThemeSplit(panel));
   for (const item of uses) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1349,66 +1365,92 @@ export function renderSceneUsed(panel) {
     const swatch = document.createElement("span");
     swatch.className = "scene-used-swatch";
     const name = document.createElement("span");
-    if (item.kind === "theme") {
-      const theme = (panel._themes || []).find((entry) => entry.id === item.id);
-      name.textContent = theme?.name || item.id;
-      swatch.style.background = theme
-        ? themeConic(theme, panel._variables || [])
-        : "";
-      button.addEventListener("click", () => panel._go(`theme/${item.id}`));
+    if (item.kind === "palette") {
+      const variable = (panel._variables || []).find((entry) => entry.id === item.id);
+      name.textContent = variable?.name || item.id;
+      appendPaletteFace(button, variable, panel._variables);
+      button.appendChild(name);
+      button.addEventListener("click", () => panel._go(`palette/${item.id}`));
     } else {
       const variable = (panel._variables || []).find((entry) => entry.id === item.id);
       name.textContent = variable?.name || item.id;
       swatch.style.background = variableSwatchCss(variable, panel._variables);
+      button.append(swatch, name);
       button.addEventListener("click", () => panel._go(`variable/${item.id}`));
     }
-    button.append(swatch, name);
     button.setAttribute("aria-label", name.textContent);
     row.appendChild(button);
   }
   return row;
 }
 
-function renderBasePaletteSplit(panel) {
+function renderThemeSplit(panel) {
   const split = document.createElement("div");
   split.className = "scene-palette-split";
-  const base = panel._sceneBasePalette?.() || null;
-  const paletteId = base?.palette_id || null;
-  const variable = paletteId
-    ? (panel._variables || []).find((entry) => entry.id === paletteId)
+  const themeId =
+    panel._formData?.theme_id ||
+    (panel._formData?.kind === "simple" ? null : "default");
+  const theme = themeId
+    ? (panel._themes || []).find((entry) => entry.id === themeId)
     : null;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "scene-used-chip";
   const name = document.createElement("span");
-  if (!variable) {
+  if (!theme) {
     button.classList.add("is-placeholder");
-    name.textContent = panel._t(
-      "frontend.dialogs.scene_palette_select",
-      "Select a palette"
-    );
+    name.textContent = panel._t("frontend.dialogs.scene_theme_select", "Select a theme");
   } else {
-    name.textContent = variable.name || paletteId;
-    appendPaletteFace(button, variable, panel._variables);
+    name.textContent = theme.name || themeId;
+    const swatch = document.createElement("span");
+    swatch.className = "scene-used-swatch";
+    swatch.style.background = themeConic(theme, panel._variables || []);
+    button.appendChild(swatch);
   }
   button.appendChild(name);
   button.setAttribute("aria-label", name.textContent);
-  button.addEventListener("click", () => panel._pickSceneBasePalette?.());
+  button.addEventListener("click", () => panel._pickSceneTheme?.());
   split.appendChild(button);
-  if (paletteId) {
+  if (theme) {
     const edit = document.createElement("ha-icon-button");
     edit.className = "scene-palette-edit";
-    edit.label = panel._t("frontend.dialogs.scene_palette_edit", "Edit palette");
+    edit.label = panel._t("frontend.dialogs.scene_theme_edit", "Edit theme");
     const icon = document.createElement("ha-icon");
     icon.setAttribute("icon", "mdi:pencil");
     edit.appendChild(icon);
     edit.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      panel._go(`palette/${paletteId}`);
+      panel._go(`theme/${theme.id}`);
     });
     split.appendChild(edit);
   }
   return split;
+}
+
+export function renderLibraryUsedBy(panel, { kind, id }) {
+  const scenes = scenesUsingLibraryItem({
+    kind,
+    id,
+    scenes: panel._items,
+    themes: panel._themes,
+    variables: panel._variables,
+  });
+  if (!scenes.length) {
+    return null;
+  }
+  const row = document.createElement("div");
+  row.className = "library-used-by";
+  for (const scene of scenes) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "scene-used-chip";
+    const name = document.createElement("span");
+    name.textContent = scene.scene_name || scene.name || scene.id;
+    button.appendChild(name);
+    button.addEventListener("click", () => panel._go(`edit/${scene.id}`));
+    row.appendChild(button);
+  }
+  return row;
 }
 
 function appendPaletteFace(button, variable, catalog) {
