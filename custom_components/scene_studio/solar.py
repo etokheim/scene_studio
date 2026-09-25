@@ -12,6 +12,8 @@ from astral.sun import elevation as sun_elevation
 from astral.sun import sun
 from homeassistant.core import HomeAssistant
 
+from .store import dusk_minimum_seconds
+
 _LOGGER = logging.getLogger(__name__)
 
 EVENT_META = (
@@ -226,8 +228,6 @@ def build_sun_path(
     )
     observer = place.observer
     if dusk_minimum is None:
-        from .store import dusk_minimum_seconds
-
         dusk_minimum = dusk_minimum_seconds(hass)
 
     events_by_name, fallbacks = resolve_solar_events(
