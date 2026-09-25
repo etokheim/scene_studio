@@ -116,13 +116,9 @@ export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
   :host([narrow]) .simple-editor {
     padding-top: 0;
-    /* Selected tiles slide a 36px plate up, plus 6px for the selection ring.
-       A 16px gap let that plate sit under the preset row. */
-    gap: 48px;
   }
-  /* Inset so rings and pins stay on screen. The mode row (48) plus the stage
-     gap (16) is kept out of the disk so presets sit under it, not on the tiles.
-     Extra height centers that group; a short screen shrinks the disk instead. */
+  /* Presets overlay the chip strip, so the disk is not resized when they
+     appear. The strip itself stays in the column and pushes the disk down. */
   :host([narrow]) .simple-wheels {
     min-height: 0;
     flex: 1 1 auto;
@@ -130,7 +126,10 @@ export const SIMPLE_EDITOR_CSS = `
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    padding: 24px 16px 0;
+    padding: 8px 16px 0;
+  }
+  :host([narrow]) .simple-editor:not(.chrome-aside) .hue-wheel-stage {
+    position: static;
   }
   :host([narrow]) .simple-wheels .hue-wheel-stage {
     height: auto;
@@ -141,12 +140,18 @@ export const SIMPLE_EDITOR_CSS = `
     margin: 0;
     box-sizing: border-box;
   }
-  :host([narrow]) .simple-editor:not(.chrome-aside) .hue-wheel-canvas {
-    width: min(100cqi, calc(100cqb - 64px));
+  :host([narrow]) .simple-editor:not(.chrome-aside) .hue-wheel-chrome {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    width: auto;
     max-width: none;
-    height: auto;
-    flex: 0 0 auto;
+    padding: 0 8px;
+    box-sizing: border-box;
   }
+  :host([narrow]) .simple-editor:not(.chrome-aside) .hue-wheel-canvas,
   :host([narrow]) .simple-editor.chrome-aside .hue-wheel-canvas {
     width: min(100cqi, 100cqb);
     max-width: none;

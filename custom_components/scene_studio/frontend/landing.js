@@ -195,6 +195,53 @@ export const LANDING_CSS = `
   .simple-editor > .scene-used .scene-palette-split {
     pointer-events: auto;
   }
+  /* Phone: one horizontal strip above the disk. It stays in the column so the
+     disk does not jump, and the color modes take its place once a light is
+     selected. Wider screens keep the vertical overlay. */
+  :host([narrow]) .simple-editor > .scene-used {
+    position: relative;
+    top: auto;
+    left: auto;
+    order: -1;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    min-height: 48px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    z-index: 4;
+    pointer-events: auto;
+    visibility: visible;
+    transition:
+      opacity 180ms cubic-bezier(0.2, 0, 0, 1),
+      visibility 0s linear 0s;
+  }
+  :host([narrow]) .simple-editor > .scene-used::-webkit-scrollbar {
+    display: none;
+  }
+  :host([narrow]) .simple-editor > .scene-used .scene-palette-split,
+  :host([narrow]) .simple-editor > .scene-used .scene-used-chip {
+    flex: 0 0 auto;
+    max-width: 220px;
+  }
+  :host([narrow]) .simple-editor:not(.chrome-aside):has(
+      .hue-wheel-mode-cluster.is-shown,
+      .hue-presets.is-shown
+    )
+    > .scene-used {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 180ms cubic-bezier(0.2, 0, 0, 1),
+      visibility 0s linear 180ms;
+  }
   .scene-palette-split {
     display: inline-flex;
     align-items: center;
