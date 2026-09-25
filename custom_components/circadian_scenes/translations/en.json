@@ -267,7 +267,7 @@
       "n_selected": "{count} selected",
       "deselect": "Deselect",
       "tiles_hint_brightness": "Drag or scroll on the light tiles to change the brightness",
-      "tiles_hint_pick": "Select a solar event or a light to edit it, or drag the sun to preview the lights at a time",
+      "tiles_hint_pick": "Select a solar event or a light to edit it, or drag the sun to preview the lights at a point in time",
       "tiles_hint_palette": "Edits here are reflected in all scenes using this palette",
       "settings_named": "Settings for {name}",
       "mode_not_supported": "Not supported",

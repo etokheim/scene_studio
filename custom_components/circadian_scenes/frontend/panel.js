@@ -1077,7 +1077,8 @@ class CircadianScenesPanel extends HTMLElement {
         }
         .sun-path.dial-view .sun-light-clock-legend {
           position: relative;
-          z-index: 5;
+          /* Above dial labels (z-index 10) that overflow the face onto the tiles. */
+          z-index: 12;
           width: 100%;
           max-width: none;
           align-self: stretch;
@@ -1987,7 +1988,7 @@ class CircadianScenesPanel extends HTMLElement {
           align-items: stretch;
           gap: 8px;
           position: relative;
-          z-index: 5;
+          z-index: 12;
           pointer-events: auto;
         }
         .sun-light-clock-legend:not(.event-bright-edit)
@@ -7109,6 +7110,30 @@ class CircadianScenesPanel extends HTMLElement {
     return null;
   }
 
+  _lightSupportsSubtitle(entityId) {
+    const modes =
+      this._hass?.states?.[entityId]?.attributes?.supported_color_modes || [];
+    const hasColor = modes.some((mode) =>
+      ["hs", "rgb", "rgbw", "rgbww", "xy"].includes(mode)
+    );
+    const hasTemp = modes.includes("color_temp");
+    const onOff = modes.length > 0 && modes.every((mode) => mode === "onoff");
+    const parts = [];
+    if (hasColor) {
+      parts.push(this._t("frontend.lights.group_color", "Color"));
+    }
+    if (hasTemp) {
+      parts.push(this._t("frontend.lights.group_temp", "Temperature"));
+    }
+    if (!hasColor && !hasTemp && !onOff) {
+      parts.push(this._t("frontend.lights.group_brightness", "Brightness"));
+    }
+    if (onOff) {
+      parts.push(this._t("frontend.lights.group_onoff", "On/off"));
+    }
+    return parts.join(", ");
+  }
+
   _dialEventBrightness(eventId, lightIdArg) {
     const lightId =
       lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
@@ -7326,6 +7351,59 @@ class CircadianScenesPanel extends HTMLElement {
     this._saveSoon();
   }
 
+  _resampleDialFromLiveBrightness() {
+    if (!this._sunPath?.lights || !this._sunPath?.events) {
+      return;
+    }
+    const events = this._sunPath.events;
+    const lights = this._sunPath.lights.map((light) => {
+      if (light.suggested || light.theme_ring) {
+        return light;
+      }
+      const event_states = (light.event_states || []).map((row) => {
+        const brightness = this._dialEventBrightness(row.event, light.entity_id);
+        const base = row.state ? { ...row.state } : { state: "on" };
+        base.brightness = brightness;
+        if (brightness > 0) {
+          base.state = "on";
+        }
+        return { ...row, state: base };
+      });
+      return { ...light, event_states };
+    });
+    this._sunPath = {
+      ...this._sunPath,
+      lights: resampleLightsForEvents(lights, events, draftRgb, {
+        intermediatesPerSegment: 5,
+      }),
+    };
+    this._paintClockRingFills(this._sunPath);
+  }
+
+  _paintClockRingFills(payload) {
+    const ringLights = this._clockRingLights(payload?.lights || []);
+    const rings = this._clockRingsHost?.querySelectorAll(":scope > .clock-ring") || [];
+    if (rings.length !== ringLights.length) {
+      return;
+    }
+    const paint = (nodeList) => {
+      for (let index = 0; index < nodeList.length; index += 1) {
+        const fill = nodeList[index].querySelector(".clock-ring-fill");
+        if (fill && ringLights[index]) {
+          fill.style.background = conicGradientFromSamples(
+            ringLights[index].samples || []
+          );
+        }
+      }
+    };
+    paint(rings);
+    for (const glow of this._clockGlowLayer?.querySelectorAll(
+      ":scope > .sun-light-clock-glow"
+    ) || []) {
+      paint(glow.querySelectorAll(":scope > .clock-ring"));
+    }
+  }
+
   _paintLiveEventBrightness() {
     const targets = {};
     for (const event of this._sunPath?.events || []) {
@@ -7338,9 +7416,11 @@ class CircadianScenesPanel extends HTMLElement {
     this._clockBrightShown = targets;
     this._clockBrightTarget = { ...targets };
     this._clockBrightFrom = { ...targets };
+    this._resampleDialFromLiveBrightness();
     this._placeClockBrightnessHandles();
     this._layoutClockEventSpokes();
     this._layoutClockBrightnessCurve();
+    this._syncThemePreviewSurfaces();
     const seconds =
       this._clockSunDisplayedSeconds ??
       this._clockStickySeconds ??
@@ -10776,7 +10856,7 @@ class CircadianScenesPanel extends HTMLElement {
           )
         : this._t(
             "frontend.lights.tiles_hint_pick",
-            "Select a solar event or a light to edit it, or drag the sun to preview the lights at a time"
+            "Select a solar event or a light to edit it, or drag the sun to preview the lights at a point in time"
           );
     }
   }
@@ -10803,7 +10883,9 @@ class CircadianScenesPanel extends HTMLElement {
     ) {
       const stored = this._lightEventStoredState(light, eventId);
       const rgb = draftRgb(stored) || [0, 0, 0];
-      const bri = Number(stored?.brightness);
+      const bri = this._eventBrightnessIsLive()
+        ? this._dialEventBrightness(eventId, light.entity_id)
+        : Number(stored?.brightness);
       const fillPct =
         stored?.state === "off" || !(bri > 0) ? 0 : (bri * 100) / 255;
       return { rgb, fillPct };
@@ -12647,7 +12729,7 @@ class CircadianScenesPanel extends HTMLElement {
 
     const opened = await this._openSceneSidebar({
       title: light.name,
-      subtitle: event.name,
+      subtitle: this._lightSupportsSubtitle(light.entity_id),
       className: "light-dialog",
       actionItems: [infoBtn],
       onDismiss: () => {
@@ -12847,7 +12929,7 @@ class CircadianScenesPanel extends HTMLElement {
       currentEvent = next;
       this._setSidebarEvent(next.id);
       if (subtitleEl) {
-        subtitleEl.textContent = next.name;
+        subtitleEl.textContent = this._lightSupportsSubtitle(light.entity_id);
       }
       this._syncDuskMinimumSlot(duskSlot, next.id);
       const entry = drafts.get(next.id);
@@ -13213,6 +13295,9 @@ class CircadianScenesPanel extends HTMLElement {
           }
           applyToSession();
           wheelCtl?.sync();
+          brightnessGraphCtl?.sync();
+          colorBriGraphCtl?.sync();
+          whiteBriGraphCtl?.sync();
         },
         getState: () => ({
           scenes: events
@@ -18318,7 +18403,7 @@ class CircadianScenesPanel extends HTMLElement {
         createLightTilesHint(
           this._t(
             "frontend.lights.tiles_hint_pick",
-            "Select a solar event or a light to edit it, or drag the sun to preview the lights at a time"
+            "Select a solar event or a light to edit it, or drag the sun to preview the lights at a point in time"
           )
         )
       );
