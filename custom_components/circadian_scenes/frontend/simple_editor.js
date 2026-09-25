@@ -1963,7 +1963,10 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   wheels.className = "simple-wheels";
   const ids = [...Array(PALETTE_SLOT_COUNT)].map((_, i) => `slot:${i}`);
   let selectedIds = new Set([ids[0]]);
+  let anchorId = ids[0];
+  let stripOrderIds = [...ids];
   const primaryId = () => [...selectedIds][0] || null;
+  let applySlotClick = () => {};
   const drafts = {};
   for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
     drafts[ids[i]] = slotToDraft(working.slots[i], variables);
@@ -1987,28 +1990,36 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     })),
     sequence: ids,
     activeId: primaryId(),
+    selectedIds: [...selectedIds],
   });
   const wheel = createSceneColorWheel({
     t: (key, fallback) => panel._t(key, fallback),
     pinFlip: panel._wheelPinFlip || null,
     getState,
-    onSelect: (id) => {
-      selectedIds = new Set(id ? [id] : []);
-      revealLightActionsNow(tiles);
-      paintPaletteSelection();
-    },
-    onChange: ({ fromPalette } = {}) => {
-      const selectedId = primaryId();
-      if (!selectedId) {
+    onSelect: (id, mods) => {
+      if (id && (mods?.shiftKey || mods?.toggleKey)) {
+        applySlotClick(id, { toggleKey: true });
         return;
       }
-      if (!fromPalette) {
-        delete drafts[selectedId].variable_ref;
-        delete drafts[selectedId].palette_t;
-        delete drafts[selectedId].palette_r;
+      applySlotClick(id);
+    },
+    onChange: ({ fromPalette, ids: writeIds } = {}) => {
+      const write = writeIds?.length ? writeIds : primaryId() ? [primaryId()] : [];
+      if (!write.length) {
+        return;
       }
-      persistSlot(selectedId);
-      refreshPaletteSlot(selectedId);
+      for (const id of write) {
+        if (!drafts[id]) {
+          continue;
+        }
+        if (!fromPalette) {
+          delete drafts[id].variable_ref;
+          delete drafts[id].palette_t;
+          delete drafts[id].palette_r;
+        }
+        persistSlot(id);
+      }
+      refreshPaletteStrip();
     },
     hasColor: true,
     hasTemp: true,
@@ -2028,6 +2039,48 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   tiles.className = "light-tiles";
   scroller.appendChild(tiles);
   bindGroupTitleStick(scroller);
+  scroller.addEventListener("keydown", (ev) => {
+    const meta = ev.metaKey || ev.ctrlKey;
+    if (meta && ev.key.toLowerCase() === "a") {
+      ev.preventDefault();
+      selectedIds = new Set(stripOrderIds);
+      anchorId = stripOrderIds[0] || null;
+      wheel.sync();
+      paintPaletteSelection();
+      return;
+    }
+    const current = ev.target.closest?.(".simple-light-selector");
+    const id = current?.dataset?.entityId;
+    if (!id || id === "__select_all__" || !stripOrderIds.includes(id)) {
+      return;
+    }
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      applySlotClick(id, ev);
+      return;
+    }
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") {
+      return;
+    }
+    const index = stripOrderIds.indexOf(id);
+    const next = stripOrderIds[index + (ev.key === "ArrowRight" ? 1 : -1)];
+    if (!next) {
+      return;
+    }
+    ev.preventDefault();
+    if (ev.shiftKey) {
+      applySlotClick(next, ev);
+    } else {
+      selectedIds = new Set([next]);
+      anchorId = next;
+      revealLightActionsNow(tiles);
+      wheel.sync();
+      paintPaletteSelection();
+    }
+    scroller
+      .querySelector(`.simple-light-selector[data-entity-id="${CSS.escape(next)}"]`)
+      ?.focus();
+  });
 
   const fillPercent = (draft) => ((Number(draft.brightness) || 0) / 255) * 100;
   const builtinSlots = () => galleryPalette(working.builtin_id)?.slots || null;
@@ -2096,6 +2149,32 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     }
     paintAll();
   };
+  // Same click rules as the scene strip: tileSelectionAfterClick owns
+  // plain, Cmd/Ctrl, and Shift. A disk click treats Shift as a toggle.
+  applySlotClick = (id, mods = {}) => {
+    if (!id) {
+      selectedIds = new Set();
+      anchorId = null;
+    } else {
+      const shiftKey = Boolean(mods.shiftKey);
+      const toggleKey = Boolean(mods.toggleKey || mods.metaKey || mods.ctrlKey);
+      const plain = !shiftKey && !toggleKey;
+      const wasSelectMode = selectedIds.size > 1;
+      const result = tileSelectionAfterClick({
+        ids: stripOrderIds.length ? stripOrderIds : ids,
+        selected: [...selectedIds],
+        anchorId,
+        entityId: id,
+        shiftKey: shiftKey && !wasSelectMode,
+        toggleKey: toggleKey || (plain && wasSelectMode),
+      });
+      selectedIds = new Set(result.selected);
+      anchorId = result.anchorId;
+    }
+    revealLightActionsNow(tiles);
+    wheel.sync();
+    paintPaletteSelection();
+  };
   // Wheel events don't have a pointer-up. Repaint once the scrub settles
   // so a changed color can gain or lose its restore control.
   let scrubSync = 0;
@@ -2111,6 +2190,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       }
       grouped.get(key).push(id);
     }
+    stripOrderIds = lightTileGroupOrder().flatMap((key) => grouped.get(key) || []);
 
     const { selector: allSelector, tile: allTile, hit: allHit } = createLightTile({
       entityId: "__select_all__",
@@ -2193,7 +2273,8 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       if (allTile._lightTileSuppressTap) {
         return;
       }
-      selectedIds = selectedIds.size > 1 ? new Set() : new Set(ids);
+      selectedIds = selectedIds.size > 1 ? new Set() : new Set(stripOrderIds);
+      anchorId = selectedIds.size ? stripOrderIds[0] || null : null;
       revealLightActionsNow(tiles);
       wheel.sync();
       paintPaletteSelection();
@@ -2313,6 +2394,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
             toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey || ev?.shiftKey),
           });
           selectedIds = new Set(result.selected);
+          anchorId = result.anchorId;
           wheel.sync();
           revealLightActionsNow(tiles);
           paintPaletteSelection();
@@ -2387,10 +2469,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
             }
             return;
           }
-          selectedIds = new Set([id]);
-          revealLightActionsNow(tiles);
-          wheel.sync();
-          paintPaletteSelection();
+          applySlotClick(id, ev);
         };
         const onDocMove = (ev) => {
           if (!slotDrag || ev.pointerId !== slotDrag.pointerId) {
@@ -2458,6 +2537,37 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   syncTiles();
   host.replaceChildren(wrap);
   bindWheelAside(wrap);
+  const clearSlotSelection = () => {
+    if (!selectedIds.size) {
+      return;
+    }
+    selectedIds = new Set();
+    anchorId = null;
+    revealLightActionsNow(tiles);
+    wheel.sync();
+    paintPaletteSelection();
+  };
+  const onBackgroundClick = (ev) => {
+    if (!wrap.isConnected) {
+      return;
+    }
+    const t = ev.target;
+    if (!(t instanceof Element)) {
+      return;
+    }
+    if (
+      t.closest(
+        ".simple-light-selector, .light-mode-label, .gm, .hue-wheel-chrome, .simple-level-host, .var-palette, .hue-presets, .scene-used-chip, .library-used-by, ha-dialog, ha-dropdown, ha-menu, ha-textfield"
+      )
+    ) {
+      return;
+    }
+    clearSlotSelection();
+  };
+  host.addEventListener("click", onBackgroundClick);
+  panel.shadowRoot?.removeEventListener("click", panel._simpleOutsideClick);
+  panel._simpleOutsideClick = onBackgroundClick;
+  panel.shadowRoot?.addEventListener("click", panel._simpleOutsideClick);
   wheel.sync();
   if (glowHost && typeof wheel.attachGlow === "function") {
     panel._simpleWheelGlowLayout = wheel.attachGlow(glowHost);

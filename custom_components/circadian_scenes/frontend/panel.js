@@ -61,6 +61,7 @@ import {
   createPaletteChip,
   renderLanding,
   renderSceneUsed,
+  renderPaletteUsed,
   renderLibraryUsedBy,
   PALETTE_RANDOMIZE_ICON,
   applyRampBackground,
@@ -7102,7 +7103,7 @@ class CircadianScenesPanel extends HTMLElement {
       }
       this._syncWorkspaceScrollport();
       this._playSimpleEnterIfNeeded(host);
-      this._syncLibraryUsedBy();
+      this._syncSceneUsed();
       return;
     }
     this._fillVariableEditor(host);
@@ -15745,6 +15746,21 @@ class CircadianScenesPanel extends HTMLElement {
   }
 
   _syncSceneUsed() {
+    if (this._view === "palette") {
+      const strip = renderPaletteUsed(this);
+      const host = this.shadowRoot?.querySelector(".simple-editor");
+      const previous = this.shadowRoot?.querySelector(".scene-used");
+      if (!host || !strip) {
+        previous?.remove();
+      } else if (previous && previous.parentNode === host) {
+        previous.replaceWith(strip);
+      } else {
+        previous?.remove();
+        host.append(strip);
+      }
+      this._syncLibraryUsedBy();
+      return;
+    }
     const strip = renderSceneUsed(this);
     const simple =
       this._view === "edit" && this._formData?.kind === "simple"

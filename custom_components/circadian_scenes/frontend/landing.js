@@ -193,6 +193,9 @@ export const LANDING_CSS = `
     color: var(--secondary-text-color);
     font-weight: 400;
   }
+  .scene-used-chip.is-source {
+    cursor: default;
+  }
   .scene-used-chip {
     display: inline-flex;
     align-items: center;
@@ -1346,6 +1349,54 @@ function libraryBlock(head, body) {
 }
 
 export const PALETTE_RANDOMIZE_ICON = "mdi:shuffle";
+
+export function renderPaletteUsed(panel) {
+  const draft = panel._variableDraft;
+  if (panel._view !== "palette" || !draft) {
+    return null;
+  }
+  const row = document.createElement("div");
+  row.className = "scene-used";
+  const preset = galleryPalette(draft.builtin_id);
+  if (preset) {
+    const chip = document.createElement("div");
+    chip.className = "scene-used-chip is-source";
+    appendPaletteFace(chip, { builtin_id: preset.id }, panel._variables);
+    const name = document.createElement("span");
+    name.textContent = panel._t(preset.nameKey, preset.name);
+    chip.appendChild(name);
+    chip.setAttribute("aria-label", name.textContent);
+    row.appendChild(chip);
+  }
+  const seen = new Set();
+  for (const slot of draft.slots || []) {
+    const id = slot?.variable_ref;
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    const variable = (panel._variables || []).find((entry) => entry.id === id);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "scene-used-chip";
+    const name = document.createElement("span");
+    name.textContent = variable?.name || id;
+    if (variable && variableIsPalette(variable)) {
+      appendPaletteFace(button, variable, panel._variables);
+      button.appendChild(name);
+      button.addEventListener("click", () => panel._go(`palette/${id}`));
+    } else {
+      const swatch = document.createElement("span");
+      swatch.className = "scene-used-swatch";
+      swatch.style.background = variableSwatchCss(variable, panel._variables);
+      button.append(swatch, name);
+      button.addEventListener("click", () => panel._go(`variable/${id}`));
+    }
+    button.setAttribute("aria-label", name.textContent);
+    row.appendChild(button);
+  }
+  return row.childElementCount ? row : null;
+}
 
 export function renderSceneUsed(panel) {
   if (panel._view !== "edit" || !panel._formData) {

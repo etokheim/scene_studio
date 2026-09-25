@@ -804,7 +804,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## Palette editor is wheel + light-tile slots
 
 - **Date:** 2026-09-16
-- **Decision:** Palette edit (`#palette/<id>`) uses the simple-scene chrome: color wheel plus five light tiles (`slot:0`…`slot:4`). There is no slot color list. Slot brightness is the same vertical drag/wheel as lights.
+- **Decision:** Palette edit (`#palette/<id>`) uses the simple-scene chrome: color wheel plus five light tiles (`slot:0`…`slot:4`). There is no slot color list. Slot brightness is the same vertical drag/wheel as lights. Tile clicks, including Cmd/Ctrl, Shift, and a click on the empty stage, go through `tileSelectionAfterClick` — the same helper as the scene strip. Do not give the palette editor its own selection rules.
 - **Why:** Palettes are the same color language as lights; a numbered swatch list was a second editor.
 - **Do not reverse without user ask.**
 
@@ -1017,7 +1017,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 
 - **Date:** 2026-09-23
 - **Decision:** The new-scene dialog lists the user’s palettes first, then picture sections (Hearth, Study, Dayroom, Small hours). Each picture’s five colors are sampled from that photo. Choosing a picture saves a new palette copied from it, keeps the photo on that palette’s library chip, and points the scene at the copy. Using the same picture again saves another copy, named with a rising number. A copied palette remembers its `builtin_id`. A slot that no longer matches that original shows the same restore control a scene light uses, and restore puts that one slot back. The palette editor groups its colors the way the light strip groups lights, and Select all scales their brightness together.
-- **Why:** A built-in has to stay available to reset against, and each use has to be its own palette so one scene’s edits do not rewrite another. The photographs are credited in `frontend/gallery/CREDITS.md`; the section and palette names are not taken from another app.
+- **Why:** A built-in has to stay available to reset against, and each use has to be its own palette so one scene’s edits do not rewrite another. The photographs are credited in `frontend/gallery/CREDITS.md`; the section and palette names are not taken from another app. The palette editor lists that source preset, plus any variables a slot points at, in the same top-left row a scene uses for its palette and variables.
 - **Do not reverse without user ask.**
 
 ## On/off group and palette base
