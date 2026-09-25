@@ -313,13 +313,16 @@ export const LIGHT_TILES_CSS = `
     top: calc(var(--light-action-outset) * -1);
     border-radius: 18px 18px 0 0;
     background-position: top;
-    box-shadow: var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08));
+    box-shadow:
+      var(--glass-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.08)),
+      0 10px 22px rgba(0, 0, 0, 0.28);
     transform: translateY(var(--light-action-outset));
   }
   .light-tile-actions-bottom {
     bottom: calc(var(--light-action-outset) * -1);
     border-radius: 0 0 18px 18px;
     background-position: bottom;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
     transform: translateY(calc(var(--light-action-outset) * -1));
   }
   /* A side with no button has no plate. An empty one still paints its fill. */

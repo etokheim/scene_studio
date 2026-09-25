@@ -47,6 +47,7 @@
       "theme_event_subtitle": "{name} theme",
       "theme_missing": "Theme not found",
       "add_variable": "Add variable",
+      "add_new_variable": "Add new variable",
       "add_palette": "Add palette",
       "add_theme": "Add theme",
       "new_variable": "New variable",

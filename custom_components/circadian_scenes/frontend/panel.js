@@ -2271,7 +2271,16 @@ class CircadianScenesPanel extends HTMLElement {
           background: color-mix(in srgb, var(--primary-text-color) 12%, transparent);
         }
         .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
-          box-shadow: 0 0 0 2px #fff;
+          box-shadow:
+            0 0 0 2px #fff,
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
+        }
+        :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.palette-active .wheel {
+          box-shadow:
+            0 0 0 2px var(--primary-color),
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
         }
         .wheel-palette-edit {
           display: flex;
@@ -2305,6 +2314,12 @@ class CircadianScenesPanel extends HTMLElement {
           background-size: cover;
           background-position: center;
           flex: 0 0 auto;
+          box-shadow:
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
+        }
+        :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.active {
+          border-color: var(--primary-color);
         }
         .wheel-mode-name {
           display: none;
@@ -2396,6 +2411,9 @@ class CircadianScenesPanel extends HTMLElement {
           transform-origin: center center;
           filter: blur(54px) saturate(1.45);
           opacity: 0.55;
+        }
+        :host(:not([data-dark-mode])) .hue-wheel-glow {
+          opacity: 0.22;
         }
         .hue-wheel-disk {
           position: absolute;
@@ -2762,6 +2780,9 @@ class CircadianScenesPanel extends HTMLElement {
           height: 24px;
           border-radius: 50%;
           flex: 0 0 auto;
+          box-shadow:
+            0 1px 3px rgba(0, 0, 0, 0.4),
+            inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
         }
         .hue-preset-name {
           display: none;
@@ -2780,20 +2801,30 @@ class CircadianScenesPanel extends HTMLElement {
         .hue-preset.active {
           border-color: #fff;
         }
+        :host(:not([data-dark-mode])) .hue-preset.active {
+          border-color: var(--primary-color);
+        }
         .hue-preset {
           background-clip: content-box;
           background-origin: content-box;
         }
         .hue-preset.add {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border-color: transparent;
+        }
+        .hue-preset-add-face {
+          box-sizing: border-box;
           display: grid;
           place-items: center;
-          background: transparent;
-          border-style: dashed;
-          border-color: color-mix(
-            in srgb,
-            var(--primary-text-color) 40%,
-            transparent
-          );
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          border: 1px dashed
+            color-mix(in srgb, var(--primary-text-color) 40%, transparent);
+          flex: 0 0 auto;
         }
         .hue-preset.add ha-icon {
           --mdc-icon-size: 18px;
@@ -3227,6 +3258,20 @@ class CircadianScenesPanel extends HTMLElement {
           grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
           gap: 8px;
         }
+        .scene-gallery-slot {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 0px;
+          gap: 0;
+          align-items: stretch;
+          min-width: 0;
+          transition:
+            grid-template-columns 220ms cubic-bezier(0.2, 0, 0, 1),
+            gap 220ms cubic-bezier(0.2, 0, 0, 1);
+        }
+        .scene-gallery-slot:has(.scene-gallery-card.selected) {
+          grid-template-columns: minmax(0, 1fr) 36px;
+          gap: 8px;
+        }
         .scene-gallery-card {
           position: relative;
           display: block;
@@ -3234,21 +3279,40 @@ class CircadianScenesPanel extends HTMLElement {
           aspect-ratio: 16 / 10;
           margin: 0;
           padding: 0;
-          border: 2px solid transparent;
+          border: 0;
           border-radius: 14px;
           overflow: hidden;
+          appearance: none;
           background: var(--surface-2, #242022);
           color: #fff;
           cursor: pointer;
         }
         .scene-gallery-card.selected {
-          border-color: var(--primary-color);
+          outline: 3px solid var(--primary-color);
+          outline-offset: 3px;
         }
         .scene-gallery-card img {
           width: 100%;
           height: 100%;
           object-fit: cover;
           display: block;
+          border: 0;
+        }
+        .scene-palette-randomize-side {
+          writing-mode: vertical-rl;
+          text-orientation: mixed;
+          min-width: 0;
+          height: 100%;
+          margin: 0;
+          padding: 0;
+          overflow: hidden;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 180ms ease;
+        }
+        .scene-gallery-slot:has(.scene-gallery-card.selected) .scene-palette-randomize-side {
+          opacity: 1;
+          pointer-events: auto;
         }
         .scene-gallery-card span {
           position: absolute;
@@ -3878,7 +3942,6 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 1;
           }
           .wheel-mode-pill .wheel-wrapper.active .wheel {
-            box-shadow: none;
             outline: 2px solid #fff;
             outline-offset: 2px;
           }
@@ -3949,7 +4012,6 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 1;
           }
           .hue-preset.active .hue-preset-swatch {
-            box-shadow: none;
             outline: 2px solid #fff;
             outline-offset: 2px;
           }
@@ -3966,6 +4028,10 @@ class CircadianScenesPanel extends HTMLElement {
             text-align: start;
           }
         }
+        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .wheel-mode-pill .wheel-wrapper.active .wheel,
+        :host(:not([data-dark-mode])) .simple-editor.chrome-aside .hue-preset.active .hue-preset-swatch {
+          outline-color: var(--primary-color);
+        }
         .stage-bg .hue-wheel-glow {
           position: absolute;
           pointer-events: none;
@@ -3975,6 +4041,9 @@ class CircadianScenesPanel extends HTMLElement {
           filter: blur(36px) saturate(1.3);
           opacity: 0.4;
           border-radius: 50%;
+        }
+        :host(:not([data-dark-mode])) .stage-bg .hue-wheel-glow {
+          opacity: 0.16;
         }
         .card-content {
           padding: 16px;
@@ -5950,6 +6019,7 @@ class CircadianScenesPanel extends HTMLElement {
     return {
       getPalette: () => this._variables || [],
       onAddPalette: (draft) => this._addVariableFromCurrentDraft(draft),
+      addVariableLabel: this._t("frontend.library.add_new_variable", "Add new variable"),
     };
   }
 
@@ -6274,7 +6344,6 @@ class CircadianScenesPanel extends HTMLElement {
             selectedKind === "gallery" && card.id === selectedId
           );
         }
-        galleryRandomize.hidden = selectedKind !== "gallery";
         noneChip?.classList.toggle("selected", selectedKind === "none");
         const locked = selectedKind !== "none" && !selectedPalette();
         useBtn.disabled = locked;
@@ -6332,28 +6401,29 @@ class CircadianScenesPanel extends HTMLElement {
           name.textContent = this._t(item.nameKey, item.name);
           card.append(photo, name);
           card.addEventListener("click", () => choose("gallery", item.id));
-          grid.appendChild(card);
+          const slot = document.createElement("div");
+          slot.className = "scene-gallery-slot";
+          const side = document.createElement("ha-button");
+          side.className = "scene-palette-randomize scene-palette-randomize-side";
+          side.appearance = "plain";
+          const sideIcon = document.createElement("ha-icon");
+          sideIcon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
+          sideIcon.slot = "icon";
+          side.append(
+            sideIcon,
+            this._t("frontend.dialogs.scene_palette_randomize", "Randomize")
+          );
+          side.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            seed = (Math.random() * 0xffffffff) >>> 0;
+            void applyPreview();
+          });
+          slot.append(card, side);
+          grid.appendChild(slot);
           cards.push({ id: item.id, el: card });
         }
         list.append(label, grid);
       }
-      const galleryRandomize = document.createElement("ha-button");
-      galleryRandomize.className = "scene-palette-randomize";
-      galleryRandomize.appearance = "plain";
-      galleryRandomize.hidden = true;
-      const galleryRandomizeIcon = document.createElement("ha-icon");
-      galleryRandomizeIcon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
-      galleryRandomizeIcon.slot = "icon";
-      galleryRandomize.appendChild(galleryRandomizeIcon);
-      galleryRandomize.append(
-        this._t("frontend.dialogs.scene_palette_randomize", "Randomize")
-      );
-      galleryRandomize.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        seed = (Math.random() * 0xffffffff) >>> 0;
-        void applyPreview();
-      });
-      list.appendChild(galleryRandomize);
       dialog.append(hint, liveToggle, list);
       const footer = customElements.get("ha-dialog-footer")
         ? document.createElement("ha-dialog-footer")

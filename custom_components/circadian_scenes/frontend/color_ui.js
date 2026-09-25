@@ -2435,6 +2435,7 @@ function createSceneColorWheel({
   onChange,
   getPalette,
   onAddPalette,
+  addVariableLabel = "Add new variable",
   getCapabilities,
   getAssignmentSeed,
   getAssignmentEntityId,
@@ -3589,10 +3590,16 @@ function createSceneColorWheel({
       add.type = "button";
       add.className = "hue-preset add";
       add.setAttribute("role", "listitem");
-      add.title = "Add variable";
+      add.title = addVariableLabel;
+      const face = document.createElement("span");
+      face.className = "hue-preset-add-face";
       const icon = document.createElement("ha-icon");
       icon.setAttribute("icon", "mdi:plus");
-      add.appendChild(icon);
+      face.appendChild(icon);
+      const name = document.createElement("span");
+      name.className = "hue-preset-name";
+      name.textContent = addVariableLabel;
+      add.append(face, name);
       add.addEventListener("click", async () => {
         if (!active?.draft) {
           return;
@@ -4009,10 +4016,12 @@ function createSceneColorWheel({
               drag?.moved && (drag.ids || []).some((id) => group.includes(id))
             ) ||
             group.some((id) => selectedIds.includes(id));
-          const dotScale = expandGroup ? 1 : Math.min(4, group.length);
-          leadMarker.g.querySelector(".pin-dot-outline")?.setAttribute("r", String(8 * dotScale));
-          leadMarker.g.querySelector(".pin-dot-fill")?.setAttribute("r", String(6 * dotScale));
-          leadMarker.hit?.setAttribute("r", String(20 * dotScale));
+          // 16px at one light, 32px at four or more. The hit target stays 40px.
+          const steps = Math.min(4, group.length) - 1;
+          const outlineR = expandGroup ? 8 : 8 + (8 * steps) / 3;
+          leadMarker.g.querySelector(".pin-dot-outline")?.setAttribute("r", String(outlineR));
+          leadMarker.g.querySelector(".pin-dot-fill")?.setAttribute("r", String(outlineR * 0.75));
+          leadMarker.hit?.setAttribute("r", "20");
           if (leadMarker.fo) {
             leadMarker.fo.style.display = "none";
           }
