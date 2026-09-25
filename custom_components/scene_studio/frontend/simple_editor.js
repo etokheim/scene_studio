@@ -79,11 +79,18 @@ function verticalChromeWidth(editor, chrome) {
   return text + 24 + 8 + 16;
 }
 
-/** Modes and variables stack beside the disk while they can sit 48–80px past its edge. The light list stays under the disks. */
+/** Modes and variables stack beside the disk while they can sit 48–80px past its edge. The light list stays under the disks.
+ *  A narrow panel keeps the top band instead: that band and this column were both
+ *  fitting around 800px and the presets jumped between them on every resize. */
 function bindWheelAside(editor) {
   const GAP_MAX = 80;
   const GAP_MIN = 48;
+  const host = editor.getRootNode()?.host;
   const apply = () => {
+    if (host?.hasAttribute?.("narrow")) {
+      editor.classList.remove("lights-aside", "chrome-aside");
+      return;
+    }
     const col = editor.clientWidth;
     const height = editor.clientHeight;
     if (!col || !height) {
@@ -106,9 +113,15 @@ function bindWheelAside(editor) {
     }
   };
   editor._wheelAside?.disconnect();
+  editor._wheelAsideAttr?.disconnect();
   const observer = new ResizeObserver(apply);
   observer.observe(editor);
   editor._wheelAside = observer;
+  if (host?.nodeType === Node.ELEMENT_NODE) {
+    const attr = new MutationObserver(apply);
+    attr.observe(host, { attributes: true, attributeFilter: ["narrow"] });
+    editor._wheelAsideAttr = attr;
+  }
   apply();
 }
 
@@ -142,7 +155,7 @@ export const SIMPLE_EDITOR_CSS = `
   }
   :host([narrow]) .simple-editor:not(.chrome-aside) .hue-wheel-chrome {
     position: absolute;
-    top: 0;
+    top: 8px;
     left: 0;
     right: 0;
     z-index: 5;

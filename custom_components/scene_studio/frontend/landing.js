@@ -210,6 +210,7 @@ export const LANDING_CSS = `
     width: 100%;
     max-width: 100%;
     min-height: 48px;
+    margin-top: 8px;
     padding: 0 8px;
     box-sizing: border-box;
     overflow-x: auto;

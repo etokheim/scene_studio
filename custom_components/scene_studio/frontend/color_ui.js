@@ -3380,7 +3380,6 @@ function createSceneColorWheel({
   };
 
   const syncModePill = () => {
-    modePill.replaceChildren();
     const state = getState();
     const { scenes, activeId } = state;
     const item = scenes.find((row) => row.id === activeId);
@@ -3402,16 +3401,23 @@ function createSceneColorWheel({
       palette: sceneHasPalette || pal || typeof onPickPalette === "function",
     });
     const lightsSelected = selected.length > 0;
-    modePill.hidden =
+    const pillHidden =
       !lightsSelected ||
       selected.every((row) => !row.hasColor && !row.hasTemp) ||
       modes.length < 2;
     randomizeBtn.hidden =
       !lightsSelected || !pal || typeof onRandomizeSeed !== "function";
-    wantModes = !(modePill.hidden && randomizeBtn.hidden);
-    if (modePill.hidden) {
+    wantModes = !(pillHidden && randomizeBtn.hidden);
+    // Leave the buttons mounted while the cluster fades out. Clearing them
+    // here collapsed the bar before the opacity transition could run.
+    if (!wantModes) {
       return;
     }
+    modePill.hidden = pillHidden;
+    if (pillHidden) {
+      return;
+    }
+    modePill.replaceChildren();
     const caps = capsOf(item || {});
     const locked = lockedUiMode();
     const current =
@@ -3580,6 +3586,8 @@ function createSceneColorWheel({
   };
 
   const posePiece = (el, show, animate, afterHide) => {
+    // Drop a fade that has not finished. Do not run its cleanup: that removes
+    // the buttons the new pose just built.
     el._chromeHide?.();
     el._chromeHide = null;
     if (show) {
@@ -3599,17 +3607,23 @@ function createSceneColorWheel({
       return;
     }
     el.classList.remove("is-shown");
+    let timer = 0;
+    const finish = () => {
+      window.clearTimeout(timer);
+      el.removeEventListener("transitionend", onEnd);
+      if (el._chromeHide === cancel) {
+        el._chromeHide = null;
+      }
+    };
     const hide = () => {
       if (el.classList.contains("is-shown")) {
+        finish();
         return;
       }
       el.hidden = true;
       dropScrollHint();
+      finish();
       afterHide?.();
-      el.removeEventListener("transitionend", onEnd);
-      if (el._chromeHide === hide) {
-        el._chromeHide = null;
-      }
     };
     const onEnd = (ev) => {
       if (ev.target !== el || ev.propertyName !== "opacity") {
@@ -3617,13 +3631,16 @@ function createSceneColorWheel({
       }
       hide();
     };
+    const cancel = () => {
+      finish();
+    };
     if (!animate) {
       hide();
       return;
     }
-    el._chromeHide = hide;
+    el._chromeHide = cancel;
     el.addEventListener("transitionend", onEnd);
-    window.setTimeout(hide, 280);
+    timer = window.setTimeout(hide, 280);
   };
 
   const poseChrome = () => {
@@ -3661,8 +3678,19 @@ function createSceneColorWheel({
     }
     chrome.hidden = false;
     chrome.classList.add("is-shown");
-    posePiece(modeCluster, wantModes, modesAnimate);
-    posePiece(presets, wantPresets, presetsAnimate);
+    posePiece(modeCluster, wantModes, modesAnimate, () => {
+      if (!wantModes) {
+        modePill.replaceChildren();
+        modePill.hidden = true;
+      }
+    });
+    posePiece(presets, wantPresets, presetsAnimate, () => {
+      if (!wantPresets) {
+        presetTrack.replaceChildren();
+        paletteColors.replaceChildren();
+        paletteColors.hidden = true;
+      }
+    });
   };
 
   const updatePresetOverflow = () => {
@@ -3734,7 +3762,6 @@ function createSceneColorWheel({
   };
 
   const syncPresets = () => {
-    presetTrack.replaceChildren();
     const state = getState();
     const { scenes, activeId } = state;
     const active = scenes.find((item) => item.id === activeId);
@@ -3744,10 +3771,11 @@ function createSceneColorWheel({
       "aria-label",
       t("frontend.library.variables", "Variables")
     );
-    syncPaletteColors();
     if (!wantPresets) {
       return;
     }
+    syncPaletteColors();
+    presetTrack.replaceChildren();
     for (const variable of palette) {
       if (variableIsPalette(variable)) {
         continue;
