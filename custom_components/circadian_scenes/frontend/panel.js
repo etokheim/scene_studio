@@ -3782,7 +3782,7 @@ class CircadianScenesPanel extends HTMLElement {
           .hue-wheel-chrome {
             position: absolute;
             top: 50%;
-            left: calc(50% + 200px);
+            left: calc(50% + var(--wheel-half, 0px) + var(--chrome-gap, 16px));
             right: auto;
             bottom: auto;
             transform: translateY(-50%);
@@ -3790,11 +3790,13 @@ class CircadianScenesPanel extends HTMLElement {
             flex-direction: column;
             align-items: flex-start;
             justify-content: flex-start;
-            width: 200px;
-            max-width: min(200px, calc(50% - 16px));
+            width: max-content;
+            max-width: calc(50% - var(--wheel-half, 0px) - var(--chrome-gap, 16px) - 8px);
             height: auto;
             max-height: 100%;
             min-height: 0;
+            padding: 6px 4px 6px 6px;
+            box-sizing: border-box;
             overflow-x: hidden;
             overflow-y: auto;
             scrollbar-width: none;
@@ -3837,8 +3839,10 @@ class CircadianScenesPanel extends HTMLElement {
             top: 0;
             z-index: 2;
             align-items: flex-start;
-            width: 100%;
-            padding-bottom: 10px;
+            align-self: flex-start;
+            width: max-content;
+            max-width: 100%;
+            padding: 0 0 10px;
             margin-bottom: 12px;
             border-bottom: 1px solid var(--divider-color);
             background: none;
@@ -3863,16 +3867,19 @@ class CircadianScenesPanel extends HTMLElement {
             align-items: center;
             justify-content: flex-start;
             gap: 8px;
-            padding: 0;
+            padding: 4px 0;
             border-color: transparent;
             opacity: 0.75;
+            overflow: visible;
           }
           .wheel-mode-pill .wheel-wrapper.active {
             border-color: transparent;
             opacity: 1;
           }
           .wheel-mode-pill .wheel-wrapper.active .wheel {
-            box-shadow: 0 0 0 2px transparent, 0 0 0 4px #fff;
+            box-shadow: none;
+            outline: 2px solid #fff;
+            outline-offset: 2px;
           }
           .wheel-mode-pill .wheel-wrapper.palette-active {
             width: auto;
@@ -3894,14 +3901,16 @@ class CircadianScenesPanel extends HTMLElement {
           }
           .wheel-mode-name {
             display: block;
+            max-width: none;
+            overflow: visible;
             text-align: start;
           }
           .hue-presets {
             flex-direction: column;
             align-items: flex-start;
             justify-content: flex-start;
-            width: 100%;
-            max-width: 200px;
+            width: max-content;
+            max-width: 100%;
             height: auto;
             max-height: none;
             min-height: 0;
@@ -3915,7 +3924,7 @@ class CircadianScenesPanel extends HTMLElement {
           .hue-presets-track {
             flex-direction: column;
             align-items: flex-start;
-            width: 100%;
+            width: max-content;
             max-width: 100%;
             overflow: visible;
           }
@@ -3930,7 +3939,7 @@ class CircadianScenesPanel extends HTMLElement {
             flex-direction: row;
             justify-content: flex-start;
             gap: 8px;
-            padding: 2px 2px 2px 10px;
+            padding: 4px 0;
             border-color: transparent;
             opacity: 0.75;
           }
@@ -3939,7 +3948,9 @@ class CircadianScenesPanel extends HTMLElement {
             opacity: 1;
           }
           .hue-preset.active .hue-preset-swatch {
-            box-shadow: 0 0 0 2px transparent, 0 0 0 4px #fff;
+            box-shadow: none;
+            outline: 2px solid #fff;
+            outline-offset: 2px;
           }
           .hue-preset.active .hue-preset-name {
             font-weight: 700;
@@ -3949,7 +3960,8 @@ class CircadianScenesPanel extends HTMLElement {
           }
           .hue-preset-name {
             display: block;
-            max-width: 148px;
+            max-width: none;
+            overflow: visible;
             text-align: start;
           }
         }

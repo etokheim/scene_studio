@@ -48,10 +48,20 @@ function bindWheelAside(editor) {
     if (!col || !height) {
       return;
     }
-    const disk = Math.min(col, height, 650);
+    const canvas = editor.querySelector(".hue-wheel-canvas");
+    const face = editor.querySelector(".hue-wheel-face");
+    const disk = canvas?.offsetWidth || Math.min(col, height, 650);
     const gutter = (col - disk) / 2;
     editor.classList.remove("lights-aside");
-    editor.classList.toggle("chrome-aside", gutter >= LIGHT_ASIDE_MIN);
+    const aside = gutter >= LIGHT_ASIDE_MIN;
+    editor.classList.toggle("chrome-aside", aside);
+    if (aside && face) {
+      const half = disk / 2;
+      const room = Math.max(0, face.clientWidth / 2 - half);
+      const gap = Math.max(12, Math.min(200, room - 168));
+      face.style.setProperty("--wheel-half", `${half}px`);
+      face.style.setProperty("--chrome-gap", `${gap}px`);
+    }
   };
   editor._wheelAside?.disconnect();
   const observer = new ResizeObserver(apply);
