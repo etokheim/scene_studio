@@ -2,6 +2,9 @@ __pycache__
 .venv/
 .pytest_cache/
 
+# Preview photos for picking palette pictures. Not shipped.
+dev/palette-candidates/
+
 # Local sandbox runtime (keep the committed starter YAML)
 dev/config/*
 !dev/config/configuration.yaml
