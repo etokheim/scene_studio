@@ -23,7 +23,7 @@
     "empty": {
       "extrapolation": "No circadian scenes yet. Create one to start lighting a room from the sun.",
       "extrapolation_title": "Start lighting with the sun",
-      "extrapolation_body": "Scene Studio blend your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day.",
+      "extrapolation_body": "Scene Studio blends your room’s lights between solar events — dawn, sunrise, noon, sunset, and dusk — so brightness and color follow the day.",
       "extrapolation_example": "Create a scene for a room from an area, or auto configure all areas that have lights.",
       "auto_configure_body": "Auto configure creates a circadian scene for every area that has lights, using the default theme. You can edit variables and themes here anytime — lights update the next time a scene runs.",
       "area_no_scenes": "No scenes yet — create one for this area",
