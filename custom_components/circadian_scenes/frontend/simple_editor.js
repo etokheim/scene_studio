@@ -382,10 +382,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     return draft;
   };
 
-  let selectedIds = new Set(members[0] ? [members[0]] : []);
+  // Opening the editor leaves every light unselected until the user clicks one.
+  let selectedIds = new Set();
   let touchSelectMode = false;
   let peeledId = null;
-  let anchorId = members[0] || null;
+  let anchorId = null;
   let stripOrderIds = [];
   let pinClusters = [];
   const selectedMemberIds = () => members.filter((id) => selectedIds.has(id));
@@ -1982,8 +1983,8 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
   const wheels = document.createElement("div");
   wheels.className = "simple-wheels";
   const ids = [...Array(PALETTE_SLOT_COUNT)].map((_, i) => `slot:${i}`);
-  let selectedIds = new Set([ids[0]]);
-  let anchorId = ids[0];
+  let selectedIds = new Set();
+  let anchorId = null;
   let stripOrderIds = [...ids];
   const primaryId = () => [...selectedIds][0] || null;
   let applySlotClick = () => {};
