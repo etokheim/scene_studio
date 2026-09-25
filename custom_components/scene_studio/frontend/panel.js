@@ -11666,6 +11666,108 @@ class SceneStudioPanel extends HTMLElement {
     this.shadowRoot.appendChild(dialog);
   }
 
+  _confirmDeleteLibraryItem(kind, item) {
+    if (!item?.id) {
+      return;
+    }
+    this.shadowRoot.querySelector("ha-dialog.confirm-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "confirm-dialog";
+    const titleKey =
+      kind === "theme"
+        ? "frontend.library.delete_theme"
+        : kind === "palette"
+          ? "frontend.library.delete_palette"
+          : "frontend.library.delete_variable";
+    const titleFallback =
+      kind === "theme"
+        ? "Delete theme?"
+        : kind === "palette"
+          ? "Delete palette?"
+          : "Delete variable?";
+    dialog.setAttribute("header-title", this._t(titleKey, titleFallback));
+    dialog.open = true;
+    const name = item.name || "";
+    const text = document.createElement("p");
+    text.textContent = this._t(
+      "frontend.library.delete_confirm",
+      "Are you sure you want to delete {name}?",
+      { name }
+    );
+    dialog.appendChild(text);
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    const confirm = document.createElement("ha-button");
+    confirm.slot = "primaryAction";
+    confirm.variant = "danger";
+    confirm.textContent = this._t("frontend.common.delete", "Delete");
+    confirm.addEventListener("click", async () => {
+      confirm.disabled = true;
+      try {
+        await this._deleteLibraryItem(kind, item);
+        dialog.open = false;
+      } catch (err) {
+        confirm.disabled = false;
+        let note = dialog.querySelector(".error");
+        if (!note) {
+          note = document.createElement("p");
+          note.className = "error";
+          text.insertAdjacentElement("afterend", note);
+        }
+        note.textContent = err.message || String(err);
+      }
+    });
+    footer.append(cancel, confirm);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
+  }
+
+  async _deleteLibraryItem(kind, item) {
+    const id = item?.id;
+    if (!id) {
+      return;
+    }
+    window.clearTimeout(this._saveSoonTimer);
+    this._saveSoonTimer = null;
+    const openVariable =
+      (kind === "variable" || kind === "palette") && this._variableId === id;
+    const openTheme = kind === "theme" && this._themeId === id;
+    if (openVariable) {
+      this._variableDraft = null;
+    }
+    if (openTheme) {
+      this._themeDraft = null;
+    }
+    if (kind === "theme") {
+      await this._hass.callWS({
+        type: `${DOMAIN}/delete_theme`,
+        theme_id: id,
+      });
+      this._themes = (this._themes || []).filter((row) => row.id !== id);
+    } else {
+      await this._hass.callWS({
+        type: `${DOMAIN}/delete_variable`,
+        variable_id: id,
+      });
+      this._variables = (this._variables || []).filter((row) => row.id !== id);
+    }
+    if (openVariable || openTheme) {
+      await this._go("");
+      return;
+    }
+    this._render();
+  }
+
   _handleOverflow(action) {
     if (!action) {
       return;

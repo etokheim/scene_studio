@@ -690,27 +690,32 @@ class SceneStudioStore:
         """Delete a variable.  Raises if still referenced by themes or scenes."""
         if var_id not in self.variables:
             return False
+        name = self.variables[var_id].get("name") or var_id
+
+        def still_used(where: str) -> None:
+            raise HomeAssistantError(f"{name} is still referenced by {where}")
+
         for other in self.variables.values():
             if other.get("id") == var_id:
                 continue
             for slot in other.get("slots") or []:
                 if isinstance(slot, dict) and slot.get(VARIABLE_REF) == var_id:
-                    raise HomeAssistantError(
-                        f"Variable {var_id!r} is still referenced by "
-                        f"palette {other.get('name', other.get('id'))!r}"
-                    )
+                    still_used(f"palette {other.get('name', other.get('id'))}")
         # Check theme refs.
         for theme in self.themes.values():
             for ev in (theme.get("events") or {}).values():
                 if isinstance(ev, dict):
                     color = ev.get("color") or {}
                     if color.get(VARIABLE_REF) == var_id:
-                        raise HomeAssistantError(
-                            f"Variable {var_id!r} is still referenced by "
-                            f"theme {theme.get('name', theme['id'])!r}"
-                        )
+                        still_used(f"theme {theme.get('name', theme['id'])}")
         # Check scene light refs.
         for sc in self.scenes.values():
+            scene_name = sc.get(SCENE_NAME, sc["id"])
+            if sc.get("palette_id") == var_id:
+                still_used(f"scene {scene_name}")
+            for entry in (sc.get("event_palettes") or {}).values():
+                if isinstance(entry, dict) and entry.get("palette_id") == var_id:
+                    still_used(f"scene {scene_name}")
             if sc.get("kind") == KIND_SIMPLE:
                 for light in (sc.get("lights") or {}).values():
                     color = light.get("color") if isinstance(light, dict) else None
@@ -721,10 +726,7 @@ class SceneStudioStore:
                             and color.get(VARIABLE_REF) == var_id
                         )
                     ):
-                        raise HomeAssistantError(
-                            f"Variable {var_id!r} is still referenced by "
-                            f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
-                        )
+                        still_used(f"scene {scene_name}")
             elif sc.get("kind") == KIND_CIRCADIAN:
                 for light_overrides in (sc.get("overrides") or {}).values():
                     for override in (
@@ -744,10 +746,7 @@ class SceneStudioStore:
                                 and color.get(VARIABLE_REF) == var_id
                             )
                         ):
-                            raise HomeAssistantError(
-                                f"Variable {var_id!r} is still referenced by "
-                                f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
-                            )
+                            still_used(f"scene {scene_name}")
         previous = self.variables.pop(var_id)
         try:
             await self.async_save()

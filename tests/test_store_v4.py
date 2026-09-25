@@ -289,6 +289,37 @@ def test_delete_variable_rejects_circadian_override_reference():
     asyncio.run(run())
 
 
+def test_delete_variable_rejects_scene_palette_id():
+    async def run():
+        store = _bare_store()
+        store.variables = {"pal": {"id": "pal", "name": "Spring", "kind": "palette"}}
+        store.scenes = {
+            "scene": {
+                "id": "scene",
+                "kind": KIND_SIMPLE,
+                SCENE_NAME: "Mantel",
+                "palette_id": "pal",
+            }
+        }
+        with pytest.raises(HomeAssistantError, match="still referenced"):
+            await store.async_delete_variable("pal")
+        assert "pal" in store.variables
+
+        store.scenes = {
+            "scene": {
+                "id": "scene",
+                "kind": KIND_CIRCADIAN,
+                SCENE_NAME: "Kitchen",
+                "event_palettes": {"noon": {"palette_id": "pal"}},
+            }
+        }
+        with pytest.raises(HomeAssistantError, match="still referenced"):
+            await store.async_delete_variable("pal")
+        assert "pal" in store.variables
+
+    asyncio.run(run())
+
+
 def test_theme_keeps_builtin_id():
     async def run():
         store = _bare_store()

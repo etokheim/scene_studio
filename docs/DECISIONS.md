@@ -119,6 +119,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 - **Date:** 2026-09-24
 - **Decision:** The area rail opens on **Scenes**. With a scene selected, the rest of that column fades until the pointer is over the rail; the hover rule has to outrank the fade rule or the rows stay dim. Variables, palettes, and circadian themes share a **Library** tab. Editing a scene lists the theme, palettes, and variables it uses at the top left of the editor, over the corner so the list does not take a row in the editor column. Choosing one opens that item and switches the rail to the tab that lists it, scrolled so the item is in view. On a circadian scene that list is its own row in the dial toolbar, under the time and play controls. The dial time, sun angle, and play control stay on the circadian readout; the readout node is created with the dial (the table chart that used to create it is gone).
 - **Superseded in part:** 2026-09-25 — the circadian used-items row sits under Play scene live. See “Theme split and palette mode button”.
+- **Superseded in part:** 2026-09-25 — each library chip has a menu to delete that variable, palette, or theme. Delete asks first. The store still refuses when a scene, theme, or palette references the item, including a simple scene’s palette and a circadian scene’s per-event palette.
 - **Why:** The scene list was buried under the library. Used items need a way back to their editors without hunting the column.
 - **Do not reverse without user ask.**
 

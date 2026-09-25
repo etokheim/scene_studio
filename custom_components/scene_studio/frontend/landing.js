@@ -670,6 +670,26 @@ export const LANDING_CSS = `
     cursor: pointer;
     padding: 0;
   }
+  .library-chip {
+    position: relative;
+    display: flex;
+    max-width: 100%;
+  }
+  /* Dots sit on the swatch. The store still refuses a delete while a scene,
+     theme, or palette references the item. */
+  .library-chip-menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 3;
+    --mdc-icon-button-size: 28px;
+    color: var(--primary-text-color);
+  }
+  .library-chip-menu ha-icon-button {
+    border-radius: 50%;
+    background: var(--app-header-background-color, var(--sidebar-background-color));
+    color: var(--primary-text-color);
+  }
   .var-chip.selected span,
   .theme-chip.selected span {
     color: var(--primary-text-color);
@@ -1401,6 +1421,48 @@ export function createPaletteChip(palette, catalog, { selected = false, onClick 
   return chip;
 }
 
+function libraryOverflow(panel, kind, item) {
+  const slot = document.createElement("div");
+  slot.className = "library-chip-menu";
+  const menu = document.createElement("ha-dropdown");
+  menu.activatable = true;
+  const trigger = document.createElement("ha-icon-button");
+  trigger.slot = "trigger";
+  trigger.label = panel._t("frontend.library.delete_menu", "Delete {name}", {
+    name: item?.name || "",
+  });
+  const icon = document.createElement("ha-icon");
+  icon.setAttribute("icon", "mdi:dots-vertical");
+  trigger.appendChild(icon);
+  menu.appendChild(trigger);
+  const action = document.createElement("ha-dropdown-item");
+  action.value = "delete";
+  action.variant = "danger";
+  const actionIcon = document.createElement("ha-icon");
+  actionIcon.setAttribute("icon", "mdi:delete");
+  actionIcon.slot = "icon";
+  action.append(
+    actionIcon,
+    document.createTextNode(panel._t("frontend.common.delete", "Delete"))
+  );
+  menu.appendChild(action);
+  menu.addEventListener("wa-select", (ev) => {
+    ev.stopPropagation();
+    if (ev.detail?.item?.value === "delete") {
+      panel._confirmDeleteLibraryItem(kind, item);
+    }
+  });
+  slot.appendChild(menu);
+  return slot;
+}
+
+function libraryChip(panel, chip, kind, item) {
+  const wrap = document.createElement("div");
+  wrap.className = "library-chip";
+  wrap.append(chip, libraryOverflow(panel, kind, item));
+  return wrap;
+}
+
 function renderLibrary(panel, { compact } = {}) {
   const wrap = document.createElement("div");
   if (!compact) {
@@ -1451,7 +1513,7 @@ function renderLibrary(panel, { compact } = {}) {
     name.textContent = variable.name;
     chip.append(dot, name);
     chip.addEventListener("click", () => panel._openVariableEditor(variable));
-    varRow.appendChild(chip);
+    varRow.appendChild(libraryChip(panel, chip, "variable", variable));
   }
   wrap.appendChild(libraryBlock(varHead, varRow));
 
@@ -1477,7 +1539,7 @@ function renderLibrary(panel, { compact } = {}) {
       selected: panel._view === "palette" && panel._variableId === palette.id,
       onClick: () => panel._openPaletteEditor(palette),
     });
-    palRow.appendChild(chip);
+    palRow.appendChild(libraryChip(panel, chip, "palette", palette));
   }
   wrap.appendChild(libraryBlock(palHead, palRow));
 
@@ -1514,7 +1576,7 @@ function renderLibrary(panel, { compact } = {}) {
     name.textContent = theme.name;
     chip.append(dial, name);
     chip.addEventListener("click", () => panel._openThemeEditor(theme));
-    themeRow.appendChild(chip);
+    themeRow.appendChild(libraryChip(panel, chip, "theme", theme));
   }
   wrap.appendChild(libraryBlock(themeHead, themeRow));
   return wrap;
