@@ -7,11 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🚨 Breaking changes
+
+- 🚨 The integration is **Scene Studio** now (domain `scene_studio`, was Circadian Scenes). Your scenes copy over on first load. The old config entry does not — remove it and add Scene Studio once. Search **Scene Studio** in HACS
+
+### Summary:
+
+One sidebar for ordinary scenes and sun-following ones. Start from a picture or a theme, name the room after it, and keep colors in a library you can actually edit.
+
 ### Added
+
+- ⭐ New scene from a picture palette, or a circadian scene from a theme preset (Daylight, Hearth, Blue hour). The scene takes that name — and “Name 2” when the room already has it
+- Library tab for color variables, palettes, and circadian themes. Edit them in the main column. Delete one from its chip; if a scene still uses it, the dialog stays open and says where
+- Palette photos on the theme dial, fading into the next solar event. Brightness darkens the photo and the light tiles that inherit the theme
+- Reset a palette slot, or a solar event, back to the preset it was copied from
+- Undo and redo in the scene, circadian, palette, variable, and theme editors
+- Auto configure: a circadian scene for every area that has lights
+- Play a scene live, and set how long that play runs
+- Earliest dusk is one house-wide setting, so lights do not dim too early
+- Translations for the new editor, in Bokmål, Nynorsk, German, and Spanish
 
 ### Changed
 
+- The rail is your scenes, grouped by area, with Library beside it. Sticky titles use the same surface as the app header
+- On a phone the wheel stays on screen. Presets scroll in their own row, and a finger on the dial does not scroll the page
+- A circadian palette belongs to the solar event. Lights that cannot do color stay off a mixed palette; temperature bulbs only join an all-kelvin one
+- Disks restack when you let go of a pin, not while you are still dragging
+
 ### Fixed
+
+- Theme brightness stays on the dial and on lights that inherit it — dragging it no longer drops the palette
+- Undo brings a palette slot or a variable’s color back
+- Rename no longer knocks out the undo tooltip
 
 ## [5.0.0] - 2026-09-02
 

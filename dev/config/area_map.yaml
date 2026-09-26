@@ -59,6 +59,8 @@ entities:
   light.kjokken_overoy: kjokken
   light.soverom_tak: soverom
   light.soverom_garderobe: soverom
+  light.soverom_leselys: soverom
+  light.soverom_nattlys: soverom
   scene.stue_dag: stue
   scene.stue_kveld: stue
   scene.stue_natt: stue

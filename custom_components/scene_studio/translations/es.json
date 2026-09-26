@@ -1,0 +1,356 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Scene Studio ya está configurado",
+      "single_instance_allowed": "Scene Studio ya está configurado. Ábrelo desde la barra lateral para añadir escenas."
+    },
+    "error": {
+      "unknown": "Error inesperado"
+    },
+    "step": {
+      "user": {
+        "title": "Scene Studio",
+        "description": "Añade Scene Studio a la barra lateral. Crea y edita habitaciones desde ahí: una integración, tantas áreas como necesites. Luz diurna que sigue el sol entre tus escenas."
+      }
+    }
+  },
+  "frontend": {
+    "title": "Scene Studio",
+    "tabs": {
+      "extrapolation": "Escenas circadianas",
+      "created": "Escenas creadas"
+    },
+    "empty": {
+      "extrapolation": "Aún no hay escenas circadianas. Crea una para iluminar una habitación según el sol.",
+      "extrapolation_title": "Empieza a iluminar con el sol",
+      "extrapolation_body": "Scene Studio mezcla las luces de la habitación entre eventos solares — amanecer civil, orto, mediodía, ocaso y crepúsculo — para que brillo y color sigan el día.",
+      "extrapolation_example": "Crea una escena para una habitación a partir de un área, o configura automáticamente todas las áreas que tengan luces.",
+      "auto_configure_body": "Configurar automáticamente crea una escena circadiana para cada área con luces, usando el tema predeterminado. Puedes editar variables y temas aquí cuando quieras: las luces cambian la próxima vez que se ejecuta una escena.",
+      "area_no_scenes": "Aún no hay escenas — crea una para esta área",
+      "select_scene": "Selecciona una escena para empezar",
+      "select_scene_body": "Elige una escena de la lista para editar sus luces a lo largo del día, o añade una escena desde un área.",
+      "no_areas": "Aún no hay áreas de Home Assistant. Añade plantas y áreas en Ajustes, y vuelve.",
+      "learn_more": "Más información"
+    },
+    "library": {
+      "title": "Variables y temas",
+      "hint": "Cambiar una variable o un tema actualiza las escenas que aún lo usan. Las luces cambian en la siguiente activación o actualización automática, no al instante.",
+      "variables": "Variables",
+      "palettes": "Paletas",
+      "tab_scenes": "Escenas",
+      "tab_library": "Biblioteca",
+      "themes": "Temas circadianos",
+      "variable_edit_hint": "El color y el brillo los comparten cada tema o luz que aún usa esta variable.",
+      "palette_edit_hint": "Una paleta son cinco colores. Las luces que la usan eligen una ranura; cambiar la paleta actualiza esas luces la próxima vez que se ejecuta una escena.",
+      "theme_hint": "Abre un tema para editar color y brillo en cada evento solar. Los cambios se aplican a cada escena circadiana que aún usa el tema. Las anulaciones por luz se quedan.",
+      "theme_edit_hint": "Editar {name} cambia cada escena circadiana que aún usa este tema. Las anulaciones por luz en esas escenas se quedan.",
+      "theme_event_subtitle": "Tema {name}",
+      "theme_missing": "Tema no encontrado",
+      "delete_menu": "Eliminar {name}",
+      "delete_variable": "¿Eliminar variable?",
+      "delete_palette": "¿Eliminar paleta?",
+      "delete_theme": "¿Eliminar tema?",
+      "delete_confirm": "¿Seguro que quieres eliminar {name}?",
+      "add_variable": "Añadir variable",
+      "add_new_variable": "Añadir nueva variable",
+      "add_palette": "Añadir paleta",
+      "add_theme": "Añadir tema",
+      "new_variable": "Nueva variable",
+      "new_palette": "Nueva paleta",
+      "new_theme": "Nuevo tema",
+      "slot_label": "Ranura {n}",
+      "slot": "Ranura",
+      "kelvin": "Kelvin",
+      "slot_custom": "Color personalizado",
+      "randomize": "Aleatorio",
+      "variable_missing": "Variable no encontrada",
+      "palette_missing": "Paleta no encontrada"
+    },
+    "kinds": {
+      "circadian": "Escena circadiana",
+      "simple": "Escena"
+    },
+    "create": {
+      "title": "Crear escena",
+      "kind": "Tipo de escena",
+      "theme": "Tema",
+      "circadian": "Crear escena circadiana",
+      "scene": "Crear escena"
+    },
+    "list": {
+      "column_name": "Nombre"
+    },
+    "settings": {
+      "title": "Ajustes",
+      "intro": "Estos ajustes se aplican a todas las habitaciones. Los cambios tienen efecto de inmediato.",
+      "automatically_update_lights": "Actualizar luces automáticamente",
+      "automatically_update_lights_on_helper": "Tras activar una escena, las luces siguen ajustándose con el intervalo de Ajustes para que la habitación siga el sol. Toca para desactivarlo en todas las habitaciones.",
+      "automatically_update_lights_off_helper": "Las actualizaciones automáticas están desactivadas. Activar una escena aplica las luces una vez. Toca para volver a activar las actualizaciones en todas las habitaciones.",
+      "automatically_update_lights_interval": "Intervalo de actualización automática de luces",
+      "automatically_update_lights_interval_helper": "Tras activar una escena, sigue actualizando las luces con esa frecuencia y la misma duración de transición (objetivo = cómo debe verse la habitación al final de la transición). 0 desactiva las actualizaciones automáticas en todas las habitaciones — igual que el control de la parte superior de la lista.",
+      "automatically_update_lights_interval_minutes": "Minutos",
+      "scene_settings": "Ajustes de escena",
+      "hidden_in_ha": "Oculta en Home Assistant",
+      "dusk_minimum_time_of_day": "Hora más temprana para el crepúsculo",
+      "dusk_minimum_time_of_day_helper": "Para evitar que las luces se atenúen demasiado y demasiado pronto. Se aplica a todas las escenas circadianas y temas."
+    },
+    "common": {
+      "untitled": "Sin título",
+      "other_areas": "Otras áreas",
+      "no_area": "Sin área",
+      "back": "Atrás",
+      "close": "Cerrar",
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "discard": "Descartar",
+      "keep_editing": "Seguir editando",
+      "choose_scene": "Elegir escena",
+      "dismiss": "Cerrar",
+      "change": "Cambiar",
+      "preview": "Vista previa",
+      "search": "Buscar",
+      "name": "Nombre",
+      "new_scene": "Nueva escena",
+      "description": "Descripción",
+      "category": "Categoría",
+      "labels": "Etiquetas",
+      "icon": "Icono",
+      "add_description": "Añadir descripción",
+      "add_category": "Añadir categoría",
+      "add_labels": "Añadir etiquetas",
+      "date": "Fecha",
+      "scene": "Escena",
+      "location": "Ubicación",
+      "save": "Guardar",
+      "rename": "Renombrar"
+    },
+    "actions": {
+      "auto_configure": "Configurar automáticamente",
+      "add_scene": "Añadir escena",
+      "live_edit": "Edición en vivo",
+      "live_preview": "Vista previa en vivo",
+      "room_preview": "Vista previa de la habitación",
+      "scene_preview": "Edición en vivo",
+      "play_scene": "Reproducir escena en vivo",
+      "stop_preview": "Detener",
+      "play_duration": "Duración de reproducción",
+      "play_duration_seconds": "{seconds}s",
+      "activate_scene": "Activar escena",
+      "preview_location": "Previsualizar otra ubicación",
+      "use_home_location": "Usar ubicación de casa",
+      "name_scene": "Nombrar escena",
+      "name_palette": "Nombrar paleta",
+      "name_variable": "Nombrar variable",
+      "name_theme": "Nombrar tema",
+      "reset_sun_now": "Restablecer el sol a la hora actual"
+    },
+    "save_warn": {
+      "title": "¿Actualizar escenas externas?",
+      "text": "Guardar cambiará estas escenas de Home Assistant que no creó Scene Studio: {scenes}.",
+      "dont_warn": "No avisar de nuevo",
+      "save": "Guardar cambios"
+    },
+    "draft": {
+      "title": "Continuaste donde lo dejaste",
+      "detail": "Se restauraron los cambios sin guardar de una sesión anterior."
+    },
+    "location": {
+      "banner": "Previsualizando otra ubicación",
+      "dialog_title": "Previsualizar ubicación",
+      "search_placeholder": "Ciudad o dirección",
+      "no_matches": "Sin coincidencias. Prueba un nombre de ciudad o mueve el mapa."
+    },
+    "gallery": {
+      "reset_slot": "Restablecer {name} al color original",
+      "reset_event": "Restablecer {name} al original",
+      "theme_daylight": "Luz diurna",
+      "theme_hearth": "Hogar",
+      "theme_blue_hour": "Hora azul",
+      "section_daylight": "Luz diurna",
+      "section_cozy": "Acogedor",
+      "section_evening": "Tarde",
+      "section_night": "Noche",
+      "section_party": "Fiesta",
+      "section_romantic": "Romántico",
+      "section_sunrise": "Amanecer",
+      "section_neon": "Neón",
+      "reading": "Lectura",
+      "library": "Biblioteca",
+      "spring": "Primavera",
+      "crisp_october": "Octubre fresco",
+      "light_in_the_wood": "Luz en el bosque",
+      "late_apples": "Manzanas tardías",
+      "rolling_gold": "Oro ondulante",
+      "hazy_meadow": "Prado brumoso",
+      "linen_noon": "Mediodía de lino",
+      "high_sails": "Velas altas",
+      "greenhouse": "Invernadero",
+      "snow_noon": "Mediodía de nieve",
+      "golden_hour": "Hora dorada",
+      "dinner_time": "Hora de cenar",
+      "last_of_the_sun": "Último sol",
+      "red_hills": "Colinas rojas",
+      "african_dusk": "Crepúsculo africano",
+      "alpenglow": "Resplandor alpino",
+      "palms_at_sunset": "Palmeras al atardecer",
+      "wool": "Lámpara de madera",
+      "low_flame": "Llama baja",
+      "lanterns": "Faroles",
+      "rain": "Lluvia en la ciudad",
+      "blue_hour_reine": "Hora azul",
+      "train_window": "Ventana del tren",
+      "velvet_dusk": "Crepúsculo de terciopelo",
+      "after_the_rain": "Después de la lluvia",
+      "the_lighthouse": "El faro",
+      "starlight": "Luz de estrellas",
+      "neon_alley": "Callejón de neón",
+      "wet_neon": "Neón mojado",
+      "magenta_hour": "Hora magenta",
+      "cocktail_pink": "Rosa cóctel",
+      "carnival_wash": "Lavado de carnaval",
+      "club_violet": "Violeta de club",
+      "fireworks": "Fuegos artificiales",
+      "rose_dusk": "Crepúsculo rosa",
+      "petal_light": "Luz de pétalos",
+      "the_sky_turns": "El cielo gira",
+      "cold_pink": "Rosa frío",
+      "pale_gold": "Oro pálido",
+      "desert_sunrise": "Amanecer en el desierto",
+      "horizon_line": "Línea del horizonte",
+      "neon_rain": "Lluvia de neón",
+      "aquarium_night": "Noche de acuario",
+      "signal_violet": "Violeta de señal",
+      "ice_and_magenta": "Hielo y magenta",
+      "afterimage": "Imagen residual"
+    },
+    "dialogs": {
+      "delete_scene_title": "¿Eliminar escena?",
+      "delete_scene_text": "¿Seguro que quieres eliminar {name}? Esto quita la escena nativa de Home Assistant.",
+      "linked_scenes": "Misma escena para amanecer civil, orto y ocaso",
+      "new_scene_step": "{step}/2 Nueva escena circadiana",
+      "scene_palette_title": "Nueva escena",
+      "scene_palette_hint": "Elige una de tus paletas, o empieza a partir de una imagen.",
+      "scene_palette_yours": "Tus paletas",
+      "scene_palette_custom": "Personalizada",
+      "scene_palette_none": "Ninguna",
+      "scene_palette_select": "Seleccionar una paleta",
+      "scene_palette_edit": "Editar paleta",
+      "scene_theme_select": "Seleccionar un tema",
+      "scene_theme_edit": "Editar tema",
+      "scene_theme_title": "Nueva escena circadiana",
+      "scene_theme_hint": "Elige uno de tus temas, o empieza a partir de un preajuste.",
+      "scene_theme_yours": "Tus temas",
+      "scene_theme_presets": "Preajustes",
+      "scene_theme_use": "Usar tema",
+      "scene_palette_use": "Usar paleta",
+      "scene_palette_randomize": "Aleatorio",
+      "unsaved_title": "Cambios sin guardar",
+      "unsaved_text": "Tienes cambios sin guardar. ¿Descartarlos?"
+    },
+    "chart": {
+      "fallback_note": "* La hora usa un valor estacional de reserva porque el sol no sale o no se pone ese día.",
+      "choose_scene": "Elegir escena",
+      "not_in_scene": "Aún no está en una escena asignada",
+      "brightness": "Brillo",
+      "brightness_sub": "0–100 % por evento solar",
+      "overridden_dusk": "{name} usa el crepúsculo mínimo ({solar_time} crepúsculo solar)",
+      "seasonal_fallback": "Reserva estacional (sin evento solar real ese día)"
+    },
+    "naming": {
+      "circadian_scene": "{area} circadiana",
+      "circadian_fallback": "Circadiana",
+      "variable": "Variable",
+      "palette": "Paleta",
+      "theme": "Tema"
+    },
+    "fields": {
+      "scene_name": {
+        "label": "Nombre de la escena",
+        "helper": "Nombre de la entidad de escena circadiana"
+      },
+      "area": {
+        "label": "Área",
+        "helper": "Las luces del área entran por defecto. Puedes excluir luces o añadir otras a la escena."
+      },
+      "display_scenes_combined": {
+        "label": "¿Combinar escenas de amanecer civil / orto / ocaso?",
+        "helper": "Si está activado, configura 3 escenas en el siguiente paso. Si no, 5"
+      },
+      "scene_dawn": {
+        "label": "Escena de amanecer civil",
+        "helper": "Primera luz (sol 6° bajo el horizonte)"
+      },
+      "scene_sunrise": {
+        "label": "Escena de orto",
+        "helper": "Cuando sale el sol"
+      },
+      "scene_noon": {
+        "label": "Escena de mediodía",
+        "helper": "Cuando el sol está en su punto más alto"
+      },
+      "scene_sunset": {
+        "label": "Escena de ocaso",
+        "helper": "Cuando se pone el sol"
+      },
+      "scene_dusk": {
+        "label": "Escena de crepúsculo",
+        "helper": "Última luz (sol 6° bajo el horizonte)"
+      },
+      "scene_dawn_sunrise_sunset": {
+        "label": "Escena de amanecer civil, orto y ocaso",
+        "helper": "Primera luz, orto y ocaso"
+      },
+      "scene_dusk_minimum_time_of_day": {
+        "label": "Hora más temprana para la escena de crepúsculo",
+        "helper": "Para evitar que las luces se atenúen demasiado pronto"
+      },
+      "setup_empty_means_auto": {
+        "helper": "Déjalo vacío para crear automáticamente una escena nativa para este evento"
+      }
+    },
+    "clock": {
+      "event_brightness": "{label}, brillo {percent} %",
+      "event_bright_pct": "{percent} %"
+    },
+    "lights": {
+      "unavailable": "No disponible",
+      "removed": "Eliminada",
+      "brightness": "Brillo",
+      "color_brightness": "Brillo de color",
+      "white_brightness": "Brillo blanco",
+      "graph_sub": "0–100 % por evento solar",
+      "overrides": "Anulaciones",
+      "override_brightness": "Brillo {percent} % · tema {theme} %",
+      "override_color": "Color",
+      "solar_events": "Eventos solares",
+      "select_all": "Seleccionar todo",
+      "n_selected": "{count} seleccionadas",
+      "deselect": "Deseleccionar",
+      "tiles_hint_brightness": "Arrastra o desplázate sobre las baldosas de luz para cambiar el brillo",
+      "tiles_hint_pick": "Selecciona un evento solar o una luz para editarla, o arrastra el sol para previsualizar las luces en un momento",
+      "tiles_hint_palette": "Los cambios aquí se reflejan en todas las escenas que usan esta paleta",
+      "settings_named": "Ajustes de {name}",
+      "mode_not_supported": "Esta luz no admite este modo",
+      "group_color": "Color",
+      "group_temp": "Temperatura",
+      "group_white": "Blanco",
+      "group_brightness": "Brillo",
+      "group_onoff": "Encendido/apagado",
+      "reset_palette": "Restablecer {name} a la paleta",
+      "power": "Encendido",
+      "off": "Apagado",
+      "toggle_power": "Alternar",
+      "add_light": "Añadir luz",
+      "add_named": "Añadir {name}",
+      "add_named_to_scene": "Añadir {name} a la escena",
+      "remove_from_scene": "Quitar luz de la escena",
+      "remove_named_from_scene": "Quitar {name} de la escena",
+      "add_light_title": "Añadir luz",
+      "add_light_help": "Añade una luz de otra zona (o cualquier luz que aún no esté en estas escenas). Su aspecto actual se copia en cada escena nativa asignada.",
+      "light": "Luz"
+    },
+    "defaults": {
+      "circadian_scene": "Circadian"
+    }
+  }
+}

@@ -1,8 +1,8 @@
-# Local Home Assistant sandbox for Circadian Scenes development.
+# Local Home Assistant sandbox for Scene Studio development.
 # Runtime files (.storage, databases, logs) stay in this folder and are gitignored.
 
 homeassistant:
-  name: Circadian Scenes Dev
+  name: Scene Studio Dev
   latitude: 59.9139
   longitude: 10.7522
   elevation: 23
@@ -25,7 +25,7 @@ virtual:
 logger:
   default: info
   logs:
-    custom_components.circadian_scenes: debug
+    custom_components.scene_studio: debug
     custom_components.virtual: info
 
 input_boolean:

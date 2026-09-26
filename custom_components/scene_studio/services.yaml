@@ -1,0 +1,64 @@
+turn_on:
+  name: Turn on circadian scene
+  description: 'Improved, more advanced version of the native "Activate scene" action (scene.turn_on). Activate one or more circadian scenes with optional brightness modifications and other advanced options. With a brightness modification, the scene will turn on directly to that brightness (a weakness with the default service is that you first have to activate the scene, and then dim the lights afterwards - which makes for a jarring experience).'
+  fields:
+    entity_id:
+      name: Scenes
+      description: Select one or more circadian scenes to activate
+      required: true
+      selector:
+        entity:
+          domain: scene
+          integration: scene_studio
+          multiple: true
+    transition:
+      name: Transition time
+      description: Defaults to 0 seconds
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 6553
+          step: 1
+          unit_of_measurement: "s"
+          mode: slider
+    brightness_modifier:
+      name: Brightness modifier
+      description: Modifies the brightness percentage of each light after the circadian blend is calculated
+      required: false
+      default: 0
+      selector:
+        number:
+          min: -100
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+    transition_percent:
+      name: Transition percent
+      description: "Absolute position along the day, equally spaced between the five scenes: 0% dawn, 25% sunrise, 50% noon, 75% sunset, 100% dusk. Omit to follow the clock. When set, automatic light updates are disarmed until the next activate without this field (transition_percent_manual stays true)."
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+    advanced_options:
+      name: Advanced options (for testing purposes)
+      collapsed: true
+      fields:
+        target_date_time:
+          name: Change the time
+          description: "Preview the scene at a different time. Eg. pretend it's summer/winter (defaults to current time)"
+          required: false
+          selector:
+            datetime:
+        location:
+          name: Location
+          description: "Override the location for solar event calculations (defaults to Home Assistant's configured location)"
+          required: false
+          selector:
+            location:

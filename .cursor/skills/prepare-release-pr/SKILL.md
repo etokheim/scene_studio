@@ -1,7 +1,7 @@
 ---
 name: prepare-release-pr
 description: >-
-  Prepare a Circadian Scenes release PR from dev to master: sync
+  Prepare a Scene Studio release PR from dev to master: sync
   translations, rewrite CHANGELOG Unreleased from the diff since the last
   release, then open the PR. Merging that PR runs the GitHub release workflow.
   Use when the user asks to release, ship, publish to HACS, cut a version, tag,
@@ -38,9 +38,9 @@ pass for **nb / nn / de / es**. How-to: [panel-translations](../panel-translatio
 1. Diff English (and panel/config copy) since `master`:
 
    ```bash
-   git diff origin/master -- custom_components/circadian_scenes/translations/en.json \
-     custom_components/circadian_scenes/frontend/panel.js \
-     custom_components/circadian_scenes/translations/
+   git diff origin/master -- custom_components/scene_studio/translations/en.json \
+     custom_components/scene_studio/frontend/panel.js \
+     custom_components/scene_studio/translations/
    ```
 
 2. For every new or changed user-visible string: key already in `en.json` (add
@@ -118,15 +118,16 @@ Do **not** open the PR until this exits 0. Matches `.github/workflows/ci.yml`
 ```bash
 source .venv/bin/activate
 # Install once if missing: pip install pylint black isort pytest homeassistant
-pylint custom_components/circadian_scenes/
+pylint custom_components/scene_studio/
 PYTHONPATH=. pytest tests/ -q
-black --check custom_components/circadian_scenes/ tests/
-isort --check-only custom_components/circadian_scenes/ tests/
+node --test tests/frontend/*.test.mjs
+black --check custom_components/scene_studio/ tests/
+isort --check-only custom_components/scene_studio/ tests/
 ```
 
 If black/isort fail: apply `black` / `isort` (no `--check`), commit the
-formatting, re-run the checks. Stop on pylint or pytest failures — fix and
-re-run; do not open a red PR and “let CI catch it.”
+formatting, re-run the checks. Stop on pylint, pytest, or frontend `node --test`
+failures — fix and re-run; do not open a red PR and “let CI catch it.”
 
 ## 4. Open the PR
 

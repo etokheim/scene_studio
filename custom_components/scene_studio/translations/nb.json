@@ -1,0 +1,356 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Scene Studio er allerede konfigurert",
+      "single_instance_allowed": "Scene Studio er allerede konfigurert. Åpne den fra sidemenyen for å legge til scener."
+    },
+    "error": {
+      "unknown": "Uventet feil"
+    },
+    "step": {
+      "user": {
+        "title": "Scene Studio",
+        "description": "Legger Scene Studio til i sidemenyen. Opprett og rediger rom derfra — én integrasjon, så mange soner du trenger. Dagslys som følger solen mellom scenene dine."
+      }
+    }
+  },
+  "frontend": {
+    "title": "Scene Studio",
+    "tabs": {
+      "extrapolation": "Circadian-scener",
+      "created": "Opprettede scener"
+    },
+    "empty": {
+      "extrapolation": "Ingen circadian-scener ennå. Opprett én for å styre belysningen etter solen.",
+      "extrapolation_title": "Begynn å lyse med solen",
+      "extrapolation_body": "Scene Studio blander rommets lys mellom solhendelser — daggry, soloppgang, middag, solnedgang og skumring — så lysstyrke og farge følger dagen.",
+      "extrapolation_example": "Opprett en scene for et rom fra en sone, eller auto-konfigurer alle soner som har lys.",
+      "auto_configure_body": "Auto-konfigurer oppretter en circadian-scene for hver sone som har lys, med standardtemaet. Du kan redigere variabler og temaer her når som helst — lysene oppdateres neste gang en scene kjører.",
+      "area_no_scenes": "Ingen scener ennå — opprett en for denne sonen",
+      "select_scene": "Velg en scene for å komme i gang",
+      "select_scene_body": "Velg en scene fra listen for å redigere lysene gjennom dagen, eller legg til en scene fra en sone.",
+      "no_areas": "Ingen Home Assistant-soner ennå. Legg til etasjer og soner under Innstillinger, og kom tilbake.",
+      "learn_more": "Les mer"
+    },
+    "library": {
+      "title": "Variabler og temaer",
+      "hint": "Endring av en variabel eller et tema oppdaterer scener som fortsatt bruker det. Lysene endres ved neste aktivering eller automatiske oppdatering — ikke med en gang.",
+      "variables": "Variabler",
+      "palettes": "Paletter",
+      "tab_scenes": "Scener",
+      "tab_library": "Bibliotek",
+      "themes": "Circadian-temaer",
+      "variable_edit_hint": "Farge og lysstyrke deles av hvert tema eller lys som fortsatt bruker denne variabelen.",
+      "palette_edit_hint": "En palett er fem farger. Lys som bruker den, velger et spor. Endring av paletten oppdaterer de lysene neste gang en scene kjører.",
+      "theme_hint": "Åpne et tema for å redigere farge og lysstyrke ved hver solhendelse. Endringer gjelder hver circadian-scene som fortsatt bruker temaet. Overstyringer per lys blir stående.",
+      "theme_edit_hint": "Redigering av {name} endrer hver circadian-scene som fortsatt bruker dette temaet. Overstyringer per lys på de scenene blir stående.",
+      "theme_event_subtitle": "Temaet {name}",
+      "theme_missing": "Tema ikke funnet",
+      "delete_menu": "Slett {name}",
+      "delete_variable": "Slette variabel?",
+      "delete_palette": "Slette palett?",
+      "delete_theme": "Slette tema?",
+      "delete_confirm": "Er du sikker på at du vil slette {name}?",
+      "add_variable": "Legg til variabel",
+      "add_new_variable": "Legg til ny variabel",
+      "add_palette": "Legg til palett",
+      "add_theme": "Legg til tema",
+      "new_variable": "Ny variabel",
+      "new_palette": "Ny palett",
+      "new_theme": "Nytt tema",
+      "slot_label": "Spor {n}",
+      "slot": "Spor",
+      "kelvin": "Kelvin",
+      "slot_custom": "Egendefinert farge",
+      "randomize": "Tilfeldig",
+      "variable_missing": "Variabel ikke funnet",
+      "palette_missing": "Palett ikke funnet"
+    },
+    "kinds": {
+      "circadian": "Circadian-scene",
+      "simple": "Scene"
+    },
+    "create": {
+      "title": "Opprett scene",
+      "kind": "Scenetype",
+      "theme": "Tema",
+      "circadian": "Opprett circadian-scene",
+      "scene": "Opprett scene"
+    },
+    "list": {
+      "column_name": "Navn"
+    },
+    "settings": {
+      "title": "Innstillinger",
+      "intro": "Disse innstillingene gjelder for alle rom. Endringer trer i kraft med en gang.",
+      "automatically_update_lights": "Oppdater lys automatisk",
+      "automatically_update_lights_on_helper": "Når du aktiverer en scene, fortsetter lysene å justeres med intervallet fra Innstillinger, slik at rommet følger solen. Trykk for å slå dette av for alle rom.",
+      "automatically_update_lights_off_helper": "Automatiske oppdateringer er av. Aktivering av en scene setter lysene én gang. Trykk for å slå oppdateringer på igjen for alle rom.",
+      "automatically_update_lights_interval": "Intervall for automatisk lysoppdatering",
+      "automatically_update_lights_interval_helper": "Når en scene er aktivert, fortsett å oppdatere lysene så ofte, med samme overgangslengde (målet = hvordan rommet skal se ut ved slutten av overgangen). 0 slår automatiske oppdateringer av for alle rom — samme som kontrollen øverst i listen.",
+      "automatically_update_lights_interval_minutes": "Minutter",
+      "scene_settings": "Sceneinnstillinger",
+      "hidden_in_ha": "Skjult i Home Assistant",
+      "dusk_minimum_time_of_day": "Tidligste tid for skumring",
+      "dusk_minimum_time_of_day_helper": "For å unngå at lysene dempes for mye, for tidlig. Gjelder alle circadian-scener og temaer."
+    },
+    "common": {
+      "untitled": "Uten navn",
+      "other_areas": "Andre soner",
+      "no_area": "Ingen sone",
+      "back": "Tilbake",
+      "close": "Lukk",
+      "cancel": "Avbryt",
+      "delete": "Slett",
+      "discard": "Forkast",
+      "keep_editing": "Fortsett å redigere",
+      "choose_scene": "Velg scene",
+      "dismiss": "Avvis",
+      "change": "Endre",
+      "preview": "Forhåndsvis",
+      "search": "Søk",
+      "name": "Navn",
+      "new_scene": "Ny scene",
+      "description": "Beskrivelse",
+      "category": "Kategori",
+      "labels": "Etiketter",
+      "icon": "Ikon",
+      "add_description": "Legg til beskrivelse",
+      "add_category": "Legg til kategori",
+      "add_labels": "Legg til etiketter",
+      "date": "Dato",
+      "scene": "Scene",
+      "location": "Sted",
+      "save": "Lagre",
+      "rename": "Gi nytt navn"
+    },
+    "actions": {
+      "auto_configure": "Auto-konfigurer",
+      "add_scene": "Legg til scene",
+      "live_edit": "Direkte redigering",
+      "live_preview": "Direkte forhåndsvisning",
+      "room_preview": "Forhåndsvis rom",
+      "scene_preview": "Direkte redigering",
+      "play_scene": "Spill av scene direkte",
+      "stop_preview": "Stopp",
+      "play_duration": "Avspillingslengde",
+      "play_duration_seconds": "{seconds}s",
+      "activate_scene": "Aktiver scene",
+      "preview_location": "Forhåndsvis et annet sted",
+      "use_home_location": "Bruk hjemsted",
+      "name_scene": "Gi scene navn",
+      "name_palette": "Gi palett navn",
+      "name_variable": "Gi variabel navn",
+      "name_theme": "Gi tema navn",
+      "reset_sun_now": "Tilbakestill sol til nå"
+    },
+    "save_warn": {
+      "title": "Oppdatere eksterne scener?",
+      "text": "Lagring endrer disse Home Assistant-scenene som ikke ble opprettet av Scene Studio: {scenes}.",
+      "dont_warn": "Ikke advar igjen",
+      "save": "Lagre endringer"
+    },
+    "draft": {
+      "title": "Fortsetter der du slapp",
+      "detail": "Ulagrede endringer fra en tidligere økt er gjenopprettet."
+    },
+    "location": {
+      "banner": "Forhåndsviser et annet sted",
+      "dialog_title": "Forhåndsvis sted",
+      "search_placeholder": "By eller adresse",
+      "no_matches": "Ingen treff. Prøv et bynavn eller flytt kartet."
+    },
+    "gallery": {
+      "reset_slot": "Tilbakestill {name} til den opprinnelige fargen",
+      "reset_event": "Tilbakestill {name} til originalen",
+      "theme_daylight": "Dagslys",
+      "theme_hearth": "Peis",
+      "theme_blue_hour": "Blå time",
+      "section_daylight": "Dagslys",
+      "section_cozy": "Koselig",
+      "section_evening": "Kveld",
+      "section_night": "Natt",
+      "section_party": "Fest",
+      "section_romantic": "Romantisk",
+      "section_sunrise": "Soloppgang",
+      "section_neon": "Neon",
+      "reading": "Lesing",
+      "library": "Bibliotek",
+      "spring": "Vår",
+      "crisp_october": "Kjølig oktober",
+      "light_in_the_wood": "Lys i skogen",
+      "late_apples": "Sene epler",
+      "rolling_gold": "Rullende gull",
+      "hazy_meadow": "Disig eng",
+      "linen_noon": "Linmiddag",
+      "high_sails": "Høye seil",
+      "greenhouse": "Drivhus",
+      "snow_noon": "Snømiddag",
+      "golden_hour": "Gylden time",
+      "dinner_time": "Middagstid",
+      "last_of_the_sun": "Siste sol",
+      "red_hills": "Røde åser",
+      "african_dusk": "Afrikansk skumring",
+      "alpenglow": "Alpeglød",
+      "palms_at_sunset": "Palmer i solnedgang",
+      "wool": "Trelampe",
+      "low_flame": "Lav flamme",
+      "lanterns": "Lykter",
+      "rain": "Byregn",
+      "blue_hour_reine": "Blå time",
+      "train_window": "Togvindu",
+      "velvet_dusk": "Fløyelsskymring",
+      "after_the_rain": "Etter regnet",
+      "the_lighthouse": "Fyret",
+      "starlight": "Stjernelys",
+      "neon_alley": "Neonsmug",
+      "wet_neon": "Våt neon",
+      "magenta_hour": "Magentatime",
+      "cocktail_pink": "Cocktailrosa",
+      "carnival_wash": "Karneval",
+      "club_violet": "Klubbfiolett",
+      "fireworks": "Fyrverkeri",
+      "rose_dusk": "Roseskumring",
+      "petal_light": "Blomsterlys",
+      "the_sky_turns": "Himmelen snur",
+      "cold_pink": "Kald rosa",
+      "pale_gold": "Blek gull",
+      "desert_sunrise": "Ørkensoloppgang",
+      "horizon_line": "Horisontlinje",
+      "neon_rain": "Neonregn",
+      "aquarium_night": "Akvarienatt",
+      "signal_violet": "Signalfiolett",
+      "ice_and_magenta": "Is og magenta",
+      "afterimage": "Etterbilde"
+    },
+    "dialogs": {
+      "delete_scene_title": "Slette scene?",
+      "delete_scene_text": "Er du sikker på at du vil slette {name}? Dette fjerner den native Home Assistant-scenen.",
+      "linked_scenes": "Samme scene for daggry, soloppgang og solnedgang",
+      "new_scene_step": "{step}/2 Ny circadian-scene",
+      "scene_palette_title": "Ny scene",
+      "scene_palette_hint": "Velg en av palettene dine, eller start fra et bilde.",
+      "scene_palette_yours": "Dine paletter",
+      "scene_palette_custom": "Egendefinert",
+      "scene_palette_none": "Ingen",
+      "scene_palette_select": "Velg en palett",
+      "scene_palette_edit": "Rediger palett",
+      "scene_theme_select": "Velg et tema",
+      "scene_theme_edit": "Rediger tema",
+      "scene_theme_title": "Ny circadian-scene",
+      "scene_theme_hint": "Velg et av temaene dine, eller start fra en forhåndsinnstilling.",
+      "scene_theme_yours": "Dine temaer",
+      "scene_theme_presets": "Forhåndsinnstillinger",
+      "scene_theme_use": "Bruk tema",
+      "scene_palette_use": "Bruk palett",
+      "scene_palette_randomize": "Tilfeldig",
+      "unsaved_title": "Ulagrede endringer",
+      "unsaved_text": "Du har ulagrede endringer. Forkaste dem?"
+    },
+    "chart": {
+      "fallback_note": "* Tiden bruker et sesongmessig fallback fordi solen ikke står opp eller går ned den dagen.",
+      "choose_scene": "Velg scene",
+      "not_in_scene": "Ikke i en tilordnet scene ennå",
+      "brightness": "Lysstyrke",
+      "brightness_sub": "0–100 % per solhendelse",
+      "overridden_dusk": "{name} bruker tidligste skumring ({solar_time} solskumring)",
+      "seasonal_fallback": "Sesongmessig fallback (ingen ekte solhendelse denne dagen)"
+    },
+    "naming": {
+      "circadian_scene": "{area} circadian",
+      "circadian_fallback": "Circadian",
+      "variable": "Variabel",
+      "palette": "Palett",
+      "theme": "Tema"
+    },
+    "fields": {
+      "scene_name": {
+        "label": "Scenenavn",
+        "helper": "Navn på circadian-scene-enheten"
+      },
+      "area": {
+        "label": "Sone",
+        "helper": "Lys i sonen er med som standard. Du kan utelate lys eller ta med ekstra på scenen."
+      },
+      "display_scenes_combined": {
+        "label": "Kombinere daggry / soloppgang / solnedgang-scener?",
+        "helper": "Hvis på, konfigurer 3 scener i neste steg. Hvis av, konfigurer 5"
+      },
+      "scene_dawn": {
+        "label": "Daggryscene",
+        "helper": "Første lys (solen 6° under horisonten)"
+      },
+      "scene_sunrise": {
+        "label": "Soloppgangsscene",
+        "helper": "Når solen står opp"
+      },
+      "scene_noon": {
+        "label": "Middagsscene",
+        "helper": "Når solen er på sitt høyeste"
+      },
+      "scene_sunset": {
+        "label": "Solnedgangsscene",
+        "helper": "Når solen går ned"
+      },
+      "scene_dusk": {
+        "label": "Skumringsscene",
+        "helper": "Siste lys (solen 6° under horisonten)"
+      },
+      "scene_dawn_sunrise_sunset": {
+        "label": "Daggry-, soloppgangs- og solnedgangsscene",
+        "helper": "Første lys, soloppgang og solnedgang"
+      },
+      "scene_dusk_minimum_time_of_day": {
+        "label": "Tidligste tid for skumringsscenen",
+        "helper": "For å unngå at lyset dempes for mye, for tidlig"
+      },
+      "setup_empty_means_auto": {
+        "helper": "La stå tom for å opprette en native scene automatisk for denne hendelsen"
+      }
+    },
+    "clock": {
+      "event_brightness": "{label}, lysstyrke {percent} %",
+      "event_bright_pct": "{percent} %"
+    },
+    "lights": {
+      "unavailable": "Utilgjengelig",
+      "removed": "Fjernet",
+      "brightness": "Lysstyrke",
+      "color_brightness": "Fargelysstyrke",
+      "white_brightness": "Hvitlysstyrke",
+      "graph_sub": "0–100 % per solhendelse",
+      "overrides": "Overstyringer",
+      "override_brightness": "Lysstyrke {percent} % · tema {theme} %",
+      "override_color": "Farge",
+      "solar_events": "Solhendelser",
+      "select_all": "Velg alle",
+      "n_selected": "{count} valgt",
+      "deselect": "Fjern valg",
+      "tiles_hint_brightness": "Dra eller rull på lysflisene for å endre lysstyrken",
+      "tiles_hint_pick": "Velg en solhendelse eller et lys for å redigere det, eller dra solen for å forhåndsvise lysene på et tidspunkt",
+      "tiles_hint_palette": "Endringer her vises i alle scener som bruker denne paletten",
+      "settings_named": "Innstillinger for {name}",
+      "mode_not_supported": "Dette lyset støtter ikke denne modusen",
+      "group_color": "Farge",
+      "group_temp": "Temperatur",
+      "group_white": "Hvitt",
+      "group_brightness": "Lysstyrke",
+      "group_onoff": "Av/på",
+      "reset_palette": "Tilbakestill {name} til paletten",
+      "power": "På",
+      "off": "Av",
+      "toggle_power": "Veksle",
+      "add_light": "Legg til lys",
+      "add_named": "Legg til {name}",
+      "add_named_to_scene": "Legg til {name} i scenen",
+      "remove_from_scene": "Fjern lys fra scene",
+      "remove_named_from_scene": "Fjern {name} fra scenen",
+      "add_light_title": "Legg til lys",
+      "add_light_help": "Legg til et lys fra et annet område (eller et lys som ennå ikke er i disse scenene). Dagens utseende kopieres inn i alle tilordnede native scener.",
+      "light": "Lys"
+    },
+    "defaults": {
+      "circadian_scene": "Circadian"
+    }
+  }
+}

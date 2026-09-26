@@ -1,8 +1,8 @@
-name: circadian-scenes
+name: scene-studio
 
 services:
   homeassistant:
-    container_name: circadian-scenes-ha
+    container_name: scene-studio-ha
     image: ghcr.io/home-assistant/home-assistant:stable
     restart: unless-stopped
     ports:
@@ -11,4 +11,4 @@ services:
       TZ: Europe/Oslo
     volumes:
       - ./dev/config:/config
-      - ./custom_components/circadian_scenes:/config/custom_components/circadian_scenes:ro
+      - ./custom_components/scene_studio:/config/custom_components/scene_studio:ro

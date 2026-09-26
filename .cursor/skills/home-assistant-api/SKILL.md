@@ -10,17 +10,27 @@ description: >-
 
 # Home Assistant API (Docker sandbox)
 
-This repo talks to the **local Circadian Scenes sandbox**, not the live home `/config`. Prefer the REST API for authoritative state over guessing from YAML alone.
+This repo talks to the **local Scene Studio sandbox**, not the live home `/config`. Prefer the REST API for authoritative state over guessing from YAML alone.
 
 ## Auth (required)
 
-- Token key: `cursor_ha_token` in [`dev/config/secrets.yaml`](../../../dev/config/secrets.yaml) (gitignored).
+- REST token: `cursor_ha_token` in [`dev/config/secrets.yaml`](../../../dev/config/secrets.yaml) (gitignored).
+- Chrome MCP UI login: `sandbox_ha_username` and `sandbox_ha_password` in the same file.
 - Example template: [`dev/config/secrets.yaml.example`](../../../dev/config/secrets.yaml.example).
-- Create the token in the **sandbox** UI (Profile → Long-Lived Access Tokens). See [`DEVELOPMENT.md`](../../../DEVELOPMENT.md).
-- **Never** open/browse the whole secrets file. Extract **only** that key.
-- **Never** print, log, or echo the token. Follow
+- Create the REST token in the **sandbox** UI (Profile → Long-Lived Access Tokens). See [`DEVELOPMENT.md`](../../../DEVELOPMENT.md).
+- **Never** open/browse the whole secrets file. Extract **only** the keys for this step.
+- If a login key is missing or `CHANGEME`, ask the user. Do not guess.
+- **Never** print, log, or echo tokens or passwords. Follow
   [`.cursor/rules/secrets-handling.mdc`](../../rules/secrets-handling.mdc).
 - **Never** read production `/config/secrets.yaml` or copy live-home tokens into this workspace.
+
+## Panel UI (Chrome DevTools MCP)
+
+Verify Scene Studio in Chrome DevTools MCP, not a Cursor-owned HA tab ([`.cursor/rules/no-browser-reload.mdc`](../../rules/no-browser-reload.mdc)):
+
+1. `http://127.0.0.1:8123/scene_studio`
+2. Login with `sandbox_ha_username` / `sandbox_ha_password` from `secrets.yaml` when the authorize form appears.
+3. After `PANEL_ASSET_REV` + `docker compose restart`, use a **normal** reload (`ignoreCache` off) and confirm the `panel.js` URL rev before judging layout.
 
 ## Base URL
 
@@ -107,8 +117,8 @@ Official reference: [REST API](https://developers.home-assistant.io/docs/api/res
 |------|--------|
 | Current entity/device state, attributes, last_changed | REST API |
 | Fire a service / validate a template quickly | REST API |
-| Circadian Scenes sidebar panel layout, CSS, chart | Browser on the **sandbox** (`http://localhost:8123`) |
-| How the integration is authored | `custom_components/circadian_scenes/` |
+| Scene Studio sidebar panel layout, CSS, chart | Chrome DevTools MCP on the sandbox (`http://127.0.0.1:8123/scene_studio`); login keys in `secrets.yaml` |
+| How the integration is authored | `custom_components/scene_studio/` |
 | How the sandbox home is authored | `dev/config/` starter YAML |
 
 ## Safety

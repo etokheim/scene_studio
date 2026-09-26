@@ -1,0 +1,21 @@
+{
+  "domain": "scene_studio",
+  "name": "Scene Studio",
+  "config_flow": true,
+  "documentation": "https://github.com/etokheim/scene_studio/blob/master/README.md",
+  "issue_tracker": "https://github.com/etokheim/scene_studio/issues",
+  "version": "5.0.0",
+  "requirements": [],
+  "ssdp": [],
+  "zeroconf": [],
+  "homekit": {},
+  "dependencies": [],
+  "codeowners": [
+    "@etokheim"
+  ],
+  "iot_class": "calculated",
+  "after_dependencies": [
+    "frontend",
+    "http"
+  ]
+}

@@ -35,8 +35,8 @@ docker compose start
 
 After that:
 
-1. **Settings → Devices & services → Add integration → Circadian Scenes** (once; the form is empty)
-2. Open **Circadian Scenes** in the sidebar
+1. **Settings → Devices & services → Add integration → Scene Studio** (once; the form is empty)
+2. Open **Scene Studio** in the sidebar
 3. **Add** a scene (area + native dag/kveld/natt scenes)
 4. Activate the generated `scene.*` from **Developer tools → States**
 
@@ -54,11 +54,21 @@ YAML in `dev/config/` can usually be reloaded from **Developer tools → YAML**.
 
 ## Unit tests
 
+Python:
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install pytest homeassistant
 PYTHONPATH=. .venv/bin/pytest tests/ -q
 ```
+
+Frontend (no Home Assistant, no browser). CI runs the same command:
+
+```bash
+node --test tests/frontend/*.test.mjs
+```
+
+That suite covers wheel grouping (`tests/frontend/pin_groups.test.mjs`), light-tile color groups and modifier selection (`tests/frontend/light_tile_select.test.mjs`), and the simple-scene card dot (`tests/frontend/card_mesh.test.mjs`). Scene icon round-trip is in `tests/test_store_v4.py`. Layout and pointer behavior of the panel are checked in the sandbox with Chrome DevTools MCP. Do not add Playwright. The panel sits in Home Assistant’s shadow DOM behind login; a browser runner would need Docker and sandbox credentials and would not replace these rule tests. See [`docs/DECISIONS.md`](docs/DECISIONS.md) (“Frontend checks are node:test plus the sandbox, not Playwright”).
 
 CI runs the same suite (see `.github/workflows/ci.yml`).
 
@@ -73,3 +83,7 @@ Config, onboarding, and your test entities persist in `dev/config/` (runtime fil
 ## Agent REST token (optional)
 
 To let Cursor agents call the sandbox REST API, create a long-lived token in the sandbox UI (Profile → Long-Lived Access Tokens), copy `dev/config/secrets.yaml.example` to `dev/config/secrets.yaml`, and set `cursor_ha_token`. See [`.cursor/skills/home-assistant-api/SKILL.md`](.cursor/skills/home-assistant-api/SKILL.md).
+
+## Agent UI login (optional)
+
+Same `secrets.yaml` holds `sandbox_ha_username` and `sandbox_ha_password` for Chrome DevTools MCP against `http://127.0.0.1:8123/scene_studio`. If those keys are missing, agents should ask. Do not commit `secrets.yaml`.
