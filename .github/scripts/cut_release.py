@@ -183,10 +183,10 @@ def main() -> int:
         PANEL_REV_RE.sub('PANEL_ASSET_REV = "1"', panel, count=1), encoding="utf-8"
     )
 
+    # The release title is already "Scene Studio {version}". A heading with
+    # the same words shows the name twice on the GitHub release page.
     notes_body = clean_unreleased_body(body)
-    NOTES.write_text(
-        f"# Scene Studio {version}\n\n{notes_body}", encoding="utf-8"
-    )
+    NOTES.write_text(notes_body, encoding="utf-8")
     write_github_output(outputs)
     return 0
 
