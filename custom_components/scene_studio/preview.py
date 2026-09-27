@@ -589,7 +589,31 @@ def _sample_light(
     pct = max(0, min(100, round(brightness * 100 / 255)))
     if final_entity.get(ATTR_STATE) != STATE_ON and brightness <= 0:
         pct = 0
+    # On/off and brightness-only snapshots have no color. Don't invent a hue,
+    # and don't turn a binary lamp into a mid brightness.
+    if not _entity_has_color(from_entity) and not _entity_has_color(to_entity):
+        on = final_entity.get(ATTR_STATE) == STATE_ON
+        neutral = (255, 236, 210) if on else (48, 48, 48)
+        if ATTR_BRIGHTNESS not in from_entity and ATTR_BRIGHTNESS not in to_entity:
+            return (100 if on else 0), neutral
+        return pct, neutral
     return pct, rgb
+
+
+_COLOR_FIELDS = (
+    "color_mode",
+    "hs_color",
+    "rgb_color",
+    "rgbw_color",
+    "rgbww_color",
+    "xy_color",
+    "color_temp",
+    "color_temp_kelvin",
+)
+
+
+def _entity_has_color(entity: dict[str, Any]) -> bool:
+    return any(entity.get(key) is not None for key in _COLOR_FIELDS)
 
 
 def _display_rgb(

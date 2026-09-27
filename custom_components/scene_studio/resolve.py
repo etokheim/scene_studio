@@ -128,13 +128,27 @@ def _adapt_color_for_modes(
 
     Kelvin variable on an HS-only light → convert. Missing ref = error (not here).
     If supported_color_modes is None/empty we pass through unchanged and let HA
-    reject it.
+    reject it. On/off lamps keep only on or off. Brightness-only lamps keep
+    level and lose color.
     """
     if not supported_color_modes:
         return dict(color)
+    modes = set(supported_color_modes)
+    if modes <= {"onoff"}:
+        state = color.get("state", "on")
+        if state != "off" and color.get("brightness") == 0:
+            state = "off"
+        return {"state": "off" if state == "off" else "on"}
     mode = color.get("color_mode")
-    has_temp = bool({"color_temp"} & supported_color_modes)
-    has_chromatic = bool({"hs", "xy", "rgb", "rgbw", "rgbww"} & supported_color_modes)
+    has_temp = bool({"color_temp"} & modes)
+    has_chromatic = bool({"hs", "xy", "rgb", "rgbw", "rgbww"} & modes)
+    if not has_temp and not has_chromatic:
+        out: dict[str, Any] = {"state": color.get("state", "on")}
+        if color.get("brightness") is not None:
+            out["brightness"] = color["brightness"]
+        elif out["state"] != "off":
+            out["brightness"] = 255
+        return out
     if mode == "color_temp" and not has_temp and has_chromatic:
         kelvin = color.get("color_temp_kelvin", 4000)
         hs = color_temperature_to_hs(kelvin)

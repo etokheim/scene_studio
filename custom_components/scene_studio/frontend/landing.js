@@ -2,6 +2,7 @@
 
 import { createSimpleCardMesh } from "./card_mesh.js";
 import { swatchRgb, variableSwatchCss } from "./color_ui.js";
+import { compareScenesForList, stripAreaPrefix } from "./display_names.js";
 import { galleryCoverUrl, galleryPalette } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, resolveSlot, variableIsPalette } from "./palette.js";
 import { sceneLibraryUses, scenesUsingLibraryItem } from "./scene_used.js";
@@ -91,6 +92,7 @@ export const LANDING_CSS = `
     /* Opaque app-header surface. The rail below stays frosted; the tab bar
        should read as the same bar as the HA header. */
     background: var(--app-header-background-color, var(--sidebar-background-color));
+    border-bottom: 1px solid var(--divider-color);
   }
   .area-rail-tabs ha-tab {
     flex: 1 1 50%;
@@ -394,11 +396,13 @@ export const LANDING_CSS = `
   .floor-areas[hidden] {
     display: none;
   }
-  .area-block { margin-bottom: 18px; }
+  .area-block { margin-bottom: 48px; }
   .scene-cards {
     display: flex;
-    flex-direction: column;
-    gap: 16px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
   }
   .area-head {
     display: flex;
@@ -478,11 +482,36 @@ export const LANDING_CSS = `
       transition: opacity 350ms;
     }
   }
+  /* Safari does not apply scroll-state container queries. The same fills
+     toggle from a scroll listener via .is-stuck. */
+  .floor-block > .floor-label.is-stuck .sticky-bg-floor {
+    background: var(--app-header-background-color, var(--sidebar-background-color));
+    opacity: 1;
+    transition: opacity 350ms;
+  }
+  .area-head.is-stuck .sticky-bg-area {
+    bottom: -16px;
+    background: linear-gradient(
+      to bottom,
+      var(--app-header-background-color, var(--sidebar-background-color)) calc(50% - 8px),
+      transparent 100%
+    );
+    opacity: 1;
+    transition: opacity 350ms;
+  }
   .area-head h2 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 16px;
     font-weight: 600;
     margin: 0;
     flex: 1;
+    min-width: 0;
+  }
+  .area-head h2 ha-icon {
+    --mdc-icon-size: 18px;
+    flex: 0 0 auto;
   }
   .area-head .floor-label {
     flex: 1;
@@ -517,6 +546,12 @@ export const LANDING_CSS = `
        stays behind every .scene-card (shared stacking, glow z-index 0). */
     overflow: visible;
     box-sizing: border-box;
+    width: calc(50% - 6px);
+    max-width: 180px;
+  }
+  .scene-card-slot.is-disabled .scene-card {
+    filter: grayscale(1);
+    opacity: 0.55;
   }
   .scene-card-slot .card-glow {
     position: absolute;
@@ -545,13 +580,16 @@ export const LANDING_CSS = `
     position: relative;
     z-index: 1;
     display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 64px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 0;
+    aspect-ratio: 1;
+    min-height: 0;
     margin: 0;
-    padding: 10px 4px 10px 12px;
+    padding: 0;
     border: 0;
-    border-radius: 14px;
+    border-radius: 16px;
     color: #fff;
     cursor: pointer;
     overflow: hidden;
@@ -562,9 +600,11 @@ export const LANDING_CSS = `
   }
   /* ha-dropdown is display:contents — margin-left:auto must live on a real box. */
   .scene-card .card-overflow-slot {
-    position: relative;
-    z-index: 2;
-    margin-left: auto;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    z-index: 3;
+    margin-left: 0;
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -606,12 +646,14 @@ export const LANDING_CSS = `
     pointer-events: none;
   }
   .scene-card .card-icon {
-    position: relative;
-    z-index: 1;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
     flex: 0 0 auto;
-    width: 28px;
-    height: 28px;
-    --mdc-icon-size: 28px;
+    width: 22px;
+    height: 22px;
+    --mdc-icon-size: 22px;
     color: #fff;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
   }
@@ -622,17 +664,49 @@ export const LANDING_CSS = `
     flex-direction: column;
     gap: 2px;
     min-width: 0;
-    flex: 1 1 auto;
+    margin-top: auto;
+    padding: 28px 10px 10px;
+    background: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.62) 0%,
+      rgba(0, 0, 0, 0.22) 62%,
+      transparent 100%
+    );
   }
   .scene-card .card-name {
     font-weight: 650;
-    font-size: 15px;
+    font-size: 14px;
+    line-height: 1.2;
     text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
-  .scene-card .card-sub {
-    font-size: 12px;
-    opacity: 0.88;
+  .scene-card .card-sub,
+  .scene-card .card-category,
+  .scene-card .card-flag {
+    font-size: 11px;
+    line-height: 1.25;
+    opacity: 0.92;
     text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  .scene-card .card-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  .scene-card .card-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+    font-size: 10px;
+    line-height: 1.4;
   }
   .library-title {
     font-size: 20px;
@@ -787,6 +861,16 @@ export const LANDING_CSS = `
       border-right: 0;
       border-bottom: 1px solid var(--divider-color);
     }
+    .scene-cards {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      padding-bottom: 4px;
+    }
+    .scene-card-slot {
+      flex: 0 0 calc(50% - 6px);
+      width: calc(50% - 6px);
+    }
   }
 `;
 
@@ -838,6 +922,50 @@ export function applyRampBackground(el, ramps) {
     }
     el.appendChild(layer);
   });
+}
+
+/** Day colors as a conic, averaged across the scene's light ramps. */
+export function circularRampBackground(ramps) {
+  const bands = (ramps || []).filter((ramp) => (ramp.stops || []).length);
+  if (!bands.length) {
+    return "conic-gradient(from 180deg, #2b2b2b, #1c1c1c)";
+  }
+  const colorAt = (event) => {
+    const index = THEME_CARD_EVENTS.indexOf(event);
+    if (index < 0) {
+      return "rgb(43, 43, 43)";
+    }
+    const samples = [];
+    for (const band of bands) {
+      const stops = band.stops;
+      const rgb = stops[Math.min(index, stops.length - 1)];
+      if (rgb && rgb.length >= 3) {
+        samples.push(rgb);
+      }
+    }
+    if (!samples.length) {
+      return "rgb(43, 43, 43)";
+    }
+    const avg = [0, 1, 2].map((channel) =>
+      Math.round(
+        samples.reduce((sum, rgb) => sum + (Number(rgb[channel]) || 0), 0) /
+          samples.length
+      )
+    );
+    return rgbCss(avg);
+  };
+  const stops = THEME_DIAL_STOPS.map(
+    ([event, at]) => `${colorAt(event)} ${at * 100}%`
+  );
+  return `conic-gradient(from 180deg, ${stops.join(", ")})`;
+}
+
+export function applyCircularRamp(el, ramps) {
+  el.replaceChildren();
+  el.style.backgroundImage = circularRampBackground(ramps);
+  el.style.backgroundSize = "cover";
+  el.style.backgroundPosition = "center";
+  el.style.backgroundRepeat = "no-repeat";
 }
 
 const THEME_CARD_EVENTS = ["dawn", "sunrise", "noon", "sunset", "dusk"];
@@ -1106,6 +1234,32 @@ function stickyBg(kind) {
   return bg;
 }
 
+/** Class-based stuck fills for browsers without scroll-state queries. */
+export function bindStickyTitles(scroller) {
+  if (!scroller) {
+    return () => {};
+  }
+  if (scroller._stickyTitles) {
+    return scroller._stickyTitles;
+  }
+  const sync = () => {
+    const top = scroller.getBoundingClientRect().top;
+    for (const el of scroller.querySelectorAll(
+      ".floor-block > .floor-label, .floor-block .area-head, .library-block > .area-head"
+    )) {
+      const offset = el.classList.contains("area-head") && el.closest(".floor-block")
+        ? 32
+        : 0;
+      const stuck = el.getBoundingClientRect().top <= top + offset + 0.5;
+      el.classList.toggle("is-stuck", stuck);
+    }
+  };
+  scroller.addEventListener("scroll", sync, { passive: true });
+  scroller._stickyTitles = sync;
+  sync();
+  return sync;
+}
+
 export function sceneCoverUrl(panel) {
   const builtinFor = (builtin) =>
     builtin && galleryPalette(builtin) ? galleryCoverUrl(builtin) : "";
@@ -1168,7 +1322,12 @@ function renderAreaBlock(panel, area, scenes) {
   const head = document.createElement("div");
   head.className = "area-head";
   const title = document.createElement("h2");
-  title.textContent = area.name;
+  if (area.icon) {
+    const areaIcon = document.createElement("ha-icon");
+    areaIcon.setAttribute("icon", area.icon);
+    title.appendChild(areaIcon);
+  }
+  title.appendChild(document.createTextNode(area.name || ""));
   const add = iconButton(
     "mdi:plus",
     panel._t("frontend.actions.add_scene", "Add scene")
@@ -1194,7 +1353,8 @@ function renderAreaBlock(panel, area, scenes) {
   }
   const cards = document.createElement("div");
   cards.className = "scene-cards";
-  for (const scene of scenes) {
+  const ordered = [...scenes].sort(compareScenesForList);
+  for (const scene of ordered) {
     cards.appendChild(renderSceneCard(panel, scene));
   }
   block.appendChild(cards);
@@ -1203,12 +1363,33 @@ function renderAreaBlock(panel, area, scenes) {
 
 function makeSceneCardBg(scene) {
   if (scene.kind === "simple") {
-    return createSimpleCardMesh(scene.card?.dots);
+    return createSimpleCardMesh(scene.card?.dots, { width: 180, height: 180 });
   }
   const bg = document.createElement("div");
   bg.className = "card-bg";
-  applyRampBackground(bg, scene.card?.ramps);
+  applyCircularRamp(bg, scene.card?.ramps);
   return bg;
+}
+
+function sceneCategoryName(panel, categoryId) {
+  if (!categoryId) {
+    return "";
+  }
+  const groups = panel._hass?.categories;
+  const sceneCats = groups?.scene || groups;
+  return sceneCats?.[categoryId]?.name || "";
+}
+
+function sceneLabelEntries(panel, ids) {
+  const catalog = panel._hass?.labels || {};
+  const entries = [];
+  for (const id of ids || []) {
+    const entry = catalog[id];
+    if (entry?.name) {
+      entries.push(entry);
+    }
+  }
+  return entries;
 }
 
 function sceneCardIcon(scene) {
@@ -1222,6 +1403,9 @@ function sceneCardIcon(scene) {
 function renderSceneCard(panel, scene) {
   const slot = document.createElement("div");
   slot.className = "scene-card-slot";
+  if (scene.disabled) {
+    slot.classList.add("is-disabled");
+  }
   const cardEl = document.createElement("div");
   cardEl.className = "scene-card";
   cardEl.dataset.sceneId = scene.id;
@@ -1234,17 +1418,40 @@ function renderSceneCard(panel, scene) {
   body.className = "card-body";
   const name = document.createElement("div");
   name.className = "card-name";
-  name.textContent =
+  const rawName =
     scene.scene_name ||
     scene.name ||
     panel._t("frontend.common.untitled", "Untitled");
-  const sub = document.createElement("div");
-  sub.className = "card-sub";
-  sub.textContent =
-    scene.kind === "simple"
-      ? panel._t("frontend.kinds.simple", "Scene")
-      : panel._t("frontend.kinds.circadian", "Circadian scene");
-  body.append(name, sub);
+  name.textContent = stripAreaPrefix(rawName, scene.area_name) || rawName;
+  const category = sceneCategoryName(panel, scene.category || scene.form?.category);
+  if (category) {
+    const cat = document.createElement("div");
+    cat.className = "card-category";
+    cat.textContent = category;
+    body.append(name, cat);
+  } else {
+    body.appendChild(name);
+  }
+  const labels = sceneLabelEntries(panel, scene.labels || scene.form?.labels);
+  if (labels.length) {
+    const row = document.createElement("div");
+    row.className = "card-labels";
+    for (const label of labels) {
+      const chip = document.createElement("span");
+      chip.className = "card-label";
+      chip.textContent = label.name;
+      row.appendChild(chip);
+    }
+    body.appendChild(row);
+  }
+  if (scene.disabled || scene.hidden) {
+    const flag = document.createElement("div");
+    flag.className = "card-flag";
+    flag.textContent = scene.disabled
+      ? panel._t("frontend.cards.disabled", "Disabled")
+      : panel._t("frontend.cards.hidden", "Hidden");
+    body.appendChild(flag);
+  }
   const icon = document.createElement("ha-icon");
   icon.className = "card-icon";
   icon.setAttribute("icon", sceneCardIcon(scene));
@@ -1652,7 +1859,13 @@ export function renderSceneUsed(panel) {
   }).filter((item) => (simple ? item.kind === "variable" : item.kind !== "theme"));
   const row = document.createElement("div");
   row.className = "scene-used";
-  row.appendChild(simple ? renderPaletteSplit(panel) : renderThemeSplit(panel));
+  const head = simple ? renderPaletteSplit(panel) : renderThemeSplit(panel);
+  if (!head && !uses.length) {
+    return null;
+  }
+  if (head) {
+    row.appendChild(head);
+  }
   for (const item of uses) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1686,17 +1899,15 @@ function renderPaletteSplit(panel) {
   const palette = paletteId
     ? (panel._variables || []).find((entry) => entry.id === paletteId)
     : null;
+  if (!palette) {
+    return null;
+  }
   const button = document.createElement("button");
   button.type = "button";
   button.className = "scene-used-chip";
   const name = document.createElement("span");
-  if (!palette) {
-    button.classList.add("is-placeholder");
-    name.textContent = panel._t("frontend.dialogs.scene_palette_select", "Select a palette");
-  } else {
-    name.textContent = palette.name || paletteId;
-    appendPaletteFace(button, palette, panel._variables);
-  }
+  name.textContent = palette.name || paletteId;
+  appendPaletteFace(button, palette, panel._variables);
   button.appendChild(name);
   button.setAttribute("aria-label", name.textContent);
   button.addEventListener("click", () => panel._pickSceneBasePalette?.());

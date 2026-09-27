@@ -23,6 +23,27 @@
 - **Why:** A fixed wheel left the tiles mid-page. Growing the disk to the raw leftover width clipped the rings and dropped the presets onto the tiles. Lifting the tiles for the name button left a gap the wheel should have used. The dial’s 600px floor scrolled sooner than the color wheel and left the tiles under the face instead of on the bottom of the column.
 - **Do not reverse without user ask.**
 
+## On/off and brightness-only lights stay in their own groups
+
+- **Date:** 2026-09-27
+- **Decision:** An on/off light stores `{state}` only, and its tile is empty or full. A brightness-only light keeps brightness and drops color. Both are grouped by capability before any palette or color draft, including a new circadian scene and auto-configure. Preview samples use the same adaptation as the saved snapshot.
+- **Why:** Those lights were painted with the theme color and a percent fill, and they joined the color group.
+- **Do not reverse without user ask.**
+
+## Sticky titles do not depend on scroll-state queries
+
+- **Date:** 2026-09-27
+- **Decision:** Floor and area title fills toggle `.is-stuck` from the rail’s scroll position. The same background the scroll-state query paints is also painted from that class. A stuck light-group title uses a solid gradient, not a masked backdrop filter. Wheel pins set an SVG `transform` attribute so the icon is not painted at the origin.
+- **Why:** Safari ignores `@container scroll-state(stuck)` and paints `foreignObject` icons at the SVG origin when the pin position is only a CSS transform on an ancestor.
+- **Do not reverse without user ask.**
+
+## Reset restores a fresh install
+
+- **Date:** 2026-09-27
+- **Decision:** Settings can delete every Scene Studio scene and its Home Assistant scene entity, remove managed native YAML leftovers, clear the activation cache, and rewrite the store to the seeded variables, the Default theme, and default settings. The config entry, lights, and areas stay. The panel then drops its `scene_studio` drafts.
+- **Why:** There was no way back to the empty onboarding store without editing storage by hand.
+- **Do not reverse without user ask.**
+
 ## Scene from a palette takes the palette name
 
 - **Date:** 2026-09-25
@@ -911,7 +932,7 @@ Agents: do not reverse these without an explicit user request. Supersede entries
 ## New items are Untitled until named
 
 - **Date:** 2026-09-16
-- **Decision:** Create scene / variable / palette / theme stores **Untitled** (translated). Editors have no Name field. While the open item is still a placeholder name, a corner FAB (**Name scene/palette/variable/theme**) opens the rename dialog, prefilled with a logical name (`{Area} Circadian` for circadian scenes, area name for simple, Variable / Palette / Theme otherwise). Unnamed scene cards also show a rename control left of the overflow menu.
+- **Decision:** Create scene / variable / palette / theme stores **Untitled** (translated). Editors have no Name field. While the open item is still a placeholder name, a corner FAB (**Name scene/palette/variable/theme**) opens the rename dialog, prefilled with the theme name for circadian scenes and the palette name for simple scenes (Variable / Palette / Theme otherwise). Do not prefix those suggestions or auto-configured scene names with the area — the list already groups by area, and displayed light and scene names strip a leading area prefix. Unnamed scene cards also show a rename control left of the overflow menu.
 - **Why:** Forcing a name at create blocked getting to the editor. The FAB is the prompt once you can see what you made.
 - **Do not reverse without user ask.**
 

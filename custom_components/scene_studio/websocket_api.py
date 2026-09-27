@@ -22,12 +22,14 @@ from .const import (
     KIND_CIRCADIAN,
     SCENE_NAME,
 )
+from .activation_cache import invalidate_activation_cache
+from .migrate_native import async_delete_managed_yaml
 from .native_scene import lights_in_area
 from .preview import build_preview
 from .scene import async_create_or_update_entity, async_remove_entity
 from .snapshots import card_colors
 from .solar import build_sun_path
-from .store import SceneStudioStore, to_form_data
+from .store import SceneStudioStore, auto_configure_scene_name, to_form_data
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get)
     websocket_api.async_register_command(hass, ws_save)
     websocket_api.async_register_command(hass, ws_delete)
+    websocket_api.async_register_command(hass, ws_reset)
     websocket_api.async_register_command(hass, ws_sun_path)
     websocket_api.async_register_command(hass, ws_preview)
     websocket_api.async_register_command(hass, ws_get_settings)
@@ -132,6 +135,8 @@ def _scene_payload(hass: HomeAssistant, item: dict[str, Any]) -> dict[str, Any]:
         "entity_id": entry.entity_id if entry else None,
         "labels": form.get("labels") or [],
         "category": form.get("category"),
+        "hidden": bool(getattr(entry, "hidden_by", None)) if entry else False,
+        "disabled": bool(getattr(entry, "disabled_by", None)) if entry else False,
         "form": form,
         "card": colors,
     }
@@ -293,6 +298,49 @@ async def ws_delete(
         connection.send_error(msg["id"], "delete_failed", str(err))
         return
     connection.send_result(msg["id"], {"scene_id": scene_id})
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/reset"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_reset(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Delete every scene and restore the fresh-install store.
+
+    Lights, areas, and the config entry stay. Scene entities and managed
+    native YAML are removed first so a failed reset can put them back.
+    """
+    store = _store(hass)
+    scene_ids = list(store.scenes)
+    managed = list(store.managed_native_scene_ids)
+    removed: list[str] = []
+    try:
+        entities = hass.data[DOMAIN][DATA_ENTITIES]
+        for scene_id in scene_ids:
+            await async_remove_entity(entities, scene_id)
+            removed.append(scene_id)
+        if managed:
+            await async_delete_managed_yaml(hass, managed)
+        await store.async_reset_to_fresh()
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        for scene_id in removed:
+            item = store.get(scene_id)
+            if item is None:
+                continue
+            await async_create_or_update_entity(
+                hass,
+                hass.data[DOMAIN][DATA_CONFIG_ENTRY],
+                item,
+                hass.data[DOMAIN][DATA_ADD_ENTITIES],
+                hass.data[DOMAIN][DATA_ENTITIES],
+            )
+        connection.send_error(msg["id"], "reset_failed", str(err))
+        return
+    invalidate_activation_cache(hass)
+    connection.send_result(msg["id"], {"ok": True})
 
 
 @websocket_api.websocket_command(
@@ -578,7 +626,7 @@ async def ws_auto_configure(
         item = await store.async_upsert(
             {
                 "kind": KIND_CIRCADIAN,
-                SCENE_NAME: f"{area.name} Circadian",
+                SCENE_NAME: auto_configure_scene_name(store.themes),
                 "area": area.id,
                 "theme_id": "default",
             }

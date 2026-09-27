@@ -67,12 +67,13 @@ import {
   renderSceneUsed,
   renderPaletteUsed,
   renderLibraryUsedBy,
-  PALETTE_RANDOMIZE_ICON,
   sceneCoverUrl,
-  applyRampBackground,
+  applyCircularRamp,
+  bindStickyTitles,
   previewRampsForTheme,
   paintThemeDial,
 } from "./landing.js";
+import { lightDisplayName } from "./display_names.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
@@ -164,10 +165,10 @@ const UNDO_STACK_LIMIT = 75;
 const LIVE_EDIT_STORAGE_VERSION = 1;
 const ROOM_PREVIEW_STORAGE_VERSION = 1;
 const SCENE_PLAY_STORAGE_VERSION = 2;
-const SCENE_PLAY_TICK_MS = 1000;
-const SCENE_PLAY_TRANSITION_SEC = 1;
-const SCENE_PLAY_DURATION_DEFAULT_SEC = 30;
-const SCENE_PLAY_DURATION_OPTIONS_SEC = [10, 15, 30, 60, 90, 120];
+const SCENE_PLAY_TICK_MS = 250;
+const SCENE_PLAY_TRANSITION_SEC = 0.25;
+const SCENE_PLAY_DURATION_DEFAULT_SEC = 10;
+const SCENE_PLAY_DURATION_OPTIONS_SEC = [2, 5, 10, 15, 30, 60, 90, 120];
 const EXTERNAL_SCENE_WARN_STORAGE_VERSION = 1;
 const CLOCK_FEATHER_PCT = 5.5;
 const LINKED_EVENTS = ["dawn", "sunrise", "sunset"];
@@ -2856,6 +2857,18 @@ class SceneStudioPanel extends HTMLElement {
           flex: 0 1 auto;
           justify-content: flex-end;
           overflow: hidden;
+          padding: 10px 6px;
+        }
+        .hue-preset-edit {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          margin-left: 4px;
+          color: inherit;
+          cursor: pointer;
+        }
+        .hue-preset-edit ha-icon {
+          --mdc-icon-size: 16px;
         }
         .hue-presets-track {
           display: flex;
@@ -3305,6 +3318,62 @@ class SceneStudioPanel extends HTMLElement {
           pointer-events: none;
           z-index: 5;
         }
+        .light-add-picker-host.is-menu {
+          opacity: 1;
+          pointer-events: auto;
+          z-index: 30;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          box-sizing: border-box;
+          padding: 8px;
+          max-height: min(360px, 50vh);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          border-radius: 12px;
+          box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0, 0, 0, 0.35));
+        }
+        .light-add-menu-search {
+          box-sizing: border-box;
+          width: 100%;
+          margin: 0;
+          padding: 8px 10px;
+          border: 1px solid var(--divider-color);
+          border-radius: 8px;
+          background: var(--secondary-background-color);
+          color: var(--primary-text-color);
+          font: inherit;
+        }
+        .light-add-menu-list {
+          overflow: auto;
+          min-height: 0;
+        }
+        .light-add-menu-area {
+          padding: 8px 8px 2px;
+          color: var(--secondary-text-color);
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .light-add-menu-item {
+          display: block;
+          width: 100%;
+          margin: 0;
+          padding: 8px;
+          border: 0;
+          border-radius: 8px;
+          background: transparent;
+          color: var(--primary-text-color);
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .light-add-menu-item:hover,
+        .light-add-menu-item:focus-visible {
+          background: var(--secondary-background-color);
+        }
+        .settings-reset {
+          margin-top: 24px;
+        }
         .light-list-add ha-button {
           --mdc-typography-button-text-transform: none;
         }
@@ -3400,18 +3469,28 @@ class SceneStudioPanel extends HTMLElement {
           gap: 8px;
         }
         .scene-gallery-slot {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 0px;
-          gap: 0;
-          align-items: stretch;
+          display: block;
           min-width: 0;
-          transition:
-            grid-template-columns 220ms cubic-bezier(0.2, 0, 0, 1),
-            gap 220ms cubic-bezier(0.2, 0, 0, 1);
         }
-        .scene-gallery-slot:has(.scene-gallery-card.selected) {
-          grid-template-columns: minmax(0, 1fr) 36px;
-          gap: 8px;
+        .scene-palette-randomize-label {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          z-index: 1;
+          padding: 2px 8px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.45);
+          color: #fff;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          pointer-events: none;
+        }
+        .scene-palette-randomize-label[hidden] {
+          display: none !important;
+        }
+        .var-chip {
+          position: relative;
         }
         .scene-gallery-card {
           position: relative;
@@ -3439,23 +3518,7 @@ class SceneStudioPanel extends HTMLElement {
           display: block;
           border: 0;
         }
-        .scene-palette-randomize-side {
-          writing-mode: vertical-rl;
-          text-orientation: mixed;
-          min-width: 0;
-          height: 100%;
-          margin: 0;
-          padding: 0;
-          overflow: hidden;
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 180ms ease;
-        }
-        .scene-gallery-slot:has(.scene-gallery-card.selected) .scene-palette-randomize-side {
-          opacity: 1;
-          pointer-events: auto;
-        }
-        .scene-gallery-card span {
+        .scene-gallery-card > span:not(.scene-palette-randomize-label) {
           position: absolute;
           left: 8px;
           right: 8px;
@@ -4231,9 +4294,9 @@ class SceneStudioPanel extends HTMLElement {
             max-height: none;
             min-height: 0;
             flex: 1 1 auto;
-            /* The ring sits in this padding so the scroller can clip without
-               eating it. The fade mask is this box, not the color modes. */
-            padding: 6px 4px 6px 0;
+            /* The scaled swatch and its ring sit in this padding so overflow
+               does not clip the top of the selected variable. */
+            padding: 14px 8px 14px 12px;
             margin: 0 -4px 0 0;
             overflow-x: hidden;
             overflow-y: auto;
@@ -5125,9 +5188,9 @@ class SceneStudioPanel extends HTMLElement {
     if (!this._panelLoadIsCurrent(token)) {
       return;
     }
-    if (hasCache) {
-      return;
-    }
+    // Always paint the payload. Skipping this when floors were already cached
+    // left auto-configure empty and let a stale in-flight load put a deleted
+    // scene back on screen.
     this._render();
   }
 
@@ -5506,13 +5569,37 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _suggestedSceneName(scene) {
-    const area = this._areaDisplayName(scene?.area);
     if (scene?.kind === "simple") {
-      return area || this._untitledLabel();
+      const palette = (this._variables || []).find(
+        (item) => item.id === scene?.palette_id
+      );
+      return palette?.name || this._untitledLabel();
     }
-    return area
-      ? this._t("frontend.naming.circadian_scene", "{area} Circadian", { area })
-      : this._t("frontend.naming.circadian_fallback", "Circadian");
+    const themeId = scene?.theme_id || "default";
+    const theme = (this._themes || []).find((item) => item.id === themeId);
+    return (
+      theme?.name || this._t("frontend.naming.circadian_fallback", "Circadian")
+    );
+  }
+
+  /** Entity name, or the device name when HA left the entity as "Light". */
+  _lightDisplayName(entityId, { areaName, fallback = "" } = {}) {
+    const state = this._hass?.states?.[entityId];
+    const entity = this._hass?.entities?.[entityId];
+    const device = entity?.device_id
+      ? this._hass?.devices?.[entity.device_id]
+      : null;
+    const area =
+      areaName !== undefined
+        ? areaName
+        : this._areaDisplayName(this._formData?.area);
+    return lightDisplayName({
+      friendlyName:
+        state?.attributes?.friendly_name || entity?.name || fallback,
+      deviceName: device?.name_by_user || device?.name || "",
+      entityId,
+      areaName: area,
+    });
   }
 
   /** Base name, or "Name 2" when this area already has that scene name. */
@@ -6002,12 +6089,16 @@ class SceneStudioPanel extends HTMLElement {
     }
     const tab = rail.dataset.tab || "scenes";
     const apply = () => {
-      if (this._areaRailForceReveal || !this._areaRailUserScrolled) {
+      if (
+        !this._areaRailSkipReveal &&
+        (this._areaRailForceReveal || !this._areaRailUserScrolled)
+      ) {
         if (this._revealSelectedInRail(rail)) {
           this._areaRailForceReveal = false;
+          return;
         }
-        return;
       }
+      this._areaRailSkipReveal = false;
       const top = this._railScrollTop?.[tab];
       if (top != null) {
         rail.scrollTop = top;
@@ -6030,6 +6121,7 @@ class SceneStudioPanel extends HTMLElement {
     }
     if (this._areaRailBound === rail) {
       this._restoreAreaRailScroll(rail);
+      bindStickyTitles(rail)();
       return;
     }
     if (this._areaRailBound && this._onAreaRailScroll) {
@@ -6047,6 +6139,7 @@ class SceneStudioPanel extends HTMLElement {
     this._areaRailBound = rail;
     rail.addEventListener("scroll", this._onAreaRailScroll, { passive: true });
     this._restoreAreaRailScroll(rail);
+    bindStickyTitles(rail);
   }
 
   _setRailTab(tab) {
@@ -6525,6 +6618,7 @@ class SceneStudioPanel extends HTMLElement {
       getPalette: () => this._variables || [],
       onAddPalette: (draft) => this._addVariableFromCurrentDraft(draft),
       addVariableLabel: this._t("frontend.library.add_variable", "Add variable"),
+      onEditVariable: (id) => this._go(`variable/${id}`),
     };
   }
 
@@ -6586,6 +6680,13 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     const current = this._sceneBasePalette();
+    const picked = new Set(this._simpleSelectedIds || []);
+    if (this._sidebarLightId) {
+      picked.add(this._sidebarLightId);
+    }
+    for (const id of this._legendSelectedIds || []) {
+      picked.add(id);
+    }
     const choice = await this._chooseScenePalette({
       areaId: this._formData.area,
       mode: "edit",
@@ -6594,10 +6695,10 @@ class SceneStudioPanel extends HTMLElement {
     if (!choice) {
       return;
     }
-    this._applySceneBasePalette(choice);
+    this._applySceneBasePalette(choice, picked);
   }
 
-  _applySceneBasePalette(choice) {
+  _applySceneBasePalette(choice, pickedBefore) {
     const scene = this._formData;
     if (!scene || !choice) {
       return;
@@ -6605,21 +6706,39 @@ class SceneStudioPanel extends HTMLElement {
     const next = choice.palette?.id || null;
     const seed = next ? choice.seed || 0 : 0;
     this._commitUndo();
+    const picked = pickedBefore || new Set();
+    const canColor = (eid) => {
+      const flags = this._lightModeFlags(eid);
+      return !flags.onOff && !flags.brightnessOnly;
+    };
     if (scene.kind === "simple") {
       const prev = scene.palette_id || null;
       scene.palette_id = next;
       scene.assignment_seed = seed;
       const lights = scene.lights || {};
       for (const [eid, light] of Object.entries(lights)) {
-        if (!light || light.variable_ref !== prev) {
+        const selected = picked.has(eid);
+        const followed = light?.variable_ref === prev;
+        if (!selected && !followed) {
+          continue;
+        }
+        if (!canColor(eid)) {
           continue;
         }
         if (next) {
           lights[eid] = { variable_ref: next };
-        } else {
+        } else if (followed) {
           delete lights[eid];
         }
       }
+      for (const eid of picked) {
+        if (!canColor(eid) || !next) {
+          continue;
+        }
+        lights[eid] = { variable_ref: next };
+      }
+      scene.lights = lights;
+      this._simpleSelectedIds = [...picked];
       this._saveSoon();
       this._render();
       return;
@@ -6632,6 +6751,32 @@ class SceneStudioPanel extends HTMLElement {
       delete map[eventId];
     }
     scene.event_palettes = map;
+    if (picked.size) {
+      this._legendSelectedIds = new Set(picked);
+      this._syncClockLightSelection?.();
+    }
+    if (next && picked.size) {
+      const overrides = { ...(scene.overrides || {}) };
+      const palette = (this._variables || []).find((item) => item.id === next);
+      for (const eid of picked) {
+        if (!canColor(eid)) {
+          continue;
+        }
+        const per = { ...(overrides[eid] || {}) };
+        const draft = { state: "on", variable_ref: next };
+        if (palette) {
+          applyVariableToDraft(draft, palette, {
+            entityId: eid,
+            seed,
+            catalog: this._variables,
+          });
+        }
+        per[eventId] = draft;
+        overrides[eid] = per;
+      }
+      scene.overrides = overrides;
+      this._assignOpenLightToPalette?.(next, seed);
+    }
     this._saveSoon();
     this._syncOpenSceneWheel?.();
     this._syncSceneUsed();
@@ -6837,17 +6982,20 @@ class SceneStudioPanel extends HTMLElement {
       noneChoice.addEventListener("click", () => choose("none", null));
       noneChip = noneChoice;
       list.appendChild(noneChoice);
+      const randomizeSeed = () => {
+        seed = (Math.random() * 0xffffffff) >>> 0;
+        void applyPreview();
+      };
       const paintSelection = () => {
         for (const row of rows) {
           const on = selectedKind === "user" && row.id === selectedId;
           row.chip.classList.toggle("selected", on);
-          row.randomize.hidden = !on;
+          row.label.hidden = !on;
         }
         for (const card of cards) {
-          card.el.classList.toggle(
-            "selected",
-            selectedKind === "gallery" && card.id === selectedId
-          );
+          const on = selectedKind === "gallery" && card.id === selectedId;
+          card.el.classList.toggle("selected", on);
+          card.label.hidden = !on;
         }
         noneChip?.classList.toggle("selected", selectedKind === "none");
         const locked = selectedKind !== "none" && !selectedPalette();
@@ -6867,27 +7015,25 @@ class SceneStudioPanel extends HTMLElement {
         const choice = document.createElement("div");
         choice.className = "scene-palette-choice";
         const chip = createPaletteChip(palette, this._variables, {
-          onClick: () => choose("user", palette.id),
+          onClick: () => {
+            if (selectedKind === "user" && selectedId === palette.id) {
+              randomizeSeed();
+              return;
+            }
+            choose("user", palette.id);
+          },
         });
-        const randomize = document.createElement("ha-button");
-        randomize.className = "scene-palette-randomize";
-        randomize.appearance = "plain";
-        randomize.hidden = true;
-        const randomizeIcon = document.createElement("ha-icon");
-        randomizeIcon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
-        randomizeIcon.slot = "icon";
-        randomize.appendChild(randomizeIcon);
-        randomize.append(
-          this._t("frontend.dialogs.scene_palette_randomize", "Randomize")
+        const label = document.createElement("span");
+        label.className = "scene-palette-randomize-label";
+        label.hidden = true;
+        label.textContent = this._t(
+          "frontend.dialogs.scene_palette_randomize",
+          "Randomize"
         );
-        randomize.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          seed = (Math.random() * 0xffffffff) >>> 0;
-          void applyPreview();
-        });
-        choice.append(chip, randomize);
+        chip.appendChild(label);
+        choice.appendChild(chip);
         list.appendChild(choice);
-        rows.push({ id: palette.id, chip, randomize });
+        rows.push({ id: palette.id, chip, label });
       }
       for (const section of gallerySections()) {
         const label = document.createElement("p");
@@ -6904,28 +7050,26 @@ class SceneStudioPanel extends HTMLElement {
           photo.src = galleryCoverUrl(item.id);
           const name = document.createElement("span");
           name.textContent = this._t(item.nameKey, item.name);
-          card.append(photo, name);
-          card.addEventListener("click", () => choose("gallery", item.id));
+          const label = document.createElement("span");
+          label.className = "scene-palette-randomize-label";
+          label.hidden = true;
+          label.textContent = this._t(
+            "frontend.dialogs.scene_palette_randomize",
+            "Randomize"
+          );
+          card.append(photo, name, label);
+          card.addEventListener("click", () => {
+            if (selectedKind === "gallery" && selectedId === item.id) {
+              randomizeSeed();
+              return;
+            }
+            choose("gallery", item.id);
+          });
           const slot = document.createElement("div");
           slot.className = "scene-gallery-slot";
-          const side = document.createElement("ha-button");
-          side.className = "scene-palette-randomize scene-palette-randomize-side";
-          side.appearance = "plain";
-          const sideIcon = document.createElement("ha-icon");
-          sideIcon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
-          sideIcon.slot = "icon";
-          side.append(
-            sideIcon,
-            this._t("frontend.dialogs.scene_palette_randomize", "Randomize")
-          );
-          side.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            seed = (Math.random() * 0xffffffff) >>> 0;
-            void applyPreview();
-          });
-          slot.append(card, side);
+          slot.appendChild(card);
           grid.appendChild(slot);
-          cards.push({ id: item.id, el: card });
+          cards.push({ id: item.id, el: card, label });
         }
         list.append(label, grid);
       }
@@ -8477,10 +8621,46 @@ class SceneStudioPanel extends HTMLElement {
     this._updateLightNameBrightness(seconds);
   }
 
+  _lightModeFlags(entityId) {
+    const modes =
+      this._hass?.states?.[entityId]?.attributes?.supported_color_modes || [];
+    const onOff = modes.length > 0 && modes.every((mode) => mode === "onoff");
+    const hasColor = modes.some((mode) =>
+      ["hs", "xy", "rgb", "rgbw", "rgbww", "color_temp"].includes(mode)
+    );
+    return {
+      known: modes.length > 0,
+      onOff,
+      brightnessOnly: modes.length > 0 && !onOff && !hasColor,
+    };
+  }
+
+  /** On/off is only on or off. Brightness-only keeps level and drops color. */
+  _editorLightState(entityId, state) {
+    const flags = this._lightModeFlags(entityId);
+    const source = state || {};
+    if (!flags.known) {
+      return source;
+    }
+    if (flags.onOff) {
+      const off = source.state === "off" || source.brightness === 0;
+      return { state: off ? "off" : "on" };
+    }
+    if (flags.brightnessOnly) {
+      const next = { state: source.state || "on" };
+      if (source.brightness != null) {
+        next.brightness = source.brightness;
+      }
+      return next;
+    }
+    return source;
+  }
+
   _lightEventStoredState(light, eventId) {
+    const adapt = (state) => this._editorLightState(light.entity_id, state);
     const ov = this._formData?.overrides?.[light.entity_id]?.[eventId];
     if (ov) {
-      return { state: ov.state || "on", ...ov };
+      return adapt({ state: ov.state || "on", ...ov });
     }
     const row = (light.event_states || []).find((item) => item.event === eventId);
     const themeEv = this._themeDraft?.events?.[eventId];
@@ -8503,12 +8683,12 @@ class SceneStudioPanel extends HTMLElement {
           merged.brightness = themeBri;
         }
       }
-      return merged;
+      return adapt(merged);
     }
     if (this._themeDraft) {
-      return this._themeEventDraft(eventId);
+      return adapt(this._themeEventDraft(eventId));
     }
-    return this._eventDefaultLightState(light.entity_id, eventId);
+    return adapt(this._eventDefaultLightState(light.entity_id, eventId));
   }
 
   _writeLightEventOverride(lightId, eventId, payload) {
@@ -9374,6 +9554,93 @@ class SceneStudioPanel extends HTMLElement {
     body.appendChild(intervalRow);
 
     this._appendDuskMinimumPicker(body);
+
+    const reset = document.createElement("ha-button");
+    reset.className = "settings-reset";
+    reset.variant = "danger";
+    reset.textContent = this._t(
+      "frontend.settings.reset",
+      "Delete and reset everything"
+    );
+    reset.addEventListener("click", () => this._confirmResetEverything());
+    body.appendChild(reset);
+  }
+
+  _confirmResetEverything() {
+    this.shadowRoot.querySelector("ha-dialog.confirm-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "confirm-dialog";
+    dialog.setAttribute(
+      "header-title",
+      this._t("frontend.settings.reset_title", "Delete and reset everything?")
+    );
+    dialog.open = true;
+    const text = document.createElement("p");
+    text.textContent = this._t(
+      "frontend.settings.reset_confirm",
+      "This deletes every Scene Studio scene and its Home Assistant scene. Palettes, other color variables, and themes are replaced with the five default colors and the Default theme, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone."
+    );
+    dialog.appendChild(text);
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    const confirm = document.createElement("ha-button");
+    confirm.slot = "primaryAction";
+    confirm.variant = "danger";
+    confirm.textContent = this._t(
+      "frontend.settings.reset",
+      "Delete and reset everything"
+    );
+    confirm.addEventListener("click", () => {
+      dialog.open = false;
+      void this._resetEverything();
+    });
+    footer.append(cancel, confirm);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
+  }
+
+  _clearSceneStudioDrafts() {
+    try {
+      const prefixes = [`${DOMAIN}.draft.`, ...LEGACY_DOMAINS.map((domain) => `${domain}.draft.`)];
+      const drop = [];
+      for (let i = 0; i < window.localStorage.length; i += 1) {
+        const key = window.localStorage.key(i);
+        if (key && prefixes.some((prefix) => key.startsWith(prefix))) {
+          drop.push(key);
+        }
+      }
+      for (const key of drop) {
+        window.localStorage.removeItem(key);
+      }
+    } catch (_err) {
+      // Private mode can throw on localStorage.
+    }
+  }
+
+  async _resetEverything() {
+    try {
+      await this._hass.callWS({ type: `${DOMAIN}/reset` });
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._render();
+      return;
+    }
+    this._clearSceneStudioDrafts();
+    this._items = [];
+    this._formData = null;
+    this._editId = null;
+    await this._go("");
+    await this._loadList();
   }
 
   _appendDuskMinimumPicker(parent) {
@@ -9882,7 +10149,7 @@ class SceneStudioPanel extends HTMLElement {
       if (!bg) {
         continue;
       }
-      applyRampBackground(bg, scene.card?.ramps);
+      applyCircularRamp(bg, scene.card?.ramps);
     }
   }
 
@@ -9917,11 +10184,11 @@ class SceneStudioPanel extends HTMLElement {
       );
       const bg = card?.querySelector(".card-bg");
       if (bg) {
-        applyRampBackground(bg, ramps);
+        applyCircularRamp(bg, ramps);
       }
       const glow = card?.parentElement?.querySelector(":scope > .card-glow");
       if (glow?.classList.contains("card-bg")) {
-        applyRampBackground(glow, ramps);
+        applyCircularRamp(glow, ramps);
       }
     }
     const chipDial = root.querySelector(
@@ -11131,56 +11398,136 @@ class SceneStudioPanel extends HTMLElement {
     this._withPreservedTileScroll(() => this._simpleEditorRefresh?.());
   }
 
-  async _openAddLightPicker(anchor, { simple = false } = {}) {
-    if (!customElements.get("ha-entity-picker")) {
-      return;
+  _addLightChoices(exclude) {
+    const states = this._hass?.states || {};
+    const entities = this._hass?.entities || {};
+    const devices = this._hass?.devices || {};
+    const areas = this._hass?.areas || {};
+    const rows = [];
+    for (const entityId of Object.keys(states)) {
+      if (!entityId.startsWith("light.") || exclude.has(entityId)) {
+        continue;
+      }
+      const entity = entities[entityId] || {};
+      const device = entity.device_id ? devices[entity.device_id] : null;
+      const areaId = entity.area_id || device?.area_id || "";
+      const areaName = areas[areaId]?.name || "";
+      const deviceName = device?.name_by_user || device?.name || "";
+      const friendly =
+        states[entityId]?.attributes?.friendly_name || entity.name || "";
+      rows.push({
+        entityId,
+        name: this._lightDisplayName(entityId, { areaName }),
+        areaName,
+        deviceName,
+        friendly,
+      });
     }
-    const listed = simple
-      ? [...(this._simpleMembers || [])]
-      : (this._sunPath?.lights || [])
-          .filter((light) => !light.suggested)
-          .map((light) => light.entity_id);
+    rows.sort((a, b) => {
+      const areaOrder = (a.areaName || "\uffff").localeCompare(
+        b.areaName || "\uffff",
+        undefined,
+        { sensitivity: "base" }
+      );
+      if (areaOrder) {
+        return areaOrder;
+      }
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+    return rows;
+  }
+
+  async _openAddLightPicker(anchor, { simple = false } = {}) {
+    const listed = new Set(
+      simple
+        ? this._simpleMembers || []
+        : (this._sunPath?.lights || [])
+            .filter((light) => !light.suggested)
+            .map((light) => light.entity_id)
+    );
     this.shadowRoot.querySelector(".light-add-picker-host")?.remove();
     const host = document.createElement("div");
-    host.className = "light-add-picker-host";
-    const picker = document.createElement("ha-entity-picker");
-    picker.includeDomains = ["light"];
-    picker.excludeEntities = listed;
-    picker.hideClearIcon = true;
-    picker.searchLabel = this._t("frontend.lights.add_light", "Add light");
-    host.appendChild(picker);
+    host.className = "light-add-picker-host is-menu";
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "light-add-menu-search";
+    search.placeholder = this._t("frontend.common.search", "Search");
+    search.setAttribute(
+      "aria-label",
+      this._t("frontend.lights.add_light", "Add light")
+    );
+    const list = document.createElement("div");
+    list.className = "light-add-menu-list";
+    const choices = this._addLightChoices(listed);
+    const paint = () => {
+      const query = (search.value || "").trim().toLocaleLowerCase();
+      list.replaceChildren();
+      let lastArea = null;
+      let shown = 0;
+      for (const row of choices) {
+        const haystack = [row.name, row.friendly, row.deviceName, row.areaName, row.entityId]
+          .join(" ")
+          .toLocaleLowerCase();
+        if (query && !haystack.includes(query)) {
+          continue;
+        }
+        const areaKey = row.areaName || "";
+        if (areaKey !== lastArea) {
+          lastArea = areaKey;
+          const heading = document.createElement("div");
+          heading.className = "light-add-menu-area";
+          heading.textContent =
+            row.areaName || this._t("frontend.common.no_area", "No area");
+          list.appendChild(heading);
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "light-add-menu-item";
+        button.textContent = row.name;
+        button.addEventListener("click", () => {
+          cleanup();
+          if (simple) {
+            this._addLightToSimpleMembers(row.entityId);
+            return;
+          }
+          void this._addLightToAssignedScenes(row.entityId);
+        });
+        list.appendChild(button);
+        shown += 1;
+      }
+      if (!shown) {
+        const empty = document.createElement("div");
+        empty.className = "light-add-menu-area";
+        empty.textContent = this._t("frontend.lights.none", "No lights");
+        list.appendChild(empty);
+      }
+    };
+    const cleanup = () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKey);
+      host.remove();
+    };
+    const onPointerDown = (ev) => {
+      if (!host.contains(ev.target)) {
+        cleanup();
+      }
+    };
+    const onKey = (ev) => {
+      if (ev.key === "Escape") {
+        cleanup();
+      }
+    };
+    search.addEventListener("input", paint);
+    host.append(search, list);
+    paint();
     if (anchor?.parentElement) {
       anchor.parentElement.appendChild(host);
     } else {
       this.shadowRoot.appendChild(host);
     }
-    const cleanup = () => {
-      picker.removeEventListener("value-changed", onValue);
-      picker.removeEventListener("picker-closed", onClosed);
-      host.remove();
-    };
-    const onValue = (ev) => {
-      ev.stopPropagation();
-      const entityId = ev.detail?.value;
-      cleanup();
-      if (!entityId || !String(entityId).startsWith("light.")) {
-        return;
-      }
-      if (simple) {
-        this._addLightToSimpleMembers(entityId);
-        return;
-      }
-      void this._addLightToAssignedScenes(entityId);
-    };
-    const onClosed = () => {
-      if (!picker.value) {
-        cleanup();
-      }
-    };
-    picker.addEventListener("value-changed", onValue);
-    picker.addEventListener("picker-closed", onClosed);
-    await picker.updateComplete;
-    await picker.open();
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKey);
+    search.focus();
   }
 
   async _flushNativeDrafts() {
@@ -11644,16 +11991,19 @@ class SceneStudioPanel extends HTMLElement {
     confirm.addEventListener("click", async () => {
       dialog.open = false;
       try {
+        this._captureAreaRailScroll();
+        this._areaRailSkipReveal = true;
+        this._invalidatePanelLoads();
         await this._hass.callWS({
           type: `${DOMAIN}/delete`,
           scene_id: scene.id,
         });
         this._dropSceneFromList(scene.id);
         if (this._editId === scene.id) {
-          this._go("");
-          return;
+          await this._go("");
+        } else {
+          this._refreshVisibleSceneList();
         }
-        this._refreshVisibleSceneList();
         await this._loadList();
       } catch (err) {
         this._error = err.message || String(err);
@@ -12144,6 +12494,8 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _clockLegendTileLook(light, seconds) {
+    const flags = this._lightModeFlags(light.entity_id);
+    const neutral = (on) => (on ? [255, 236, 210] : [48, 48, 48]);
     const eventId = this._sidebarEventId;
     if (
       eventId &&
@@ -12151,7 +12503,13 @@ class SceneStudioPanel extends HTMLElement {
       (this._sunPath?.events || []).some((item) => item.id === eventId)
     ) {
       const stored = this._lightEventStoredState(light, eventId);
-      const rgb = draftRgb(stored) || [0, 0, 0];
+      if (flags.onOff) {
+        const on = stored?.state !== "off";
+        return { rgb: neutral(on), fillPct: on ? 100 : 0 };
+      }
+      const rgb = flags.brightnessOnly
+        ? neutral(stored?.state !== "off")
+        : draftRgb(stored) || [0, 0, 0];
       const bri = this._eventBrightnessIsLive()
         ? this._dialEventBrightness(eventId, light.entity_id)
         : Number(stored?.brightness);
@@ -12163,6 +12521,13 @@ class SceneStudioPanel extends HTMLElement {
       return null;
     }
     const sample = interpolateLightSample(light.samples || [], seconds);
+    if (flags.onOff) {
+      const on = sample.brightness > 0;
+      return { rgb: neutral(on), fillPct: on ? 100 : 0 };
+    }
+    if (flags.brightnessOnly) {
+      return { rgb: neutral(sample.brightness > 0), fillPct: sample.brightness };
+    }
     return { rgb: sample.rgb, fillPct: sample.brightness };
   }
 
@@ -12683,7 +13048,15 @@ class SceneStudioPanel extends HTMLElement {
       return 0;
     };
     rows.sort((a, b) => rank(a) - rank(b));
-    return rows;
+    const seen = new Set();
+    return rows.filter((light) => {
+      const id = light?.entity_id;
+      if (!id || seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      return true;
+    });
   }
 
   _uniqueAssignedScenes(events) {
@@ -13997,7 +14370,7 @@ class SceneStudioPanel extends HTMLElement {
     this._syncRoomPreviewControl();
 
     const opened = await this._openSceneSidebar({
-      title: light.name,
+      title: this._lightDisplayName(light.entity_id, { fallback: light.name }),
       subtitle: this._lightSupportsSubtitle(light.entity_id),
       className: "light-dialog",
       actionItems: [infoBtn],
@@ -14013,6 +14386,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         this._sidebarUndoBtn = null;
         this._sidebarRedoBtn = null;
+        this._assignOpenLightToPalette = null;
         this._syncPreviewOverlay();
         this._sunPathKey = undefined;
         this._ensureSunPath().then(async () => {
@@ -14541,6 +14915,10 @@ class SceneStudioPanel extends HTMLElement {
           }
           return (this._variables || []).find((item) => item.id === base.palette_id) || null;
         },
+        onPickPalette: async () => {
+          await this._pickSceneBasePalette();
+          wheelCtl?.sync();
+        },
         getAssignmentEntityId: () => light.entity_id,
         getAssignmentSeed: () => {
           const draft = currentDraft();
@@ -14606,6 +14984,19 @@ class SceneStudioPanel extends HTMLElement {
         if (wheelCtl?.el?.isConnected) {
           wheelCtl.sync();
         }
+      };
+      this._assignOpenLightToPalette = (paletteId, seed) => {
+        const draft = currentDraft();
+        const palette = (this._variables || []).find((item) => item.id === paletteId);
+        if (!draft || !palette) {
+          return;
+        }
+        applyVariableToDraft(draft, palette, {
+          entityId: light.entity_id,
+          seed: seed || 0,
+          catalog: this._variables,
+        });
+        wheelCtl?.sync();
       };
       wheelCtl.setMode(draftWheelMode(currentDraft(), hasColor, hasTemp), {
         convertDraft: false,
@@ -14883,13 +15274,17 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     try {
+      this._captureAreaRailScroll();
+      this._areaRailSkipReveal = true;
+      this._invalidatePanelLoads();
       await this._hass.callWS({
         type: `${DOMAIN}/delete`,
         scene_id: this._editId,
       });
       this._clearPersistedDraft();
       this._dropSceneFromList(this._editId);
-      this._go("");
+      await this._go("");
+      await this._loadList();
     } catch (err) {
       this._error = err.message || String(err);
       this._renderEditor();
@@ -19172,7 +19567,9 @@ class SceneStudioPanel extends HTMLElement {
       fill.style.webkitMaskImage = mask;
       fill.style.maskImage = mask;
       ring.appendChild(fill);
-      ring.title = light.name;
+      ring.title = this._lightDisplayName(light.entity_id, {
+        fallback: light.name,
+      });
       ringsHost.appendChild(ring);
     }
     const hoverName = document.createElement("div");
@@ -19984,9 +20381,12 @@ class SceneStudioPanel extends HTMLElement {
       rgb: [0, 0, 0],
       fillPct: 0,
     };
+    const lightName = this._lightDisplayName(light.entity_id, {
+      fallback: light.name,
+    });
     const displayName = removed
-      ? this._t("frontend.lights.add_named", "Add {name}", { name: light.name })
-      : light.name;
+      ? this._t("frontend.lights.add_named", "Add {name}", { name: lightName })
+      : lightName;
     const { selector, tile, hit } = createLightTile({
       entityId: light.entity_id,
       name: displayName,
@@ -20036,7 +20436,7 @@ class SceneStudioPanel extends HTMLElement {
         tile.setAttribute(
           "aria-label",
           this._t("frontend.lights.add_named_to_scene", "Add {name} to the scene", {
-            name: light.name,
+            name: lightName,
           })
         );
         const addBack = (ev) => {
@@ -20054,7 +20454,7 @@ class SceneStudioPanel extends HTMLElement {
       }
       const canEdit = !removed && assigned.length && (!unavailable || capsKnown);
       if (canEdit) {
-        tile.setAttribute("aria-label", `Edit ${light.name}`);
+        tile.setAttribute("aria-label", `Edit ${lightName}`);
         const openClosest = (ev) => {
           if (tile._lightTileSuppressTap || this._suppressLightTileOpen) {
             return;
@@ -20107,13 +20507,13 @@ class SceneStudioPanel extends HTMLElement {
           removeLabel: this._t(
             "frontend.lights.remove_named_from_scene",
             "Remove {name} from the scene",
-            { name: light.name }
+            { name: lightName }
           ),
           onRemove: () => this._removeLightFromAssignedScenes(light.entity_id),
           settingsLabel: this._t(
             "frontend.lights.settings_named",
             "Settings for {name}",
-            { name: light.name }
+            { name: lightName }
           ),
           onSettings: () => this._showEntityMoreInfo(light.entity_id, "settings"),
           powerLabel: this._t("frontend.lights.toggle_power", "Toggle"),

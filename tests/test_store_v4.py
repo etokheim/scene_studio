@@ -18,8 +18,10 @@ from custom_components.scene_studio.const import (
     VARIABLE_REF,
 )
 from custom_components.scene_studio.store import (
+    DEFAULT_SETTINGS,
     SceneStudioStore,
     _migrate_v3_to_v4,
+    auto_configure_scene_name,
     normalize_circadian_scene,
     normalize_scene,
     normalize_simple_scene,
@@ -388,3 +390,32 @@ class TestStripSceneDuskMinimum:
 
         scenes = {"a": {"kind": KIND_CIRCADIAN}}
         assert strip_scene_dusk_minimum(scenes) is None
+
+
+def test_auto_configure_scene_name_uses_the_default_theme():
+    themes = seed_default_theme(seed_variables())
+    assert auto_configure_scene_name(themes) == "Default"
+    assert auto_configure_scene_name({}) == "Circadian"
+    assert auto_configure_scene_name(None) == "Circadian"
+
+
+def test_reset_restores_the_fresh_install_store():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"room": {SCENE_NAME: "Kitchen Circadian", "id": "room"}}
+        store.variables = {"custom": {"id": "custom", "name": "Custom"}}
+        store.themes = {"custom": {"id": "custom", "name": "Custom"}}
+        store.settings = {"automatically_update_lights_interval": 60}
+        store.managed_native_scene_ids = ["old_yaml"]
+        store.pending_hide_sync = True
+        await store.async_reset_to_fresh()
+        assert store.scenes == {}
+        assert set(store.variables) == {f"default_{event}" for event in SOLAR_EVENTS}
+        assert set(store.themes) == {"default"}
+        assert store.themes["default"]["name"] == "Default"
+        assert store.settings == DEFAULT_SETTINGS
+        assert store.managed_native_scene_ids == []
+        assert store.pending_hide_sync is False
+        store.async_save.assert_awaited()
+
+    asyncio.run(run())

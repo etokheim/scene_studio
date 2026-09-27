@@ -191,6 +191,31 @@ class TestAdaptColorForModes:
         color = {"color_mode": "color_temp", "color_temp_kelvin": 3000}
         assert _adapt_color_for_modes(color, {"color_temp", "hs"}) == color
 
+    def test_onoff_drops_color_and_brightness(self):
+        color = {
+            "state": "on",
+            "color_mode": "hs",
+            "hs_color": [30, 80],
+            "brightness": 180,
+        }
+        assert _adapt_color_for_modes(color, {"onoff"}) == {"state": "on"}
+
+    def test_onoff_zero_brightness_is_off(self):
+        color = {"state": "on", "brightness": 0, "color_mode": "hs", "hs_color": [0, 0]}
+        assert _adapt_color_for_modes(color, {"onoff"}) == {"state": "off"}
+
+    def test_brightness_only_keeps_level(self):
+        color = {
+            "state": "on",
+            "color_mode": "hs",
+            "hs_color": [30, 80],
+            "brightness": 180,
+        }
+        assert _adapt_color_for_modes(color, {"brightness"}) == {
+            "state": "on",
+            "brightness": 180,
+        }
+
 
 # ---------------------------------------------------------------------------
 # build_circadian_event_snapshot

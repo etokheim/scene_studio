@@ -134,16 +134,11 @@ export const LIGHT_TILES_CSS = `
   }
   .light-mode-label.is-stuck::before {
     opacity: 1;
-    backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
-    -webkit-backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
-    -webkit-mask-image: linear-gradient(
+    /* Solid fill. A masked backdrop-filter paints nothing in Safari. */
+    background-color: transparent;
+    background-image: linear-gradient(
       to right,
-      #000 calc(100% - var(--ramp-extra, 0px)),
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      to right,
-      #000 calc(100% - var(--ramp-extra, 0px)),
+      var(--group-fill, var(--card-background-color)) calc(100% - var(--ramp-extra, 0px)),
       transparent 100%
     );
   }
@@ -1341,6 +1336,16 @@ const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness", "onoff"];
  * color_temp draft still belongs in the brightness group.
  */
 export function lightTileColorGroup(draft, caps, paletteIds, tempOnlyPaletteIds, mixedPaletteIds) {
+  // Capability wins over a theme color that was copied onto every light.
+  if (caps?.onOff || draft?.color_mode === "onoff") {
+    return "onoff";
+  }
+  if (caps?.known && !caps.hasColor && !caps.hasTemp) {
+    if (draft?.color_mode === "white") {
+      return "white";
+    }
+    return "brightness";
+  }
   const ref = draft?.variable_ref;
   const linked = Boolean(ref && paletteIds?.has?.(ref));
   const canDrawColor = caps?.known

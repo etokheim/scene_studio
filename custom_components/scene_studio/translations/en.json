@@ -92,7 +92,10 @@
       "scene_settings": "Scene settings",
       "hidden_in_ha": "Hidden in Home Assistant",
       "dusk_minimum_time_of_day": "Earliest time for dusk",
-      "dusk_minimum_time_of_day_helper": "To avoid lights dimming too much, too early. Applies to every circadian scene and theme."
+      "dusk_minimum_time_of_day_helper": "To avoid lights dimming too much, too early. Applies to every circadian scene and theme.",
+      "reset": "Delete and reset everything",
+      "reset_title": "Delete and reset everything?",
+      "reset_confirm": "This deletes every Scene Studio scene and its Home Assistant scene. Palettes, other color variables, and themes are replaced with the five default colors and the Default theme, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone."
     },
     "common": {
       "untitled": "Untitled",
@@ -122,7 +125,14 @@
       "scene": "Scene",
       "location": "Location",
       "save": "Save",
-      "rename": "Rename"
+      "rename": "Rename",
+      "edit": "Edit",
+      "hidden": "Hidden",
+      "disabled": "Disabled"
+    },
+    "cards": {
+      "hidden": "Hidden",
+      "disabled": "Disabled"
     },
     "actions": {
       "auto_configure": "Auto configure",
@@ -341,6 +351,7 @@
       "off": "Off",
       "toggle_power": "Toggle",
       "add_light": "Add light",
+      "none": "No lights",
       "add_named": "Add {name}",
       "add_named_to_scene": "Add {name} to the scene",
       "remove_from_scene": "Remove light from scene",

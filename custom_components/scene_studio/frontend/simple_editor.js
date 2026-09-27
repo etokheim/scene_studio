@@ -401,7 +401,7 @@ function lightIcon(panel, entityId) {
 export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const scene = panel._formData || {};
   const lights = { ...(scene.lights || {}) };
-  let members = panel._simpleMembers || Object.keys(lights);
+  let members = [...new Set(panel._simpleMembers || Object.keys(lights))];
   let removedMembers = [];
   const variables = panel._variables || [];
   const wrap = document.createElement("div");
@@ -436,7 +436,8 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   };
 
   // Opening the editor leaves every light unselected until the user clicks one.
-  let selectedIds = new Set();
+  // A palette pick restores the lights that were selected when the dialog opened.
+  let selectedIds = new Set(panel._simpleSelectedIds || []);
   let touchSelectMode = false;
   let peeledId = null;
   let anchorId = null;
@@ -725,6 +726,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     ...panel._wheelPalette(),
     onPickPalette: () => panel._pickSceneBasePalette?.(),
     onEditPalette: (id) => panel._go(`palette/${id}`),
+    onEditVariable: (id) => panel._go(`variable/${id}`),
   });
   panel._randomizeScenePalette = () => {
     const seed = (Math.random() * 0xffffffff) >>> 0;
@@ -912,6 +914,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   };
 
   const paintTileSelection = () => {
+    panel._simpleSelectedIds = [...selectedIds];
     tiles.classList.toggle("select-mode", inSelectMode());
     for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
       const eid = selector.dataset.entityId;
@@ -936,8 +939,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
 
   const paintSelector = (selector, eid, draft) => {
     const onOff = isOnOffLight(eid);
+    const flags = panel._lightModeFlags?.(eid);
+    const levelOnly = onOff || flags?.brightnessOnly;
+    const on = (draft?.state || "on") !== "off";
     paintLightTile(selector, {
-      rgb: draftRgb(draft),
+      rgb: levelOnly ? (on ? [255, 236, 210] : [48, 48, 48]) : draftRgb(draft),
       fillPct: fillPercent(draft, eid),
       selected: selectedIds.has(eid),
       brightnessLabel: onOff ? onOffLabel(draft) : undefined,
@@ -951,9 +957,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       "icon",
       overridden ? "mdi:restore" : "mdi:close"
     );
-    const state = panel._hass?.states?.[eid];
-    const name =
-      state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+    const name = panel._lightDisplayName(eid);
     removeBtn.setAttribute(
       "aria-label",
       overridden
@@ -1365,8 +1369,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     for (const eid of stripOrderIds) {
       const draft = drafts[eid] || {};
       const state = panel._hass?.states?.[eid];
-      const name =
-        state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+      const name = panel._lightDisplayName(eid);
       const { selector, tile, hit } = createLightTile({
         entityId: eid,
         name,
@@ -1637,9 +1640,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       });
       tiles.appendChild(group);
       for (const eid of removedMembers) {
-        const state = panel._hass?.states?.[eid];
-        const name =
-          state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+        const name = panel._lightDisplayName(eid);
         const { selector, tile } = createLightTile({
           entityId: eid,
           name: panel._t("frontend.lights.add_named", "Add {name}", { name }),

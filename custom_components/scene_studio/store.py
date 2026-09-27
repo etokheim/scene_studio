@@ -76,6 +76,15 @@ _DEFAULT_VARIABLE_NAMES: dict[str, str] = {
 }
 
 
+def auto_configure_scene_name(themes: dict[str, dict[str, Any]] | None) -> str:
+    """Name auto-configured scenes from the default theme, never the area."""
+    theme = (themes or {}).get("default") or {}
+    name = theme.get("name") if isinstance(theme, dict) else None
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return "Circadian"
+
+
 def seed_variables() -> dict[str, dict[str, Any]]:
     """Create the five default color variables keyed by stable id."""
     result: dict[str, dict[str, Any]] = {}
@@ -877,6 +886,20 @@ class SceneStudioStore:
         item[AUTOMATICALLY_UPDATE_LIGHTS] = bool(automatically_update_lights)
         await self.async_save()
         return item
+
+    async def async_reset_to_fresh(self) -> None:
+        """Replace scenes, library, and settings with a fresh install.
+
+        The config entry stays. Callers remove scene entities and managed
+        native YAML before this, then drop the activation cache after.
+        """
+        self.scenes = {}
+        self.variables = seed_variables()
+        self.themes = seed_default_theme(self.variables)
+        self.settings = dict(DEFAULT_SETTINGS)
+        self.managed_native_scene_ids = []
+        self.pending_hide_sync = False
+        await self.async_save()
 
     async def async_delete(self, scene_id: str) -> bool:
         """Delete a scene config."""
