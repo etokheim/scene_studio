@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  lightPointLayout,
-  lightPointRadius,
+  evaluateMeshWarp,
   meshColors,
+  meshGradientPlan,
+  meshPresetIndex,
   scaledCardRgb,
+  solveMeshWarp,
 } from "../../custom_components/scene_studio/frontend/card_mesh.js";
 
 test("card dots scale chromatic rgb by brightness", () => {
@@ -39,40 +41,70 @@ test("mesh colors reject malformed values and deduplicate", () => {
   );
 });
 
-test("empty and single-color cards are a flat fill", () => {
-  assert.deepEqual(lightPointLayout([]), { base: [35, 35, 35], points: [] });
-  assert.deepEqual(lightPointLayout([[12, 80, 220]]), {
-    base: [12, 80, 220],
-    points: [],
+test("one color is a flat fill and the warp stays put when only brightness changes", () => {
+  assert.deepEqual(meshGradientPlan([]), {
+    flat: true,
+    color: [35, 35, 35],
+    corners: null,
+    preset: 0,
   });
+  assert.equal(meshGradientPlan([{ rgb: [12, 80, 220] }]).flat, true);
+  const withOff = meshGradientPlan([
+    { entity_id: "light.a", rgb: [255, 40, 20] },
+    { entity_id: "light.b", rgb: [0, 0, 0] },
+    { entity_id: "light.c", rgb: [20, 80, 220] },
+  ]);
+  assert.equal(withOff.flat, false);
+  assert.ok(withOff.corners.every((rgb) => rgb.some((channel) => channel > 0)));
+  const dots = [
+    { entity_id: "light.a", rgb: [255, 0, 0] },
+    { entity_id: "light.b", rgb: [0, 255, 0] },
+    { entity_id: "light.c", rgb: [0, 0, 255] },
+  ];
+  const dimmed = dots.map((dot) => ({
+    ...dot,
+    rgb: dot.rgb.map((channel) => Math.round(channel / 2)),
+  }));
+  assert.equal(meshPresetIndex(dots), meshPresetIndex(dimmed));
+  assert.equal(meshGradientPlan(dots).preset, meshGradientPlan(dimmed).preset);
+  assert.notEqual(meshPresetIndex(dots), meshPresetIndex([
+    { entity_id: "light.kitchen", rgb: [1, 2, 3] },
+    { entity_id: "light.bedroom", rgb: [4, 5, 6] },
+  ]));
 });
 
-test("each unique color is a circle at a stable scatter", () => {
-  const colors = [
-    [255, 0, 0],
-    [0, 255, 0],
-    [0, 0, 255],
+test("warp weights reconstruct each source point at its destination", () => {
+  const sources = [
+    [-0.85, -0.9],
+    [-0.322, 0.538],
+    [0.669, -0.772],
+    [0.95, 0.9],
+    [-0.053, 0.484],
+    [0.797, -0.205],
+    [0.031, 0.494],
   ];
-  const layout = lightPointLayout(colors);
-  assert.deepEqual(layout.base, colors[0]);
-  assert.equal(layout.points.length, 3);
-  const expected = [
-    [0.4, 0.2],
-    [0.8, 0],
-    [0, 0.5],
+  const dests = [
+    [-0.85, -0.9],
+    [-0.95, 0.9],
+    [-0.934, -0.5],
+    [0.95, 0.9],
+    [-0.625, 0.225],
+    [0.544, -0.134],
+    [-0.649, -0.061],
   ];
-  layout.points.forEach((point, index) => {
-    assert.deepEqual(point.rgb, colors[index]);
-    assert.deepEqual([point.x, point.y], expected[index]);
-    assert.ok(point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1);
-    assert.equal(point.radius, lightPointRadius(point.x, point.y));
-    const farthest = Math.max(
-      Math.hypot(point.x, point.y),
-      Math.hypot(1 - point.x, point.y),
-      Math.hypot(point.x, 1 - point.y),
-      Math.hypot(1 - point.x, 1 - point.y)
-    );
-    assert.equal(point.radius, farthest / 2);
+  const weights = solveMeshWarp(sources, dests);
+  dests.forEach((dest, index) => {
+    const warped = evaluateMeshWarp(dest, dests, weights);
+    assert.ok(Math.abs(warped[0] - sources[index][0]) < 1e-6);
+    assert.ok(Math.abs(warped[1] - sources[index][1]) < 1e-6);
   });
-  assert.deepEqual(lightPointLayout(colors), layout);
+  const plan = meshGradientPlan([
+    { entity_id: "light.a", rgb: [255, 40, 20] },
+    { entity_id: "light.b", rgb: [20, 80, 220] },
+    { entity_id: "light.c", rgb: [240, 180, 40] },
+    { entity_id: "light.d", rgb: [40, 180, 90] },
+  ]);
+  assert.equal(plan.flat, false);
+  assert.equal(plan.corners.length, 4);
+  assert.ok(plan.preset >= 0 && plan.preset < 4);
 });
