@@ -854,6 +854,34 @@ export const LANDING_CSS = `
     background: none;
     color: #fff;
   }
+  /* Hidden until hover or a touch long-press. pointer-events stays none while
+     hidden so a tap on the dots hits the card, not an invisible menu. */
+  .library-block .scene-card .card-overflow-slot {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .library-block .scene-card .card-overflow-slot.is-revealed,
+  .library-block .scene-card .card-overflow-slot:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .library-block .scene-card:hover .card-overflow-slot {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+  .scene-card-slot > .card-glow.is-cover {
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+  }
+  .scene-card-slot > .card-glow.theme-dial {
+    width: auto;
+    height: auto;
+    border-radius: 14px;
+    box-shadow: none;
+  }
   .library-block .scene-cards {
     margin: 0 0 12px;
   }
@@ -1695,6 +1723,69 @@ function libraryOverflow(panel, kind, item) {
   return slot;
 }
 
+const LIBRARY_OVERFLOW_HOLD_MS = 500;
+
+/** Touch long-press reveals the menu. A mouse uses hover CSS. */
+function bindLibraryOverflowReveal(card, overflowSlot) {
+  let timer = 0;
+  let startX = 0;
+  let startY = 0;
+  let suppressClick = false;
+  const reveal = () => overflowSlot.classList.add("is-revealed");
+  const hide = () => overflowSlot.classList.remove("is-revealed");
+  const cancelHold = () => {
+    window.clearTimeout(timer);
+    timer = 0;
+  };
+  card.addEventListener("pointerdown", (ev) => {
+    if (ev.pointerType === "mouse") {
+      return;
+    }
+    if (ev.target.closest?.(".card-overflow-slot")) {
+      return;
+    }
+    startX = ev.clientX;
+    startY = ev.clientY;
+    cancelHold();
+    timer = window.setTimeout(() => {
+      timer = 0;
+      suppressClick = true;
+      reveal();
+    }, LIBRARY_OVERFLOW_HOLD_MS);
+  });
+  card.addEventListener("pointerup", cancelHold);
+  card.addEventListener("pointercancel", cancelHold);
+  card.addEventListener("pointermove", (ev) => {
+    if (!timer) {
+      return;
+    }
+    if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 10) {
+      cancelHold();
+    }
+  });
+  card.addEventListener("contextmenu", (ev) => {
+    if (ev.pointerType === "touch" || ev.pointerType === "pen") {
+      ev.preventDefault();
+    }
+  });
+  card.addEventListener(
+    "click",
+    (ev) => {
+      if (ev.target.closest?.(".card-overflow-slot")) {
+        return;
+      }
+      if (suppressClick) {
+        suppressClick = false;
+        ev.preventDefault();
+        ev.stopPropagation();
+        return;
+      }
+      hide();
+    },
+    true
+  );
+}
+
 function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kind, item }) {
   const slot = document.createElement("div");
   slot.className = "scene-card-slot";
@@ -1720,6 +1811,9 @@ function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kin
   overflowSlot.className = "card-overflow-slot";
   overflowSlot.appendChild(libraryOverflow(panel, kind, item));
   card.append(bg, body, overflowSlot);
+  const glow = bg.cloneNode(true);
+  glow.classList.add("card-glow");
+  glow.setAttribute("aria-hidden", "true");
   const open = (ev) => {
     if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
       return;
@@ -1737,7 +1831,13 @@ function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kin
     ev.preventDefault();
     onOpen();
   });
-  slot.appendChild(card);
+  bindLibraryOverflowReveal(card, overflowSlot);
+  slot.append(glow, card);
+  if (selected) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => slot.classList.add("glow-on"));
+    });
+  }
   return slot;
 }
 

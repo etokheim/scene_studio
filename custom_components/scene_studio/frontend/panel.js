@@ -5809,14 +5809,34 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
+  _railCardSelected(card) {
+    if (card.dataset.sceneId) {
+      return this._view === "edit" && card.dataset.sceneId === this._editId;
+    }
+    const itemId = card.dataset.itemId;
+    if (!itemId) {
+      return false;
+    }
+    if (this._view === "palette" || this._view === "variable") {
+      return itemId === this._variableId;
+    }
+    if (this._view === "theme") {
+      return itemId === this._themeId;
+    }
+    return false;
+  }
+
   _syncRailSelection() {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
     for (const card of root.querySelectorAll(".scene-card")) {
-      const on = this._view === "edit" && card.dataset.sceneId === this._editId;
+      const on = this._railCardSelected(card);
       card.classList.toggle("selected", on);
+      if (card.hasAttribute("aria-pressed")) {
+        card.setAttribute("aria-pressed", on ? "true" : "false");
+      }
       card.parentElement?.classList.toggle("glow-on", on);
     }
     for (const chip of root.querySelectorAll(".var-chip")) {
