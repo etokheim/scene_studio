@@ -402,7 +402,8 @@ export const LANDING_CSS = `
     flex-direction: row;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: 12px;
+    gap: 16px;
+    padding: 8px 4px 12px;
   }
   .area-head {
     display: flex;
@@ -546,7 +547,7 @@ export const LANDING_CSS = `
        stays behind every .scene-card (shared stacking, glow z-index 0). */
     overflow: visible;
     box-sizing: border-box;
-    width: calc(50% - 6px);
+    width: calc(50% - 8px);
     max-width: 155px;
     max-height: 155px;
   }
@@ -577,6 +578,10 @@ export const LANDING_CSS = `
   .scene-card-slot.glow-on .card-glow {
     opacity: 0.55;
   }
+  .scene-card-slot:hover,
+  .scene-card-slot:has(.scene-card.selected) {
+    z-index: 2;
+  }
   .scene-card {
     position: relative;
     z-index: 1;
@@ -599,6 +604,10 @@ export const LANDING_CSS = `
     box-sizing: border-box;
     text-align: left;
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+    transform-origin: center;
+    transition:
+      transform 180ms cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 180ms ease;
   }
   /* ha-dropdown is display:contents — margin-left:auto must live on a real box. */
   .scene-card .card-overflow-slot {
@@ -616,10 +625,20 @@ export const LANDING_CSS = `
   .scene-card .card-overflow-slot ha-icon-button {
     color: #fff;
   }
-  :host(:not([data-dark-mode])) .scene-card.selected {
+  :host(:not([data-dark-mode])) .scene-card.selected,
+  .scene-card.selected {
+    transform: scale(1.06);
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-      0 16px 42px rgba(0, 0, 0, 0.16);
+      0 14px 32px rgba(0, 0, 0, 0.42);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .scene-card-slot:hover .scene-card:not(.selected) {
+      transform: scale(1.03);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 8px 20px rgba(0, 0, 0, 0.32);
+    }
   }
   .scene-card.selected::after {
     content: "";
@@ -658,6 +677,14 @@ export const LANDING_CSS = `
     --mdc-icon-size: 22px;
     color: #fff;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  }
+  .scene-card .card-icon-photo {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    object-fit: cover;
+    filter: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
   }
   .scene-card .card-body {
     position: relative;
@@ -922,8 +949,8 @@ export const LANDING_CSS = `
       padding-bottom: 4px;
     }
     .scene-card-slot {
-      flex: 0 0 calc(50% - 6px);
-      width: calc(50% - 6px);
+      flex: 0 0 calc(50% - 8px);
+      width: calc(50% - 8px);
     }
     /* scale(1.1) paints outside the card and becomes scrollable overflow.
        overflow-x: auto then shows a vertical scrollbar. Inset the glow so
@@ -1320,6 +1347,50 @@ export function bindStickyTitles(scroller) {
   return sync;
 }
 
+function paletteCoverUrl(panel, paletteId) {
+  if (!paletteId) {
+    return "";
+  }
+  const variable = (panel._variables || []).find((item) => item.id === paletteId);
+  if (!galleryPalette(variable?.builtin_id)) {
+    return "";
+  }
+  return galleryCoverUrl(variable.builtin_id);
+}
+
+/** Picture for the card corner: the scene palette, or a circadian event that has one. */
+function sceneCardCoverUrl(panel, scene) {
+  const direct = paletteCoverUrl(panel, scene?.palette_id);
+  if (direct) {
+    return direct;
+  }
+  if (scene?.kind !== "circadian") {
+    return "";
+  }
+  const theme = (panel._themes || []).find(
+    (item) => item.id === (scene.theme_id || "default")
+  );
+  const events = ["dawn", "sunrise", "noon", "sunset", "dusk"];
+  const urls = {};
+  for (const event of events) {
+    const entry = scene.event_palettes?.[event];
+    let paletteId = entry?.palette_id;
+    if (!paletteId) {
+      const color = theme?.events?.[event]?.color;
+      const ref = color?.variable_ref;
+      const variable = (panel._variables || []).find((item) => item.id === ref);
+      if (variableIsPalette(variable)) {
+        paletteId = ref;
+      }
+    }
+    const url = paletteCoverUrl(panel, paletteId);
+    if (url) {
+      urls[event] = url;
+    }
+  }
+  return urls.noon || events.map((event) => urls[event]).find(Boolean) || "";
+}
+
 export function sceneCoverUrl(panel) {
   const builtinFor = (builtin) =>
     builtin && galleryPalette(builtin) ? galleryCoverUrl(builtin) : "";
@@ -1512,9 +1583,18 @@ function renderSceneCard(panel, scene) {
       : panel._t("frontend.cards.hidden", "Hidden");
     body.appendChild(flag);
   }
-  const icon = document.createElement("ha-icon");
-  icon.className = "card-icon";
-  icon.setAttribute("icon", sceneCardIcon(scene));
+  const cover = sceneCardCoverUrl(panel, scene);
+  let icon;
+  if (cover) {
+    icon = document.createElement("img");
+    icon.className = "card-icon card-icon-photo";
+    icon.alt = "";
+    icon.src = cover;
+  } else {
+    icon = document.createElement("ha-icon");
+    icon.className = "card-icon";
+    icon.setAttribute("icon", sceneCardIcon(scene));
+  }
   const overflowSlot = document.createElement("div");
   overflowSlot.className = "card-overflow-slot";
   if (panel._nameIsPlaceholder?.(scene.scene_name)) {
@@ -1695,28 +1775,52 @@ function libraryOverflow(panel, kind, item) {
   menu.activatable = true;
   const trigger = document.createElement("ha-icon-button");
   trigger.slot = "trigger";
-  trigger.label = panel._t("frontend.library.delete_menu", "Delete {name}", {
+  trigger.label = panel._t("frontend.library.item_menu", "Menu for {name}", {
     name: item?.name || "",
   });
   const icon = document.createElement("ha-icon");
   icon.setAttribute("icon", "mdi:dots-vertical");
   trigger.appendChild(icon);
   menu.appendChild(trigger);
-  const action = document.createElement("ha-dropdown-item");
-  action.value = "delete";
-  action.variant = "danger";
-  const actionIcon = document.createElement("ha-icon");
-  actionIcon.setAttribute("icon", "mdi:delete");
-  actionIcon.slot = "icon";
-  action.append(
-    actionIcon,
-    document.createTextNode(panel._t("frontend.common.delete", "Delete"))
+  const addItem = (value, label, iconName, { danger = false } = {}) => {
+    const action = document.createElement("ha-dropdown-item");
+    action.value = value;
+    if (danger) {
+      action.variant = "danger";
+    }
+    const actionIcon = document.createElement("ha-icon");
+    actionIcon.setAttribute("icon", iconName);
+    actionIcon.slot = "icon";
+    action.append(actionIcon, document.createTextNode(label));
+    menu.appendChild(action);
+  };
+  if (kind === "variable" || kind === "palette") {
+    addItem(
+      "rename",
+      panel._t("frontend.common.rename", "Rename"),
+      "mdi:pencil"
+    );
+    addItem(
+      "duplicate",
+      panel._t("frontend.library.duplicate", "Duplicate"),
+      "mdi:content-duplicate"
+    );
+  }
+  addItem(
+    "delete",
+    panel._t("frontend.common.delete", "Delete"),
+    "mdi:delete",
+    { danger: true }
   );
-  menu.appendChild(action);
   menu.addEventListener("wa-select", (ev) => {
     ev.stopPropagation();
-    if (ev.detail?.item?.value === "delete") {
+    const value = ev.detail?.item?.value;
+    if (value === "delete") {
       panel._confirmDeleteLibraryItem(kind, item);
+    } else if (value === "rename") {
+      panel._renameLibraryItem(kind, item);
+    } else if (value === "duplicate") {
+      void panel._duplicateLibraryItem(kind, item);
     }
   });
   slot.appendChild(menu);

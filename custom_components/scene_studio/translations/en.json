@@ -47,6 +47,8 @@
       "theme_event_subtitle": "{name} theme",
       "theme_missing": "Theme not found",
       "delete_menu": "Delete {name}",
+      "item_menu": "Menu for {name}",
+      "duplicate": "Duplicate",
       "delete_variable": "Delete variable?",
       "delete_palette": "Delete palette?",
       "delete_theme": "Delete theme?",

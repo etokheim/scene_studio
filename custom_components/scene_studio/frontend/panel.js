@@ -2622,9 +2622,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         .hue-wheel-svg .gm {
           cursor: pointer;
-          transition:
-            transform 480ms cubic-bezier(0.22, 1.15, 0.36, 1),
-            color 360ms ease;
+          transition: color 360ms ease;
         }
         .hue-wheel-svg .gm.expanded,
         .hue-wheel-svg .gm.drop-target {
@@ -12105,6 +12103,99 @@ class SceneStudioPanel extends HTMLElement {
     dialog.appendChild(footer);
     dialog.addEventListener("closed", () => dialog.remove());
     this.shadowRoot.appendChild(dialog);
+  }
+
+  _renameLibraryItem(kind, item) {
+    if (!item?.id || (kind !== "variable" && kind !== "palette")) {
+      return;
+    }
+    this.shadowRoot.querySelector("ha-dialog.confirm-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "confirm-dialog";
+    dialog.setAttribute(
+      "header-title",
+      this._t("frontend.common.rename", "Rename")
+    );
+    dialog.open = true;
+    const field = document.createElement("ha-textfield");
+    field.label = this._t("frontend.common.name", "Name");
+    field.value = item.name || "";
+    dialog.appendChild(field);
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._t("frontend.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    const save = document.createElement("ha-button");
+    save.slot = "primaryAction";
+    save.variant = "brand";
+    save.textContent = this._t("frontend.common.rename", "Rename");
+    save.addEventListener("click", async () => {
+      const name = String(field.value || "").trim();
+      if (!name || name === item.name) {
+        dialog.open = false;
+        return;
+      }
+      save.disabled = true;
+      try {
+        const saved = await this._hass.callWS({
+          type: `${DOMAIN}/save_variable`,
+          data: { ...item, name },
+        });
+        this._variables = (this._variables || []).map((row) =>
+          row.id === saved.id ? saved : row
+        );
+        if (this._variableId === saved.id && this._variableDraft) {
+          this._variableDraft = { ...this._variableDraft, name: saved.name };
+        }
+        dialog.open = false;
+        this._render();
+      } catch (err) {
+        save.disabled = false;
+        let note = dialog.querySelector(".error");
+        if (!note) {
+          note = document.createElement("p");
+          note.className = "error";
+          field.insertAdjacentElement("afterend", note);
+        }
+        note.textContent = err.message || String(err);
+      }
+    });
+    footer.append(cancel, save);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
+    requestAnimationFrame(() => field.focus?.());
+  }
+
+  async _duplicateLibraryItem(kind, item) {
+    if (!item?.id || (kind !== "variable" && kind !== "palette")) {
+      return;
+    }
+    const names = (this._variables || []).map((row) => row.name);
+    const copy = { ...item, name: galleryCopyName(item.name || "Copy", names) };
+    delete copy.id;
+    try {
+      const saved = await this._hass.callWS({
+        type: `${DOMAIN}/save_variable`,
+        data: copy,
+      });
+      this._variables = [...(this._variables || []), saved];
+      if (saved?.id) {
+        this._go(kind === "palette" ? `palette/${saved.id}` : `variable/${saved.id}`);
+      } else {
+        this._render();
+      }
+    } catch (err) {
+      this._error = err.message || String(err);
+      this._render();
+    }
   }
 
   _confirmDeleteLibraryItem(kind, item) {

@@ -2963,7 +2963,9 @@ function createSceneColorWheel({
     `translate(${px - PIN_TIP_X} ${py - PIN_TIP_Y})`;
   const setPinTransform = (g, px, py) => {
     g.setAttribute("transform", pinAtAttr(px, py));
-    g.style.transform = "none";
+    // An inline transform of "none" overrides the attribute and leaves the
+    // dot at the SVG origin (top-left of the wheel).
+    g.style.transform = "";
   };
 
   // A group split animates with the Web Animations API. placeMarker must not
@@ -3171,8 +3173,12 @@ function createSceneColorWheel({
       Number.isFinite(prevX) &&
       Number.isFinite(prevY) &&
       (Math.abs(prevX - x) > 0.5 || Math.abs(prevY - y) > 0.5);
+    // Opacity fades also run on the group. They must not block the first
+    // placement — that left the dot at the SVG origin once the fade ended.
     const pinMoves = () =>
-      marker.g.getAnimations({ subtree: false }).filter((anim) => anim.playState === "running");
+      marker.g.getAnimations({ subtree: false }).filter(
+        (anim) => anim.playState === "running" && anim.id === "pin-move"
+      );
     if (!moved && pinMoves().length) {
       return;
     }
@@ -3185,6 +3191,7 @@ function createSceneColorWheel({
           duration: 480,
           easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
           fill: "both",
+          id: "pin-move",
         }
       );
       anim.onfinish = () => {
@@ -4241,11 +4248,14 @@ function createSceneColorWheel({
             ? ""
             : String(scene.index);
       marker.hit.style.display = "";
-      marker.g.style.display = "";
       marker.g.classList.remove("grouped");
       if (!radius) {
+        // The wheel is not laid out yet. Showing the pin now paints it at
+        // the SVG origin (top-left of the disk).
+        marker.g.style.display = "none";
         continue;
       }
+      marker.g.style.display = "";
       const pos = positionForDraft(
         scene.draft,
         markerMode,
@@ -5218,6 +5228,17 @@ function createSceneColorWheel({
   chrome.addEventListener("scroll", updatePresetOverflow, { passive: true });
   ro?.observe(chrome);
   paintWheels();
+  // sync() above often runs before the wheel is in the document, so
+  // clientWidth is 0 and pins are skipped. Place them on the next frame,
+  // after the caller has mounted the wheel.
+  requestAnimationFrame(() => {
+    if (!canvasWrap.isConnected) {
+      return;
+    }
+    sync();
+    updatePresetOverflow();
+    layoutGlow();
+  });
 
   const disconnect = () => {
     ro?.disconnect();
