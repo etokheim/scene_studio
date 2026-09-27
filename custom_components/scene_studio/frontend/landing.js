@@ -78,10 +78,17 @@ export const LANDING_CSS = `
     .area-empty,
     .var-row,
     .theme-row,
-    .library-hint,
-    .scene-card
+    .library-hint
   ) {
     transition: opacity 160ms ease;
+  }
+  /* More specific than .scene-card, so this list has to include the scale
+     or the opacity-only rule above would replace it. */
+  .area-rail .scene-card {
+    transition:
+      opacity 160ms ease,
+      transform 120ms cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 120ms ease;
   }
   /* Selected scene stays put. The rest of the column fades until the pointer
      is over the column, so the open scene is easy to find. */
@@ -403,7 +410,9 @@ export const LANDING_CSS = `
     flex-wrap: wrap;
     align-items: flex-start;
     gap: 16px;
-    padding: 8px 4px 12px;
+    /* Room for the selected card's scale(1.1). A tighter pad lets that
+       paint become scrollable overflow on a horizontal scene row. */
+    padding: 12px 10px 16px;
   }
   .area-head {
     display: flex;
@@ -606,10 +615,12 @@ export const LANDING_CSS = `
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
     transform-origin: center;
     transition:
-      transform 180ms cubic-bezier(0.2, 0, 0, 1),
-      box-shadow 180ms ease;
+      transform 120ms cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 120ms ease;
   }
-  /* ha-dropdown is display:contents — margin-left:auto must live on a real box. */
+  /* ha-dropdown is display:contents — margin-left:auto must live on a real box.
+     Hidden until hover, a touch long-press, or keyboard focus. pointer-events
+     stays none so a tap on the dots hits the card. */
   .scene-card .card-overflow-slot {
     position: absolute;
     top: 2px;
@@ -621,23 +632,35 @@ export const LANDING_CSS = `
     align-items: center;
     color: #fff;
     --mdc-icon-button-size: 36px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+  .scene-card .card-overflow-slot.is-revealed,
+  .scene-card .card-overflow-slot:focus-within {
+    opacity: 1;
+    pointer-events: auto;
   }
   .scene-card .card-overflow-slot ha-icon-button {
     color: #fff;
   }
   :host(:not([data-dark-mode])) .scene-card.selected,
   .scene-card.selected {
-    transform: scale(1.06);
+    transform: scale(1.1);
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.08),
       0 14px 32px rgba(0, 0, 0, 0.42);
   }
   @media (hover: hover) and (pointer: fine) {
     .scene-card-slot:hover .scene-card:not(.selected) {
-      transform: scale(1.03);
+      transform: scale(1.06);
       box-shadow:
         inset 0 0 0 1px rgba(255, 255, 255, 0.08),
         0 8px 20px rgba(0, 0, 0, 0.32);
+    }
+    .scene-card:hover .card-overflow-slot {
+      opacity: 1;
+      pointer-events: auto;
     }
   }
   .scene-card.selected::after {
@@ -684,7 +707,7 @@ export const LANDING_CSS = `
     border-radius: 8px;
     object-fit: cover;
     filter: none;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    box-shadow: none;
   }
   .scene-card .card-body {
     position: relative;
@@ -881,23 +904,6 @@ export const LANDING_CSS = `
     background: none;
     color: #fff;
   }
-  /* Hidden until hover or a touch long-press. pointer-events stays none while
-     hidden so a tap on the dots hits the card, not an invisible menu. */
-  .library-block .scene-card .card-overflow-slot {
-    opacity: 0;
-    pointer-events: none;
-  }
-  .library-block .scene-card .card-overflow-slot.is-revealed,
-  .library-block .scene-card .card-overflow-slot:focus-within {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .library-block .scene-card:hover .card-overflow-slot {
-      opacity: 1;
-      pointer-events: auto;
-    }
-  }
   .scene-card-slot > .card-glow.is-cover {
     background-position: center;
     background-repeat: no-repeat;
@@ -946,7 +952,7 @@ export const LANDING_CSS = `
       flex-wrap: nowrap;
       overflow-x: auto;
       overscroll-behavior-x: contain;
-      padding-bottom: 4px;
+      padding-bottom: 14px;
     }
     .scene-card-slot {
       flex: 0 0 calc(50% - 8px);
@@ -1628,11 +1634,16 @@ function renderSceneCard(panel, scene) {
   }
   slot.append(glow, cardEl);
   if (selected) {
-    cardEl.classList.add("selected");
+    // The card is created already selected. Adding the class on the next
+    // paint lets the scale transition run instead of appearing at full size.
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => slot.classList.add("glow-on"));
+      requestAnimationFrame(() => {
+        cardEl.classList.add("selected");
+        slot.classList.add("glow-on");
+      });
     });
   }
+  bindCardOverflowReveal(cardEl, overflowSlot);
   let leaving = false;
   const activate = () => {
     if (leaving) {
@@ -1827,10 +1838,10 @@ function libraryOverflow(panel, kind, item) {
   return slot;
 }
 
-const LIBRARY_OVERFLOW_HOLD_MS = 500;
+const CARD_OVERFLOW_HOLD_MS = 500;
 
-/** Touch long-press reveals the menu. A mouse uses hover CSS. */
-function bindLibraryOverflowReveal(card, overflowSlot) {
+/** Touch long-press reveals the menu. A fine pointer uses hover CSS. */
+function bindCardOverflowReveal(card, overflowSlot) {
   let timer = 0;
   let startX = 0;
   let startY = 0;
@@ -1855,7 +1866,7 @@ function bindLibraryOverflowReveal(card, overflowSlot) {
       timer = 0;
       suppressClick = true;
       reveal();
-    }, LIBRARY_OVERFLOW_HOLD_MS);
+    }, CARD_OVERFLOW_HOLD_MS);
   });
   card.addEventListener("pointerup", cancelHold);
   card.addEventListener("pointercancel", cancelHold);
@@ -1899,9 +1910,6 @@ function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kin
   card.setAttribute("role", "button");
   card.tabIndex = 0;
   card.setAttribute("aria-pressed", selected ? "true" : "false");
-  if (selected) {
-    card.classList.add("selected");
-  }
   const bg = document.createElement("div");
   bg.className = "card-bg";
   paint(bg);
@@ -1935,11 +1943,14 @@ function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kin
     ev.preventDefault();
     onOpen();
   });
-  bindLibraryOverflowReveal(card, overflowSlot);
+  bindCardOverflowReveal(card, overflowSlot);
   slot.append(glow, card);
   if (selected) {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => slot.classList.add("glow-on"));
+      requestAnimationFrame(() => {
+        card.classList.add("selected");
+        slot.classList.add("glow-on");
+      });
     });
   }
   return slot;

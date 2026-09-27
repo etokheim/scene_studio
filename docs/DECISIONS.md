@@ -1,5 +1,12 @@
 # Decisions
 
+## Scene cards scale, and their menu matches the library
+
+- **Date:** 2026-09-27
+- **Decision:** Scene cards and library square cards share one overflow. It stays hidden until hover on a fine pointer, a 500ms touch hold, or keyboard focus. A tap still opens the card. Selected scale is 1.1 and hover is 1.06, both in 120ms. The selected class is added on the frame after first paint, because the card is created in that state and a same-turn class never transitions. The corner palette photo has no drop shadow. Card padding contains the 1.1 scale so a horizontal scene row does not grow a vertical scrollbar.
+- **Why:** The scene list kept the menu visible while palettes hid it. The scale was applied before the first paint, so it popped. The photo shadow sat on top of the image.
+- **Do not reverse without user ask.**
+
 ## A scene’s palette photo is an attribute, not the icon
 
 - **Date:** 2026-09-27
