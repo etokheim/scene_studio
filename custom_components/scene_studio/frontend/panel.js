@@ -6555,10 +6555,11 @@ class SceneStudioPanel extends HTMLElement {
     if (item) {
       item.card = { ...(item.card || {}), kind: "simple", dots };
     }
-    const mesh = this.shadowRoot?.querySelector(
-      `.scene-card[data-scene-id="${CSS.escape(id)}"] canvas.card-mesh`
+    const card = this.shadowRoot?.querySelector(
+      `.scene-card[data-scene-id="${CSS.escape(id)}"]`
     );
-    if (mesh) {
+    const meshes = card?.parentElement?.querySelectorAll("canvas.card-mesh");
+    for (const mesh of meshes || []) {
       paintSimpleCardMesh(mesh, dots);
     }
   }
@@ -10209,8 +10210,8 @@ class SceneStudioPanel extends HTMLElement {
         continue;
       }
       if (scene.kind === "simple") {
-        const mesh = card.querySelector("canvas.card-mesh");
-        if (mesh) {
+        const meshes = card.parentElement?.querySelectorAll("canvas.card-mesh");
+        for (const mesh of meshes || []) {
           paintSimpleCardMesh(mesh, scene.card?.dots);
         }
         continue;
