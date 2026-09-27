@@ -65,6 +65,7 @@ from .extrapolation_math import (
     transition_progress_percent,
 )
 from .native_scene import scenes_in_area
+from .palette import scene_palette_image_attributes
 from .snapshots import circadian_anchor, simple_anchor
 from .solar import EVENT_ORDER, dusk_start_seconds
 from .store import dusk_minimum_seconds
@@ -129,6 +130,27 @@ async def async_remove_entity(entities: dict, scene_id: str) -> None:
     entity = entities.pop(scene_id, None)
     if entity is not None:
         await entity.async_remove(force_remove=True)
+
+
+def _palette_image_attributes(
+    hass: HomeAssistant, scene_config: dict
+) -> dict[str, Any]:
+    """Palette photo URLs for a scene, when a shipped cover exists."""
+    store = hass.data.get(DOMAIN, {}).get(DATA_STORE)
+    if store is None:
+        return {}
+    return scene_palette_image_attributes(
+        scene_config, store.variables, store.themes
+    )
+
+
+def _palette_image_state_key(hass: HomeAssistant, scene_config: dict) -> tuple:
+    attrs = _palette_image_attributes(hass, scene_config)
+    images = attrs.get("palette_images") or {}
+    return (
+        attrs.get("palette_image"),
+        tuple(sorted(images.items())),
+    )
 
 
 def _configured_icon(scene_config: dict, default: str) -> str:
@@ -239,6 +261,7 @@ class CircadianScene(Scene):
             tuple(sorted(self._overridden)),
             tuple(sorted(self._interrupted)),
             self._attr_icon,
+            _palette_image_state_key(self.hass, self._scene_config),
         )
 
     def _write_ha_state_if_attrs_changed(self) -> None:
@@ -317,6 +340,7 @@ class CircadianScene(Scene):
             attrs["target_date_time"] = self._target_date_time.isoformat()
 
         attrs["kind"] = "circadian"
+        attrs.update(_palette_image_attributes(self.hass, self._scene_config))
         theme_id = self._cfg("theme_id")
         if theme_id:
             attrs["theme_id"] = theme_id
@@ -1026,7 +1050,9 @@ class SimpleScene(Scene):
     @property
     def extra_state_attributes(self):
         """Return state attributes."""
-        return {"kind": KIND_SIMPLE, "integration": self._attr_integration}
+        attrs = {"kind": KIND_SIMPLE, "integration": self._attr_integration}
+        attrs.update(_palette_image_attributes(self.hass, self._scene_config))
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         """Assign the configured area once the entity is registered."""

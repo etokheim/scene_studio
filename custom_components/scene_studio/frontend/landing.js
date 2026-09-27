@@ -833,6 +833,30 @@ export const LANDING_CSS = `
     background-size: cover;
     pointer-events: none;
   }
+  /* Library themes and picture palettes use the scene card. The dial fills
+     the square; the 72px circle is only the compact chip. */
+  .scene-card .theme-dial.card-bg {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    box-shadow: none;
+    cursor: inherit;
+  }
+  .scene-card .card-bg.is-cover {
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+  }
+  .scene-card .library-chip-menu {
+    position: static;
+  }
+  .scene-card .library-chip-menu ha-icon-button {
+    background: none;
+    color: #fff;
+  }
+  .library-block .scene-cards {
+    margin: 0 0 12px;
+  }
   .theme-chip {
     display: flex;
     flex-direction: column;
@@ -1671,6 +1695,52 @@ function libraryOverflow(panel, kind, item) {
   return slot;
 }
 
+function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kind, item }) {
+  const slot = document.createElement("div");
+  slot.className = "scene-card-slot";
+  const card = document.createElement("div");
+  card.className = "scene-card";
+  card.dataset.itemId = id || "";
+  card.setAttribute("role", "button");
+  card.tabIndex = 0;
+  card.setAttribute("aria-pressed", selected ? "true" : "false");
+  if (selected) {
+    card.classList.add("selected");
+  }
+  const bg = document.createElement("div");
+  bg.className = "card-bg";
+  paint(bg);
+  const body = document.createElement("div");
+  body.className = "card-body";
+  const title = document.createElement("div");
+  title.className = "card-name";
+  title.textContent = name || "";
+  body.appendChild(title);
+  const overflowSlot = document.createElement("div");
+  overflowSlot.className = "card-overflow-slot";
+  overflowSlot.appendChild(libraryOverflow(panel, kind, item));
+  card.append(bg, body, overflowSlot);
+  const open = (ev) => {
+    if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
+      return;
+    }
+    onOpen();
+  };
+  card.addEventListener("click", open);
+  card.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" && ev.key !== " ") {
+      return;
+    }
+    if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
+      return;
+    }
+    ev.preventDefault();
+    onOpen();
+  });
+  slot.appendChild(card);
+  return slot;
+}
+
 function libraryChip(panel, chip, kind, item) {
   const wrap = document.createElement("div");
   wrap.className = "library-chip";
@@ -1747,16 +1817,44 @@ function renderLibrary(panel, { compact } = {}) {
   });
   palHead.append(stickyBg("area"), palLabel, addPal);
 
+  const palCards = document.createElement("div");
+  palCards.className = "scene-cards";
   const palRow = document.createElement("div");
   palRow.className = "var-row";
   for (const palette of palettes) {
+    const cover = galleryPalette(palette?.builtin_id);
+    const selected = panel._view === "palette" && panel._variableId === palette.id;
+    if (cover) {
+      palCards.appendChild(
+        renderLibrarySquareCard(panel, {
+          id: palette.id,
+          name: palette.name,
+          selected,
+          kind: "palette",
+          item: palette,
+          onOpen: () => panel._openPaletteEditor(palette),
+          paint: (bg) => {
+            bg.classList.add("is-cover");
+            bg.style.backgroundImage = `url("${galleryCoverUrl(cover.id)}")`;
+          },
+        })
+      );
+      continue;
+    }
     const chip = createPaletteChip(palette, panel._variables, {
-      selected: panel._view === "palette" && panel._variableId === palette.id,
+      selected,
       onClick: () => panel._openPaletteEditor(palette),
     });
     palRow.appendChild(libraryChip(panel, chip, "palette", palette));
   }
-  wrap.appendChild(libraryBlock(palHead, palRow));
+  const palBody = document.createElement("div");
+  if (palCards.childElementCount) {
+    palBody.appendChild(palCards);
+  }
+  if (palRow.childElementCount) {
+    palBody.appendChild(palRow);
+  }
+  wrap.appendChild(libraryBlock(palHead, palBody));
 
   const themeHead = document.createElement("div");
   themeHead.className = "area-head";
@@ -1774,24 +1872,22 @@ function renderLibrary(panel, { compact } = {}) {
   themeHead.append(stickyBg("area"), themeLabel, addTheme);
 
   const themeRow = document.createElement("div");
-  themeRow.className = "theme-row";
+  themeRow.className = "scene-cards";
   for (const theme of panel._themes || []) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "theme-chip";
-    chip.dataset.itemId = theme.id;
-    chip.dataset.themeId = theme.id;
-    if (panel._view === "theme" && panel._themeId === theme.id) {
-      chip.classList.add("selected");
-    }
-    const dial = document.createElement("div");
-    dial.className = "theme-dial";
-    paintThemeDial(dial, theme, panel._variables || []);
-    const name = document.createElement("span");
-    name.textContent = theme.name;
-    chip.append(dial, name);
-    chip.addEventListener("click", () => panel._openThemeEditor(theme));
-    themeRow.appendChild(libraryChip(panel, chip, "theme", theme));
+    themeRow.appendChild(
+      renderLibrarySquareCard(panel, {
+        id: theme.id,
+        name: theme.name,
+        selected: panel._view === "theme" && panel._themeId === theme.id,
+        kind: "theme",
+        item: theme,
+        onOpen: () => panel._openThemeEditor(theme),
+        paint: (bg) => {
+          bg.classList.add("theme-dial");
+          paintThemeDial(bg, theme, panel._variables || []);
+        },
+      })
+    );
   }
   wrap.appendChild(libraryBlock(themeHead, themeRow));
   return wrap;

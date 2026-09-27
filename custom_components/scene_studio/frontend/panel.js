@@ -2246,11 +2246,11 @@ class SceneStudioPanel extends HTMLElement {
         }
         .scene-gallery-card.scene-theme-card .theme-dial {
           position: absolute;
-          width: 84px;
-          height: 84px;
-          left: 50%;
-          top: 42%;
-          transform: translate(-50%, -50%);
+          inset: 0;
+          width: auto;
+          height: auto;
+          border-radius: inherit;
+          box-shadow: none;
           pointer-events: none;
         }
         .theme-edit-banner {
@@ -3464,19 +3464,24 @@ class SceneStudioPanel extends HTMLElement {
           margin-top: 0;
         }
         .scene-gallery-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-          gap: 8px;
+          display: flex;
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          gap: 12px;
         }
-        .scene-gallery-slot {
+        .scene-gallery-slot,
+        .scene-gallery-grid > .scene-gallery-card {
           display: block;
           min-width: 0;
+          width: calc(50% - 6px);
+          max-width: 155px;
         }
         .scene-palette-randomize-label {
           position: absolute;
           top: 8px;
           right: 8px;
-          z-index: 1;
+          z-index: 3;
           padding: 2px 8px;
           border-radius: 999px;
           background: rgba(0, 0, 0, 0.45);
@@ -3496,16 +3501,33 @@ class SceneStudioPanel extends HTMLElement {
           position: relative;
           display: block;
           width: 100%;
-          aspect-ratio: 16 / 10;
+          aspect-ratio: 1;
+          max-height: 155px;
           margin: 0;
           padding: 0;
           border: 0;
-          border-radius: 14px;
+          border-radius: 16px;
           overflow: hidden;
           appearance: none;
           background: var(--surface-2, #242022);
           color: #fff;
           cursor: pointer;
+        }
+        .scene-gallery-card::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 1;
+          height: 46%;
+          background: linear-gradient(
+            to top,
+            rgba(0, 0, 0, 0.62) 0%,
+            rgba(0, 0, 0, 0.22) 62%,
+            transparent 100%
+          );
+          pointer-events: none;
         }
         .scene-gallery-card.selected {
           outline: 3px solid var(--primary-color);
@@ -3520,13 +3542,27 @@ class SceneStudioPanel extends HTMLElement {
         }
         .scene-gallery-card > span:not(.scene-palette-randomize-label) {
           position: absolute;
-          left: 8px;
-          right: 8px;
-          bottom: 6px;
-          font-size: 13px;
-          font-weight: 600;
+          left: 10px;
+          right: 10px;
+          bottom: 10px;
+          z-index: 2;
+          font-size: 14px;
+          font-weight: 650;
+          line-height: 1.2;
           text-align: left;
-          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+        }
+        @media (max-width: 870px) {
+          .scene-gallery-grid {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            padding-bottom: 4px;
+          }
+          .scene-gallery-slot,
+          .scene-gallery-grid > .scene-gallery-card {
+            flex: 0 0 calc(50% - 6px);
+          }
         }
         .dialog-row {
           display: flex;
@@ -7011,17 +7047,46 @@ class SceneStudioPanel extends HTMLElement {
         );
         list.appendChild(yours);
       }
-      for (const palette of palettes) {
+      const pictured = palettes.filter((palette) => galleryPalette(palette?.builtin_id));
+      const plain = palettes.filter((palette) => !galleryPalette(palette?.builtin_id));
+      const onUserPalette = (palette) => {
+        if (selectedKind === "user" && selectedId === palette.id) {
+          randomizeSeed();
+          return;
+        }
+        choose("user", palette.id);
+      };
+      if (pictured.length) {
+        const grid = document.createElement("div");
+        grid.className = "scene-gallery-grid";
+        for (const palette of pictured) {
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = "scene-gallery-card";
+          const photo = document.createElement("img");
+          photo.alt = "";
+          photo.src = galleryCoverUrl(palette.builtin_id);
+          const name = document.createElement("span");
+          name.textContent = palette.name;
+          const label = document.createElement("span");
+          label.className = "scene-palette-randomize-label";
+          label.hidden = true;
+          label.textContent = this._t(
+            "frontend.dialogs.scene_palette_randomize",
+            "Randomize"
+          );
+          card.append(photo, name, label);
+          card.addEventListener("click", () => onUserPalette(palette));
+          grid.appendChild(card);
+          rows.push({ id: palette.id, chip: card, label });
+        }
+        list.appendChild(grid);
+      }
+      for (const palette of plain) {
         const choice = document.createElement("div");
         choice.className = "scene-palette-choice";
         const chip = createPaletteChip(palette, this._variables, {
-          onClick: () => {
-            if (selectedKind === "user" && selectedId === palette.id) {
-              randomizeSeed();
-              return;
-            }
-            choose("user", palette.id);
-          },
+          onClick: () => onUserPalette(palette),
         });
         const label = document.createElement("span");
         label.className = "scene-palette-randomize-label";
@@ -7308,10 +7373,12 @@ class SceneStudioPanel extends HTMLElement {
         );
         list.appendChild(yours);
       }
+      const yoursGrid = document.createElement("div");
+      yoursGrid.className = "scene-gallery-grid";
       for (const theme of themes) {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "scene-theme-choice";
+        button.className = "scene-gallery-card scene-theme-card";
         const dial = document.createElement("div");
         dial.className = "theme-dial";
         paintThemeDial(dial, theme, this._variables || []);
@@ -7319,8 +7386,11 @@ class SceneStudioPanel extends HTMLElement {
         name.textContent = theme.name || theme.id;
         button.append(dial, name);
         button.addEventListener("click", () => choose("user", theme.id));
-        list.appendChild(button);
+        yoursGrid.appendChild(button);
         choices.push({ id: theme.id, el: button });
+      }
+      if (themes.length) {
+        list.appendChild(yoursGrid);
       }
       const presetsLabel = document.createElement("p");
       presetsLabel.className = "scene-gallery-label";

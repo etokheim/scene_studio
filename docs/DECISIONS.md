@@ -1,5 +1,12 @@
 # Decisions
 
+## A scene’s palette photo is an attribute, not the icon
+
+- **Date:** 2026-09-27
+- **Decision:** When a scene’s palette is a shipped picture, the scene entity gets `palette_image` — a stable `/api/scene_studio/gallery/<id>.jpg` URL. A circadian scene also gets `palette_images`, one entry per solar event that has a photo. `palette_image` is noon when that event has one, otherwise the earliest event that does. The scene icon stays an mdi name. Dashboards that want the photo read the attribute.
+- **Why:** Home Assistant’s icon field cannot be a photo. The versioned panel asset URL changes whenever the frontend rev bumps, so a card pointed at it would break.
+- **Do not reverse without user ask.**
+
 ## Dial touch does not scroll, and the sky stays on the dial
 
 - **Date:** 2026-09-25
