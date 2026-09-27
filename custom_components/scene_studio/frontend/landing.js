@@ -547,7 +547,8 @@ export const LANDING_CSS = `
     overflow: visible;
     box-sizing: border-box;
     width: calc(50% - 6px);
-    max-width: 180px;
+    max-width: 155px;
+    max-height: 155px;
   }
   .scene-card-slot.is-disabled .scene-card {
     filter: grayscale(1);
@@ -585,6 +586,7 @@ export const LANDING_CSS = `
     justify-content: flex-end;
     gap: 0;
     aspect-ratio: 1;
+    max-height: 155px;
     min-height: 0;
     margin: 0;
     padding: 0;
@@ -870,6 +872,12 @@ export const LANDING_CSS = `
     .scene-card-slot {
       flex: 0 0 calc(50% - 6px);
       width: calc(50% - 6px);
+    }
+    /* scale(1.1) paints outside the card and becomes scrollable overflow.
+       overflow-x: auto then shows a vertical scrollbar. Inset the glow so
+       the scaled box stays inside the card; the blur still bleeds. */
+    .scene-card-slot .card-glow {
+      inset: 5%;
     }
   }
 `;
@@ -1363,7 +1371,7 @@ function renderAreaBlock(panel, area, scenes) {
 
 function makeSceneCardBg(scene) {
   if (scene.kind === "simple") {
-    return createSimpleCardMesh(scene.card?.dots, { width: 180, height: 180 });
+    return createSimpleCardMesh(scene.card?.dots, { width: 155, height: 155 });
   }
   const bg = document.createElement("div");
   bg.className = "card-bg";
