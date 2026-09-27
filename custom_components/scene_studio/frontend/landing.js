@@ -92,6 +92,33 @@ export const LANDING_CSS = `
   }
   /* Selected scene stays put. The rest of the column fades until the pointer
      is over the column, so the open scene is easy to find. */
+  .rail-live-edit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex: 0 0 auto;
+    margin: 12px 12px 0;
+    padding: 10px 14px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--card-background-color) 88%, transparent);
+    border: 1px solid var(--divider-color);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  }
+  .rail-live-edit-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .rail-live-edit-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .rail-live-edit-hint {
+    font-size: 12px;
+    color: var(--secondary-text-color);
+  }
   .area-rail-tabs {
     display: flex;
     flex: 0 0 auto;
@@ -113,12 +140,13 @@ export const LANDING_CSS = `
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    padding: 0 0 24px;
+    padding: 0 0 calc(24px + var(--scene-safe-bottom, 0px));
   }
   .area-rail-body[data-tab="library"] {
-    /* No padding on the scrollport. A padded scrollport makes sticky titles
-       lock short of the top, with a gap above them. */
-    padding: 0 0 24px;
+    /* No padding on the scrollport top. A padded scrollport makes sticky titles
+       lock short of the top, with a gap above them. Bottom pad clears the
+       iOS home indicator without shrinking the page shell. */
+    padding: 0 0 calc(24px + var(--scene-safe-bottom, 0px));
   }
   .area-rail-body[hidden] {
     display: none;
@@ -707,7 +735,7 @@ export const LANDING_CSS = `
     border-radius: 8px;
     object-fit: cover;
     filter: none;
-    box-shadow: none;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.15);
   }
   .scene-card .card-body {
     position: relative;
@@ -946,7 +974,7 @@ export const LANDING_CSS = `
       flex: 1 1 42%;
       height: auto;
       border-right: 0;
-      border-bottom: 1px solid var(--divider-color);
+      border-bottom: 0;
     }
     .scene-cards {
       flex-wrap: nowrap;
@@ -1247,6 +1275,27 @@ export function renderLanding(panel, { includeStage = true } = {}) {
     button.addEventListener("click", () => panel._setRailTab(id));
     tabs.appendChild(button);
   }
+  const liveBar = document.createElement("div");
+  liveBar.className = "rail-live-edit";
+  const liveCopy = document.createElement("div");
+  liveCopy.className = "rail-live-edit-copy";
+  const liveTitle = document.createElement("span");
+  liveTitle.className = "rail-live-edit-title";
+  liveTitle.textContent = panel._t("frontend.actions.live_edit", "Live edit");
+  const liveHint = document.createElement("span");
+  liveHint.className = "rail-live-edit-hint";
+  liveHint.textContent = panel._t(
+    "frontend.actions.live_edit_hint",
+    "Show the open scene on the lights"
+  );
+  liveCopy.append(liveTitle, liveHint);
+  const liveSwitch = document.createElement("ha-switch");
+  liveSwitch.checked = Boolean(panel._readRoomPreviewPref?.());
+  liveSwitch.addEventListener("change", () => {
+    void panel._setRoomPreview(Boolean(liveSwitch.checked));
+  });
+  liveBar.append(liveCopy, liveSwitch);
+  panel._roomPreviewSwitch = liveSwitch;
   const scenesBody = document.createElement("div");
   scenesBody.className = "area-rail-body";
   scenesBody.dataset.tab = "scenes";
@@ -1256,7 +1305,7 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   libraryBody.dataset.tab = "library";
   libraryBody.hidden = tab !== "library";
   libraryBody.appendChild(renderLibrary(panel, { compact: true }));
-  rail.append(tabs, scenesBody, libraryBody);
+  rail.append(liveBar, tabs, scenesBody, libraryBody);
 
   const floors = panel._floors || [];
   const items = panel._items || [];

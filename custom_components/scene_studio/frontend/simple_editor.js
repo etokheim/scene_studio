@@ -129,6 +129,7 @@ export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
   :host([narrow]) .simple-editor {
     padding-top: 0;
+    padding-bottom: calc(16px + var(--scene-safe-bottom, 0px));
   }
   /* Presets overlay the chip strip, so the disk is not resized when they
      appear. The strip itself stays in the column and pushes the disk down. */
@@ -411,6 +412,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   wheels.className = "simple-wheels";
 
   const paletteBaseId = () => panel._formData?.palette_id || null;
+  const levelOnlyLight = (eid) => {
+    const flags = panel._lightModeFlags?.(eid);
+    return Boolean(flags?.onOff || flags?.brightnessOnly);
+  };
 
   const hydrateDraft = (raw, eid) => {
     const base = paletteBaseId();
@@ -430,6 +435,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         entityId: eid,
         seed: Number(panel._formData?.assignment_seed) || 0,
         catalog: variables,
+        levelOnly: levelOnlyLight(eid),
       });
     }
     return draft;
@@ -575,6 +581,24 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const cardDots = () =>
     members.map((eid) => {
       const draft = drafts[eid] || {};
+      if (levelOnlyLight(eid)) {
+        const on =
+          (draft.state || "on") !== "off" &&
+          !(panel._lightModeFlags?.(eid)?.brightnessOnly &&
+            Number(draft.brightness) <= 0);
+        return {
+          entity_id: eid,
+          rgb: on
+            ? scaledCardRgb([255, 255, 255], {
+                ...draft,
+                state: "on",
+                brightness: panel._lightModeFlags?.(eid)?.onOff
+                  ? 255
+                  : draft.brightness,
+              })
+            : [48, 48, 48],
+        };
+      }
       return {
         entity_id: eid,
         rgb: scaledCardRgb(draftRgb(draft), draft),
@@ -745,6 +769,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           entityId: eid,
           seed,
           catalog: variables,
+          levelOnly: levelOnlyLight(eid),
         });
       }
       persistLight(eid);
@@ -943,7 +968,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const levelOnly = onOff || flags?.brightnessOnly;
     const on = (draft?.state || "on") !== "off";
     paintLightTile(selector, {
-      rgb: levelOnly ? (on ? [255, 236, 210] : [48, 48, 48]) : draftRgb(draft),
+      rgb: levelOnly ? (on ? [255, 255, 255] : [48, 48, 48]) : draftRgb(draft),
       fillPct: fillPercent(draft, eid),
       selected: selectedIds.has(eid),
       brightnessLabel: onOff ? onOffLabel(draft) : undefined,
@@ -984,6 +1009,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       entityId: eid,
       seed: Number(panel._formData?.assignment_seed) || 0,
       catalog: variables,
+      levelOnly: levelOnlyLight(eid),
     });
     persistLight(eid);
     const selector = tiles.querySelector(

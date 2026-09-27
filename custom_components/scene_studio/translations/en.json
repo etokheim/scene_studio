@@ -140,6 +140,7 @@
       "auto_configure": "Auto configure",
       "add_scene": "Add scene",
       "live_edit": "Live edit",
+      "live_edit_hint": "Show the open scene on the lights",
       "live_preview": "Live edit light",
       "room_preview": "Preview room",
       "scene_preview": "Live edit",
@@ -255,6 +256,8 @@
       "scene_theme_presets": "Presets",
       "scene_theme_use": "Use theme",
       "scene_palette_use": "Use palette",
+      "scene_palette_create": "Create scene",
+      "scene_palette_live_preview": "Live preview",
       "scene_palette_randomize": "Randomize",
       "unsaved_title": "Unsaved changes",
       "unsaved_text": "You have unsaved changes. Discard them?"

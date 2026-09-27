@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 
 from .color_math import entity_rgb
 from .const import KIND_CIRCADIAN, KIND_SIMPLE, SOLAR_EVENTS
-from .native_scene import lights_in_area
+from .native_scene import lights_in_area, without_redundant_light_groups
 from .resolve import (
     build_circadian_event_snapshot,
     build_simple_snapshot,
@@ -32,7 +32,9 @@ def scene_members(hass: HomeAssistant, scene: dict[str, Any]) -> list[str]:
     """Resolve membership for a stored scene."""
     area_id = scene.get("area")
     area_lights = lights_in_area(hass, area_id) if area_id else []
-    return resolve_membership(area_lights, scene.get("membership") or {})
+    return without_redundant_light_groups(
+        hass, resolve_membership(area_lights, scene.get("membership") or {})
+    )
 
 
 def modes_map(hass: HomeAssistant, entity_ids: list[str]) -> dict[str, set[str] | None]:

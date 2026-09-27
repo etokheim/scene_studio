@@ -269,6 +269,44 @@ def scenes_in_area(hass: HomeAssistant, area_id: str) -> list[str]:
     return sorted(scenes)
 
 
+def light_group_member_ids(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """Other lights controlled by this entity, when it is a light group."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return []
+    raw = state.attributes.get("entity_id")
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [
+        member
+        for member in raw
+        if isinstance(member, str)
+        and member.startswith("light.")
+        and member != entity_id
+    ]
+
+
+def without_redundant_light_groups(
+    hass: HomeAssistant, entity_ids: list[str]
+) -> list[str]:
+    """Drop a group when any of its member lights are already in the list.
+
+    Hide members hides the bulbs (``hidden_by``), so they are not in the list
+    and the group stays. Stored membership is left unchanged; callers filter
+    the resolved list.
+    """
+    present = set(entity_ids)
+    kept: list[str] = []
+    for entity_id in entity_ids:
+        members = light_group_member_ids(hass, entity_id)
+        if members and any(member in present for member in members):
+            continue
+        kept.append(entity_id)
+    return kept
+
+
 def lights_in_area(hass: HomeAssistant, area_id: str) -> list[str]:
     """Return enabled light entity ids in an area (entity area, else device)."""
     entity_reg = er.async_get(hass)
@@ -286,7 +324,7 @@ def lights_in_area(hass: HomeAssistant, area_id: str) -> list[str]:
             entry.area_id is None and entry.device_id in device_ids
         ):
             lights.append(entry.entity_id)
-    return sorted(lights)
+    return without_redundant_light_groups(hass, sorted(lights))
 
 
 def light_state_for_event(

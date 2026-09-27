@@ -1,5 +1,35 @@
 # Decisions
 
+## Phone content clears the home indicator
+
+- **Date:** 2026-09-27
+- **Decision:** The page shell stays `100vh` and full-bleed. The scene list, the circadian light tiles, and the simple editor add bottom padding from `--safe-area-inset-bottom` / `env(safe-area-inset-bottom)`. That pad is inside the scroller or under the tiles, not on `.page`. The phone rail has no bottom border.
+- **Why:** `100vh` includes the iOS home indicator, and a pad on the overflow-hidden page shrinks the flex box and clips the workspace. Activity clips the same way; Energy does not, because its scroller clears the inset.
+- **Do not reverse without user ask.**
+
+## Desktop header stays put; Live edit sits on the list
+
+- **Date:** 2026-09-27
+- **Decision:** On a wide layout the header is always undo, redo, and settings. Live edit is a full-width bar at the top of the area rail, on both tabs, and it shares the `roomPreview` preference with the create dialog’s Live preview. A narrow editor hides the rail, so that switch stays in the narrow header. Settings opens over whichever editor is in the main column and is not closed when that column changes. The drawer’s exit transitions opacity and transform for the same duration as the entry.
+- **Why:** The header was swapping actions every time a scene opened, and the settings drawer vanished because only transform was eased.
+- **Do not reverse without user ask.**
+
+## Level-only lights are white
+
+- **Date:** 2026-09-27
+- **Supersedes in part:** “On/off and brightness-only lights stay in their own groups” — the tile color is white, not the warm neutral.
+- **Decision:** On/off and brightness-only lights paint white, scaled by brightness. Off stays the gray tile. Applying a palette does not write `rgb_color` onto those drafts. A light group is omitted when any of its members are also listed. Hide members hides the bulbs, so the group stays. Stored membership is not rewritten.
+- **Why:** Those tiles were picking up palette color. A group plus its bulbs applied the same lights twice.
+- **Do not reverse without user ask.**
+
+## Edit to edit keeps the scene rail
+
+- **Date:** 2026-09-27
+- **Supersedes in part:** “Area rail keeps scroll; stage resets” — that still restores scroll when the rail is rebuilt. Moving from one scene editor to another no longer rebuilds the rail.
+- **Decision:** On a wide layout, `#edit/A` → `#edit/B` keeps the existing `.area-rail`, updates selection in place, and swaps the stage. It does not recenter the list. The rail scrolls to the open card only when that card is outside the scrollport, and only on first open or when arriving from the list or the library. The card is found by `data-scene-id` / `data-item-id`, because `.selected` is added a frame later so the scale can transition.
+- **Why:** Rebuilding the rail started it at scroll 0, so the reveal treated an on-screen card as off-screen and jumped. The late selected class also flashed the dimming.
+- **Do not reverse without user ask.**
+
 ## Scene cards scale, and their menu matches the library
 
 - **Date:** 2026-09-27

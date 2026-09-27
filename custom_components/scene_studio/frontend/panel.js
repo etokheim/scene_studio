@@ -34,7 +34,7 @@ import {
   themeDraftSignature,
   themeEventSignature,
 } from "./gallery.js";
-import { defaultPaletteSlots, paletteIsMixed, paletteIsTemperatureOnly, samplePaletteWheel, variableIsPalette } from "./palette.js";
+import { defaultPaletteSlots, paletteIsMixed, paletteIsTemperatureOnly, paletteSwatchCss, samplePaletteWheel, variableIsPalette } from "./palette.js";
 import {
   isoYear,
   daysInYear,
@@ -62,7 +62,6 @@ import {
 } from "./dial_clock.js";
 import {
   LANDING_CSS,
-  createPaletteChip,
   renderLanding,
   renderSceneUsed,
   renderPaletteUsed,
@@ -361,7 +360,7 @@ class SceneStudioPanel extends HTMLElement {
       if (ev?.type === "visibilitychange" && document.visibilityState === "visible") {
         return;
       }
-      void this._saveNow();
+      void this._leaveLiveEdits();
     };
     this._onLandscapeChange = () => this._syncYearScrubLayout();
     this._onWindowResize = () => {
@@ -489,7 +488,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    void this._saveNow();
+    void this._leaveLiveEdits();
     this._closeSceneSidebar();
     window.removeEventListener("hashchange", this._onHashChange);
     window.removeEventListener("location-changed", this._onLocationChanged);
@@ -542,9 +541,19 @@ class SceneStudioPanel extends HTMLElement {
     this._cancelSunPathMorph();
     this._stopScenePlay({ restore: false });
     this._clearScenePreviewApplyTimer();
-    if (this._roomPreviewSnapshots) {
-      void this._abandonScenePreview();
+  }
+
+  async _restoreOpenLightPreview() {
+    const sidebar = this.shadowRoot?.querySelector(".scene-sidebar.light-dialog");
+    if (typeof sidebar?._restoreLive === "function") {
+      await sidebar._restoreLive();
     }
+  }
+
+  async _leaveLiveEdits() {
+    await this._restoreOpenLightPreview();
+    await this._abandonScenePreview();
+    await this._saveNow();
   }
 
   async _build() {
@@ -565,6 +574,10 @@ class SceneStudioPanel extends HTMLElement {
           height: 100vh;
           max-height: 100%;
           overflow: hidden;
+          --scene-safe-bottom: max(
+            var(--safe-area-inset-bottom, 0px),
+            env(safe-area-inset-bottom, 0px)
+          );
           background: var(--primary-background-color);
           color: var(--primary-text-color);
           --scene-sidebar-gutter: 0px;
@@ -3155,7 +3168,9 @@ class SceneStudioPanel extends HTMLElement {
           pointer-events: none;
           transform: translateX(100%);
           opacity: 0;
-          transition: transform ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1);
+          transition:
+            transform ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1),
+            opacity ${SIDEBAR_ANIMATION_MS}ms cubic-bezier(0.2, 0, 0, 1);
         }
         .scene-sidebar.desktop.open {
           pointer-events: auto;
@@ -3280,8 +3295,13 @@ class SceneStudioPanel extends HTMLElement {
         .sidebar-actions-bar .activate-scene-btn {
           margin-inline-end: 4px;
         }
-        .sidebar-actions-bar .remove-light-from-scene-btn {
-          margin-inline-start: auto;
+        .sidebar-remove-light {
+          margin-top: 20px;
+          padding-top: 12px;
+          border-top: 1px solid var(--divider-color);
+        }
+        .sidebar-remove-light .remove-light-from-scene-btn {
+          --ha-button-width: 100%;
         }
         .light-effect-row {
           display: flex;
@@ -3460,6 +3480,11 @@ class SceneStudioPanel extends HTMLElement {
         }
         .scene-palette-list > .scene-gallery-label:first-child {
           margin-top: 0;
+        }
+        .scene-palette-list .scene-cards {
+          flex-wrap: wrap;
+          overflow: visible;
+          padding: 8px 4px 16px;
         }
         .scene-gallery-grid {
           display: flex;
@@ -3982,6 +4007,7 @@ class SceneStudioPanel extends HTMLElement {
         :host([narrow]) .sun-path.dial-view .sun-light-clock-legend {
           flex: 0 0 auto;
           width: 100%;
+          padding-bottom: var(--scene-safe-bottom, 0px);
         }
         :host([narrow]) .sun-light-clock-face {
           flex: 0 0 auto;
@@ -5010,6 +5036,7 @@ class SceneStudioPanel extends HTMLElement {
     if (!(await this._confirmLeaveEditor())) {
       return;
     }
+    await this._restoreOpenLightPreview();
     this._abortPreview();
     this._forceCloseSceneSidebar();
     const previous = (window.location.hash || "#").replace(/^#/, "");
@@ -5092,7 +5119,8 @@ class SceneStudioPanel extends HTMLElement {
       this._variableDraft = null;
       this._entityId = null;
       this._error = null;
-      void this._abandonScenePreview();
+      await this._restoreOpenLightPreview();
+      await this._abandonScenePreview();
       this._loadTheme(themeMatch[1]);
       return;
     }
@@ -5109,7 +5137,8 @@ class SceneStudioPanel extends HTMLElement {
       this._variableId = paletteMatch[1];
       this._entityId = null;
       this._error = null;
-      void this._abandonScenePreview();
+      await this._restoreOpenLightPreview();
+      await this._abandonScenePreview();
       this._loadVariable(paletteMatch[1]);
       return;
     }
@@ -5126,7 +5155,8 @@ class SceneStudioPanel extends HTMLElement {
       this._variableId = variableMatch[1];
       this._entityId = null;
       this._error = null;
-      void this._abandonScenePreview();
+      await this._restoreOpenLightPreview();
+      await this._abandonScenePreview();
       this._loadVariable(variableMatch[1]);
       return;
     }
@@ -5138,7 +5168,8 @@ class SceneStudioPanel extends HTMLElement {
       this._variableId = null;
       this._variableDraft = null;
       this._entityId = null;
-      void this._abandonScenePreview();
+      await this._restoreOpenLightPreview();
+      await this._abandonScenePreview();
       this._loadList();
       return;
     }
@@ -5149,7 +5180,8 @@ class SceneStudioPanel extends HTMLElement {
     this._variableId = null;
     this._variableDraft = null;
     this._entityId = null;
-    void this._abandonScenePreview();
+    await this._restoreOpenLightPreview();
+    await this._abandonScenePreview();
     this._loadList();
   }
 
@@ -5273,6 +5305,11 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   async _loadItem(sceneId) {
+    const sidebar = this.shadowRoot?.querySelector(".scene-sidebar.light-dialog");
+    if (sidebar?._sceneId && sidebar._sceneId !== sceneId) {
+      await this._restoreOpenLightPreview();
+      this._closeSceneSidebar();
+    }
     if (this._scenePreviewOwnerId && this._scenePreviewOwnerId !== sceneId) {
       await this._abandonScenePreview();
     }
@@ -5935,12 +5972,15 @@ class SceneStudioPanel extends HTMLElement {
     if (!this._built) {
       return;
     }
+    // Consumed by this paint only. A later list refresh still rebuilds the rail.
+    const keepRail = Boolean(this._keepAreaRail) && !this._narrow;
+    this._keepAreaRail = false;
     if (this._wheelMorph && this._renderWheelMorph()) {
       this._surfaceKind = this._editorMotionKind();
       return;
     }
     if (this._view === "edit") {
-      this._renderEditor();
+      this._renderEditor({ keepRail });
     } else if (this._view === "theme") {
       this._renderThemeEditor();
     } else if (this._view === "variable" || this._view === "palette") {
@@ -6110,10 +6150,38 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
-  _revealSelectedInRail(rail) {
-    const card = rail.querySelector(
+  _revealTargetInRail(rail) {
+    const esc = (id) => CSS.escape(id);
+    if (this._view === "edit" && this._editId) {
+      return rail.querySelector(
+        `.scene-card[data-scene-id="${esc(this._editId)}"]`
+      );
+    }
+    if (
+      (this._view === "palette" || this._view === "variable") &&
+      this._variableId
+    ) {
+      const id = esc(this._variableId);
+      return rail.querySelector(
+        `.scene-card[data-item-id="${id}"], .var-chip[data-item-id="${id}"]`
+      );
+    }
+    if (this._view === "theme" && this._themeId) {
+      const id = esc(this._themeId);
+      return rail.querySelector(
+        `.scene-card[data-item-id="${id}"], .theme-chip[data-item-id="${id}"]`
+      );
+    }
+    return rail.querySelector(
       ".scene-card.selected, .var-chip.selected, .theme-chip.selected"
     );
+  }
+
+  _revealSelectedInRail(rail) {
+    // Match the open item by id. `.selected` is added a frame later so the
+    // scale can transition, and waiting for it recenters a rail that was
+    // just rebuilt at scroll 0.
+    const card = this._revealTargetInRail(rail);
     if (!card || rail.clientHeight < 40) {
       return false;
     }
@@ -6144,6 +6212,7 @@ class SceneStudioPanel extends HTMLElement {
     const tab = rail.dataset.tab || "scenes";
     const apply = () => {
       if (
+        !this._areaRailHoldScroll &&
         !this._areaRailSkipReveal &&
         (this._areaRailForceReveal || !this._areaRailUserScrolled)
       ) {
@@ -6200,6 +6269,13 @@ class SceneStudioPanel extends HTMLElement {
     if (tab !== "library" && tab !== "scenes") {
       return;
     }
+    if (this._railTab === tab) {
+      const current = this._contentEl?.querySelector(".area-rail");
+      const body = current?.querySelector(`.area-rail-body[data-tab="${tab}"]`);
+      if (body && !body.hidden && this._areaRailBound === body) {
+        return;
+      }
+    }
     this._captureAreaRailScroll();
     this._railTab = tab;
     const rail = this._contentEl?.querySelector(".area-rail");
@@ -6220,7 +6296,24 @@ class SceneStudioPanel extends HTMLElement {
 
   _noteRailTabForHash(hash) {
     const library = /^(variable|palette|theme|variables)(\/|$)/.test(hash || "");
-    this._railTab = library ? "library" : "scenes";
+    const nextTab = library ? "library" : "scenes";
+    // edit → edit stays on the scenes rail. Rebuilding it jumps scroll and
+    // flashes the selection. Load, and arrival from the list or library, still
+    // reveal when the card is outside the scrollport.
+    const editToEdit =
+      !this._narrow &&
+      nextTab === "scenes" &&
+      this._railTab !== "library" &&
+      this._view === "edit" &&
+      /^edit\/.+/.test(hash || "");
+    this._railTab = nextTab;
+    if (editToEdit) {
+      this._keepAreaRail = true;
+      this._areaRailHoldScroll = true;
+      return;
+    }
+    this._keepAreaRail = false;
+    this._areaRailHoldScroll = false;
     this._areaRailForceReveal = true;
     this._areaRailUserScrolled = false;
   }
@@ -6439,7 +6532,12 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _renderList({ keepSidebar = false } = {}) {
-    if (!keepSidebar) {
+    const openSidebar = this.shadowRoot?.querySelector(".scene-sidebar");
+    if (
+      !keepSidebar &&
+      openSidebar &&
+      !openSidebar.classList.contains("list-settings-dialog")
+    ) {
       this._closeSceneSidebar();
     }
     // Allow clock enter again the next time an editor opens.
@@ -7011,11 +7109,15 @@ class SceneStudioPanel extends HTMLElement {
       const liveToggle = document.createElement("label");
       liveToggle.className = "live-edit-toggle";
       const liveLabel = document.createElement("span");
-      liveLabel.textContent = this._t("frontend.actions.live_edit", "Live edit");
+      liveLabel.textContent = this._t(
+        "frontend.dialogs.scene_palette_live_preview",
+        "Live preview"
+      );
       const liveSwitch = document.createElement("ha-switch");
       liveSwitch.checked = this._readRoomPreviewPref();
       liveSwitch.addEventListener("change", () => {
         this._writeRoomPreviewPref(Boolean(liveSwitch.checked));
+        this._syncRoomPreviewControl();
         void applyPreview();
       });
       liveToggle.append(liveLabel, liveSwitch);
@@ -7030,29 +7132,70 @@ class SceneStudioPanel extends HTMLElement {
         paintSelection();
         void applyPreview();
       };
-      const noneChoice = document.createElement("button");
-      noneChoice.type = "button";
-      noneChoice.className = "scene-palette-none";
-      noneChoice.textContent = this._t("frontend.dialogs.scene_palette_none", "None");
-      noneChoice.addEventListener("click", () => choose("none", null));
-      noneChip = noneChoice;
-      list.appendChild(noneChoice);
+      const paletteChoiceCard = (name, paint) => {
+        const slot = document.createElement("div");
+        slot.className = "scene-card-slot";
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "scene-card";
+        const bg = document.createElement("div");
+        bg.className = "card-bg";
+        paint(bg);
+        const body = document.createElement("div");
+        body.className = "card-body";
+        const title = document.createElement("div");
+        title.className = "card-name";
+        title.textContent = name;
+        body.appendChild(title);
+        card.append(bg, body);
+        slot.appendChild(card);
+        return { slot, card };
+      };
+      const randomizeLabel = () => {
+        const label = document.createElement("span");
+        label.className = "scene-palette-randomize-label";
+        label.hidden = true;
+        label.textContent = this._t(
+          "frontend.dialogs.scene_palette_randomize",
+          "Randomize"
+        );
+        return label;
+      };
+      const none = paletteChoiceCard(
+        this._t("frontend.dialogs.scene_palette_none", "None"),
+        (bg) => {
+          bg.style.background =
+            "color-mix(in srgb, var(--secondary-background-color) 88%, var(--primary-text-color))";
+        }
+      );
+      none.card.addEventListener("click", () => choose("none", null));
+      noneChip = none;
+      const noneGrid = document.createElement("div");
+      noneGrid.className = "scene-cards";
+      noneGrid.appendChild(none.slot);
+      list.appendChild(noneGrid);
       const randomizeSeed = () => {
         seed = (Math.random() * 0xffffffff) >>> 0;
         void applyPreview();
       };
-      const paintSelection = () => {
-        for (const row of rows) {
-          const on = selectedKind === "user" && row.id === selectedId;
-          row.chip.classList.toggle("selected", on);
+      const markChoice = (row, on) => {
+        row.card.classList.toggle("selected", on);
+        row.slot.classList.toggle("glow-on", on);
+        if (row.label) {
           row.label.hidden = !on;
         }
-        for (const card of cards) {
-          const on = selectedKind === "gallery" && card.id === selectedId;
-          card.el.classList.toggle("selected", on);
-          card.label.hidden = !on;
+      };
+      const paintSelection = () => {
+        for (const row of rows) {
+          markChoice(row, selectedKind === "user" && row.id === selectedId);
         }
-        noneChip?.classList.toggle("selected", selectedKind === "none");
+        for (const card of cards) {
+          markChoice(card, selectedKind === "gallery" && card.id === selectedId);
+        }
+        if (noneChip) {
+          noneChip.card.classList.toggle("selected", selectedKind === "none");
+          noneChip.slot.classList.toggle("glow-on", selectedKind === "none");
+        }
         const locked = selectedKind !== "none" && !selectedPalette();
         useBtn.disabled = locked;
         useBtn.toggleAttribute("disabled", locked);
@@ -7075,85 +7218,59 @@ class SceneStudioPanel extends HTMLElement {
         }
         choose("user", palette.id);
       };
-      if (pictured.length) {
+      const appendPaletteCards = (palettesToShow, paintFor) => {
+        if (!palettesToShow.length) {
+          return;
+        }
         const grid = document.createElement("div");
-        grid.className = "scene-gallery-grid";
-        for (const palette of pictured) {
-          const card = document.createElement("button");
-          card.type = "button";
-          card.className = "scene-gallery-card";
-          const photo = document.createElement("img");
-          photo.alt = "";
-          photo.src = galleryCoverUrl(palette.builtin_id);
-          const name = document.createElement("span");
-          name.textContent = palette.name;
-          const label = document.createElement("span");
-          label.className = "scene-palette-randomize-label";
-          label.hidden = true;
-          label.textContent = this._t(
-            "frontend.dialogs.scene_palette_randomize",
-            "Randomize"
-          );
-          card.append(photo, name, label);
-          card.addEventListener("click", () => onUserPalette(palette));
-          grid.appendChild(card);
-          rows.push({ id: palette.id, chip: card, label });
+        grid.className = "scene-cards";
+        for (const palette of palettesToShow) {
+          const choice = paletteChoiceCard(palette.name, paintFor(palette));
+          const label = randomizeLabel();
+          choice.card.appendChild(label);
+          choice.card.addEventListener("click", () => onUserPalette(palette));
+          grid.appendChild(choice.slot);
+          rows.push({ id: palette.id, ...choice, label });
         }
         list.appendChild(grid);
-      }
-      for (const palette of plain) {
-        const choice = document.createElement("div");
-        choice.className = "scene-palette-choice";
-        const chip = createPaletteChip(palette, this._variables, {
-          onClick: () => onUserPalette(palette),
-        });
-        const label = document.createElement("span");
-        label.className = "scene-palette-randomize-label";
-        label.hidden = true;
-        label.textContent = this._t(
-          "frontend.dialogs.scene_palette_randomize",
-          "Randomize"
+      };
+      appendPaletteCards(pictured, (palette) => (bg) => {
+        const cover = galleryPalette(palette.builtin_id);
+        bg.classList.add("is-cover");
+        bg.style.backgroundImage = `url("${galleryCoverUrl(cover.id)}")`;
+      });
+      appendPaletteCards(plain, (palette) => (bg) => {
+        bg.style.background = paletteSwatchCss(
+          palette,
+          this._variables,
+          draftRgb
         );
-        chip.appendChild(label);
-        choice.appendChild(chip);
-        list.appendChild(choice);
-        rows.push({ id: palette.id, chip, label });
-      }
+      });
       for (const section of gallerySections()) {
         const label = document.createElement("p");
         label.className = "scene-gallery-label";
         label.textContent = this._t(section.nameKey, section.name);
         const grid = document.createElement("div");
-        grid.className = "scene-gallery-grid";
+        grid.className = "scene-cards";
         for (const item of section.palettes) {
-          const card = document.createElement("button");
-          card.type = "button";
-          card.className = "scene-gallery-card";
-          const photo = document.createElement("img");
-          photo.alt = "";
-          photo.src = galleryCoverUrl(item.id);
-          const name = document.createElement("span");
-          name.textContent = this._t(item.nameKey, item.name);
-          const label = document.createElement("span");
-          label.className = "scene-palette-randomize-label";
-          label.hidden = true;
-          label.textContent = this._t(
-            "frontend.dialogs.scene_palette_randomize",
-            "Randomize"
+          const choice = paletteChoiceCard(
+            this._t(item.nameKey, item.name),
+            (bg) => {
+              bg.classList.add("is-cover");
+              bg.style.backgroundImage = `url("${galleryCoverUrl(item.id)}")`;
+            }
           );
-          card.append(photo, name, label);
-          card.addEventListener("click", () => {
+          const randomLabel = randomizeLabel();
+          choice.card.appendChild(randomLabel);
+          choice.card.addEventListener("click", () => {
             if (selectedKind === "gallery" && selectedId === item.id) {
               randomizeSeed();
               return;
             }
             choose("gallery", item.id);
           });
-          const slot = document.createElement("div");
-          slot.className = "scene-gallery-slot";
-          slot.appendChild(card);
-          grid.appendChild(slot);
-          cards.push({ id: item.id, el: card, label });
+          grid.appendChild(choice.slot);
+          cards.push({ id: item.id, ...choice, label: randomLabel });
         }
         list.append(label, grid);
       }
@@ -7162,32 +7279,15 @@ class SceneStudioPanel extends HTMLElement {
         ? document.createElement("ha-dialog-footer")
         : document.createElement("div");
       footer.slot = "footer";
-      const custom = document.createElement("ha-button");
-      custom.slot = "secondaryAction";
-      custom.appearance = "plain";
-      custom.textContent = this._t(
-        "frontend.dialogs.scene_palette_custom",
-        "Custom"
-      );
       const useBtn = document.createElement("ha-button");
       useBtn.slot = "primaryAction";
       useBtn.variant = "brand";
       useBtn.disabled = true;
       useBtn.toggleAttribute("disabled", true);
-      useBtn.textContent = this._t(
-        "frontend.dialogs.scene_palette_use",
-        "Use palette"
-      );
-      custom.addEventListener("click", () => {
-        // Copy before restore clears the preview snapshots. Those are the
-        // room colors from before the palette preview. Create-only: Custom
-        // builds a scene from the room. The editor uses None instead.
-        const room = snaps ? structuredClone(snaps) : null;
-        void restoreSnaps().then(() => finish({ palette: null, room }));
-      });
-      if (mode === "edit") {
-        custom.hidden = true;
-      }
+      useBtn.textContent =
+        mode === "edit"
+          ? this._t("frontend.dialogs.scene_palette_use", "Use palette")
+          : this._t("frontend.dialogs.scene_palette_create", "Create scene");
       useBtn.addEventListener("click", () => {
         if (selectedKind === "none") {
           void restoreSnaps().then(() => finish({ palette: null }));
@@ -7244,7 +7344,7 @@ class SceneStudioPanel extends HTMLElement {
             this._error = err.message || String(err);
           });
       });
-      footer.append(custom, useBtn);
+      footer.append(useBtn);
       dialog.appendChild(footer);
       paintSelection();
       dialog.addEventListener("closed", () => {
@@ -7579,6 +7679,9 @@ class SceneStudioPanel extends HTMLElement {
           this._roomPreview = true;
           this._roomPreviewSnapshots = choice.snapshots;
           this._scenePreviewOwnerId = saved.id;
+          // The dialog already painted these lights. A second apply with a
+          // transition flashes the room back and forth.
+          this._roomPreviewHoldApply = true;
         }
         this._upsertSceneInList(saved);
         this._commitCreatedUndo({
@@ -9891,19 +9994,19 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _setEditorActions() {
-    if (this._view === "theme") {
-      this._liveEditSwitch = null;
-      this._roomPreviewSwitch = null;
-      this._locationBtn = null;
-      if (this._narrow) {
-        const undo = this._undoRedoButton("undo");
-        const redo = this._undoRedoButton("redo");
-        this._undoBtn = undo;
-        this._redoBtn = redo;
-        this._setActionItems(undo, redo);
-        this._syncUndoButtons();
-        return;
+    this._liveEdit = this._readLiveEditPref();
+    this._liveEditSwitch = null;
+    this._locationBtn = null;
+    if (!this._narrow) {
+      // The list column owns Live edit. Header stays undo, redo, settings.
+      this._setListActions();
+      if (this._view === "edit") {
+        this._maybeResumeRoomPreview();
       }
+      return;
+    }
+    if (this._view === "theme") {
+      this._roomPreviewSwitch = null;
       const undo = this._undoRedoButton("undo");
       const redo = this._undoRedoButton("redo");
       this._undoBtn = undo;
@@ -9912,10 +10015,7 @@ class SceneStudioPanel extends HTMLElement {
       this._syncUndoButtons();
       return;
     }
-    this._liveEdit = this._readLiveEditPref();
-    // Per-light Live edit lives in the light sidebar — clear any stale app-bar switch.
-    this._liveEditSwitch = null;
-
+    // Narrow editors replace the rail, so the switch stays in the header.
     const previewToggle = document.createElement("label");
     previewToggle.className = "live-edit-toggle room-preview-toggle";
     const previewLabel = document.createElement("span");
@@ -9924,28 +10024,12 @@ class SceneStudioPanel extends HTMLElement {
       "Live edit"
     );
     const previewSwitch = document.createElement("ha-switch");
-    previewSwitch.checked = Boolean(this._roomPreview);
+    previewSwitch.checked = this._readRoomPreviewPref();
     previewSwitch.addEventListener("change", () => {
-      this._setRoomPreview(Boolean(previewSwitch.checked));
+      void this._setRoomPreview(Boolean(previewSwitch.checked));
     });
     previewToggle.append(previewLabel, previewSwitch);
     this._roomPreviewSwitch = previewSwitch;
-
-    // Location lives in the overflow menu.
-    this._locationBtn = null;
-
-    if (this._narrow) {
-      const undo = this._undoRedoButton("undo");
-      const redo = this._undoRedoButton("redo");
-      this._undoBtn = undo;
-      this._redoBtn = redo;
-      this._setActionItems(undo, redo, previewToggle, this._overflowMenu());
-      this._syncUndoButtons();
-      this._syncLocationToolbar();
-      this._maybeResumeRoomPreview();
-      return;
-    }
-
     const undo = this._undoRedoButton("undo");
     const redo = this._undoRedoButton("redo");
     this._undoBtn = undo;
@@ -9953,7 +10037,9 @@ class SceneStudioPanel extends HTMLElement {
     this._setActionItems(undo, redo, previewToggle, this._overflowMenu());
     this._syncUndoButtons();
     this._syncLocationToolbar();
-    this._maybeResumeRoomPreview();
+    if (this._view === "edit") {
+      this._maybeResumeRoomPreview();
+    }
   }
 
   _syncLiveEditControl() {
@@ -9961,6 +10047,7 @@ class SceneStudioPanel extends HTMLElement {
       this._liveEditSwitch.checked = Boolean(this._liveEdit);
     }
     this._syncSidebarLiveEditToggle();
+    this._syncActivateSceneButton();
   }
 
   _syncSidebarLiveEditToggle() {
@@ -9973,9 +10060,18 @@ class SceneStudioPanel extends HTMLElement {
 
   _syncRoomPreviewControl() {
     if (this._roomPreviewSwitch) {
-      this._roomPreviewSwitch.checked = Boolean(this._roomPreview);
+      this._roomPreviewSwitch.checked = this._readRoomPreviewPref();
     }
     this._syncSidebarLiveEditToggle();
+    this._syncActivateSceneButton();
+  }
+
+  _syncActivateSceneButton() {
+    const btn = this._activateSceneBtn;
+    if (!btn) {
+      return;
+    }
+    btn.hidden = Boolean(this._readRoomPreviewPref() || this._liveEdit);
   }
 
   _maybeResumeRoomPreview() {
@@ -9988,6 +10084,11 @@ class SceneStudioPanel extends HTMLElement {
 
   async _resumeRoomPreviewIfPreferred() {
     if (this._view !== "edit" || !this._readRoomPreviewPref()) {
+      return;
+    }
+    if (this._roomPreviewHoldApply) {
+      this._roomPreviewHoldApply = false;
+      this._syncRoomPreviewControl();
       return;
     }
     if (!this._roomPreview) {
@@ -10674,8 +10775,10 @@ class SceneStudioPanel extends HTMLElement {
     return null;
   }
 
-  _applySession(snapshot, { remount = true } = {}) {
-    this._forceCloseSceneSidebar();
+  _applySession(snapshot, { remount = true, keepLightSidebar = false } = {}) {
+    if (!keepLightSidebar) {
+      this._forceCloseSceneSidebar();
+    }
     this._formData = structuredClone(snapshot.form);
     this._nativeDrafts = structuredClone(snapshot.nativeDrafts);
     this._removedLights = [];
@@ -10792,10 +10895,22 @@ class SceneStudioPanel extends HTMLElement {
     if (!snap) {
       return;
     }
+    const focus = entry.focus || null;
+    const lightSidebar = this.shadowRoot?.querySelector(
+      ".scene-sidebar.light-dialog"
+    );
+    const keepLightSidebar =
+      which === "before" &&
+      focus?.type === "light" &&
+      focus.lightId &&
+      lightSidebar &&
+      !lightSidebar._closing &&
+      lightSidebar._lightEntityId === focus.lightId &&
+      typeof lightSidebar._reloadDrafts === "function";
     this._historyRestoring = true;
     try {
       await this._openHistoryTarget(entry.target);
-      this._applySession(snap, { remount: false });
+      this._applySession(snap, { remount: false, keepLightSidebar });
       await this._saveNow({ fromHistory: true });
       if (
         this._view === "edit" ||
@@ -10809,7 +10924,11 @@ class SceneStudioPanel extends HTMLElement {
       }
       this._clearPreviewCache();
       await this._ensureSunPath();
-      this._revealHistoryFocus(entry.focus || null);
+      if (keepLightSidebar && lightSidebar.isConnected) {
+        lightSidebar._reloadDrafts();
+      } else {
+        this._revealHistoryFocus(focus);
+      }
     } finally {
       this._historyRestoring = false;
     }
@@ -11014,13 +11133,32 @@ class SceneStudioPanel extends HTMLElement {
     return this._formData.membership;
   }
 
+  _lightGroupMemberIds(entityId) {
+    const raw = this._hass?.states?.[entityId]?.attributes?.entity_id;
+    const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+    return list.filter(
+      (id) =>
+        typeof id === "string" && id.startsWith("light.") && id !== entityId
+    );
+  }
+
+  _withoutRedundantLightGroups(ids) {
+    const present = new Set(ids);
+    return ids.filter((id) => {
+      const members = this._lightGroupMemberIds(id);
+      return !members.some((member) => present.has(member));
+    });
+  }
+
   _areaLightIds(areaId = this._formData?.area) {
     if (!areaId) {
       return [];
     }
     const floorAreas = (this._floors || []).flatMap((floor) => floor.areas || []);
     const area = floorAreas.find((item) => item.id === areaId);
-    return (area?.lights || []).filter((id) => this._isPhysicalLightEntityId(id));
+    return this._withoutRedundantLightGroups(
+      (area?.lights || []).filter((id) => this._isPhysicalLightEntityId(id))
+    );
   }
 
   _entityInSelectedArea(entityId) {
@@ -11370,10 +11508,10 @@ class SceneStudioPanel extends HTMLElement {
     const exclude = new Set(this._formData.membership?.exclude || []);
     const include = this._formData.membership?.include || [];
     const areaLights = area?.lights || [];
-    const members = [
+    const members = this._withoutRedundantLightGroups([
       ...areaLights.filter((id) => !exclude.has(id)),
       ...include.filter((id) => !areaLights.includes(id)),
-    ];
+    ]);
     const removed = [
       ...areaLights.filter((id) => exclude.has(id)),
       ...(this._removedLights || [])
@@ -12400,9 +12538,10 @@ class SceneStudioPanel extends HTMLElement {
 
   _forceCloseSceneSidebar() {
     const el = this.shadowRoot?.querySelector(".scene-sidebar");
-    if (el) {
-      el._isDirty = () => false;
+    if (!el || el.classList.contains("list-settings-dialog")) {
+      return;
     }
+    el._isDirty = () => false;
     this._closeSceneSidebar();
   }
 
@@ -12677,7 +12816,7 @@ class SceneStudioPanel extends HTMLElement {
 
   _clockLegendTileLook(light, seconds) {
     const flags = this._lightModeFlags(light.entity_id);
-    const neutral = (on) => (on ? [255, 236, 210] : [48, 48, 48]);
+    const neutral = (on) => (on ? [255, 255, 255] : [48, 48, 48]);
     const eventId = this._sidebarEventId;
     if (
       eventId &&
@@ -12891,7 +13030,7 @@ class SceneStudioPanel extends HTMLElement {
         this._setSidebarLight(null);
       }
       this._clearClockRingHover();
-      if (!host._committed && this.isConnected) {
+      if (!host._committed) {
         host._onDismiss?.();
       }
       this._syncYearScrubLayout();
@@ -12914,7 +13053,77 @@ class SceneStudioPanel extends HTMLElement {
     return { host, header, body, footer };
   }
 
-  _renderEditor() {
+  _editorRailCanStay(page) {
+    const rail = page?.querySelector(":scope > .area-rail");
+    const stage = page?.querySelector(":scope > .stage-col");
+    if (!rail || !stage || this._railTab === "library") {
+      return false;
+    }
+    if (!this._editId) {
+      return true;
+    }
+    const card = rail.querySelector(
+      `.scene-card[data-scene-id="${CSS.escape(this._editId)}"]`
+    );
+    if (card) {
+      return true;
+    }
+    // The open scene is not in this rail yet (just created). Rebuild and reveal.
+    this._areaRailHoldScroll = false;
+    this._areaRailForceReveal = true;
+    this._areaRailUserScrolled = false;
+    return false;
+  }
+
+  _paintEditorInPlace() {
+    const page = this._contentEl?.querySelector(":scope > .workspace");
+    if (!this._editorRailCanStay(page)) {
+      return false;
+    }
+    const stage = page.querySelector(":scope > .stage-col");
+    this._syncRailSelection();
+    const previousCover =
+      [...page.querySelectorAll(".scene-cover")].find(
+        (cover) => !cover.classList.contains("is-leaving")
+      )?.style.backgroundImage || "";
+    this._crossfadeCoverInPlace(previousCover);
+    const scroll = this._stageScrollEl(stage);
+    if (scroll) {
+      scroll.scrollTop = 0;
+    }
+    if (this._error) {
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = this._error;
+      scroll?.replaceChildren(error);
+      this._syncWorkspaceScrollport();
+      return true;
+    }
+    if (this._formData.kind === "simple") {
+      this._parkSunPath();
+      const host = document.createElement("div");
+      host.className = "simple-editor-host";
+      scroll?.replaceChildren(host);
+      this._mountPageBanners(stage);
+      this._simpleEditorHost = host;
+      const lists = this._simpleMembershipLists();
+      this._simpleMembers = lists.members;
+      renderSimpleEditor(this, host, { glowHost: null });
+      this._syncSceneUsed();
+      this._syncWorkspaceScrollport();
+      this._playSimpleEnterIfNeeded(host);
+      return true;
+    }
+    this._mountSunPath(stage);
+    if (this._sunPath?.curve?.length) {
+      this._forgetClockDom();
+      this._drawSunPath();
+    }
+    this._syncWorkspaceScrollport();
+    return true;
+  }
+
+  _renderEditor({ keepRail = false } = {}) {
     this._syncAppBarTitle();
     this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
     this._setEditorActions();
@@ -12923,6 +13132,10 @@ class SceneStudioPanel extends HTMLElement {
     this._contentEl.classList.add("wide");
     const split = !this._narrow;
     this._contentEl.classList.toggle("workspace-split", split);
+
+    if (keepRail && this._paintEditorInPlace()) {
+      return;
+    }
 
     this._parkSunPath();
     const page = renderLanding(this, { includeStage: true });
@@ -13801,6 +14014,7 @@ class SceneStudioPanel extends HTMLElement {
     const state = stored.state;
     const paletteT = stored.palette_t;
     const paletteR = stored.palette_r;
+    const levelOnly = this._lightModeFlags(entityId);
     applyVariableToDraft(stored, variable, {
       entityId,
       seed:
@@ -13808,6 +14022,7 @@ class SceneStudioPanel extends HTMLElement {
         Number(this._formData?.assignment_seed) ||
         0,
       catalog: this._variables,
+      levelOnly: Boolean(levelOnly.onOff || levelOnly.brightnessOnly),
     });
     if (brightness != null) {
       stored.brightness = brightness;
@@ -13816,6 +14031,8 @@ class SceneStudioPanel extends HTMLElement {
       stored.state = state;
     }
     if (
+      !levelOnly.onOff &&
+      !levelOnly.brightnessOnly &&
       paletteT != null &&
       paletteR != null &&
       variableIsPalette(variable)
@@ -14437,34 +14654,54 @@ class SceneStudioPanel extends HTMLElement {
       this._saveSoon();
       paintOverrides();
     };
-    const restoreLive = async () => {
-      if (!liveApplied) {
-        return;
-      }
-      liveApplied = false;
-      if (this._roomPreview || this._readRoomPreviewPref()) {
-        return;
-      }
-      await this._applyLightState(light.entity_id, snapshot);
+    // One queue so a restore cannot be overwritten by an apply that was
+    // already in flight when the sidebar closed.
+    let liveQueue = Promise.resolve();
+    let sidebarLiveClosed = false;
+    const enqueueLive = (task) => {
+      const run = liveQueue.then(task, task);
+      liveQueue = run.then(
+        () => {},
+        () => {}
+      );
+      return run;
     };
-    // Dragging floods pointermove → service calls. Cap live updates and match
-    // HA transition length so the lamp blends between samples (same pattern as
-    // continuous auto-update ticks).
     const LIVE_PREVIEW_MS = 500;
     let liveLastSent = 0;
     let liveTimer = null;
     let livePending = false;
-    const flushLive = async ({ transitionSec = 0 } = {}) => {
-      if (!this._perLightLiveEditOn()) {
-        return;
+    const applySnapshot = () =>
+      enqueueLive(async () => {
+        if (!liveApplied) {
+          return;
+        }
+        liveApplied = false;
+        if (this._roomPreview || this._readRoomPreviewPref()) {
+          return;
+        }
+        await this._applyLightState(light.entity_id, snapshot);
+      });
+    const restoreLive = () => {
+      sidebarLiveClosed = true;
+      if (liveTimer) {
+        clearTimeout(liveTimer);
+        liveTimer = null;
       }
       livePending = false;
-      liveLastSent = performance.now();
-      liveApplied = true;
-      await this._applyLightState(light.entity_id, currentDraft(), {
-        transition: transitionSec,
-      });
+      return applySnapshot();
     };
+    const flushLive = ({ transitionSec = 0 } = {}) =>
+      enqueueLive(async () => {
+        if (sidebarLiveClosed || !this._perLightLiveEditOn()) {
+          return;
+        }
+        livePending = false;
+        liveLastSent = performance.now();
+        liveApplied = true;
+        await this._applyLightState(light.entity_id, currentDraft(), {
+          transition: transitionSec,
+        });
+      });
     const scheduleLive = async ({ dragging = false } = {}) => {
       if (!this._perLightLiveEditOn()) {
         return;
@@ -14510,6 +14747,8 @@ class SceneStudioPanel extends HTMLElement {
         activateBtn.disabled = false;
       }
     });
+    this._activateSceneBtn = activateBtn;
+    this._syncActivateSceneButton();
 
     const liveToggle = document.createElement("label");
     liveToggle.className = "live-edit-toggle";
@@ -14544,8 +14783,7 @@ class SceneStudioPanel extends HTMLElement {
       if (on) {
         await applyLive();
       } else if (liveApplied) {
-        await this._applyLightState(light.entity_id, snapshot);
-        liveApplied = false;
+        await applySnapshot();
       }
     };
 
@@ -14565,6 +14803,9 @@ class SceneStudioPanel extends HTMLElement {
         }
         if (this._sidebarLiveEditToggle === liveToggle) {
           this._sidebarLiveEditToggle = null;
+        }
+        if (this._activateSceneBtn === activateBtn) {
+          this._activateSceneBtn = null;
         }
         this._sidebarUndoBtn = null;
         this._sidebarRedoBtn = null;
@@ -14618,6 +14859,8 @@ class SceneStudioPanel extends HTMLElement {
     };
     const { host, header, body, footer } = opened;
     host._lightEntityId = light.entity_id;
+    host._sceneId = this._editId;
+    host._restoreLive = restoreLive;
     const subtitleEl = header.querySelector("[slot='subtitle']");
     const duskSlot = document.createElement("div");
     const chipsHost = document.createElement("div");
@@ -15198,20 +15441,52 @@ class SceneStudioPanel extends HTMLElement {
     removeFromSceneBtn.addEventListener("click", () => {
       this._removeLightFromAssignedScenes(light.entity_id);
     });
+    const removeRow = document.createElement("div");
+    removeRow.className = "sidebar-remove-light";
+    removeRow.appendChild(removeFromSceneBtn);
+    body.appendChild(removeRow);
     if (this._narrow) {
       const undo = this._undoRedoButton("undo");
       const redo = this._undoRedoButton("redo");
       undo.id = "sidebar-button-undo";
       redo.id = "sidebar-button-redo";
-      bar.append(undo, redo, liveToggle, activateBtn, removeFromSceneBtn);
+      bar.append(undo, redo, liveToggle, activateBtn);
       this._sidebarUndoBtn = undo;
       this._sidebarRedoBtn = redo;
     } else {
-      bar.append(liveToggle, activateBtn, removeFromSceneBtn);
+      bar.append(liveToggle, activateBtn);
       this._sidebarUndoBtn = null;
       this._sidebarRedoBtn = null;
     }
     footer.append(bar);
+    host._reloadDrafts = () => {
+      const fresh =
+        (this._sunPath?.lights || []).find(
+          (row) => row.entity_id === light.entity_id
+        ) || light;
+      const member = !fresh.suggested && !fresh.removed;
+      for (const [index, item] of events.entries()) {
+        const stored = this._lightEventStoredState(fresh, item.id);
+        drafts.set(item.id, {
+          draft: member ? { ...stored } : null,
+          saved: member ? lightDraftFingerprint(stored) : "absent",
+          member,
+          event: item,
+          index: index + 1,
+        });
+      }
+      undoCommitted = false;
+      paintChips();
+      paintOverrides();
+      brightnessGraphCtl?.sync();
+      colorBriGraphCtl?.sync();
+      whiteBriGraphCtl?.sync();
+      wheelCtl?.sync();
+      syncEffectControl();
+      if (this._perLightLiveEditOn()) {
+        void applyLive();
+      }
+    };
     this._syncDuskMinimumSlot(duskSlot, currentEvent.id);
     this._syncUndoButtons();
 

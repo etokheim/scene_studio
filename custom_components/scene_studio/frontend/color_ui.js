@@ -593,8 +593,38 @@ function draftUsesPalette(draft, getPalette) {
   return variableIsPalette(variable);
 }
 
-function applyVariableToDraft(draft, variable, { entityId, seed, catalog } = {}) {
+function applyVariableToDraft(
+  draft,
+  variable,
+  { entityId, seed, catalog, levelOnly = false } = {}
+) {
   if (!draft || !variable) {
+    return;
+  }
+  if (levelOnly) {
+    draft.color_temp_kelvin = undefined;
+    draft.rgb_color = undefined;
+    draft.hs_color = undefined;
+    draft.rgbw_color = undefined;
+    draft.rgbww_color = undefined;
+    draft.color_mode = undefined;
+    draft.variable_ref = variable.id;
+    if (variableIsPalette(variable)) {
+      const { t, r } = assignmentTR(entityId || "", seed || 0);
+      const sampled = samplePaletteWheel(
+        variable,
+        t,
+        r,
+        catalog || [],
+        draftRgb
+      );
+      draft.brightness = sampled.brightness;
+    } else {
+      const brightness = Number(variable.brightness);
+      if (Number.isFinite(brightness)) {
+        draft.brightness = brightness;
+      }
+    }
     return;
   }
   draft.color_temp_kelvin = undefined;
