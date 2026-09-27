@@ -601,7 +601,8 @@ export const LANDING_CSS = `
     border-radius: 14px;
     overflow: hidden;
     pointer-events: none;
-    filter: blur(16px);
+    /* Blur only the open card. Filtering every hidden glow stalls the scale. */
+    filter: none;
     transform: scale(1.1);
     opacity: 0;
     transition: opacity 0.35s cubic-bezier(0.2, 0, 0, 1);
@@ -613,7 +614,14 @@ export const LANDING_CSS = `
     object-fit: fill;
   }
   .scene-card-slot.glow-on .card-glow {
+    filter: blur(16px);
     opacity: 0.55;
+  }
+  .scene-card ha-ripple {
+    z-index: 2;
+    border-radius: inherit;
+    --ha-ripple-color: #fff;
+    --ha-ripple-pressed-opacity: 0.16;
   }
   .scene-card-slot:hover,
   .scene-card-slot:has(.scene-card.selected) {
@@ -1667,7 +1675,8 @@ function renderSceneCard(panel, scene) {
   const overflow = panel._listSceneOverflowMenu(scene);
   overflow.classList.add("card-overflow");
   overflowSlot.appendChild(overflow);
-  cardEl.append(bg, icon, body, overflowSlot);
+  const ripple = document.createElement("ha-ripple");
+  cardEl.append(bg, icon, body, ripple, overflowSlot);
   const glowArt = makeSceneCardBg(scene);
   glowArt.classList.add("card-glow");
   let glow = glowArt;
@@ -1698,10 +1707,14 @@ function renderSceneCard(panel, scene) {
     if (leaving) {
       return;
     }
-    if (selected) {
+    // Read the live class. The closure captured at build time stays true for
+    // the card that was open when the rail was painted, so a later click
+    // left the editor or reloaded the same scene and restarted the motion.
+    if (cardEl.classList.contains("selected")) {
       leaving = true;
       slot.classList.remove("glow-on");
       cardEl.classList.remove("selected");
+      cardEl.setAttribute("aria-pressed", "false");
       panel._go("");
       return;
     }
@@ -1754,6 +1767,14 @@ function renderEmptyHero(panel) {
   btn.addEventListener("click", () => panel._autoConfigure());
   el.appendChild(btn);
   return el;
+}
+
+export function renderListStageEmpty(panel) {
+  const items = panel._items || [];
+  if (!items.length) {
+    return renderEmptyHero(panel);
+  }
+  return renderSelectEmpty(panel);
 }
 
 function renderSelectEmpty(panel) {

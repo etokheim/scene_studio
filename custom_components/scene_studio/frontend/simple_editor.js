@@ -45,11 +45,18 @@ function wheelPinMorph(panel, ids) {
     return { pinFlip: panel._wheelPinFlip || null, fadePinIds: null };
   }
   panel._wheelMorphPins = null;
+  const byId = new Map();
+  for (const pin of pins) {
+    if (pin?.id) {
+      byId.set(pin.id, pin);
+    }
+  }
   const pinFlip = new Map();
   const fadePinIds = new Set();
   ids.forEach((id, i) => {
-    if (pins[i]) {
-      pinFlip.set(id, { x: pins[i].x, y: pins[i].y });
+    const prev = byId.get(id) || (!byId.size ? pins[i] : null);
+    if (prev) {
+      pinFlip.set(id, { x: prev.x, y: prev.y });
     } else {
       fadePinIds.add(id);
     }

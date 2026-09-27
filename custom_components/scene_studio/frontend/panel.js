@@ -63,6 +63,7 @@ import {
 import {
   LANDING_CSS,
   renderLanding,
+  renderListStageEmpty,
   renderSceneUsed,
   renderPaletteUsed,
   renderLibraryUsedBy,
@@ -807,6 +808,18 @@ class SceneStudioPanel extends HTMLElement {
           outline: 2px solid var(--primary-color);
           outline-offset: 2px;
         }
+        .sun-scrub-date-reset {
+          --mdc-icon-size: 18px;
+          color: var(--primary-text-color);
+        }
+        .sun-scrub-date-reset[hidden] {
+          display: none;
+        }
+        /* Right-aligned date: icon sits in front of the text. */
+        .sun-year-scrub-rail .sun-scrub-date-reset {
+          order: -1;
+          --mdc-icon-size: 22px;
+        }
         /* Visually hidden but mounted — opened via ha-date-input._openDialog.
            Keep it laid out (not display:none) so the selector finishes upgrading.
            clip-path + contain so the upgraded control cannot widen scrollWidth. */
@@ -842,6 +855,25 @@ class SceneStudioPanel extends HTMLElement {
           pointer-events: none;
           background: transparent;
           padding: 8px 12px 0 16px;
+        }
+        /* Desktop landscape: the chip/play row overlays the dial so the face
+           can grow into that band. The year rail stays in the grid. */
+        .sun-path.dial-view:has(.sun-path-stage.landscape-clock-scrub) > .sun-toolbar {
+          position: absolute;
+          top: 0;
+          left: 0;
+          /* Stop the chip row on the dial column so it does not cover the date. */
+          right: calc(${CLOCK_SCRUB_RAIL_PX}px + ${CLOCK_SCRUB_RAIL_PAD_PX}px);
+        }
+        .sun-path.dial-view:has(.sun-path-stage.scrub-collapsed) > .sun-toolbar {
+          right: 0;
+        }
+        .sun-path.dial-view:has(.sun-path-stage.landscape-clock-scrub) .sun-light-clock {
+          justify-content: flex-start;
+          padding-top: 4px;
+        }
+        .sun-path.dial-view:has(.sun-path-stage.landscape-clock-scrub) .sun-light-clock-legend {
+          margin-top: auto;
         }
         .sun-path.dial-view .sun-toolbar > * {
           pointer-events: auto;
@@ -3986,6 +4018,39 @@ class SceneStudioPanel extends HTMLElement {
         :host([narrow]) .sun-path.dial-view .sun-toolbar {
           flex: 0 0 auto;
         }
+        :host([narrow]) .sun-chip-row,
+        :host([narrow]) .sun-toolbar-chrome .sun-chip-row {
+          display: none;
+        }
+        :host([narrow]) .sun-path.dial-view .sun-year-scrub {
+          margin-bottom: 16px;
+        }
+        :host([narrow]) .sun-path.dial-view .sun-date-tools {
+          flex-wrap: nowrap;
+          width: 100%;
+        }
+        :host([narrow]) .sun-path.dial-view .sun-date-tools .sun-hover-readout {
+          position: static;
+          flex: 1 1 auto;
+          justify-content: flex-end;
+          flex-wrap: nowrap;
+          min-height: 0;
+          margin: 0;
+          padding: 0;
+          gap: 8px 12px;
+        }
+        :host([narrow]) .sun-hover-play-split {
+          display: none;
+        }
+        @media (max-width: 870px) {
+          .sun-chip-row,
+          .sun-toolbar-chrome .sun-chip-row {
+            display: none;
+          }
+          .sun-path.dial-view .sun-year-scrub {
+            margin-bottom: 16px;
+          }
+        }
         :host([narrow]) .sun-path.dial-view .sun-path-stage,
         :host([narrow]) .sun-path.dial-view .sun-path-body,
         :host([narrow]) .sun-path.dial-view .sun-light-clock {
@@ -3998,7 +4063,9 @@ class SceneStudioPanel extends HTMLElement {
         }
         :host([narrow]) .sun-path.dial-view .sun-light-clock {
           padding-top: 0;
-          justify-content: center;
+          /* The 16px under the timeline is the scrub margin. Centering the
+             face left a much larger gap above it. */
+          justify-content: flex-start;
           /* Border box includes the 16px under the face, so the square
              itself still stops at the color-wheel floor. */
           min-height: calc(${DIAL_FACE_MIN_PX}px + 16px);
@@ -4007,6 +4074,7 @@ class SceneStudioPanel extends HTMLElement {
         :host([narrow]) .sun-path.dial-view .sun-light-clock-legend {
           flex: 0 0 auto;
           width: 100%;
+          margin-top: auto;
           padding-bottom: var(--scene-safe-bottom, 0px);
         }
         :host([narrow]) .sun-light-clock-face {
@@ -5224,6 +5292,9 @@ class SceneStudioPanel extends HTMLElement {
 
   async _loadList() {
     const token = this._startPanelLoad();
+    // The cached paint consumes the flag. The payload paint below has to
+    // keep the rail too, or deselect rebuilds the cards and the scale snaps.
+    const keepRail = Boolean(this._keepAreaRail);
     const hasCache =
       Array.isArray(this._items) && (this._floors || []).length > 0;
     if (hasCache) {
@@ -5257,6 +5328,9 @@ class SceneStudioPanel extends HTMLElement {
     // Always paint the payload. Skipping this when floors were already cached
     // left auto-configure empty and let a stale in-flight load put a deleted
     // scene back on screen.
+    if (keepRail) {
+      this._keepAreaRail = true;
+    }
     this._render();
   }
 
@@ -5986,7 +6060,7 @@ class SceneStudioPanel extends HTMLElement {
     } else if (this._view === "variable" || this._view === "palette") {
       this._renderVariableEditor();
     } else {
-      this._renderList();
+      this._renderList({ keepRail });
     }
     if (this._view === "edit" || this._view === "theme") {
       this._ensureSunPath();
@@ -6300,16 +6374,22 @@ class SceneStudioPanel extends HTMLElement {
     // edit → edit stays on the scenes rail. Rebuilding it jumps scroll and
     // flashes the selection. Load, and arrival from the list or library, still
     // reveal when the card is outside the scrollport.
-    const editToEdit =
+    const scenesToScenes =
       !this._narrow &&
       nextTab === "scenes" &&
       this._railTab !== "library" &&
-      this._view === "edit" &&
-      /^edit\/.+/.test(hash || "");
+      (this._view === "edit" || this._view === "list") &&
+      (hash === "" || /^edit\/.+/.test(hash || ""));
     this._railTab = nextTab;
-    if (editToEdit) {
+    if (scenesToScenes) {
       this._keepAreaRail = true;
-      this._areaRailHoldScroll = true;
+      // List → edit may still scroll a card that is outside the scrollport.
+      // Edit → edit and edit → list leave the scroll where the user left it.
+      const fromList = this._view !== "edit";
+      this._areaRailHoldScroll = !fromList;
+      if (fromList) {
+        this._areaRailForceReveal = true;
+      }
       return;
     }
     this._keepAreaRail = false;
@@ -6478,7 +6558,7 @@ class SceneStudioPanel extends HTMLElement {
       }
     }
     let toolbarH = 0;
-    if (isDial && this._dateToolbar?.isConnected) {
+    if (isDial && this._dateToolbar?.isConnected && !this._dialChromeOverlaysFace()) {
       toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
     }
     /* scene-used is an overlay. Its height must not shrink the dial. */
@@ -6531,7 +6611,40 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
-  _renderList({ keepSidebar = false } = {}) {
+  _paintListInPlace() {
+    const page = this._contentEl?.querySelector(":scope > .workspace");
+    const rail = page?.querySelector(":scope > .area-rail");
+    const stage = page?.querySelector(":scope > .stage-col");
+    if (!rail || !stage || this._railTab === "library" || this._narrow) {
+      return false;
+    }
+    const cards = rail.querySelectorAll(
+      '.area-rail-body[data-tab="scenes"] .scene-card[data-scene-id]'
+    );
+    // A rail painted before areas arrived has no cards. Rebuilding is the
+    // only way those scenes show up.
+    if (cards.length !== (this._items || []).length) {
+      return false;
+    }
+    this._syncRailSelection();
+    for (const cover of page.querySelectorAll(".scene-cover")) {
+      if (cover.classList.contains("is-leaving")) {
+        continue;
+      }
+      cover.classList.add("is-leaving");
+      const drop = () => cover.remove();
+      cover.addEventListener("transitionend", drop, { once: true });
+      window.setTimeout(drop, 700);
+    }
+    const scroll = this._stageScrollEl(stage);
+    scroll?.replaceChildren(renderListStageEmpty(this));
+    this._mountPageBanners(stage);
+    this._syncWorkspaceScrollport();
+    this._prepareEmptyEnter(scroll?.querySelector(":scope > .empty-state"));
+    return true;
+  }
+
+  _renderList({ keepSidebar = false, keepRail = false } = {}) {
     const openSidebar = this.shadowRoot?.querySelector(".scene-sidebar");
     if (
       !keepSidebar &&
@@ -6568,6 +6681,12 @@ class SceneStudioPanel extends HTMLElement {
       error.className = "error";
       error.textContent = this._error;
       this._contentEl.replaceChildren(error);
+      this._setListActions();
+      this._setFab(null);
+      return;
+    }
+
+    if (keepRail && this._paintListInPlace()) {
       this._setListActions();
       this._setFab(null);
       return;
@@ -11862,10 +11981,21 @@ class SceneStudioPanel extends HTMLElement {
       const itemIcon = document.createElement("ha-icon");
       itemIcon.setAttribute("icon", iconName);
       itemIcon.slot = "icon";
+      item.dataset.action = value;
       item.append(itemIcon, document.createTextNode(label));
       menu.appendChild(item);
     };
 
+    if (this._narrow && this._canPlayScenePreview()) {
+      const playing = this._scenePlayActive();
+      addItem(
+        "play-scene",
+        playing
+          ? this._t("frontend.actions.stop_preview", "Stop")
+          : this._t("frontend.actions.play_scene", "Play scene live"),
+        playing ? "mdi:stop" : "mdi:play"
+      );
+    }
     if (this._narrow) {
       addItem(
         "undo",
@@ -12440,6 +12570,10 @@ class SceneStudioPanel extends HTMLElement {
 
   _handleOverflow(action) {
     if (!action) {
+      return;
+    }
+    if (action === "play-scene") {
+      this._toggleScenePlay();
       return;
     }
     if (action === "undo") {
@@ -13082,6 +13216,15 @@ class SceneStudioPanel extends HTMLElement {
     }
     const stage = page.querySelector(":scope > .stage-col");
     this._syncRailSelection();
+    if (this._areaRailForceReveal) {
+      const body = page.querySelector(
+        '.area-rail-body[data-tab="scenes"]:not([hidden])'
+      );
+      if (body) {
+        this._revealSelectedInRail(body);
+      }
+      this._areaRailForceReveal = false;
+    }
     const previousCover =
       [...page.querySelectorAll(".scene-cover")].find(
         (cover) => !cover.classList.contains("is-leaving")
@@ -14425,6 +14568,48 @@ class SceneStudioPanel extends HTMLElement {
     return host;
   }
 
+  _syncNarrowPlayAction() {
+    if (!this._narrow || this._view === "theme") {
+      return;
+    }
+    const item = this.shadowRoot?.querySelector(
+      'ha-dropdown-item[data-action="play-scene"]'
+    );
+    const want = this._canPlayScenePreview();
+    if (Boolean(item) !== want) {
+      if (this._syncingNarrowPlay) {
+        return;
+      }
+      this._syncingNarrowPlay = true;
+      try {
+        this._setEditorActions();
+      } finally {
+        this._syncingNarrowPlay = false;
+      }
+      return;
+    }
+    if (!item) {
+      return;
+    }
+    const playing = this._scenePlayActive();
+    const flag = playing ? "1" : "0";
+    if (item.dataset.playing === flag) {
+      return;
+    }
+    item.dataset.playing = flag;
+    const label = playing
+      ? this._t("frontend.actions.stop_preview", "Stop")
+      : this._t("frontend.actions.play_scene", "Play scene live");
+    const text = [...item.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+    if (text) {
+      text.textContent = label;
+    }
+    item.querySelector("ha-icon")?.setAttribute(
+      "icon",
+      playing ? "mdi:stop" : "mdi:play"
+    );
+  }
+
   _syncScenePlayButton() {
     const host = this._scenePlayBtn;
     const main = this._scenePlayMain;
@@ -14467,6 +14652,7 @@ class SceneStudioPanel extends HTMLElement {
         check.style.opacity = selected ? "1" : "0";
       }
     }
+    this._syncNarrowPlayAction();
   }
 
   async _activateNativeSceneWithDrafts(sceneEntityId) {
@@ -16721,14 +16907,25 @@ class SceneStudioPanel extends HTMLElement {
     dateBtn.tabIndex = 0;
     const dateLabel = document.createElement("span");
     dateLabel.className = "sun-scrub-date-label";
-    dateBtn.append(dateLabel, pickerHost);
-    dateBtn.addEventListener("click", () => this._openPreviewDatePicker());
+    const dateReset = document.createElement("ha-icon");
+    dateReset.className = "sun-scrub-date-reset";
+    dateReset.setAttribute("icon", "mdi:restore");
+    dateReset.hidden = true;
+    dateBtn.append(dateLabel, dateReset, pickerHost);
+    const onDateActivate = () => {
+      if (this._previewDate !== todayIso()) {
+        this._setPreviewDate(todayIso());
+        return;
+      }
+      this._openPreviewDatePicker();
+    };
+    dateBtn.addEventListener("click", onDateActivate);
     dateBtn.addEventListener("keydown", (ev) => {
       if (ev.key !== "Enter" && ev.key !== " ") {
         return;
       }
       ev.preventDefault();
-      this._openPreviewDatePicker();
+      onDateActivate();
     });
 
     const dateTools = document.createElement("div");
@@ -16745,6 +16942,7 @@ class SceneStudioPanel extends HTMLElement {
     this._dateChips = chipRow.querySelectorAll(".sun-chip");
     this._scrubDateBtn = dateBtn;
     this._scrubDateLabel = dateLabel;
+    this._scrubDateReset = dateReset;
     this._dateTools = dateTools;
     this._chipRow = chipRow;
     this._scrubBlock = scrubBlock;
@@ -16759,9 +16957,20 @@ class SceneStudioPanel extends HTMLElement {
     if (!this._scrubDateLabel) {
       return;
     }
+    const otherDay = this._previewDate !== todayIso();
     this._scrubDateLabel.textContent = formatPreviewDayMonth(this._previewDate);
+    if (this._scrubDateReset) {
+      this._scrubDateReset.hidden = !otherDay;
+    }
     if (this._scrubDateBtn) {
-      this._scrubDateBtn.title = this._previewDate;
+      this._scrubDateBtn.classList.toggle("is-other-day", otherDay);
+      const choose = this._t(
+        "frontend.actions.choose_preview_date",
+        "Choose preview date"
+      );
+      const back = this._t("frontend.actions.back_to_today", "Back to today");
+      this._scrubDateBtn.title = otherDay ? back : this._previewDate;
+      this._scrubDateBtn.setAttribute("aria-label", otherDay ? back : choose);
     }
   }
 
@@ -17283,6 +17492,24 @@ class SceneStudioPanel extends HTMLElement {
     return chrome;
   }
 
+  _placeDateWithReadout() {
+    if (!this._dateTools || !this._scrubDateBtn) {
+      return;
+    }
+    const row = [this._scrubDateBtn];
+    if (this._hoverReadout) {
+      row.push(this._hoverReadout);
+    }
+    this._dateTools.replaceChildren(...row);
+  }
+
+  _dialChromeOverlaysFace() {
+    return (
+      !this._isEditorNarrow() &&
+      Boolean(this._sunPathStage?.classList.contains("landscape-clock-scrub"))
+    );
+  }
+
   _syncYearScrubLayout() {
     if (!this._yearScrub || !this._dateToolbar || !this._scrubBlock) {
       return;
@@ -17323,25 +17550,31 @@ class SceneStudioPanel extends HTMLElement {
       if (this._scrubBlock.parentNode !== this._clockScrubRail) {
         this._clockScrubRail.appendChild(this._scrubBlock);
       }
-      // Time + date chips stay in the stage toolbar (full column). The rail
-      // only holds the date label and year slider beside the face.
-      const chrome = this._ensureToolbarChrome();
-      [...chrome.querySelectorAll(".sun-hover-readout")].forEach((el) => {
-        if (el !== this._hoverReadout) {
-          el.remove();
+      if (this._narrow) {
+        // Chips are hidden. Now and sun angle sit on the date row.
+        this._toolbarChrome?.remove();
+        this._placeDateWithReadout();
+      } else {
+        // Time + date chips stay in the stage toolbar (full column). The rail
+        // only holds the date label and year slider beside the face.
+        const chrome = this._ensureToolbarChrome();
+        [...chrome.querySelectorAll(".sun-hover-readout")].forEach((el) => {
+          if (el !== this._hoverReadout) {
+            el.remove();
+          }
+        });
+        if (this._hoverReadout && this._hoverReadout.parentNode !== chrome) {
+          chrome.appendChild(this._hoverReadout);
         }
-      });
-      if (this._hoverReadout && this._hoverReadout.parentNode !== chrome) {
-        chrome.appendChild(this._hoverReadout);
-      }
-      if (this._chipRow && this._chipRow.parentNode !== chrome) {
-        chrome.appendChild(this._chipRow);
-      }
-      if (chrome.parentNode !== this._dateToolbar) {
-        this._dateToolbar.insertBefore(chrome, this._dateToolbar.firstChild);
-      }
-      if (this._dateTools && this._scrubDateBtn) {
-        this._dateTools.replaceChildren(this._scrubDateBtn);
+        if (this._chipRow && this._chipRow.parentNode !== chrome) {
+          chrome.appendChild(this._chipRow);
+        }
+        if (chrome.parentNode !== this._dateToolbar) {
+          this._dateToolbar.insertBefore(chrome, this._dateToolbar.firstChild);
+        }
+        if (this._dateTools && this._scrubDateBtn) {
+          this._dateTools.replaceChildren(this._scrubDateBtn);
+        }
       }
     } else {
       this._sunPathStage?.classList.remove("scrub-collapsed");
@@ -17359,7 +17592,10 @@ class SceneStudioPanel extends HTMLElement {
       this._scrubBlock.hidden = hideToolbarScrub;
       this._yearScrub.classList.remove("vertical");
 
-      if (clock) {
+      if (clock && this._narrow) {
+        this._toolbarChrome?.remove();
+        this._placeDateWithReadout();
+      } else if (clock) {
         // Portrait dial: time/sun + chips in one wrapping chrome row; date +
         // year scrub below (in-flow so the timeline pushes the dial down).
         const chrome = this._ensureToolbarChrome();
@@ -17426,7 +17662,7 @@ class SceneStudioPanel extends HTMLElement {
     // the face shrinks, then scrolls at DIAL_FACE_MIN. Landscape year rail
     // sits beside the face (not in the toolbar).
     let toolbarH = 0;
-    if (this._dateToolbar?.isConnected) {
+    if (this._dateToolbar?.isConnected && !this._dialChromeOverlaysFace()) {
       toolbarH = Math.ceil(this._dateToolbar.getBoundingClientRect().height) || 0;
     }
     path.style.setProperty("--dial-timeline-h", `${toolbarH}px`);
@@ -17696,11 +17932,12 @@ class SceneStudioPanel extends HTMLElement {
       });
       resetSlot.appendChild(reset);
     }
-    if (this._canPlayScenePreview()) {
+    if (this._canPlayScenePreview() && !this._narrow) {
       readout.append(this._ensureScenePlayButton(), time, sun, resetSlot);
     } else {
       readout.append(time, sun, resetSlot);
     }
+    this._syncNarrowPlayAction();
   }
 
   _resetClockSunToNow() {

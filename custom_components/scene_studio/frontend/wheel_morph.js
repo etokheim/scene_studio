@@ -106,6 +106,9 @@ export function snapshotWheelEditor(root) {
   return {
     tileRects: tiles.map((el) => el.getBoundingClientRect()),
     tileClones: tiles.map((el) => el.cloneNode(true)),
+    tileByKey: new Map(
+      tiles.map((el) => [el.dataset.stripKey || "", el.getBoundingClientRect()])
+    ),
     groups,
     pins: captureWheelPinList(root),
     modeRects: modes.map((el) => el.getBoundingClientRect()),
@@ -126,7 +129,37 @@ export function applyWheelMorph(snap, root) {
   const tiles = lightTiles(root);
   const strip = root.querySelector(".light-tiles");
   playLightStripLayout(strip, snap.groups, { matchedOnly: true });
-  morphIndexed(tiles, snap.tileRects, snap.tileClones, strip);
+  // Match tiles by light id. Index order changes between scenes, so a tile
+  // was flying out of a neighbor's slot and then snapping back.
+  if (snap.tileByKey) {
+    const nextKeys = new Set();
+    for (const el of tiles) {
+      const key = el.dataset.stripKey || "";
+      nextKeys.add(key);
+      const prev = key ? snap.tileByKey.get(key) : null;
+      if (!prev || prev.width < 1) {
+        el.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: FADE_MS,
+          easing: "ease-out",
+        });
+      } else {
+        flipFrom(el, prev);
+      }
+    }
+    const gone = [];
+    const goneRects = [];
+    snap.tileClones.forEach((clone, index) => {
+      const key = clone.dataset?.stripKey || "";
+      if (!key || nextKeys.has(key)) {
+        return;
+      }
+      gone.push(clone);
+      goneRects.push(snap.tileRects[index]);
+    });
+    fadeSurplus(strip, gone, goneRects);
+  } else {
+    morphIndexed(tiles, snap.tileRects, snap.tileClones, strip);
+  }
   const svg = root.querySelector(".hue-wheel-svg");
   const nextPins = [...root.querySelectorAll(".hue-wheel-svg .gm")].filter(
     (node) => node.style.display !== "none"

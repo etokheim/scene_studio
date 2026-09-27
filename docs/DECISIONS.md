@@ -22,6 +22,14 @@
 - **Why:** Those tiles were picking up palette color. A group plus its bulbs applied the same lights twice.
 - **Do not reverse without user ask.**
 
+## Scene selection keeps one rail and one motion
+
+- **Date:** 2026-09-27
+- **Supersedes in part:** “Edit to edit keeps the scene rail” — list → edit and edit → list keep that rail too.
+- **Decision:** On a wide layout, moving between the scene list and a scene editor does not rebuild `.area-rail`. Selection is the live `.selected` class, not the flag from when the card was built. Wheel pins and light tiles morph by entity id, and a pin move uses the Web Animations API. On a narrow dial, date chips are hidden, the date returns to today, and Play scene live is a header menu item. On a wide landscape dial, the play/chip row overlays the face so the dial can grow into that band.
+- **Why:** A stale selected flag reloaded or left the scene, which restarted the scale. Index-matched tiles and an untransitioned pin attribute jumped backward, then forward. Rebuilding the rail on deselect cut the scale off halfway.
+- **Do not reverse without user ask.**
+
 ## Edit to edit keeps the scene rail
 
 - **Date:** 2026-09-27

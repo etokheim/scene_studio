@@ -2477,6 +2477,7 @@ function captureWheelPinList(root) {
       continue;
     }
     list.push({
+      id: g.dataset.sceneId || "",
       x: Number(match[1]) + PIN_TIP_X,
       y: Number(match[2]) + PIN_TIP_Y,
       clone: g.cloneNode(true),
@@ -3172,6 +3173,49 @@ function createSceneColorWheel({
     if (marker.flipPending) {
       return;
     }
+    const pinMoves = () =>
+      marker.g.getAnimations({ subtree: false }).filter(
+        (anim) => anim.playState === "running" && anim.id === "pin-move"
+      );
+    // A second placement used to cancel the flight and restart at the previous
+    // target, so the dot jumped backward and then forward.
+    const visualTip = () => {
+      const tr = getComputedStyle(marker.g).transform;
+      if (!tr || tr === "none") {
+        return null;
+      }
+      const m = new DOMMatrixReadOnly(tr);
+      if (!Number.isFinite(m.e) || !Number.isFinite(m.f)) {
+        return null;
+      }
+      return { x: m.e + PIN_TIP_X, y: m.f + PIN_TIP_Y };
+    };
+    const flyPin = (fromX, fromY) => {
+      const gen = (marker.pinGen || 0) + 1;
+      marker.pinGen = gen;
+      pinMoves().forEach((anim) => anim.cancel());
+      marker.g.style.transition = "none";
+      const anim = marker.g.animate(
+        [
+          { transform: at(fromX, fromY) },
+          { transform: at(marker.x, marker.y) },
+        ],
+        {
+          duration: 480,
+          easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
+          fill: "both",
+          id: "pin-move",
+        }
+      );
+      anim.onfinish = () => {
+        if (marker.pinGen !== gen) {
+          return;
+        }
+        marker.g.style.transition = "";
+        setPinTransform(marker.g, marker.x, marker.y);
+        anim.cancel();
+      };
+    };
     if (
       from &&
       Number.isFinite(from.x) &&
@@ -3179,22 +3223,7 @@ function createSceneColorWheel({
       (Math.abs(from.x - x) > 0.5 || Math.abs(from.y - y) > 0.5)
     ) {
       marker.posed = true;
-      marker.flipPending = true;
-      marker.g.style.transition = "none";
-      setPinTransform(marker.g, from.x, from.y);
-      requestAnimationFrame(() => {
-        if (!marker.flipPending) {
-          return;
-        }
-        marker.g.style.transition = "";
-        requestAnimationFrame(() => {
-          if (!marker.flipPending) {
-            return;
-          }
-          marker.flipPending = false;
-          setPinTransform(marker.g, marker.x, marker.y);
-        });
-      });
+      flyPin(from.x, from.y);
       return;
     }
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -3205,30 +3234,12 @@ function createSceneColorWheel({
       (Math.abs(prevX - x) > 0.5 || Math.abs(prevY - y) > 0.5);
     // Opacity fades also run on the group. They must not block the first
     // placement — that left the dot at the SVG origin once the fade ended.
-    const pinMoves = () =>
-      marker.g.getAnimations({ subtree: false }).filter(
-        (anim) => anim.playState === "running" && anim.id === "pin-move"
-      );
     if (!moved && pinMoves().length) {
       return;
     }
     if (moved && !instant && !drag && !reduce) {
-      pinMoves().forEach((anim) => anim.cancel());
-      marker.g.style.transition = "none";
-      const anim = marker.g.animate(
-        [{ transform: at(prevX, prevY) }, { transform: at(x, y) }],
-        {
-          duration: 480,
-          easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
-          fill: "both",
-          id: "pin-move",
-        }
-      );
-      anim.onfinish = () => {
-        marker.g.style.transition = "";
-        setPinTransform(marker.g, marker.x, marker.y);
-        anim.cancel();
-      };
+      const visual = visualTip();
+      flyPin(visual?.x ?? prevX, visual?.y ?? prevY);
       return;
     }
     pinMoves().forEach((anim) => anim.cancel());

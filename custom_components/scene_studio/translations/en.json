@@ -145,6 +145,8 @@
       "room_preview": "Preview room",
       "scene_preview": "Live edit",
       "play_scene": "Play scene live",
+      "back_to_today": "Back to today",
+      "choose_preview_date": "Choose preview date",
       "stop_preview": "Stop",
       "play_duration": "Play duration",
       "play_duration_seconds": "{seconds}s",
