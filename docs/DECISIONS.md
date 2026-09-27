@@ -10,7 +10,7 @@
 ## Desktop header stays put; Live edit sits on the list
 
 - **Date:** 2026-09-27
-- **Decision:** On a wide layout the header is always undo, redo, and settings. Live edit is a full-width bar at the top of the area rail, on both tabs, and it shares the `roomPreview` preference with the create dialog’s Live preview. A narrow editor hides the rail, so that switch stays in the narrow header. Settings opens over whichever editor is in the main column and is not closed when that column changes. The drawer’s exit transitions opacity and transform for the same duration as the entry.
+- **Decision:** On a wide layout the header is always undo, redo, and settings. Live edit is the first item inside each rail tab, under the tab bar, and it shares the `roomPreview` preference with the create dialog’s Live preview. A narrow editor hides the rail, so that switch stays in the narrow header. Settings opens over whichever editor is in the main column and is not closed when that column changes. The drawer’s exit transitions opacity and transform for the same duration as the entry. Area titles show how many scenes that area contains.
 - **Why:** The header was swapping actions every time a scene opened, and the settings drawer vanished because only transform was eased.
 - **Do not reverse without user ask.**
 

@@ -140,7 +140,7 @@
       "auto_configure": "Auto configure",
       "add_scene": "Add scene",
       "live_edit": "Live edit",
-      "live_edit_hint": "Show the open scene on the lights",
+      "live_edit_hint": "Apply the scene and changes in real-time",
       "live_preview": "Live edit light",
       "room_preview": "Preview room",
       "scene_preview": "Live edit",

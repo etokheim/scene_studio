@@ -10178,8 +10178,12 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _syncRoomPreviewControl() {
+    const checked = this._readRoomPreviewPref();
+    this.shadowRoot?.querySelectorAll(".rail-live-edit ha-switch").forEach((el) => {
+      el.checked = checked;
+    });
     if (this._roomPreviewSwitch) {
-      this._roomPreviewSwitch.checked = this._readRoomPreviewPref();
+      this._roomPreviewSwitch.checked = checked;
     }
     this._syncSidebarLiveEditToggle();
     this._syncActivateSceneButton();

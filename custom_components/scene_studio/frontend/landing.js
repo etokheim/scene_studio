@@ -98,7 +98,7 @@ export const LANDING_CSS = `
     justify-content: space-between;
     gap: 12px;
     flex: 0 0 auto;
-    margin: 12px 12px 0;
+    margin: 12px 12px 4px;
     padding: 10px 14px;
     border-radius: 16px;
     background: color-mix(in srgb, var(--card-background-color) 88%, transparent);
@@ -550,6 +550,19 @@ export const LANDING_CSS = `
   .area-head h2 ha-icon {
     --mdc-icon-size: 18px;
     flex: 0 0 auto;
+  }
+  .area-head h2 .area-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .area-count {
+    flex: 0 0 auto;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--secondary-text-color);
+    font-variant-numeric: tabular-nums;
   }
   .area-head .floor-label {
     flex: 1;
@@ -1283,27 +1296,6 @@ export function renderLanding(panel, { includeStage = true } = {}) {
     button.addEventListener("click", () => panel._setRailTab(id));
     tabs.appendChild(button);
   }
-  const liveBar = document.createElement("div");
-  liveBar.className = "rail-live-edit";
-  const liveCopy = document.createElement("div");
-  liveCopy.className = "rail-live-edit-copy";
-  const liveTitle = document.createElement("span");
-  liveTitle.className = "rail-live-edit-title";
-  liveTitle.textContent = panel._t("frontend.actions.live_edit", "Live edit");
-  const liveHint = document.createElement("span");
-  liveHint.className = "rail-live-edit-hint";
-  liveHint.textContent = panel._t(
-    "frontend.actions.live_edit_hint",
-    "Show the open scene on the lights"
-  );
-  liveCopy.append(liveTitle, liveHint);
-  const liveSwitch = document.createElement("ha-switch");
-  liveSwitch.checked = Boolean(panel._readRoomPreviewPref?.());
-  liveSwitch.addEventListener("change", () => {
-    void panel._setRoomPreview(Boolean(liveSwitch.checked));
-  });
-  liveBar.append(liveCopy, liveSwitch);
-  panel._roomPreviewSwitch = liveSwitch;
   const scenesBody = document.createElement("div");
   scenesBody.className = "area-rail-body";
   scenesBody.dataset.tab = "scenes";
@@ -1312,8 +1304,12 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   libraryBody.className = "area-rail-body";
   libraryBody.dataset.tab = "library";
   libraryBody.hidden = tab !== "library";
-  libraryBody.appendChild(renderLibrary(panel, { compact: true }));
-  rail.append(liveBar, tabs, scenesBody, libraryBody);
+  const scenesLive = renderRailLiveEdit(panel);
+  const libraryLive = renderRailLiveEdit(panel);
+  scenesBody.appendChild(scenesLive);
+  libraryBody.append(libraryLive, renderLibrary(panel, { compact: true }));
+  panel._roomPreviewSwitch = scenesLive.querySelector("ha-switch");
+  rail.append(tabs, scenesBody, libraryBody);
 
   const floors = panel._floors || [];
   const items = panel._items || [];
@@ -1475,6 +1471,30 @@ export function sceneCoverUrl(panel) {
   return galleryCoverUrl(builtin);
 }
 
+function renderRailLiveEdit(panel) {
+  const liveBar = document.createElement("div");
+  liveBar.className = "rail-live-edit";
+  const liveCopy = document.createElement("div");
+  liveCopy.className = "rail-live-edit-copy";
+  const liveTitle = document.createElement("span");
+  liveTitle.className = "rail-live-edit-title";
+  liveTitle.textContent = panel._t("frontend.actions.live_edit", "Live edit");
+  const liveHint = document.createElement("span");
+  liveHint.className = "rail-live-edit-hint";
+  liveHint.textContent = panel._t(
+    "frontend.actions.live_edit_hint",
+    "Apply the scene and changes in real-time"
+  );
+  liveCopy.append(liveTitle, liveHint);
+  const liveSwitch = document.createElement("ha-switch");
+  liveSwitch.checked = Boolean(panel._readRoomPreviewPref?.());
+  liveSwitch.addEventListener("change", () => {
+    void panel._setRoomPreview(Boolean(liveSwitch.checked));
+  });
+  liveBar.append(liveCopy, liveSwitch);
+  return liveBar;
+}
+
 function renderFloorBlock(panel, floor, byArea) {
   const block = document.createElement("div");
   block.className = "floor-block";
@@ -1521,7 +1541,13 @@ function renderAreaBlock(panel, area, scenes) {
     areaIcon.setAttribute("icon", area.icon);
     title.appendChild(areaIcon);
   }
-  title.appendChild(document.createTextNode(area.name || ""));
+  const areaName = document.createElement("span");
+  areaName.className = "area-name";
+  areaName.textContent = area.name || "";
+  const areaCount = document.createElement("span");
+  areaCount.className = "area-count";
+  areaCount.textContent = String(scenes.length);
+  title.append(areaName, areaCount);
   const add = iconButton(
     "mdi:plus",
     panel._t("frontend.actions.add_scene", "Add scene")
