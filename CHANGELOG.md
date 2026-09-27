@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [6.0.0] - 2026-09-26
+
 ### 🚨 Breaking changes
 
 - 🚨 The integration is **Scene Studio** now (domain `scene_studio`, was Circadian Scenes). Your scenes copy over on first load. The old config entry does not — remove it and add Scene Studio once. Search **Scene Studio** in HACS
