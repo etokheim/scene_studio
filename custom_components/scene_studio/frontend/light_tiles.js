@@ -465,6 +465,13 @@ export const LIGHT_TILES_CSS = `
     --hue-light-on-text-color: rgba(0, 0, 0, 0.8) !important;
     --hue-light-off-text-color: rgba(0, 0, 0, 0.72) !important;
   }
+  .simple-light-tile ha-ripple {
+    z-index: 6;
+    border-radius: inherit;
+    pointer-events: none;
+    --ha-ripple-color: #fff;
+    --ha-ripple-pressed-opacity: 0.2;
+  }
   .simple-light-tile {
     --hue-unfilled-mix: 50%;
     --hue-unfilled-opacity: 100%;
@@ -1029,11 +1036,13 @@ export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
   fill.className = "simple-light-fill";
   const hit = document.createElement("div");
   hit.className = "simple-light-hit";
+  const ripple = document.createElement("ha-ripple");
   tile.append(
     fill,
     makeLabels("layer-off", name, makeIcon),
     makeLabels("layer-on", name, makeIcon),
-    hit
+    hit,
+    ripple
   );
   const frame = document.createElement("div");
   frame.className = "simple-light-frame";

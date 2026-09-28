@@ -161,11 +161,13 @@ export function applyWheelMorph(snap, root) {
     morphIndexed(tiles, snap.tileRects, snap.tileClones, strip);
   }
   const svg = root.querySelector(".hue-wheel-svg");
-  const nextPins = [...root.querySelectorAll(".hue-wheel-svg .gm")].filter(
-    (node) => node.style.display !== "none"
-  ).length;
-  for (const pin of snap.pins.slice(nextPins)) {
-    if (!svg || !pin.clone) {
+  const nextPinIds = new Set(
+    [...root.querySelectorAll(".hue-wheel-svg .gm")]
+      .filter((node) => node.style.display !== "none")
+      .map((node) => node.dataset.sceneId || "")
+  );
+  for (const pin of snap.pins) {
+    if (!svg || !pin.clone || (pin.id && nextPinIds.has(pin.id))) {
       continue;
     }
     pin.clone.style.pointerEvents = "none";

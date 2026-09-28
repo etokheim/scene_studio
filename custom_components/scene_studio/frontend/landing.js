@@ -153,6 +153,7 @@ export const LANDING_CSS = `
   }
   @media (hover: hover) and (pointer: fine) {
     .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
+      .rail-live-edit,
       .floor-block > .floor-label > :not(.sticky-bg),
       .floor-block .area-head > :not(.sticky-bg),
       .area-empty,
@@ -162,8 +163,10 @@ export const LANDING_CSS = `
       .scene-card:not(.selected)
     ) {
       opacity: 0.38;
+      transition: opacity 180ms ease;
     }
     .area-rail:hover .area-rail-body:not([hidden]):has(.scene-card.selected) :is(
+      .rail-live-edit,
       .floor-block > .floor-label > :not(.sticky-bg),
       .floor-block .area-head > :not(.sticky-bg),
       .area-empty,
@@ -1736,12 +1739,25 @@ function renderSceneCard(panel, scene) {
     // Read the live class. The closure captured at build time stays true for
     // the card that was open when the rail was painted, so a later click
     // left the editor or reloaded the same scene and restarted the motion.
+    // The rail is kept, so this element survives the navigation. `leaving`
+    // only covers that navigation — leaving it set blocked every later click.
     if (cardEl.classList.contains("selected")) {
       leaving = true;
       slot.classList.remove("glow-on");
       cardEl.classList.remove("selected");
       cardEl.setAttribute("aria-pressed", "false");
-      panel._go("");
+      void panel._go("").finally(() => {
+        leaving = false;
+        if (
+          cardEl.isConnected &&
+          panel._view === "edit" &&
+          panel._editId === scene.id
+        ) {
+          cardEl.classList.add("selected");
+          slot.classList.add("glow-on");
+          cardEl.setAttribute("aria-pressed", "true");
+        }
+      });
       return;
     }
     panel._go(`edit/${scene.id}`);

@@ -2465,9 +2465,9 @@ function captureWheelPinList(root) {
     return list;
   }
   for (const g of root.querySelectorAll(".hue-wheel-svg .gm")) {
-    if (g.style.display === "none") {
-      continue;
-    }
+    // Grouped members are display:none but still sit on the cluster. Skipping
+    // them made those dots pop to their next color instead of flying.
+    const hidden = g.style.display === "none";
     const match =
       /translate\(([-\d.]+)(?:px)?[,\s]+([-\d.]+)(?:px)?\)/.exec(
         g.getAttribute("transform") || ""
@@ -2480,7 +2480,7 @@ function captureWheelPinList(root) {
       id: g.dataset.sceneId || "",
       x: Number(match[1]) + PIN_TIP_X,
       y: Number(match[2]) + PIN_TIP_Y,
-      clone: g.cloneNode(true),
+      clone: hidden ? null : g.cloneNode(true),
     });
   }
   return list;

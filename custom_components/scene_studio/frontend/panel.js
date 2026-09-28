@@ -5117,14 +5117,32 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   async _syncHash() {
-    this._hashSyncQueued = true;
+    const hash = (window.location.hash || "#").replace(/^#/, "");
+    // hashchange and HA's location-changed both fire for one hash write,
+    // about 30ms apart. The first pass has already returned by then, and a
+    // second pass rebuilt the editor while the first animation was running.
+    if (
+      hash === this._hashSyncHash &&
+      performance.now() - (this._hashSyncAt || 0) < 100
+    ) {
+      return;
+    }
     if (this._hashSyncing) {
+      if (hash !== this._hashSyncHash) {
+        this._hashSyncQueued = true;
+      }
       return;
     }
     this._hashSyncing = true;
+    this._hashSyncQueued = false;
     try {
+      this._hashSyncHash = hash;
+      this._hashSyncAt = performance.now();
+      await this._syncHashOnce();
       while (this._hashSyncQueued) {
         this._hashSyncQueued = false;
+        this._hashSyncHash = (window.location.hash || "#").replace(/^#/, "");
+        this._hashSyncAt = performance.now();
         await this._syncHashOnce();
       }
     } finally {
@@ -5573,6 +5591,22 @@ class SceneStudioPanel extends HTMLElement {
     }
     const layer = document.createElement("div");
     layer.className = "stage-motion-layer";
+    // Enter classes survive their animation. Moving that node into the exit
+    // layer restarts scale(0.92) while the layer scales the other way.
+    for (const root of [scroll, bg]) {
+      root
+        ?.querySelectorAll(
+          ".simple-editor-enter, .clock-face-enter, .stage-surface-enter"
+        )
+        .forEach((el) => {
+          el.getAnimations().forEach((anim) => anim.cancel());
+          el.classList.remove(
+            "simple-editor-enter",
+            "clock-face-enter",
+            "stage-surface-enter"
+          );
+        });
+    }
     // Horizon/bloom live on .stage-bg, not in the scrollport. Lift them with
     // the editor so they fade out instead of being re-parented onto the next
     // surface.
@@ -5620,13 +5654,23 @@ class SceneStudioPanel extends HTMLElement {
     void el.offsetWidth;
     el.classList.add("simple-editor-enter");
     const clear = (ev) => {
+      if (ev.target !== el) {
+        return;
+      }
       if (ev.animationName && ev.animationName !== "stage-surface-enter-scale") {
         return;
       }
+      finish();
+    };
+    const finish = () => {
       el.classList.remove("simple-editor-enter");
       el.removeEventListener("animationend", clear);
     };
     el.addEventListener("animationend", clear);
+    // A child animation used to satisfy the listener, or the node was moved
+    // before animationend, and the class stayed on. Reparenting then replayed
+    // the enter scale inside the exit layer.
+    window.setTimeout(finish, 480);
   }
 
   _prepareEmptyEnter(el) {
@@ -5664,6 +5708,8 @@ class SceneStudioPanel extends HTMLElement {
     }
     if (to === "dial" && from === "dial") {
       this._clockEnterPlayed = true;
+      // Keep the mounted dial and lerp the new scene's path into it.
+      this._pathMorphMs = PREVIEW_REFINE_MS;
     } else if (to === "dial") {
       this._clockEnterPlayed = false;
     }
@@ -5940,13 +5986,35 @@ class SceneStudioPanel extends HTMLElement {
     if (!root) {
       return;
     }
+    const reveal = [];
     for (const card of root.querySelectorAll(".scene-card")) {
       const on = this._railCardSelected(card);
-      card.classList.toggle("selected", on);
+      const was = card.classList.contains("selected");
       if (card.hasAttribute("aria-pressed")) {
         card.setAttribute("aria-pressed", on ? "true" : "false");
       }
-      card.parentElement?.classList.toggle("glow-on", on);
+      if (on === was) {
+        continue;
+      }
+      // Adding .selected in the same turn as the editor swap paints the card
+      // at scale(1.1) with no transition. The next frame lets it scale.
+      if (!on) {
+        card.classList.remove("selected");
+        card.parentElement?.classList.remove("glow-on");
+        continue;
+      }
+      reveal.push(card);
+    }
+    if (reveal.length) {
+      requestAnimationFrame(() => {
+        for (const card of reveal) {
+          if (!card.isConnected || !this._railCardSelected(card)) {
+            continue;
+          }
+          card.classList.add("selected");
+          card.parentElement?.classList.add("glow-on");
+        }
+      });
     }
     for (const chip of root.querySelectorAll(".var-chip")) {
       const on =
@@ -13262,9 +13330,20 @@ class SceneStudioPanel extends HTMLElement {
       return true;
     }
     this._mountSunPath(stage);
-    if (this._sunPath?.curve?.length) {
-      this._forgetClockDom();
-      this._drawSunPath();
+    // The list hero stays in the scrollport until the preview arrives. Leaving
+    // it there flashes the empty state over the dial.
+    for (const child of [...(scroll?.children || [])]) {
+      if (child === this._sunPathEl || child === this._pageBannersEl) {
+        continue;
+      }
+      child.remove();
+    }
+    // A matching path can paint now. A scene change keeps the mounted dial
+    // and lets the preview lerp; forgetting it here popped every ring and tile.
+    if (this._sunPathMatchesChart()) {
+      if (!this._clockRingsHost?.isConnected) {
+        this._drawSunPath();
+      }
     }
     this._syncWorkspaceScrollport();
     return true;
@@ -13335,8 +13414,9 @@ class SceneStudioPanel extends HTMLElement {
         this._mountSunPath(stage);
       }
     }
-    if (this._sunPath?.curve?.length) {
-      this._forgetClockDom();
+    // Refs may still point at the dial that was lifted into the exit layer.
+    this._forgetClockDom();
+    if (this._sunPathMatchesChart()) {
       this._drawSunPath();
     }
     this._syncWorkspaceScrollport();
@@ -16466,6 +16546,12 @@ class SceneStudioPanel extends HTMLElement {
     };
   }
 
+  _sunPathMatchesChart() {
+    return Boolean(
+      this._sunPath?.curve?.length && this._sunPathKey === this._chartKey()
+    );
+  }
+
   _chartKey() {
     if (this._view !== "edit") {
       // List chart is solar-only and always “today” — not the editor date scrub.
@@ -16649,7 +16735,12 @@ class SceneStudioPanel extends HTMLElement {
         const key = this._chartKey();
         const listView = this._view !== "edit";
         if (this._sunPath && this._sunPathKey === key) {
-          this._drawSunPath();
+          // Paint already drew this path. Drawing again restarts sun layout
+          // under the enter arc and the disk flashes backward.
+          this._pathMorphMs = 0;
+          if (!this._clockRingsHost?.isConnected) {
+            this._drawSunPath();
+          }
           continue;
         }
         const cached = this._previewCache.get(key);
@@ -17831,6 +17922,9 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     const { events } = this._sunPath;
+    const tileSnap = captureLightStripLayout(
+      this._clockLegendEl?.querySelector(".light-tiles")
+    );
     const clockEl = this._buildLightClock(events);
     if (!this._dateToolbar) {
       this._dateToolbar = this._buildDateToolbar();
@@ -17860,6 +17954,10 @@ class SceneStudioPanel extends HTMLElement {
     if (this._clockLegendEl) {
       this._sunPathEl.appendChild(this._clockLegendEl);
     }
+    playLightStripLayout(
+      this._clockLegendEl?.querySelector(".light-tiles"),
+      tileSnap
+    );
     this._syncEditorChrome();
     this._ensureHoverReadout();
     this._syncYearScrubLayout();
@@ -19005,14 +19103,18 @@ class SceneStudioPanel extends HTMLElement {
     // Restart CSS enter if the face was recycled in the same document.
     void face.offsetWidth;
     face.classList.add("clock-face-enter");
+    const finish = () => {
+      face.classList.remove("clock-face-enter");
+      face.removeEventListener("animationend", clearEnter);
+    };
     const clearEnter = (ev) => {
       if (ev.animationName && ev.animationName !== "clock-overlay-spin") {
         return;
       }
-      face.classList.remove("clock-face-enter");
-      face.removeEventListener("animationend", clearEnter);
+      finish();
     };
     face.addEventListener("animationend", clearEnter);
+    window.setTimeout(finish, 480);
     this._animateClockSunArc(from, idle, 700, { forward: true });
   }
 

@@ -1,5 +1,12 @@
 # Decisions
 
+## Scene changes keep the dial and one rail paint
+
+- **Date:** 2026-09-28
+- **Decision:** Circadian scene to circadian scene leaves the dial mounted and lerps the new path. The list rail is not rebuilt for that switch. A hash write is handled once: Home Assistant fires both `hashchange` and `location-changed`. The exit layer strips leftover enter classes before it scales away. A scene card can be opened again after it is deselected, because that card stays in the rail.
+- **Why:** Forgetting the dial popped the rings and tiles. A second hash pass rebuilt the editor while the first animation was still running, and a leftover enter class restarted scale(0.92) inside the exit.
+- **Do not reverse without user ask.**
+
 ## Phone content clears the home indicator
 
 - **Date:** 2026-09-27
