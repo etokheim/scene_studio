@@ -1,10 +1,10 @@
 /** Area rail, scene cards, and variable/theme library for the list view. */
 
 import { createSimpleCardMesh } from "./card_mesh.js";
-import { swatchRgb, variableSwatchCss } from "./color_ui.js";
+import { draftRgb, swatchRgb, variableSwatchCss } from "./color_ui.js";
 import { compareScenesForList, stripAreaPrefix } from "./display_names.js";
-import { galleryCoverUrl, galleryPalette } from "./gallery.js";
-import { PALETTE_SLOT_COUNT, resolveSlot, variableIsPalette } from "./palette.js";
+import { galleryCoverUrl, galleryPalette, galleryTheme } from "./gallery.js";
+import { PALETTE_SLOT_COUNT, paletteSwatchCss, resolveSlot, variableIsPalette } from "./palette.js";
 import { sceneLibraryUses, scenesUsingLibraryItem } from "./scene_used.js";
 
 const AREA_RAIL_PX = 340;
@@ -304,6 +304,37 @@ export const LANDING_CSS = `
   }
   .scene-used-chip.is-source {
     cursor: default;
+    flex-wrap: wrap;
+    max-width: 220px;
+  }
+  .scene-used-reset {
+    flex-basis: 100%;
+    margin: 0;
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: var(--primary-color);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .library-used-by-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0;
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    color: var(--primary-text-color);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .library-used-by-trigger ha-icon {
+    --mdc-icon-size: 18px;
   }
   .scene-used-chip {
     display: inline-flex;
@@ -866,6 +897,31 @@ export const LANDING_CSS = `
     z-index: 3;
     --mdc-icon-button-size: 28px;
     color: var(--primary-text-color);
+  }
+  /* Color presets: the menu covers the dot if it is always visible. It sits
+     in the extra width of a selected chip. */
+  .library-chip:has(.var-chip) .library-chip-menu {
+    display: none;
+  }
+  .library-chip:has(.var-chip.selected) .library-chip-menu {
+    display: block;
+    top: 8px;
+    right: 2px;
+  }
+  .var-dot {
+    transition: width 180ms ease, box-shadow 180ms ease;
+  }
+  .var-chip {
+    transition: transform 180ms ease;
+  }
+  .var-chip.selected {
+    transform: scale(1.1);
+  }
+  .var-chip.selected .var-dot {
+    width: 88px;
+    box-shadow:
+      inset 0 0 0 2px #fff,
+      0 2px 8px rgba(0, 0, 0, 0.25);
   }
   .library-chip-menu ha-icon-button {
     border-radius: 50%;
@@ -1760,6 +1816,7 @@ function renderSceneCard(panel, scene) {
     // only covers that navigation — leaving it set blocked every later click.
     if (cardEl.classList.contains("selected")) {
       leaving = true;
+      panel._pendingRailSceneId = null;
       slot.classList.remove("glow-on");
       cardEl.classList.remove("selected");
       cardEl.setAttribute("aria-pressed", "false");
@@ -1777,6 +1834,8 @@ function renderSceneCard(panel, scene) {
       });
       return;
     }
+    panel._pendingRailSceneId = scene.id;
+    panel._syncRailSelection?.();
     panel._go(`edit/${scene.id}`);
   };
   cardEl.addEventListener("click", (ev) => {
@@ -2030,15 +2089,14 @@ function bindCardOverflowReveal(card, overflowSlot) {
   );
 }
 
-function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kind, item }) {
+export function createPresetSceneCard({ name, paint, selected = false, asButton = false }) {
   const slot = document.createElement("div");
   slot.className = "scene-card-slot";
-  const card = document.createElement("div");
+  const card = document.createElement(asButton ? "button" : "div");
+  if (asButton) {
+    card.type = "button";
+  }
   card.className = "scene-card";
-  card.dataset.itemId = id || "";
-  card.setAttribute("role", "button");
-  card.tabIndex = 0;
-  card.setAttribute("aria-pressed", selected ? "true" : "false");
   const bg = document.createElement("div");
   bg.className = "card-bg";
   paint(bg);
@@ -2048,13 +2106,33 @@ function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kin
   title.className = "card-name";
   title.textContent = name || "";
   body.appendChild(title);
-  const overflowSlot = document.createElement("div");
-  overflowSlot.className = "card-overflow-slot";
-  overflowSlot.appendChild(libraryOverflow(panel, kind, item));
-  card.append(bg, body, overflowSlot);
+  const ripple = document.createElement("ha-ripple");
+  card.append(bg, body, ripple);
   const glow = bg.cloneNode(true);
   glow.classList.add("card-glow");
   glow.setAttribute("aria-hidden", "true");
+  slot.append(glow, card);
+  if (selected) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        card.classList.add("selected");
+        slot.classList.add("glow-on");
+      });
+    });
+  }
+  return { slot, card };
+}
+
+function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kind, item }) {
+  const { slot, card } = createPresetSceneCard({ name, paint, selected });
+  card.dataset.itemId = id || "";
+  card.setAttribute("role", "button");
+  card.tabIndex = 0;
+  card.setAttribute("aria-pressed", selected ? "true" : "false");
+  const overflowSlot = document.createElement("div");
+  overflowSlot.className = "card-overflow-slot";
+  overflowSlot.appendChild(libraryOverflow(panel, kind, item));
+  card.appendChild(overflowSlot);
   const open = (ev) => {
     if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
       return;
@@ -2073,15 +2151,6 @@ function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kin
     onOpen();
   });
   bindCardOverflowReveal(card, overflowSlot);
-  slot.append(glow, card);
-  if (selected) {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        card.classList.add("selected");
-        slot.classList.add("glow-on");
-      });
-    });
-  }
   return slot;
 }
 
@@ -2163,42 +2232,29 @@ function renderLibrary(panel, { compact } = {}) {
 
   const palCards = document.createElement("div");
   palCards.className = "scene-cards";
-  const palRow = document.createElement("div");
-  palRow.className = "var-row";
   for (const palette of palettes) {
     const cover = galleryPalette(palette?.builtin_id);
     const selected = panel._view === "palette" && panel._variableId === palette.id;
-    if (cover) {
-      palCards.appendChild(
-        renderLibrarySquareCard(panel, {
-          id: palette.id,
-          name: palette.name,
-          selected,
-          kind: "palette",
-          item: palette,
-          onOpen: () => panel._openPaletteEditor(palette),
-          paint: (bg) => {
+    palCards.appendChild(
+      renderLibrarySquareCard(panel, {
+        id: palette.id,
+        name: palette.name,
+        selected,
+        kind: "palette",
+        item: palette,
+        onOpen: () => panel._openPaletteEditor(palette),
+        paint: (bg) => {
+          if (cover) {
             bg.classList.add("is-cover");
             bg.style.backgroundImage = `url("${galleryCoverUrl(cover.id)}")`;
-          },
-        })
-      );
-      continue;
-    }
-    const chip = createPaletteChip(palette, panel._variables, {
-      selected,
-      onClick: () => panel._openPaletteEditor(palette),
-    });
-    palRow.appendChild(libraryChip(panel, chip, "palette", palette));
+            return;
+          }
+          bg.style.background = paletteSwatchCss(palette, panel._variables, draftRgb);
+        },
+      })
+    );
   }
-  const palBody = document.createElement("div");
-  if (palCards.childElementCount) {
-    palBody.appendChild(palCards);
-  }
-  if (palRow.childElementCount) {
-    palBody.appendChild(palRow);
-  }
-  wrap.appendChild(libraryBlock(palHead, palBody));
+  wrap.appendChild(libraryBlock(palHead, palCards));
 
   const themeHead = document.createElement("div");
   themeHead.className = "area-head";
@@ -2262,6 +2318,18 @@ export function renderPaletteUsed(panel) {
     name.textContent = panel._t(preset.nameKey, preset.name);
     chip.appendChild(name);
     chip.setAttribute("aria-label", name.textContent);
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "scene-used-reset";
+    reset.textContent = panel._t(
+      "frontend.library.reset_preset",
+      "Reset to preset default"
+    );
+    reset.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      panel._confirmResetPreset?.("palette");
+    });
+    chip.appendChild(reset);
     row.appendChild(chip);
   }
   const seen = new Set();
@@ -2430,6 +2498,37 @@ function renderThemeSplit(panel) {
   return split;
 }
 
+export function renderThemePresetSource(panel) {
+  const preset = galleryTheme(panel._themeDraft?.builtin_id);
+  if (panel._view !== "theme" || !preset) {
+    return null;
+  }
+  const row = document.createElement("div");
+  row.className = "scene-used";
+  const chip = document.createElement("div");
+  chip.className = "scene-used-chip is-source";
+  const swatch = document.createElement("span");
+  swatch.className = "scene-used-swatch";
+  paintThemeDial(swatch, preset, panel._variables || []);
+  const name = document.createElement("span");
+  name.textContent = panel._t(preset.nameKey, preset.name);
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "scene-used-reset";
+  reset.textContent = panel._t(
+    "frontend.library.reset_preset",
+    "Reset to preset default"
+  );
+  reset.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    panel._confirmResetPreset?.("theme");
+  });
+  chip.append(swatch, name, reset);
+  chip.setAttribute("aria-label", name.textContent);
+  row.appendChild(chip);
+  return row;
+}
+
 export function renderLibraryUsedBy(panel, { kind, id }) {
   const scenes = scenesUsingLibraryItem({
     kind,
@@ -2443,16 +2542,34 @@ export function renderLibraryUsedBy(panel, { kind, id }) {
   }
   const row = document.createElement("div");
   row.className = "library-used-by";
+  const menu = document.createElement("ha-dropdown");
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "library-used-by-trigger";
+  trigger.slot = "trigger";
+  const count = scenes.length;
+  const label = document.createElement("span");
+  label.textContent =
+    count === 1
+      ? panel._t("frontend.library.used_in_one", "Used in 1 scene")
+      : panel._t("frontend.library.used_in", "Used in {count} scenes", { count });
+  const chevron = document.createElement("ha-icon");
+  chevron.setAttribute("icon", "mdi:chevron-down");
+  trigger.append(label, chevron);
+  menu.appendChild(trigger);
   for (const scene of scenes) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "scene-used-chip";
-    const name = document.createElement("span");
-    name.textContent = scene.scene_name || scene.name || scene.id;
-    button.appendChild(name);
-    button.addEventListener("click", () => panel._go(`edit/${scene.id}`));
-    row.appendChild(button);
+    const item = document.createElement("ha-dropdown-item");
+    item.value = scene.id;
+    item.textContent = scene.scene_name || scene.name || scene.id;
+    menu.appendChild(item);
   }
+  menu.addEventListener("wa-select", (ev) => {
+    const sceneId = ev.detail?.item?.value;
+    if (sceneId) {
+      panel._go(`edit/${sceneId}`);
+    }
+  });
+  row.appendChild(menu);
   return row;
 }
 

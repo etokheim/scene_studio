@@ -67,6 +67,8 @@ import {
   renderSceneUsed,
   renderPaletteUsed,
   renderLibraryUsedBy,
+  renderThemePresetSource,
+  createPresetSceneCard,
   sceneCoverUrl,
   applyCircularRamp,
   bindStickyTitles,
@@ -160,7 +162,6 @@ const CLOCK_SUN_MOVE_MS = 1500;
 const DATE_MORPH_MS = 1500;
 const PREVIEW_REFINE_MS = 800;
 /** Settled preview samples are denser than scrub knots (≤8 incl. midnight). */
-const AUTHORITATIVE_SAMPLE_MIN = 9;
 const UNDO_STACK_LIMIT = 75;
 const LIVE_EDIT_STORAGE_VERSION = 1;
 const ROOM_PREVIEW_STORAGE_VERSION = 1;
@@ -5195,6 +5196,12 @@ class SceneStudioPanel extends HTMLElement {
 
   async _syncHashOnce() {
     const hash = (window.location.hash || "#").replace(/^#/, "");
+    if (
+      this._pendingRailSceneId &&
+      hash !== `edit/${this._pendingRailSceneId}`
+    ) {
+      this._pendingRailSceneId = null;
+    }
     this._noteRailTabForHash(hash);
     const current = this._currentHash();
     if (
@@ -5227,6 +5234,9 @@ class SceneStudioPanel extends HTMLElement {
     if (match) {
       this._view = "edit";
       this._editId = match[1];
+      if (this._pendingRailSceneId === match[1]) {
+        this._pendingRailSceneId = null;
+      }
       this._themeId = null;
       this._themeDraft = null;
       this._variableId = null;
@@ -6009,6 +6019,13 @@ class SceneStudioPanel extends HTMLElement {
 
   _railCardSelected(card) {
     if (card.dataset.sceneId) {
+      // A click sets this before the scene fetch. Otherwise the previous
+      // card stays highlighted until that fetch, and a second click is
+      // what finally shows the new one.
+      const pending = this._pendingRailSceneId;
+      if (pending) {
+        return card.dataset.sceneId === pending;
+      }
       return this._view === "edit" && card.dataset.sceneId === this._editId;
     }
     const itemId = card.dataset.itemId;
@@ -7370,26 +7387,8 @@ class SceneStudioPanel extends HTMLElement {
         paintSelection();
         void applyPreview();
       };
-      const paletteChoiceCard = (name, paint) => {
-        const slot = document.createElement("div");
-        slot.className = "scene-card-slot";
-        const card = document.createElement("button");
-        card.type = "button";
-        card.className = "scene-card";
-        const bg = document.createElement("div");
-        bg.className = "card-bg";
-        paint(bg);
-        const body = document.createElement("div");
-        body.className = "card-body";
-        const title = document.createElement("div");
-        title.className = "card-name";
-        title.textContent = name;
-        body.appendChild(title);
-        const ripple = document.createElement("ha-ripple");
-        card.append(bg, body, ripple);
-        slot.appendChild(card);
-        return { slot, card };
-      };
+      const paletteChoiceCard = (name, paint) =>
+        createPresetSceneCard({ name, paint, asButton: true });
       const randomizeLabel = () => {
         const label = document.createElement("span");
         label.className = "scene-palette-randomize-label";
@@ -7492,13 +7491,20 @@ class SceneStudioPanel extends HTMLElement {
           draftRgb
         );
       });
+      const adoptedPalettes = new Set(
+        (this._variables || []).map((item) => item.builtin_id).filter(Boolean)
+      );
       for (const section of gallerySections()) {
+        const visible = section.palettes.filter((item) => !adoptedPalettes.has(item.id));
+        if (!visible.length) {
+          continue;
+        }
         const label = document.createElement("p");
         label.className = "scene-gallery-label";
         label.textContent = this._t(section.nameKey, section.name);
         const grid = document.createElement("div");
         grid.className = "scene-cards";
-        for (const item of section.palettes) {
+        for (const item of visible) {
           const choice = paletteChoiceCard(
             this._t(item.nameKey, item.name),
             (bg) => {
@@ -7709,7 +7715,109 @@ class SceneStudioPanel extends HTMLElement {
     };
   }
 
-  _chooseCircadianTheme() {
+  _confirmResetPreset(kind) {
+    this.shadowRoot.querySelector("ha-dialog.confirm-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "confirm-dialog";
+    dialog.setAttribute(
+      "header-title",
+      this._t("frontend.library.reset_preset_title", "Reset to preset default?")
+    );
+    dialog.open = true;
+    const text = document.createElement("p");
+    text.textContent = this._t(
+      "frontend.library.reset_preset_text",
+      "This replaces your edits with the original preset. You can undo it afterward."
+    );
+    dialog.appendChild(text);
+    const footer = customElements.get("ha-dialog-footer")
+      ? document.createElement("ha-dialog-footer")
+      : document.createElement("div");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._loc("ui.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => {
+      dialog.open = false;
+    });
+    const confirm = document.createElement("ha-button");
+    confirm.slot = "primaryAction";
+    confirm.textContent = this._t("frontend.library.reset_preset", "Reset to preset default");
+    confirm.addEventListener("click", () => {
+      dialog.open = false;
+      if (kind === "theme") {
+        void this._resetThemeToPresetDefault();
+        return;
+      }
+      this._resetPaletteToPresetDefault();
+    });
+    footer.append(cancel, confirm);
+    dialog.appendChild(footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
+  }
+
+  _resetPaletteToPresetDefault() {
+    const draft = this._variableDraft;
+    const source = galleryPalette(draft?.builtin_id);
+    if (!source || this._view !== "palette") {
+      return;
+    }
+    this._commitUndo();
+    this._variableDraft = {
+      ...draft,
+      slots: structuredClone(source.slots),
+    };
+    this._saveSoon();
+    this._render();
+  }
+
+  async _resetThemeToPresetDefault() {
+    const draft = this._themeDraft;
+    const preset = galleryTheme(draft?.builtin_id);
+    if (!preset || this._view !== "theme") {
+      return;
+    }
+    this._commitUndo();
+    const events = {};
+    for (const eventId of ["dawn", "sunrise", "noon", "sunset", "dusk"]) {
+      const spec = preset.events?.[eventId];
+      if (!spec) {
+        continue;
+      }
+      if (spec.palette) {
+        const current = draft.events?.[eventId]?.color;
+        const currentVar = (this._variables || []).find(
+          (item) => item.id === current?.variable_ref
+        );
+        const keep =
+          variableIsPalette(currentVar) && currentVar.builtin_id === spec.palette
+            ? currentVar
+            : (this._variables || []).find(
+                (item) =>
+                  variableIsPalette(item) && item.builtin_id === spec.palette
+              );
+        const palette = keep || (await this._copyGalleryPalette(spec.palette));
+        events[eventId] = {
+          color: { variable_ref: palette.id },
+          brightness: spec.brightness,
+          assignment_seed: 0,
+        };
+      } else {
+        events[eventId] = {
+          color: structuredClone(spec.color),
+          brightness: spec.brightness,
+        };
+      }
+    }
+    this._themeDraft = { ...this._themeDraft, events };
+    this._saveSoon();
+    this._rebuildThemeDial();
+    this._render();
+  }
+
+  _chooseCircadianTheme({ areaId } = {}) {
     return new Promise((resolve) => {
       this.shadowRoot.querySelector("ha-dialog.scene-theme-create-dialog")?.remove();
       const dialog = document.createElement("ha-dialog");
@@ -7722,6 +7830,8 @@ class SceneStudioPanel extends HTMLElement {
       let settled = false;
       let selectedKind = null;
       let selectedId = null;
+      let snaps = null;
+      const areaLights = this._areaLightIds(areaId);
       const finish = (value) => {
         if (settled) {
           return;
@@ -7730,17 +7840,98 @@ class SceneStudioPanel extends HTMLElement {
         dialog.open = false;
         resolve(value);
       };
+      const restoreSnaps = async () => {
+        if (!snaps) {
+          return;
+        }
+        const prior = snaps;
+        snaps = null;
+        await Promise.all(
+          Object.entries(prior).map(([entityId, stored]) =>
+            this._applyLightState(entityId, stored, { transition: 0.4 })
+          )
+        );
+      };
+      const selectedRecord = () =>
+        selectedKind === "preset"
+          ? galleryTheme(selectedId)
+          : (this._themes || []).find((item) => item.id === selectedId);
+      const noonDraft = (theme) => {
+        const ev = theme?.events?.noon;
+        if (!ev) {
+          return null;
+        }
+        const draft = { state: "on", brightness: ev.brightness ?? 200 };
+        if (ev.palette) {
+          const palette = galleryAsPalette(ev.palette);
+          if (!palette) {
+            return null;
+          }
+          applyVariableToDraft(draft, palette, { catalog: this._variables });
+          return draft;
+        }
+        const color = ev.color || {};
+        if (color.variable_ref) {
+          const variable = (this._variables || []).find(
+            (item) => item.id === color.variable_ref
+          );
+          if (variable) {
+            applyVariableToDraft(draft, variable, { catalog: this._variables });
+            return draft;
+          }
+        }
+        return { ...draft, ...color };
+      };
+      const applyPreview = async () => {
+        const theme = selectedRecord();
+        const draft = noonDraft(theme);
+        if (!this._readRoomPreviewPref() || !draft || !areaLights.length) {
+          await restoreSnaps();
+          return;
+        }
+        if (!snaps) {
+          snaps = {};
+          for (const entityId of areaLights) {
+            snaps[entityId] = this._snapshotLight(entityId);
+          }
+        }
+        await Promise.all(
+          areaLights.map((entityId) =>
+            this._applyLightState(entityId, draft, { transition: 0.4 })
+          )
+        );
+      };
       const hint = document.createElement("p");
       hint.className = "scene-palette-hint";
       hint.textContent = this._t(
         "frontend.dialogs.scene_theme_hint",
-        "Pick one of your circadian presets, or start from a starter preset."
+        "Create a circadian scene from a preset or start from scratch"
       );
+      const liveToggle = document.createElement("label");
+      liveToggle.className = "live-edit-toggle";
+      const liveLabel = document.createElement("span");
+      liveLabel.textContent = this._t(
+        "frontend.dialogs.scene_palette_live_preview",
+        "Live preview"
+      );
+      const liveSwitch = document.createElement("ha-switch");
+      liveSwitch.checked = this._readRoomPreviewPref();
+      liveSwitch.addEventListener("change", () => {
+        this._writeRoomPreviewPref(Boolean(liveSwitch.checked));
+        this._syncRoomPreviewControl();
+        void applyPreview();
+      });
+      liveToggle.slot = "headerActionItems";
+      liveToggle.append(liveLabel, liveSwitch);
       const list = document.createElement("div");
       list.className = "scene-palette-list";
       const themes = this._themes || [];
-      const choices = [];
+      const rows = [];
       const cards = [];
+      const paintCard = (theme) => (bg) => {
+        bg.classList.add("theme-dial");
+        paintThemeDial(bg, theme, this._variables || []);
+      };
       if (themes.length) {
         const yours = document.createElement("p");
         yours.className = "scene-gallery-label";
@@ -7748,107 +7939,133 @@ class SceneStudioPanel extends HTMLElement {
           "frontend.dialogs.scene_theme_yours",
           "Your circadian presets"
         );
-        list.appendChild(yours);
+        const yoursGrid = document.createElement("div");
+        yoursGrid.className = "scene-cards";
+        for (const theme of themes) {
+          const choice = createPresetSceneCard({
+            name: theme.name || theme.id,
+            paint: paintCard(theme),
+            asButton: true,
+          });
+          choice.card.addEventListener("click", () => choose("user", theme.id));
+          yoursGrid.appendChild(choice.slot);
+          rows.push({ id: theme.id, ...choice });
+        }
+        list.append(yours, yoursGrid);
       }
-      const yoursGrid = document.createElement("div");
-      yoursGrid.className = "scene-gallery-grid";
-      for (const theme of themes) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "scene-gallery-card scene-theme-card";
-        const dial = document.createElement("div");
-        dial.className = "theme-dial";
-        paintThemeDial(dial, theme, this._variables || []);
-        const name = document.createElement("span");
-        name.textContent = theme.name || theme.id;
-        button.append(dial, name);
-        button.addEventListener("click", () => choose("user", theme.id));
-        yoursGrid.appendChild(button);
-        choices.push({ id: theme.id, el: button });
+      const adopted = new Set(themes.map((item) => item.builtin_id).filter(Boolean));
+      const presets = galleryThemes().filter((item) => !adopted.has(item.id));
+      if (presets.length) {
+        const presetsLabel = document.createElement("p");
+        presetsLabel.className = "scene-gallery-label";
+        presetsLabel.textContent = this._t(
+          "frontend.dialogs.scene_theme_presets",
+          "Starter presets"
+        );
+        const grid = document.createElement("div");
+        grid.className = "scene-cards";
+        for (const preset of presets) {
+          const choice = createPresetSceneCard({
+            name: this._t(preset.nameKey, preset.name),
+            paint: paintCard(preset),
+            asButton: true,
+          });
+          choice.card.addEventListener("click", () => choose("preset", preset.id));
+          grid.appendChild(choice.slot);
+          cards.push({ id: preset.id, ...choice });
+        }
+        list.append(presetsLabel, grid);
       }
-      if (themes.length) {
-        list.appendChild(yoursGrid);
-      }
-      const presetsLabel = document.createElement("p");
-      presetsLabel.className = "scene-gallery-label";
-      presetsLabel.textContent = this._t(
-        "frontend.dialogs.scene_theme_presets",
-        "Starter presets"
-      );
-      const grid = document.createElement("div");
-      grid.className = "scene-gallery-grid";
-      for (const preset of galleryThemes()) {
-        const card = document.createElement("button");
-        card.type = "button";
-        card.className = "scene-gallery-card scene-theme-card";
-        const dial = document.createElement("div");
-        dial.className = "theme-dial";
-        paintThemeDial(dial, preset, this._variables || []);
-        const name = document.createElement("span");
-        name.textContent = this._t(preset.nameKey, preset.name);
-        card.append(dial, name);
-        card.addEventListener("click", () => choose("preset", preset.id));
-        grid.appendChild(card);
-        cards.push({ id: preset.id, el: card });
-      }
-      list.append(presetsLabel, grid);
-      dialog.append(hint, list);
+      const body = document.createElement("div");
+      body.className = "scene-palette-body";
+      body.append(hint, list);
+      dialog.append(liveToggle, body);
       const footer = customElements.get("ha-dialog-footer")
         ? document.createElement("ha-dialog-footer")
         : document.createElement("div");
       footer.slot = "footer";
-      const custom = document.createElement("ha-button");
-      custom.slot = "secondaryAction";
-      custom.appearance = "plain";
-      custom.textContent = this._t("frontend.dialogs.scene_palette_custom", "Custom");
+      const finishScratch = () => {
+        void restoreSnaps().then(() => finish({ custom: true }));
+      };
+      const scratchBtn = document.createElement("ha-button");
+      scratchBtn.slot = "secondaryAction";
+      scratchBtn.appearance = "plain";
+      scratchBtn.hidden = true;
+      scratchBtn.textContent = this._t(
+        "frontend.dialogs.scene_theme_start_scratch",
+        "Start from scratch"
+      );
+      scratchBtn.addEventListener("click", () => finishScratch());
       const useBtn = document.createElement("ha-button");
       useBtn.slot = "primaryAction";
       useBtn.variant = "brand";
-      useBtn.disabled = true;
-      useBtn.toggleAttribute("disabled", true);
-      useBtn.textContent = this._t("frontend.dialogs.scene_theme_use", "Use circadian preset");
+      useBtn.textContent = this._t(
+        "frontend.dialogs.scene_theme_from_scratch",
+        "Create from scratch"
+      );
+      const markChoice = (row, on) => {
+        row.card.classList.toggle("selected", on);
+        row.slot.classList.toggle("glow-on", on);
+      };
       const choose = (kind, id) => {
         selectedKind = kind;
         selectedId = id;
         paintSelection();
+        void applyPreview();
       };
       const paintSelection = () => {
-        for (const row of choices) {
-          row.el.classList.toggle(
-            "selected",
-            selectedKind === "user" && row.id === selectedId
-          );
+        for (const row of rows) {
+          markChoice(row, selectedKind === "user" && row.id === selectedId);
         }
         for (const card of cards) {
-          card.el.classList.toggle(
-            "selected",
-            selectedKind === "preset" && card.id === selectedId
-          );
+          markChoice(card, selectedKind === "preset" && card.id === selectedId);
         }
-        const ready = Boolean(selectedKind && selectedId);
-        useBtn.disabled = !ready;
-        useBtn.toggleAttribute("disabled", !ready);
+        const hasPreset = Boolean(selectedKind && selectedRecord());
+        useBtn.textContent = hasPreset
+          ? this._t(
+              "frontend.dialogs.scene_theme_from_preset",
+              "Create from this preset"
+            )
+          : this._t(
+              "frontend.dialogs.scene_theme_from_scratch",
+              "Create from scratch"
+            );
+        scratchBtn.hidden = !hasPreset;
       };
-      custom.addEventListener("click", () => finish({ custom: true }));
       useBtn.addEventListener("click", () => {
+        if (!selectedKind) {
+          finishScratch();
+          return;
+        }
+        const deliver = (value) => {
+          const keepPreview = this._readRoomPreviewPref() && Boolean(snaps);
+          if (!keepPreview) {
+            void restoreSnaps().then(() => finish(value));
+            return;
+          }
+          snaps = null;
+          finish(value);
+        };
         if (selectedKind === "user") {
           const theme = themes.find((item) => item.id === selectedId);
           if (theme) {
-            finish({ theme });
+            deliver({ theme });
           }
           return;
         }
         const preset = galleryTheme(selectedId);
         if (preset) {
-          finish({ preset });
+          deliver({ preset });
         }
       });
-      footer.append(custom, useBtn);
+      footer.append(scratchBtn, useBtn);
       dialog.appendChild(footer);
       paintSelection();
       dialog.addEventListener("closed", () => {
         dialog.remove();
-        finish(null);
+        if (!settled) {
+          void restoreSnaps().then(() => finish(null));
+        }
       });
       this.shadowRoot.appendChild(dialog);
     });
@@ -7865,7 +8082,7 @@ class SceneStudioPanel extends HTMLElement {
     const beforeTarget = this._historyTarget();
     try {
       if (kind === "scene") {
-        const choice = await this._chooseCircadianTheme();
+        const choice = await this._chooseCircadianTheme({ areaId });
         if (!choice) {
           return;
         }
@@ -8557,6 +8774,7 @@ class SceneStudioPanel extends HTMLElement {
       }
     }
     this._syncWorkspaceScrollport();
+    this._syncSceneUsed();
   }
 
   async _saveTheme() {
@@ -9237,21 +9455,8 @@ class SceneStudioPanel extends HTMLElement {
     this._drawSunPath();
   }
 
-  _patchDialFromSession({ applyTheme = false } = {}) {
-    if (applyTheme && this._editingThemeLook()) {
-      this._rebuildThemeDial();
-      this._syncThemePreviewSurfaces();
-      return;
-    }
-    if (this._view === "theme") {
-      this._rebuildThemeDial();
-      return;
-    }
-    if (this._view !== "edit" || !this._sunPath?.lights || !this._sunPath?.events) {
-      return;
-    }
-    const events = this._sunPath.events;
-    const lights = this._sunPath.lights.map((light) => {
+  _dialLightsFromSession(lights, events, { applyTheme = false } = {}) {
+    const next = (lights || []).map((light) => {
       if (light.suggested || light.theme_ring) {
         return light;
       }
@@ -9287,12 +9492,45 @@ class SceneStudioPanel extends HTMLElement {
       });
       return { ...light, event_states };
     });
+    return resampleLightsForEvents(next, events, draftRgb, {
+      intermediatesPerSegment: 5,
+    });
+  }
+
+  /** Replace ring samples with the solar-event resample. Does not paint. */
+  _applySettledDialSamples({ applyTheme = false } = {}) {
+    if (!this._sunPath?.lights || !this._sunPath?.events) {
+      return false;
+    }
+    if (this._view === "theme" || (applyTheme && this._editingThemeLook())) {
+      return false;
+    }
+    if (this._view !== "edit") {
+      return false;
+    }
+    void this._ensureThemeDraft();
     this._sunPath = {
       ...this._sunPath,
-      lights: resampleLightsForEvents(lights, events, draftRgb, {
-        intermediatesPerSegment: 5,
+      lights: this._dialLightsFromSession(this._sunPath.lights, this._sunPath.events, {
+        applyTheme,
       }),
     };
+    return true;
+  }
+
+  _patchDialFromSession({ applyTheme = false } = {}) {
+    if (applyTheme && this._editingThemeLook()) {
+      this._rebuildThemeDial();
+      this._syncThemePreviewSurfaces();
+      return;
+    }
+    if (this._view === "theme") {
+      this._rebuildThemeDial();
+      return;
+    }
+    if (!this._applySettledDialSamples({ applyTheme })) {
+      return;
+    }
     if (this._clockRingsHost?.isConnected && this._patchLightClock(this._sunPath)) {
       this._displayedSunPath = this._sunPath;
     } else {
@@ -10486,18 +10724,27 @@ class SceneStudioPanel extends HTMLElement {
       this._saveSoon();
       return;
     }
+    const savingId = this._editId;
+    const savingData = this._formData;
     this._saving = true;
     this._error = null;
     try {
       await this._flushNativeDrafts();
       const saved = await this._hass.callWS({
         type: `${DOMAIN}/save`,
-        scene_id: this._editId || undefined,
-        data: this._formData,
+        scene_id: savingId || undefined,
+        data: savingData,
       });
-      const wasNew = !this._editId;
-      this._editId = saved.id;
       this._upsertSceneInList(saved);
+      // A solar-event sidebar closes with an unawaited save. If the user
+      // already opened another scene, writing this id back deselects that card.
+      const stayed = this._view === "edit" && this._editId === savingId;
+      if (!stayed) {
+        this._syncRailSelection();
+        return;
+      }
+      const wasNew = !savingId;
+      this._editId = saved.id;
       this._sessionBaseline = this._snapshotSession();
       this._clearPersistedDraft();
       this._clearPersistedDraft("new");
@@ -10530,13 +10777,16 @@ class SceneStudioPanel extends HTMLElement {
     if (!(this._themeDraft.name || "").trim()) {
       return;
     }
+    const savingThemeId = this._themeId;
+    const savingDraft = this._themeDraft;
     try {
       const saved = await this._hass.callWS({
         type: `${DOMAIN}/save_theme`,
-        data: this._themeDraft,
+        data: savingDraft,
       });
       this._adoptSavedTheme(saved);
-      if (this._view === "theme") {
+      const stayed = this._view === "theme" && this._themeId === savingThemeId;
+      if (stayed) {
         this._themeId = saved.id;
         this._sessionBaseline = this._snapshotSession();
         if (this._currentHash() !== `theme/${saved.id}`) {
@@ -16667,57 +16917,25 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _commitSunPath(payload, key) {
-    const prepared = this._withClientLightSamples(payload);
     const decorated = {
-      ...prepared,
-      lights: this._decorateMembershipLights(prepared?.lights),
+      ...payload,
+      lights: this._decorateMembershipLights(payload?.lights),
     };
     const from = this._displayedSunPath || this._sunPath;
-    const morphMs = this._takePathMorphMs(from, decorated);
     this._sunPath = decorated;
     this._sunPathKey = key;
-    if (morphMs && from && from !== decorated) {
-      this._morphSunPath(from, decorated, morphMs);
+    // Settled preview matches the scene card: theme + overrides, darkened
+    // between solar events. The HA sample grid and a CSS lerp of five knots
+    // both stay a warm wash until a solar event is opened.
+    this._applySettledDialSamples({ applyTheme: true });
+    const to = this._sunPath;
+    const morphMs = this._takePathMorphMs(from, to);
+    if (morphMs && from && from !== to) {
+      this._morphSunPath(from, to, morphMs);
       return;
     }
     this._drawSunPath();
     void this._resumeRoomPreviewIfPreferred();
-  }
-
-  /**
-   * Settled DOMAIN/preview includes mid-segment samples from HA extrapolators.
-   * Keep those for dial and table. Mid-scrub / client sun days stay knotsOnly
-   * — never RGB-densify a 5-minute grid (that disagrees with runtime HS-rim).
-   */
-  _withClientLightSamples(payload) {
-    const lights = payload?.lights;
-    const events = payload?.events;
-    if (!lights?.length || !events?.length) {
-      return payload;
-    }
-    if (this._hasAuthoritativeLightSamples(lights)) {
-      return payload;
-    }
-    const hasKnots = lights.some(
-      (light) => !light.suggested && (light.event_states || []).length
-    );
-    if (!hasKnots) {
-      return payload;
-    }
-    return {
-      ...payload,
-      lights: resampleLightsForEvents(lights, events, draftRgb, {
-        knotsOnly: true,
-      }),
-    };
-  }
-
-  _hasAuthoritativeLightSamples(lights) {
-    return (lights || []).some(
-      (light) =>
-        !light.suggested &&
-        (light.samples?.length || 0) >= AUTHORITATIVE_SAMPLE_MIN
-    );
   }
 
   _cancelSunPathMorph() {
@@ -17792,7 +18010,11 @@ class SceneStudioPanel extends HTMLElement {
       }
     }
     this._syncYearScrub();
-    if (this._toolbarChrome?.isConnected && this._view === "edit" && this._formData?.kind !== "simple") {
+    if (
+      this._toolbarChrome?.isConnected &&
+      (this._view === "theme" ||
+        (this._view === "edit" && this._formData?.kind !== "simple"))
+    ) {
       this._syncSceneUsed();
     }
     if (landscapeClock) {
@@ -17884,6 +18106,21 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _syncSceneUsed() {
+    if (this._view === "theme") {
+      const strip = renderThemePresetSource(this);
+      const host = this._toolbarChrome;
+      const previous = this.shadowRoot?.querySelector(".scene-used");
+      if (!host || !strip) {
+        previous?.remove();
+      } else if (previous && previous.parentNode === host) {
+        previous.replaceWith(strip);
+      } else {
+        previous?.remove();
+        host.append(strip);
+      }
+      this._syncLibraryUsedBy();
+      return;
+    }
     if (this._view === "palette") {
       const strip = renderPaletteUsed(this);
       const host = this.shadowRoot?.querySelector(".simple-editor");
@@ -20708,7 +20945,16 @@ class SceneStudioPanel extends HTMLElement {
     face.append(horizonBack, glowLayer, core, faceTicks);
 
     const editable = this._view === "edit" || this._view === "theme";
-    void this._ensureThemeDraft();
+    const hadTheme = Boolean(this._themeDraft);
+    void this._ensureThemeDraft().then((ok) => {
+      if (!ok || hadTheme || !this.isConnected) {
+        return;
+      }
+      if (this._view !== "edit" || this._formData?.kind === "simple") {
+        return;
+      }
+      this._patchDialFromSession({ applyTheme: true });
+    });
     const eventLayer = document.createElement("div");
     eventLayer.className = "clock-event-layer";
     const briSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");

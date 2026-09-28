@@ -42,6 +42,7 @@ import {
 function wheelPinMorph(panel, ids) {
   const pins = panel._wheelMorphPins;
   if (!pins) {
+    panel._wheelMorphConsumedPins = null;
     return { pinFlip: panel._wheelPinFlip || null, fadePinIds: null };
   }
   panel._wheelMorphPins = null;
@@ -53,14 +54,31 @@ function wheelPinMorph(panel, ids) {
   }
   const pinFlip = new Map();
   const fadePinIds = new Set();
-  ids.forEach((id, i) => {
-    const prev = byId.get(id) || (!byId.size ? pins[i] : null);
-    if (prev) {
-      pinFlip.set(id, { x: prev.x, y: prev.y });
-    } else {
-      fadePinIds.add(id);
+  const used = new Set();
+  for (const id of ids) {
+    const prev = byId.get(id);
+    if (!prev) {
+      continue;
     }
-  });
+    pinFlip.set(id, { x: prev.x, y: prev.y });
+    used.add(prev);
+  }
+  // Shared lights fly to themselves. Leftover pins (another area's lights)
+  // pair in list order so the first dot takes the new title and color
+  // instead of fading out while a new dot pops in.
+  const leftoverPins = pins.filter((pin) => pin && !used.has(pin));
+  const leftoverIds = ids.filter((id) => !pinFlip.has(id));
+  const shared = Math.min(leftoverPins.length, leftoverIds.length);
+  const consumed = new Set();
+  for (let i = 0; i < shared; i += 1) {
+    const prev = leftoverPins[i];
+    pinFlip.set(leftoverIds[i], { x: prev.x, y: prev.y });
+    consumed.add(prev);
+  }
+  for (let i = shared; i < leftoverIds.length; i += 1) {
+    fadePinIds.add(leftoverIds[i]);
+  }
+  panel._wheelMorphConsumedPins = consumed;
   return { pinFlip, fadePinIds };
 }
 

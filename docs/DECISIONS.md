@@ -1,5 +1,12 @@
 # Decisions
 
+## Leftover lights fly; a settled dial matches the card
+
+- **Date:** 2026-09-28
+- **Decision:** When two simple scenes share no lights, leftover pins and tiles pair in list order after the entity-id match. The first leftover pin and tile take the new title, brightness, and color. Only a true extra fades in or out. A settled circadian dial resamples from the theme plus per-light overrides (`intermediatesPerSegment: 5`), the same path as opening a solar event. A gallery scene or circadian preset leaves the starter list once any library item has that `builtin_id`. An in-flight save does not write `_editId` or `_themeId` after the editor has moved on. Clicking a scene card highlights it before the scene fetch returns, including while a solar-event sidebar is closing.
+- **Why:** Id-only morph faded every pin when the area changed. The preview sample grid stayed a warm wash until a solar event forced the event resample. Adopting a starter twice was easy because it stayed in the gallery. Closing the solar-event sidebar saved the previous scene after the next card was already open, so the rail kept the old selection.
+- **Do not reverse without user ask.**
+
 ## A phone dial shrinks; presets are the user-facing names
 
 - **Date:** 2026-09-28
