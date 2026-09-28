@@ -3,7 +3,13 @@
 import { createSimpleCardMesh } from "./card_mesh.js";
 import { draftRgb, swatchRgb, variableSwatchCss } from "./color_ui.js";
 import { compareScenesForList, stripAreaPrefix } from "./display_names.js";
-import { galleryCoverUrl, galleryPalette, galleryTheme } from "./gallery.js";
+import {
+  galleryCoverUrl,
+  galleryPalette,
+  galleryTheme,
+  paletteMatchesGallery,
+  themeMatchesGallery,
+} from "./gallery.js";
 import { PALETTE_SLOT_COUNT, paletteSwatchCss, resolveSlot, variableIsPalette } from "./palette.js";
 import { sceneLibraryUses, scenesUsingLibraryItem } from "./scene_used.js";
 
@@ -203,11 +209,12 @@ export const LANDING_CSS = `
     left: 0;
     z-index: 4;
     width: max-content;
-    max-width: min(240px, 46vw);
+    max-width: min(520px, 70vw);
     pointer-events: none;
   }
   .sun-toolbar-chrome > .scene-used .scene-used-chip,
-  .sun-toolbar-chrome > .scene-used .scene-palette-split {
+  .sun-toolbar-chrome > .scene-used .scene-palette-split,
+  .sun-toolbar-chrome > .scene-used .scene-used-reset {
     pointer-events: auto;
   }
   .library-used-by {
@@ -237,7 +244,8 @@ export const LANDING_CSS = `
     pointer-events: none;
   }
   .simple-editor > .scene-used .scene-used-chip,
-  .simple-editor > .scene-used .scene-palette-split {
+  .simple-editor > .scene-used .scene-palette-split,
+  .simple-editor > .scene-used .scene-used-reset {
     pointer-events: auto;
   }
   /* Phone: one horizontal strip above the disk. It stays in the column so the
@@ -302,38 +310,26 @@ export const LANDING_CSS = `
     color: var(--secondary-text-color);
     font-weight: 400;
   }
-  .scene-used-chip.is-source {
-    cursor: default;
-    flex-wrap: wrap;
-    max-width: 220px;
-  }
-  .scene-used-reset {
-    flex-basis: 100%;
-    margin: 0;
-    padding: 0 4px;
-    border: 0;
-    background: none;
-    color: var(--primary-color);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .library-used-by-trigger {
+  .scene-used-source {
     display: inline-flex;
+    flex-flow: row nowrap;
     align-items: center;
     gap: 2px;
-    margin: 0;
-    padding: 2px 0;
-    border: 0;
-    background: none;
-    color: var(--primary-text-color);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
+    min-width: 0;
+    max-width: 100%;
   }
-  .library-used-by-trigger ha-icon {
+  .scene-used-chip.is-source {
+    cursor: default;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .scene-used-reset {
+    flex: 0 0 auto;
+  }
+  .scene-used-reset[hidden] {
+    display: none !important;
+  }
+  .library-used-by ha-button {
     --mdc-icon-size: 18px;
   }
   .scene-used-chip {
@@ -407,8 +403,9 @@ export const LANDING_CSS = `
     flex: 0 0 auto;
     width: 100%;
   }
-  /* Desktop dial sits 24px under the app bar. A phone dial is not in this column. */
-  .stage-col .sun-path.dial-view {
+  /* Push only the face down. Margin on the whole dial view left a black band
+     above Play scene live and the date chips. A phone dial is not in this column. */
+  .stage-col .sun-path.dial-view .sun-light-clock-face {
     margin-top: 24px;
   }
   /* Fill the scrollport so the light tiles sit on the bottom. The column
@@ -865,12 +862,30 @@ export const LANDING_CSS = `
     margin: 0 0 16px;
   }
   .var-dot {
+    position: relative;
     width: 44px;
     height: 44px;
-    border-radius: 50%;
+    box-sizing: border-box;
+    /* Fixed radius so a wider selected chip is a pill, not a stretched ellipse. */
+    border-radius: 22px;
     border: 2px solid rgba(255,255,255,0.35);
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  /* Outside the fill, 2px away, same as a selected color-mode disc. */
+  .var-dot::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 26px;
+    border: 2px solid #fff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  :host(:not([data-dark-mode])) .var-chip.selected .var-dot::after {
+    border-color: var(--primary-color);
   }
   .var-chip {
     display: flex;
@@ -898,30 +913,25 @@ export const LANDING_CSS = `
     --mdc-icon-button-size: 28px;
     color: var(--primary-text-color);
   }
-  /* Color presets: the menu covers the dot if it is always visible. It sits
-     in the extra width of a selected chip. */
-  .library-chip:has(.var-chip) .library-chip-menu {
-    display: none;
-  }
-  .library-chip:has(.var-chip.selected) .library-chip-menu {
-    display: block;
-    top: 8px;
-    right: 2px;
-  }
-  .var-dot {
-    transition: width 180ms ease, box-shadow 180ms ease;
-  }
-  .var-chip {
-    transition: transform 180ms ease;
-  }
-  .var-chip.selected {
-    transform: scale(1.1);
+  /* The menu rides the right half of the pill. Hidden until the chip is selected
+     so it does not cover the round swatch. */
+  .var-dot > .library-chip-menu {
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1);
   }
   .var-chip.selected .var-dot {
     width: 88px;
-    box-shadow:
-      inset 0 0 0 2px #fff,
-      0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+  .var-chip.selected .var-dot::after {
+    opacity: 1;
+  }
+  .var-chip.selected .var-dot > .library-chip-menu {
+    opacity: 1;
+    pointer-events: auto;
   }
   .library-chip-menu ha-icon-button {
     border-radius: 50%;
@@ -2022,6 +2032,8 @@ function libraryOverflow(panel, kind, item) {
       void panel._duplicateLibraryItem(kind, item);
     }
   });
+  slot.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+  slot.addEventListener("click", (ev) => ev.stopPropagation());
   slot.appendChild(menu);
   return slot;
 }
@@ -2157,8 +2169,35 @@ function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kin
 function libraryChip(panel, chip, kind, item) {
   const wrap = document.createElement("div");
   wrap.className = "library-chip";
-  wrap.append(chip, libraryOverflow(panel, kind, item));
+  const menu = libraryOverflow(panel, kind, item);
+  const dot = chip.querySelector(":scope > .var-dot");
+  if (dot) {
+    dot.appendChild(menu);
+    wrap.appendChild(chip);
+    return wrap;
+  }
+  wrap.append(chip, menu);
   return wrap;
+}
+
+function presetResetButton(panel, kind) {
+  const reset = document.createElement("ha-button");
+  reset.className = "scene-used-reset";
+  reset.appearance = "plain";
+  reset.size = "small";
+  reset.hidden =
+    kind === "theme"
+      ? themeMatchesGallery(panel._themeDraft, panel._variables)
+      : paletteMatchesGallery(panel._variableDraft);
+  reset.textContent = panel._t(
+    "frontend.library.reset_preset",
+    "Reset to preset default"
+  );
+  reset.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    panel._confirmResetPreset?.(kind);
+  });
+  return reset;
 }
 
 function renderLibrary(panel, { compact } = {}) {
@@ -2197,20 +2236,34 @@ function renderLibrary(panel, { compact } = {}) {
   const varRow = document.createElement("div");
   varRow.className = "var-row";
   for (const variable of colors) {
-    const chip = document.createElement("button");
-    chip.type = "button";
+    const chip = document.createElement("div");
     chip.className = "var-chip";
+    chip.setAttribute("role", "button");
+    chip.tabIndex = 0;
     chip.dataset.itemId = variable.id;
-    if (panel._view === "variable" && panel._variableId === variable.id) {
-      chip.classList.add("selected");
-    }
     const dot = document.createElement("div");
     dot.className = "var-dot";
     dot.style.background = variableSwatchCss(variable, panel._variables);
     const name = document.createElement("span");
     name.textContent = variable.name;
     chip.append(dot, name);
-    chip.addEventListener("click", () => panel._openVariableEditor(variable));
+    const open = () => panel._openVariableEditor(variable);
+    chip.addEventListener("click", (ev) => {
+      if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
+        return;
+      }
+      open();
+    });
+    chip.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") {
+        return;
+      }
+      if (ev.target.closest?.("ha-dropdown, ha-icon-button")) {
+        return;
+      }
+      ev.preventDefault();
+      open();
+    });
     varRow.appendChild(libraryChip(panel, chip, "variable", variable));
   }
   wrap.appendChild(libraryBlock(varHead, varRow));
@@ -2318,19 +2371,10 @@ export function renderPaletteUsed(panel) {
     name.textContent = panel._t(preset.nameKey, preset.name);
     chip.appendChild(name);
     chip.setAttribute("aria-label", name.textContent);
-    const reset = document.createElement("button");
-    reset.type = "button";
-    reset.className = "scene-used-reset";
-    reset.textContent = panel._t(
-      "frontend.library.reset_preset",
-      "Reset to preset default"
-    );
-    reset.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      panel._confirmResetPreset?.("palette");
-    });
-    chip.appendChild(reset);
-    row.appendChild(chip);
+    const source = document.createElement("div");
+    source.className = "scene-used-source";
+    source.append(chip, presetResetButton(panel, "palette"));
+    row.appendChild(source);
   }
   const seen = new Set();
   for (const slot of draft.slots || []) {
@@ -2512,20 +2556,12 @@ export function renderThemePresetSource(panel) {
   paintThemeDial(swatch, preset, panel._variables || []);
   const name = document.createElement("span");
   name.textContent = panel._t(preset.nameKey, preset.name);
-  const reset = document.createElement("button");
-  reset.type = "button";
-  reset.className = "scene-used-reset";
-  reset.textContent = panel._t(
-    "frontend.library.reset_preset",
-    "Reset to preset default"
-  );
-  reset.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    panel._confirmResetPreset?.("theme");
-  });
-  chip.append(swatch, name, reset);
+  chip.append(swatch, name);
   chip.setAttribute("aria-label", name.textContent);
-  row.appendChild(chip);
+  const source = document.createElement("div");
+  source.className = "scene-used-source";
+  source.append(chip, presetResetButton(panel, "theme"));
+  row.appendChild(source);
   return row;
 }
 
@@ -2543,9 +2579,10 @@ export function renderLibraryUsedBy(panel, { kind, id }) {
   const row = document.createElement("div");
   row.className = "library-used-by";
   const menu = document.createElement("ha-dropdown");
-  const trigger = document.createElement("button");
-  trigger.type = "button";
-  trigger.className = "library-used-by-trigger";
+  const trigger = document.createElement("ha-button");
+  trigger.appearance = "plain";
+  trigger.size = "small";
+  trigger.withEnd = true;
   trigger.slot = "trigger";
   const count = scenes.length;
   const label = document.createElement("span");
@@ -2554,6 +2591,7 @@ export function renderLibraryUsedBy(panel, { kind, id }) {
       ? panel._t("frontend.library.used_in_one", "Used in 1 scene")
       : panel._t("frontend.library.used_in", "Used in {count} scenes", { count });
   const chevron = document.createElement("ha-icon");
+  chevron.slot = "end";
   chevron.setAttribute("icon", "mdi:chevron-down");
   trigger.append(label, chevron);
   menu.appendChild(trigger);

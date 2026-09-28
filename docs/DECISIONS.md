@@ -1,5 +1,12 @@
 # Decisions
 
+## A selected color preset is a pill
+
+- **Date:** 2026-09-28
+- **Decision:** A selected color preset grows from a 44px circle to an 88px pill with the same 22px corner radius. The white ring sits 2px outside the fill, like a selected color-mode disc. The overflow menu fades in on the right half of that pill. Reset to preset default is a plain text button beside the source chip, and it is hidden while the copy still matches the gallery preset. “Used in N scenes” is a plain text button too.
+- **Why:** Stretching the circle with an inset border covered the color and left no room for the menu. A bare text node had no hover or press state. The reset action was always on screen, including when there was nothing to restore.
+- **Do not reverse without user ask.**
+
 ## Leftover lights fly; a settled dial matches the card
 
 - **Date:** 2026-09-28
@@ -11,14 +18,14 @@
 
 - **Date:** 2026-09-28
 - **Supersedes in part:** “Narrow editor fills the screen” — a narrow dial no longer scrolls once the face hits the color-wheel floor. “Desktop header stays put” — Live edit is not in the narrow header.
-- **Decision:** On a phone the circadian face is centered in the space above the light tiles and may shrink below the color-wheel floor so the page does not scroll. A wide dial keeps that floor and has 24px above the dial view. Light tiles are grouped again whenever a selector sits on the strip outside a group. The narrow overflow menu holds Live edit; undo and redo stay as header buttons. Library copy says scene presets, color presets, and circadian presets. Stored kinds stay `palette`, `variable`, and `theme`.
+- **Decision:** On a phone the circadian face is centered in the space above the light tiles and may shrink below the color-wheel floor so the page does not scroll. A wide dial keeps that floor. The face itself sits 24px lower; the play row and date chips stay at the top of the column. Light tiles are grouped again whenever a selector sits on the strip outside a group. The narrow overflow menu holds Live edit; undo and redo stay as header buttons. Library copy says scene presets, color presets, and circadian presets. Stored kinds stay `palette`, `variable`, and `theme`.
 - **Why:** A matching group signature left a rebuilt tile list flat. The floor plus a scrollbar hid the tiles on a short phone. Palette, variable, and theme did not say how the three lists relate.
 - **Do not reverse without user ask.**
 
 ## Scene changes keep the dial and one rail paint
 
 - **Date:** 2026-09-28
-- **Decision:** Circadian scene to circadian scene leaves the dial mounted and lerps the new path. The list rail is not rebuilt for that switch. A hash write is handled once: Home Assistant fires both `hashchange` and `location-changed`. The exit layer strips leftover enter classes before it scales away. A scene card can be opened again after it is deselected, because that card stays in the rail.
+- **Decision:** Circadian scene to circadian scene leaves the dial mounted and lerps the new path. The preview key includes the scene and its theme, so two scenes in one area do not keep each other's ring colors. The list rail is not rebuilt for that switch. A hash write is handled once: Home Assistant fires both `hashchange` and `location-changed`. The exit layer strips leftover enter classes before it scales away. A scene card can be opened again after it is deselected, because that card stays in the rail.
 - **Why:** Forgetting the dial popped the rings and tiles. A second hash pass rebuilt the editor while the first animation was still running, and a leftover enter class restarted scale(0.92) inside the exit.
 - **Do not reverse without user ask.**
 

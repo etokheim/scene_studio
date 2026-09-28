@@ -805,6 +805,38 @@ export function themeDraftSignature(draft, variables) {
   return `color:${themeColorSignature(draft, draft.brightness)}`;
 }
 
+const GALLERY_EVENT_IDS = ["dawn", "sunrise", "noon", "sunset", "dusk"];
+
+/** True when a theme draft still matches the gallery preset it was copied from. */
+export function themeMatchesGallery(draft, variables) {
+  const preset = galleryTheme(draft?.builtin_id);
+  if (!preset) {
+    return true;
+  }
+  return GALLERY_EVENT_IDS.every(
+    (id) =>
+      themeEventSignature(draft?.events?.[id], variables) ===
+      themeEventSignature(preset.events?.[id], variables)
+  );
+}
+
+/** True when palette slots still match the gallery preset they were copied from. */
+export function paletteMatchesGallery(draft) {
+  const preset = galleryPalette(draft?.builtin_id);
+  if (!preset) {
+    return true;
+  }
+  const slots = draft?.slots || [];
+  const source = preset.slots || [];
+  if (slots.length !== source.length) {
+    return false;
+  }
+  return slots.every(
+    (slot, index) =>
+      paletteSlotSignature(slot) === paletteSlotSignature(source[index])
+  );
+}
+
 export function paletteSlotSignature(slot) {
   if (!slot || typeof slot !== "object") {
     return "";

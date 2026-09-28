@@ -5,9 +5,11 @@ import {
   galleryCopyName,
   galleryPalette,
   galleryTheme,
+  paletteMatchesGallery,
   paletteSlotSignature,
   themeDraftSignature,
   themeEventSignature,
+  themeMatchesGallery,
 } from "../../custom_components/scene_studio/frontend/gallery.js";
 
 test("a repeated picture palette gets the next free name", () => {
@@ -59,6 +61,41 @@ test("a theme event matches its preset until the palette or brightness changes",
   );
 });
 
+test("reset stays hidden until a copied preset changes", () => {
+  const wool = galleryPalette("wool");
+  assert.equal(paletteMatchesGallery({ builtin_id: "wool", slots: wool.slots }), true);
+  const changed = structuredClone(wool.slots);
+  changed[0] = { ...changed[0], brightness: changed[0].brightness - 10 };
+  assert.equal(paletteMatchesGallery({ builtin_id: "wool", slots: changed }), false);
+  assert.equal(paletteMatchesGallery({ slots: [] }), true);
+
+  const daylight = galleryTheme("daylight");
+  const draft = {
+    builtin_id: "daylight",
+    events: {
+      dawn: { color: daylight.events.dawn.color, brightness: daylight.events.dawn.brightness },
+      sunrise: daylight.events.sunrise,
+      noon: daylight.events.noon,
+      sunset: daylight.events.sunset,
+      dusk: daylight.events.dusk,
+    },
+  };
+  assert.equal(themeMatchesGallery(draft, []), true);
+  assert.equal(
+    themeMatchesGallery(
+      {
+        ...draft,
+        events: {
+          ...draft.events,
+          dawn: { ...draft.events.dawn, brightness: draft.events.dawn.brightness - 10 },
+        },
+      },
+      []
+    ),
+    false
+  );
+});
+
 test("a palette slot matches its built-in color until something changes", () => {
   const source = galleryPalette("wool");
   assert.ok(source);
@@ -70,3 +107,4 @@ test("a palette slot matches its built-in color until something changes", () => 
   );
   assert.equal(paletteSlotSignature({ variable_ref: "other" }), "ref:other");
 });
+

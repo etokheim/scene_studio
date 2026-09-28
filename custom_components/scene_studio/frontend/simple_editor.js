@@ -2114,6 +2114,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     panel._beginSimpleUndo?.();
     working.slots[index] = draftToSlot(drafts[id]);
     panel._saveSoon();
+    panel._syncPresetReset?.();
   };
   const getState = () => ({
     scenes: ids.map((id, index) => ({

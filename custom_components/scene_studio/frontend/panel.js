@@ -31,8 +31,10 @@ import {
   gallerySections,
   galleryTheme,
   galleryThemes,
+  paletteMatchesGallery,
   themeDraftSignature,
   themeEventSignature,
+  themeMatchesGallery,
 } from "./gallery.js";
 import { defaultPaletteSlots, paletteIsMixed, paletteIsTemperatureOnly, paletteSwatchCss, samplePaletteWheel, variableIsPalette } from "./palette.js";
 import {
@@ -1105,7 +1107,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         .sun-path.dial-view {
           --dial-timeline-h: 0px;
-          /* The desktop stage rule adds 24px. This stays 0 so a phone dial,
+          /* The desktop face rule adds 24px. This stays 0 so a phone dial,
              which is not in .stage-col, stays flush under the app bar. */
           margin-top: 0;
           display: flex;
@@ -6076,11 +6078,38 @@ class SceneStudioPanel extends HTMLElement {
         }
       });
     }
+    const revealChips = [];
     for (const chip of root.querySelectorAll(".var-chip")) {
       const on =
-        (this._view === "palette" || this._view === "variable") &&
-        chip.dataset.itemId === this._variableId;
-      chip.classList.toggle("selected", on);
+        this._view === "variable" && chip.dataset.itemId === this._variableId;
+      const was = chip.classList.contains("selected");
+      if (on === was) {
+        continue;
+      }
+      if (!on) {
+        chip.classList.remove("selected");
+        continue;
+      }
+      // Same-turn .selected paints the pill at full width. The next frame
+      // lets the width and the outside ring transition.
+      if (this._prefersReducedMotion()) {
+        chip.classList.add("selected");
+        continue;
+      }
+      revealChips.push(chip);
+    }
+    if (revealChips.length) {
+      requestAnimationFrame(() => {
+        for (const chip of revealChips) {
+          if (!chip.isConnected) {
+            continue;
+          }
+          if (this._view !== "variable" || chip.dataset.itemId !== this._variableId) {
+            continue;
+          }
+          chip.classList.add("selected");
+        }
+      });
     }
   }
 
@@ -6186,7 +6215,7 @@ class SceneStudioPanel extends HTMLElement {
     } else if (this._view === "theme") {
       this._renderThemeEditor();
     } else if (this._view === "variable" || this._view === "palette") {
-      this._renderVariableEditor();
+      this._renderVariableEditor({ keepRail });
     } else {
       this._renderList({ keepRail });
     }
@@ -6508,7 +6537,21 @@ class SceneStudioPanel extends HTMLElement {
       this._railTab !== "library" &&
       (this._view === "edit" || this._view === "list") &&
       (hash === "" || /^edit\/.+/.test(hash || ""));
+    // Color preset → color preset keeps the chips so the pill can ease in
+    // and the previous one can ease back to a circle.
+    const libraryToLibrary =
+      !this._narrow &&
+      nextTab === "library" &&
+      this._railTab === "library" &&
+      this._view === "variable" &&
+      /^variable\/(?!new$).+/.test(hash || "");
     this._railTab = nextTab;
+    if (libraryToLibrary) {
+      this._keepAreaRail = true;
+      this._areaRailHoldScroll = true;
+      this._areaRailForceReveal = false;
+      return;
+    }
     if (scenesToScenes) {
       this._keepAreaRail = true;
       // List → edit may still scroll a card that is outside the scrollport.
@@ -6649,6 +6692,11 @@ class SceneStudioPanel extends HTMLElement {
         (Number.isFinite(padTop) ? padTop : 40) +
         (Number.isFinite(padBottom) ? padBottom : 16) +
         (Number.isFinite(gap) ? gap : 16);
+      const face = box.querySelector(".sun-light-clock-face");
+      const faceMargin = face ? parseFloat(getComputedStyle(face).marginTop) : 0;
+      if (Number.isFinite(faceMargin)) {
+        overhead += faceMargin;
+      }
     } else if (editor) {
       const disk = editor.querySelector(".hue-wheel-canvas");
       const diskH = disk?.getBoundingClientRect().height || 0;
@@ -8550,7 +8598,54 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
-  _renderVariableEditor() {
+  _libraryRailCanStay(page) {
+    const rail = page?.querySelector(":scope > .area-rail");
+    const stage = page?.querySelector(":scope > .stage-col");
+    if (!rail || !stage || this._railTab !== "library" || this._view !== "variable") {
+      return false;
+    }
+    if (!this._variableId) {
+      return true;
+    }
+    return Boolean(
+      rail.querySelector(
+        `.var-chip[data-item-id="${CSS.escape(this._variableId)}"]`
+      )
+    );
+  }
+
+  _paintVariableEditorInPlace() {
+    const page = this._contentEl?.querySelector(":scope > .workspace");
+    if (!this._libraryRailCanStay(page)) {
+      return false;
+    }
+    const stage = page.querySelector(":scope > .stage-col");
+    const working = this._variableDraft || this._variableWorkingCopy(null);
+    working.kind = "color";
+    this._variableDraft = working;
+    const scroll = this._stageScrollEl(stage);
+    if (scroll) {
+      scroll.scrollTop = 0;
+    }
+    const host = document.createElement("div");
+    host.className = "library-editor";
+    if (this._error) {
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = this._error;
+      host.appendChild(error);
+    }
+    scroll?.replaceChildren(host);
+    this._mountPageBanners(stage);
+    this._fillVariableEditor(host);
+    this._syncWorkspaceScrollport();
+    this._playSimpleEnterIfNeeded(host);
+    this._syncLibraryUsedBy();
+    this._syncRailSelection();
+    return true;
+  }
+
+  _renderVariableEditor({ keepRail = false } = {}) {
     this._syncAppBarTitle();
     this._setNavigationIcon(this._narrow ? this._backButton() : this._menuButton());
     this._setListActions();
@@ -8559,6 +8654,9 @@ class SceneStudioPanel extends HTMLElement {
     this._contentEl.classList.add("wide");
     const split = !this._narrow;
     this._contentEl.classList.toggle("workspace-split", split);
+    if (keepRail && this._view === "variable" && this._paintVariableEditorInPlace()) {
+      return;
+    }
     this._parkSunPath();
     const isPalette = this._view === "palette";
     const working = this._variableDraft || this._variableWorkingCopy(null);
@@ -8589,6 +8687,7 @@ class SceneStudioPanel extends HTMLElement {
       this._syncWorkspaceScrollport();
       this._playSimpleEnterIfNeeded(host);
       this._syncSceneUsed();
+      this._syncRailSelection();
       return;
     }
     this._fillVariableEditor(host);
@@ -8604,6 +8703,7 @@ class SceneStudioPanel extends HTMLElement {
     this._syncWorkspaceScrollport();
     this._playSimpleEnterIfNeeded(host);
     this._syncLibraryUsedBy();
+    this._syncRailSelection();
   }
 
   _fillVariableEditor(host) {
@@ -8928,6 +9028,7 @@ class SceneStudioPanel extends HTMLElement {
         brightness: value,
         assignment_seed: draft.assignment_seed ?? prev.assignment_seed ?? 0,
       };
+      this._syncPresetReset();
       return;
     }
     const color = {};
@@ -8948,6 +9049,21 @@ class SceneStudioPanel extends HTMLElement {
       brightness: value,
       assignment_seed: prev.assignment_seed ?? 0,
     };
+    this._syncPresetReset();
+  }
+
+  _syncPresetReset() {
+    const reset = this.shadowRoot?.querySelector(".scene-used-reset");
+    if (!reset) {
+      return;
+    }
+    const clean =
+      this._view === "theme"
+        ? themeMatchesGallery(this._themeDraft, this._variables)
+        : this._view === "palette"
+          ? paletteMatchesGallery(this._variableDraft)
+          : true;
+    reset.hidden = clean;
   }
 
   /** Selected lamp for dial brightness, else theme (including `theme:` ids). */
@@ -16874,6 +16990,10 @@ class SceneStudioPanel extends HTMLElement {
       overlay: this._previewOverlay,
       location: this._previewLocation,
       area: this._formData.area || null,
+      // Two circadian scenes in one area share lights and solar geometry.
+      // Without the scene and theme, the mounted dial keeps the previous colors.
+      scene: this._editId || null,
+      theme: this._formData?.theme_id || null,
       membership: this._formData.membership || { exclude: [], include: [] },
     });
   }
