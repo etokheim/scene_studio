@@ -110,8 +110,8 @@ const CLOCK_SCRUB_RAIL_PAD_PX = 16;
    width keep the portrait toolbar (avoids empty “black bar” side columns). */
 const CLOCK_LANDSCAPE_SCRUB_MIN_WIDTH_PX = 900;
 /** Color-wheel face floor; below this the stage column scrolls.
- *  The dial uses the same floor so a short window pushes the light tiles
- *  down instead of keeping a taller disk on screen. */
+ *  A wide dial uses the same floor. A narrow dial may shrink further so the
+ *  light tiles stay on screen without a page scrollbar. */
 const WHEEL_FACE_MIN_PX = 400;
 const DIAL_FACE_MIN_PX = WHEEL_FACE_MIN_PX;
 /** Color wheels (simple / variable) cap; the stage column stays full width. */
@@ -870,7 +870,9 @@ class SceneStudioPanel extends HTMLElement {
         }
         .sun-path.dial-view:has(.sun-path-stage.landscape-clock-scrub) .sun-light-clock {
           justify-content: flex-start;
-          padding-top: 4px;
+          /* The date row is absolute, so this pad keeps the face below it.
+             8px toolbar padding + 32px chip row. */
+          padding-top: 40px;
         }
         .sun-path.dial-view:has(.sun-path-stage.landscape-clock-scrub) .sun-light-clock-legend {
           margin-top: auto;
@@ -1102,8 +1104,8 @@ class SceneStudioPanel extends HTMLElement {
         }
         .sun-path.dial-view {
           --dial-timeline-h: 0px;
-          /* Flush under the app bar so horizon/bloom/ramp share one top edge
-             (margin left a strip where only some bleed painted). */
+          /* The desktop stage rule adds 24px. This stays 0 so a phone dial,
+             which is not in .stage-col, stays flush under the app bar. */
           margin-top: 0;
           display: flex;
           flex-direction: column;
@@ -3442,6 +3444,19 @@ class SceneStudioPanel extends HTMLElement {
         .live-edit-toggle[hidden] {
           display: none !important;
         }
+        .overflow-live-edit {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          box-sizing: border-box;
+          min-height: 48px;
+          padding: 8px 16px;
+          color: var(--primary-text-color);
+        }
+        .overflow-live-edit ha-switch {
+          --mdc-switch-track-width: 36px;
+        }
         .live-edit-toggle ha-switch {
           --mdc-switch-track-width: 36px;
         }
@@ -3451,12 +3466,29 @@ class SceneStudioPanel extends HTMLElement {
           font-size: 14px;
           line-height: 20px;
         }
+        .scene-palette-body {
+          display: flex;
+          flex-direction: column;
+          height: calc(92vh - 168px);
+          min-height: 240px;
+          max-height: calc(92vh - 168px);
+        }
         .scene-palette-list {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          max-height: min(640px, 68vh);
+          flex: 1 1 auto;
+          min-height: 0;
+          max-height: none;
           overflow: auto;
+          /* Room for a selected card's scale(1.1) inside the scrollport. */
+          padding: 14px 12px 18px;
+        }
+        .scene-palette-dialog .live-edit-toggle {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-inline-start: auto;
         }
         .scene-palette-choice {
           display: flex;
@@ -3514,9 +3546,23 @@ class SceneStudioPanel extends HTMLElement {
           margin-top: 0;
         }
         .scene-palette-list .scene-cards {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 20px;
+          width: 100%;
           flex-wrap: wrap;
           overflow: visible;
-          padding: 8px 4px 16px;
+          padding: 12px 8px 16px;
+        }
+        .scene-palette-list .scene-card-slot {
+          width: auto;
+          max-width: none;
+          max-height: none;
+          flex: none;
+        }
+        .scene-palette-list .scene-card {
+          max-width: none;
+          max-height: none;
         }
         .scene-gallery-grid {
           display: flex;
@@ -3978,16 +4024,13 @@ class SceneStudioPanel extends HTMLElement {
           padding-bottom: 0;
         }
         /* The dial page also has an empty .content.wide, so :has(.content.wide)
-           matches it and is more specific than .page.dial-wide. Keep the clip
-           on :not(.dial-wide) or the dial never scrolls. */
+           matches it and is more specific than .page.dial-wide. */
         :host([narrow]) .page:has(.content.wide):not(.dial-wide) {
           overflow: hidden;
         }
-        /* The dial page scrolls once the face hits the color-wheel floor.
-           The simple editor stays clipped and shrinks into the shell. */
+        /* The face shrinks to the leftover height. The page does not scroll. */
         :host([narrow]) .page.dial-wide {
-          overflow-x: clip;
-          overflow-y: auto;
+          overflow: hidden;
         }
         :host([narrow]) .content.wide {
           flex: 1 1 auto;
@@ -4004,8 +4047,8 @@ class SceneStudioPanel extends HTMLElement {
           flex: none;
         }
         :host([narrow]) .page.dial-wide > .sun-path.dial-view {
-          flex: 1 0 auto;
-          min-height: 100%;
+          flex: 1 1 auto;
+          min-height: 0;
           min-width: 0;
           width: 100%;
           display: flex;
@@ -4056,38 +4099,38 @@ class SceneStudioPanel extends HTMLElement {
         :host([narrow]) .sun-path.dial-view .sun-light-clock {
           flex: 1 1 auto;
           min-width: 0;
+          min-height: 0;
           width: 100%;
           display: flex;
           flex-direction: column;
           align-items: center;
         }
         :host([narrow]) .sun-path.dial-view .sun-light-clock {
-          padding-top: 0;
-          /* The 16px under the timeline is the scrub margin. Centering the
-             face left a much larger gap above it. */
+          padding: 0;
+          gap: 0;
           justify-content: flex-start;
-          /* Border box includes the 16px under the face, so the square
-             itself still stops at the color-wheel floor. */
-          min-height: calc(${DIAL_FACE_MIN_PX}px + 16px);
+          /* The face may shrink below the color-wheel floor so the tiles fit.
+             No extra pad: auto margins center the face between the date and tiles. */
+          min-height: 0;
+          flex: 1 1 auto;
           container-type: size;
         }
         :host([narrow]) .sun-path.dial-view .sun-light-clock-legend {
           flex: 0 0 auto;
           width: 100%;
-          margin-top: auto;
+          margin-top: 0;
           padding-bottom: var(--scene-safe-bottom, 0px);
         }
         :host([narrow]) .sun-light-clock-face {
           flex: 0 0 auto;
-          /* The clock is the budget: it grows into leftover space and stops
-             at the color-wheel floor. --dial-face-max is the old fit-without-
-             scrolling estimate, and on a narrow page nothing measures a stage
-             to replace it, so it must not shrink the face below that floor. */
-          width: min(100cqi, 100cqb);
+          /* --dial-face-max is the leftover height. margin-block centers the
+             face in the space above the tiles; the legend stays at the bottom. */
+          width: min(100%, var(--dial-face-max, 100%));
           max-width: 100%;
           height: auto;
-          max-height: none;
+          max-height: var(--dial-face-max, none);
           margin-inline: 0;
+          margin-block: auto;
         }
         /* Workspace (rail + .stage-col) always uses the full panel — same
            shell as the circadian dial, including simple/variable editors. */
@@ -5734,9 +5777,9 @@ class SceneStudioPanel extends HTMLElement {
     return new Set([
       this._untitledLabel(),
       this._t("frontend.common.new_scene", "New scene"),
-      this._t("frontend.library.new_variable", "New variable"),
-      this._t("frontend.library.new_palette", "New palette"),
-      this._t("frontend.library.new_theme", "New theme"),
+      this._t("frontend.library.new_variable", "New color preset"),
+      this._t("frontend.library.new_palette", "New scene preset"),
+      this._t("frontend.library.new_theme", "New circadian preset"),
     ]);
   }
 
@@ -5812,12 +5855,12 @@ class SceneStudioPanel extends HTMLElement {
 
   _suggestedLibraryName() {
     if (this._view === "palette") {
-      return this._t("frontend.naming.palette", "Palette");
+      return this._t("frontend.naming.palette", "Scene preset");
     }
     if (this._view === "theme") {
-      return this._t("frontend.naming.theme", "Theme");
+      return this._t("frontend.naming.theme", "Circadian preset");
     }
-    return this._t("frontend.naming.variable", "Variable");
+    return this._t("frontend.naming.variable", "Color preset");
   }
 
   _currentItemIsUnnamed() {
@@ -5835,13 +5878,13 @@ class SceneStudioPanel extends HTMLElement {
 
   _nameFabLabel() {
     if (this._view === "palette") {
-      return this._t("frontend.actions.name_palette", "Name palette");
+      return this._t("frontend.actions.name_palette", "Name scene preset");
     }
     if (this._view === "variable") {
-      return this._t("frontend.actions.name_variable", "Name variable");
+      return this._t("frontend.actions.name_variable", "Name color preset");
     }
     if (this._view === "theme") {
-      return this._t("frontend.actions.name_theme", "Name theme");
+      return this._t("frontend.actions.name_theme", "Name circadian preset");
     }
     return this._t("frontend.actions.name_scene", "Name scene");
   }
@@ -6525,11 +6568,17 @@ class SceneStudioPanel extends HTMLElement {
     this._faceSyncing = true;
     try {
     const stage = this._contentEl?.querySelector(".stage-col");
-    if (!stage) {
+    // A narrow dial has no stage column. Measure the page so the face can
+    // shrink into the space above the tiles.
+    const narrowDial = !stage && this._narrow && this._isDialView();
+    const measureRoot = stage || (narrowDial
+      ? this.shadowRoot?.querySelector(".page.dial-wide")
+      : null);
+    if (!measureRoot) {
       return;
     }
-    const scroll = this._stageScrollEl(stage);
-    const box = scroll || stage;
+    const scroll = stage ? this._stageScrollEl(stage) : null;
+    const box = scroll || measureRoot;
     const scrollH = box.clientHeight || 0;
     const scrollW = box.clientWidth || 0;
     if (scrollH < 1 || scrollW < 1) {
@@ -6643,13 +6692,15 @@ class SceneStudioPanel extends HTMLElement {
       ? Math.max(0, box.scrollHeight - spillTarget.offsetHeight)
       : 0;
     const available = budgetH - stripH - overhead - toolbarH - spill;
+    // Wide dials keep the color-wheel floor and scroll. A phone dial shrinks.
+    const floor = narrowDial ? 1 : minPx;
     const size = Math.max(
       1,
-      Math.floor(Math.min(widthCap, Math.max(minPx, available)))
+      Math.floor(Math.min(widthCap, Math.max(floor, available)))
     );
     const nextFace = `${size}px`;
-    const prevFace = stage.style.getPropertyValue("--dial-face-max");
-    stage.style.setProperty("--dial-face-max", nextFace);
+    const prevFace = measureRoot.style.getPropertyValue("--dial-face-max");
+    measureRoot.style.setProperty("--dial-face-max", nextFace);
     if (this._sunPathEl?.classList.contains("dial-view")) {
       this._sunPathEl.style.setProperty("--dial-face-max", nextFace);
     }
@@ -6957,7 +7008,7 @@ class SceneStudioPanel extends HTMLElement {
     return {
       getPalette: () => this._variables || [],
       onAddPalette: (draft) => this._addVariableFromCurrentDraft(draft),
-      addVariableLabel: this._t("frontend.library.add_variable", "Add variable"),
+      addVariableLabel: this._t("frontend.library.add_variable", "Add color preset"),
       onEditVariable: (id) => this._go(`variable/${id}`),
     };
   }
@@ -7170,7 +7221,7 @@ class SceneStudioPanel extends HTMLElement {
       dialog.className = "scene-theme-dialog";
       dialog.setAttribute(
         "header-title",
-        this._t("frontend.dialogs.scene_theme_select", "Select a theme")
+        this._t("frontend.dialogs.scene_theme_select", "Select a circadian preset")
       );
       dialog.open = true;
       let settled = false;
@@ -7230,12 +7281,12 @@ class SceneStudioPanel extends HTMLElement {
       dialog.setAttribute(
         "header-title",
         mode === "edit"
-          ? this._t("frontend.dialogs.scene_palette_select", "Select a palette")
+          ? this._t("frontend.dialogs.scene_palette_select", "Select a scene preset")
           : this._t("frontend.dialogs.scene_palette_title", "New scene")
       );
       dialog.open = true;
       let settled = false;
-      let selectedKind = mode === "edit" ? (paletteId ? "user" : "none") : null;
+      let selectedKind = mode === "edit" && paletteId ? "user" : null;
       let selectedId = mode === "edit" ? paletteId || null : null;
       let seed = (Math.random() * 0xffffffff) >>> 0;
       let snaps = null;
@@ -7291,7 +7342,7 @@ class SceneStudioPanel extends HTMLElement {
       hint.className = "scene-palette-hint";
       hint.textContent = this._t(
         "frontend.dialogs.scene_palette_hint",
-        "Pick one of your palettes, or start from a picture."
+        "Create a scene from a preset or start from scratch (current lighting)"
       );
       const liveToggle = document.createElement("label");
       liveToggle.className = "live-edit-toggle";
@@ -7307,12 +7358,12 @@ class SceneStudioPanel extends HTMLElement {
         this._syncRoomPreviewControl();
         void applyPreview();
       });
+      liveToggle.slot = "headerActionItems";
       liveToggle.append(liveLabel, liveSwitch);
       const list = document.createElement("div");
       list.className = "scene-palette-list";
       const rows = [];
       const cards = [];
-      let noneChip = null;
       const choose = (kind, id) => {
         selectedKind = kind;
         selectedId = id;
@@ -7334,7 +7385,8 @@ class SceneStudioPanel extends HTMLElement {
         title.className = "card-name";
         title.textContent = name;
         body.appendChild(title);
-        card.append(bg, body);
+        const ripple = document.createElement("ha-ripple");
+        card.append(bg, body, ripple);
         slot.appendChild(card);
         return { slot, card };
       };
@@ -7348,19 +7400,6 @@ class SceneStudioPanel extends HTMLElement {
         );
         return label;
       };
-      const none = paletteChoiceCard(
-        this._t("frontend.dialogs.scene_palette_none", "None"),
-        (bg) => {
-          bg.style.background =
-            "color-mix(in srgb, var(--secondary-background-color) 88%, var(--primary-text-color))";
-        }
-      );
-      none.card.addEventListener("click", () => choose("none", null));
-      noneChip = none;
-      const noneGrid = document.createElement("div");
-      noneGrid.className = "scene-cards";
-      noneGrid.appendChild(none.slot);
-      list.appendChild(noneGrid);
       const randomizeSeed = () => {
         seed = (Math.random() * 0xffffffff) >>> 0;
         void applyPreview();
@@ -7379,20 +7418,40 @@ class SceneStudioPanel extends HTMLElement {
         for (const card of cards) {
           markChoice(card, selectedKind === "gallery" && card.id === selectedId);
         }
-        if (noneChip) {
-          noneChip.card.classList.toggle("selected", selectedKind === "none");
-          noneChip.slot.classList.toggle("glow-on", selectedKind === "none");
+        const hasPreset = Boolean(selectedKind && selectedPalette());
+        if (mode === "edit") {
+          useBtn.textContent = hasPreset
+            ? this._t("frontend.dialogs.scene_palette_use", "Use this preset")
+            : this._t("frontend.dialogs.scene_palette_clear", "Clear preset");
+          scratchBtn.textContent = this._t(
+            "frontend.dialogs.scene_palette_clear",
+            "Clear preset"
+          );
+        } else {
+          useBtn.textContent = hasPreset
+            ? this._t(
+                "frontend.dialogs.scene_palette_from_preset",
+                "Create from this preset"
+              )
+            : this._t(
+                "frontend.dialogs.scene_palette_from_scratch",
+                "Create from scratch"
+              );
+          scratchBtn.textContent = this._t(
+            "frontend.dialogs.scene_palette_start_scratch",
+            "Start from scratch"
+          );
         }
-        const locked = selectedKind !== "none" && !selectedPalette();
-        useBtn.disabled = locked;
-        useBtn.toggleAttribute("disabled", locked);
+        scratchBtn.hidden = !hasPreset;
+        useBtn.disabled = false;
+        useBtn.toggleAttribute("disabled", false);
       };
       if (palettes.length) {
         const yours = document.createElement("p");
         yours.className = "scene-gallery-label";
         yours.textContent = this._t(
           "frontend.dialogs.scene_palette_yours",
-          "Your palettes"
+          "Your scene presets"
         );
         list.appendChild(yours);
       }
@@ -7461,23 +7520,35 @@ class SceneStudioPanel extends HTMLElement {
         }
         list.append(label, grid);
       }
-      dialog.append(hint, liveToggle, list);
+      const body = document.createElement("div");
+      body.className = "scene-palette-body";
+      body.append(hint, list);
+      dialog.append(liveToggle, body);
       const footer = customElements.get("ha-dialog-footer")
         ? document.createElement("ha-dialog-footer")
         : document.createElement("div");
       footer.slot = "footer";
+      const finishScratch = () => {
+        void restoreSnaps().then(() => finish({ palette: null }));
+      };
+      const scratchBtn = document.createElement("ha-button");
+      scratchBtn.slot = "secondaryAction";
+      scratchBtn.appearance = "plain";
+      scratchBtn.hidden = true;
+      scratchBtn.addEventListener("click", () => finishScratch());
       const useBtn = document.createElement("ha-button");
       useBtn.slot = "primaryAction";
       useBtn.variant = "brand";
-      useBtn.disabled = true;
-      useBtn.toggleAttribute("disabled", true);
       useBtn.textContent =
         mode === "edit"
-          ? this._t("frontend.dialogs.scene_palette_use", "Use palette")
-          : this._t("frontend.dialogs.scene_palette_create", "Create scene");
+          ? this._t("frontend.dialogs.scene_palette_clear", "Clear preset")
+          : this._t(
+              "frontend.dialogs.scene_palette_from_scratch",
+              "Create from scratch"
+            );
       useBtn.addEventListener("click", () => {
-        if (selectedKind === "none") {
-          void restoreSnaps().then(() => finish({ palette: null }));
+        if (!selectedKind) {
+          finishScratch();
           return;
         }
         const picked = selectedPalette();
@@ -7531,7 +7602,7 @@ class SceneStudioPanel extends HTMLElement {
             this._error = err.message || String(err);
           });
       });
-      footer.append(useBtn);
+      footer.append(scratchBtn, useBtn);
       dialog.appendChild(footer);
       paintSelection();
       dialog.addEventListener("closed", () => {
@@ -7663,7 +7734,7 @@ class SceneStudioPanel extends HTMLElement {
       hint.className = "scene-palette-hint";
       hint.textContent = this._t(
         "frontend.dialogs.scene_theme_hint",
-        "Pick one of your themes, or start from a preset."
+        "Pick one of your circadian presets, or start from a starter preset."
       );
       const list = document.createElement("div");
       list.className = "scene-palette-list";
@@ -7675,7 +7746,7 @@ class SceneStudioPanel extends HTMLElement {
         yours.className = "scene-gallery-label";
         yours.textContent = this._t(
           "frontend.dialogs.scene_theme_yours",
-          "Your themes"
+          "Your circadian presets"
         );
         list.appendChild(yours);
       }
@@ -7702,7 +7773,7 @@ class SceneStudioPanel extends HTMLElement {
       presetsLabel.className = "scene-gallery-label";
       presetsLabel.textContent = this._t(
         "frontend.dialogs.scene_theme_presets",
-        "Presets"
+        "Starter presets"
       );
       const grid = document.createElement("div");
       grid.className = "scene-gallery-grid";
@@ -7735,7 +7806,7 @@ class SceneStudioPanel extends HTMLElement {
       useBtn.variant = "brand";
       useBtn.disabled = true;
       useBtn.toggleAttribute("disabled", true);
-      useBtn.textContent = this._t("frontend.dialogs.scene_theme_use", "Use theme");
+      useBtn.textContent = this._t("frontend.dialogs.scene_theme_use", "Use circadian preset");
       const choose = (kind, id) => {
         selectedKind = kind;
         selectedId = id;
@@ -7884,7 +7955,7 @@ class SceneStudioPanel extends HTMLElement {
       if (kind === "theme") {
         const source = (this._themes || [])[0];
         if (!source?.events) {
-          this._error = this._t("frontend.library.theme_missing", "Theme not found");
+          this._error = this._t("frontend.library.theme_missing", "Circadian preset not found");
           this._render();
           return;
         }
@@ -8163,8 +8234,8 @@ class SceneStudioPanel extends HTMLElement {
       if (!variable) {
         const missing =
           this._view === "palette"
-            ? this._t("frontend.library.palette_missing", "Palette not found")
-            : this._t("frontend.library.variable_missing", "Variable not found");
+            ? this._t("frontend.library.palette_missing", "Scene preset not found")
+            : this._t("frontend.library.variable_missing", "Color preset not found");
         this._error = missing;
         this._view = "list";
         this._variableId = null;
@@ -8326,7 +8397,7 @@ class SceneStudioPanel extends HTMLElement {
     hint.className = "library-hint";
     hint.textContent = this._t(
       "frontend.library.variable_edit_hint",
-      "Color and brightness are shared by every theme or light that still uses this variable."
+      "Color and brightness are shared by every circadian preset or light that still uses this color preset."
     );
     host.append(hint);
     const draft = working.colorDraft;
@@ -8408,7 +8479,7 @@ class SceneStudioPanel extends HTMLElement {
       if (themeId === "new") {
         const source = (this._themes || [])[0];
         if (!source?.events) {
-          this._error = this._t("frontend.library.theme_missing", "Theme not found");
+          this._error = this._t("frontend.library.theme_missing", "Circadian preset not found");
           this._view = "list";
           this._themeId = null;
           this._themeDraft = null;
@@ -8427,7 +8498,7 @@ class SceneStudioPanel extends HTMLElement {
       }
       const theme = (this._themes || []).find((item) => item.id === themeId);
       if (!theme) {
-        this._error = this._t("frontend.library.theme_missing", "Theme not found");
+        this._error = this._t("frontend.library.theme_missing", "Circadian preset not found");
         this._view = "list";
         this._themeId = null;
         this._render();
@@ -9232,7 +9303,7 @@ class SceneStudioPanel extends HTMLElement {
 
   async _toggleThemeEventSidebar(event) {
     if (!(await this._ensureThemeDraft())) {
-      this._error = this._t("frontend.library.theme_missing", "Theme not found");
+      this._error = this._t("frontend.library.theme_missing", "Circadian preset not found");
       return;
     }
     const existing = this.shadowRoot?.querySelector(
@@ -9256,10 +9327,10 @@ class SceneStudioPanel extends HTMLElement {
     let brightnessGraphCtl = null;
     const themeName =
       this._themeDraft?.name ||
-      this._t("frontend.library.themes", "Circadian themes");
+      this._t("frontend.library.themes", "Circadian presets");
     const opened = await this._openSceneSidebar({
       title: event.name,
-      subtitle: this._t("frontend.library.theme_event_subtitle", "{name} theme", {
+      subtitle: this._t("frontend.library.theme_event_subtitle", "{name} preset", {
         name: themeName,
       }),
       className: "light-dialog theme-event-dialog",
@@ -9303,7 +9374,7 @@ class SceneStudioPanel extends HTMLElement {
     hint.className = "sidebar-note theme-edit-banner";
     hint.textContent = this._t(
       "frontend.library.theme_edit_hint",
-      "Editing {name} changes every circadian scene that still uses this theme. Per-light overrides on those scenes stay as they are.",
+      "Editing {name} changes every circadian scene that still uses this circadian preset. Per-light overrides on those scenes stay as they are.",
       { name: themeName }
     );
     body.appendChild(hint);
@@ -10202,26 +10273,12 @@ class SceneStudioPanel extends HTMLElement {
       this._syncUndoButtons();
       return;
     }
-    // Narrow editors replace the rail, so the switch stays in the header.
-    const previewToggle = document.createElement("label");
-    previewToggle.className = "live-edit-toggle room-preview-toggle";
-    const previewLabel = document.createElement("span");
-    previewLabel.textContent = this._t(
-      "frontend.actions.live_edit",
-      "Live edit"
-    );
-    const previewSwitch = document.createElement("ha-switch");
-    previewSwitch.checked = this._readRoomPreviewPref();
-    previewSwitch.addEventListener("change", () => {
-      void this._setRoomPreview(Boolean(previewSwitch.checked));
-    });
-    previewToggle.append(previewLabel, previewSwitch);
-    this._roomPreviewSwitch = previewSwitch;
+    // Narrow editors replace the rail. Live edit lives in the overflow menu.
     const undo = this._undoRedoButton("undo");
     const redo = this._undoRedoButton("redo");
     this._undoBtn = undo;
     this._redoBtn = redo;
-    this._setActionItems(undo, redo, previewToggle, this._overflowMenu());
+    this._setActionItems(undo, redo, this._overflowMenu());
     this._syncUndoButtons();
     this._syncLocationToolbar();
     if (this._view === "edit") {
@@ -12068,19 +12125,22 @@ class SceneStudioPanel extends HTMLElement {
         playing ? "mdi:stop" : "mdi:play"
       );
     }
-    if (this._narrow) {
-      addItem(
-        "undo",
-        this._loc("ui.common.undo", "Undo"),
-        "mdi:undo",
-        { disabled: !this._undoStack.length }
-      );
-      addItem(
-        "redo",
-        this._loc("ui.common.redo", "Redo"),
-        "mdi:redo",
-        { disabled: !this._redoStack.length }
-      );
+    if (this._narrow && this._view !== "theme") {
+      const row = document.createElement("div");
+      row.className = "overflow-live-edit";
+      const label = document.createElement("span");
+      label.textContent = this._t("frontend.actions.live_edit", "Live edit");
+      const previewSwitch = document.createElement("ha-switch");
+      previewSwitch.checked = this._readRoomPreviewPref();
+      const stop = (ev) => ev.stopPropagation();
+      row.addEventListener("pointerdown", stop);
+      row.addEventListener("click", stop);
+      previewSwitch.addEventListener("change", () => {
+        void this._setRoomPreview(Boolean(previewSwitch.checked));
+      });
+      row.append(label, previewSwitch);
+      this._roomPreviewSwitch = previewSwitch;
+      menu.appendChild(row);
     }
     // Location preview stays in overflow (Preview scene replaced Activate).
     addItem(
@@ -12553,10 +12613,10 @@ class SceneStudioPanel extends HTMLElement {
           : "frontend.library.delete_variable";
     const titleFallback =
       kind === "theme"
-        ? "Delete theme?"
+        ? "Delete circadian preset?"
         : kind === "palette"
-          ? "Delete palette?"
-          : "Delete variable?";
+          ? "Delete scene preset?"
+          : "Delete color preset?";
     dialog.setAttribute("header-title", this._t(titleKey, titleFallback));
     dialog.open = true;
     const name = item.name || "";
@@ -13450,14 +13510,14 @@ class SceneStudioPanel extends HTMLElement {
       this._headerEl.textContent =
         this._variableDraft?.name ||
         (this._view === "palette"
-          ? this._t("frontend.library.add_palette", "Add palette")
-          : this._t("frontend.library.add_variable", "Add variable"));
+          ? this._t("frontend.library.add_palette", "Add scene preset")
+          : this._t("frontend.library.add_variable", "Add color preset"));
       return;
     }
     if (this._narrow && this._view === "theme") {
       this._headerEl.textContent =
         this._themeDraft?.name ||
-        this._t("frontend.library.themes", "Circadian themes");
+        this._t("frontend.library.themes", "Circadian presets");
       return;
     }
     this._headerEl.textContent = integration;
@@ -20065,6 +20125,8 @@ class SceneStudioPanel extends HTMLElement {
     this._clockBrightShown = {};
     this._clockBrightTarget = {};
     this._clockBrightFrom = {};
+    // A new legend is a flat list. A matching signature must not skip grouping it.
+    this._legendGroupSignature = "";
   }
 
   _patchLightClock(payload, { morphing = false } = {}) {
@@ -21030,7 +21092,13 @@ class SceneStudioPanel extends HTMLElement {
     const signature = entries
       .map((entry) => `${entry.light.entity_id}:${bucketOf(entry)}`)
       .join("|");
-    if (signature === this._legendGroupSignature) {
+    // A matching signature is not enough: a rebuilt legend is a flat list,
+    // and a tile flight can leave selectors on the strip until it is restored.
+    const ungrouped = [...tilesEl.querySelectorAll(":scope > .simple-light-selector")].some(
+      (el) =>
+        !el.classList.contains("add-light-tile") && el.style.position !== "absolute"
+    );
+    if (signature === this._legendGroupSignature && !ungrouped) {
       return;
     }
     this._legendGroupSignature = signature;

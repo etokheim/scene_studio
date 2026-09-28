@@ -2497,7 +2497,7 @@ function createSceneColorWheel({
   onChange,
   getPalette,
   onAddPalette,
-  addVariableLabel = "Add variable",
+  addVariableLabel = "Add color preset",
   getCapabilities,
   getAssignmentSeed,
   getAssignmentEntityId,
@@ -3524,10 +3524,10 @@ function createSceneColorWheel({
         mode === "temp"
           ? t("frontend.lights.group_temp", "Temperature")
           : mode === "palette"
-            ? t("frontend.naming.palette", "Palette")
+            ? t("frontend.naming.palette", "Scene preset")
             : t("frontend.lights.group_color", "Color");
       if (offerPalette && !palVar) {
-        name.textContent = t("frontend.dialogs.scene_palette_select", "Select a palette");
+        name.textContent = t("frontend.dialogs.scene_palette_select", "Select a scene preset");
       } else {
         name.textContent = label;
       }
@@ -3799,7 +3799,7 @@ function createSceneColorWheel({
     paletteColors.hidden = false;
     const title = document.createElement("div");
     title.className = "hue-palette-colors-title";
-    title.textContent = palette.name || t("frontend.naming.palette", "Palette");
+    title.textContent = palette.name || t("frontend.naming.palette", "Scene preset");
     paletteColors.appendChild(title);
     const catalog = paletteCatalog();
     const slots = palette.slots || [];
@@ -3831,7 +3831,7 @@ function createSceneColorWheel({
     wantPresets = selectedIdsOf(state).length > 0;
     presetTrack.setAttribute(
       "aria-label",
-      t("frontend.library.variables", "Variables")
+      t("frontend.library.variables", "Color presets")
     );
     if (!wantPresets) {
       return;
@@ -3911,7 +3911,7 @@ function createSceneColorWheel({
       pick.type = "button";
       pick.className = "hue-preset add";
       pick.setAttribute("role", "listitem");
-      const pickLabel = t("frontend.dialogs.scene_palette_select", "Select a palette");
+      const pickLabel = t("frontend.dialogs.scene_palette_select", "Select a scene preset");
       pick.title = pickLabel;
       const pickFace = document.createElement("span");
       pickFace.className = "hue-preset-add-face";

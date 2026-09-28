@@ -1,5 +1,13 @@
 # Decisions
 
+## A phone dial shrinks; presets are the user-facing names
+
+- **Date:** 2026-09-28
+- **Supersedes in part:** “Narrow editor fills the screen” — a narrow dial no longer scrolls once the face hits the color-wheel floor. “Desktop header stays put” — Live edit is not in the narrow header.
+- **Decision:** On a phone the circadian face is centered in the space above the light tiles and may shrink below the color-wheel floor so the page does not scroll. A wide dial keeps that floor and has 24px above the dial view. Light tiles are grouped again whenever a selector sits on the strip outside a group. The narrow overflow menu holds Live edit; undo and redo stay as header buttons. Library copy says scene presets, color presets, and circadian presets. Stored kinds stay `palette`, `variable`, and `theme`.
+- **Why:** A matching group signature left a rebuilt tile list flat. The floor plus a scrollbar hid the tiles on a short phone. Palette, variable, and theme did not say how the three lists relate.
+- **Do not reverse without user ask.**
+
 ## Scene changes keep the dial and one rail paint
 
 - **Date:** 2026-09-28
@@ -17,7 +25,7 @@
 ## Desktop header stays put; Live edit sits on the list
 
 - **Date:** 2026-09-27
-- **Decision:** On a wide layout the header is always undo, redo, and settings. Live edit is the first item inside each rail tab, under the tab bar, and it shares the `roomPreview` preference with the create dialog’s Live preview. A narrow editor hides the rail, so that switch stays in the narrow header. Settings opens over whichever editor is in the main column and is not closed when that column changes. The drawer’s exit transitions opacity and transform for the same duration as the entry. Area titles show how many scenes that area contains.
+- **Decision:** On a wide layout the header is always undo, redo, and settings. Live edit is the first item inside each rail tab, under the tab bar, and it shares the `roomPreview` preference with the create dialog’s Live preview. A narrow editor hides the rail. Live edit for that editor is in the header overflow menu (see “A phone dial shrinks”). Settings opens over whichever editor is in the main column and is not closed when that column changes. The drawer’s exit transitions opacity and transform for the same duration as the entry. Area titles show how many scenes that area contains.
 - **Why:** The header was swapping actions every time a scene opened, and the settings drawer vanished because only transform was eased.
 - **Do not reverse without user ask.**
 
@@ -78,7 +86,7 @@
 ## Narrow editor fills the screen; the wheel does not scroll the page
 
 - **Date:** 2026-09-25
-- **Decision:** On a narrow panel the simple editor and the circadian dial fill the shell. The light tiles stay at the bottom. The color wheel and the dial face grow into the space above those tiles. The color wheel does not grow past that space, so its page does not scroll. The dial uses the same 400px floor as the color wheel: once the face cannot shrink further, the column scrolls and the light tiles move down with it. The disk keeps 16px at each side. On a phone the palette split and used-item chips are one horizontal strip above the disk, with 8px under the header, so the disk sits below them. Selecting a light fades that strip out and fades the color modes and variables into the same band, over the disk, so the disk does not move. That band stays horizontal for the whole narrow range. The beside-disk column is only for the wide stage; using it on a narrow panel made the presets jump as the window passed about 800px. Wider screens keep the chips as a vertical overlay. When the wheel group is shorter than the space above the tiles, it is centered. The name-scene button floats over whatever is underneath. The list view still scrolls inside the rail.
+- **Decision:** On a narrow panel the simple editor and the circadian dial fill the shell. The light tiles stay at the bottom. The color wheel and the dial face grow into the space above those tiles. The color wheel does not grow past that space, so its page does not scroll. A wide dial uses the same 400px floor as the color wheel. A narrow dial may shrink below that floor so the tiles stay on screen (see “A phone dial shrinks”). The disk keeps 16px at each side. On a phone the palette split and used-item chips are one horizontal strip above the disk, with 8px under the header, so the disk sits below them. Selecting a light fades that strip out and fades the color modes and variables into the same band, over the disk, so the disk does not move. That band stays horizontal for the whole narrow range. The beside-disk column is only for the wide stage; using it on a narrow panel made the presets jump as the window passed about 800px. Wider screens keep the chips as a vertical overlay. When the wheel group is shorter than the space above the tiles, it is centered. The name-scene button floats over whatever is underneath. The list view still scrolls inside the rail.
 - **Why:** A fixed wheel left the tiles mid-page. Growing the disk to the raw leftover width clipped the rings and dropped the presets onto the tiles. Lifting the tiles for the name button left a gap the wheel should have used. The dial’s 600px floor scrolled sooner than the color wheel and left the tiles under the face instead of on the bottom of the column.
 - **Do not reverse without user ask.**
 

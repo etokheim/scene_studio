@@ -376,6 +376,10 @@ export const LANDING_CSS = `
     flex: 0 0 auto;
     width: 100%;
   }
+  /* Desktop dial sits 24px under the app bar. A phone dial is not in this column. */
+  .stage-col .sun-path.dial-view {
+    margin-top: 24px;
+  }
   /* Fill the scrollport so the light tiles sit on the bottom. The column
      grows past the port once the dial hits the same floor as the color wheel. */
   .stage-scroll > .sun-path.dial-view {
@@ -1005,6 +1009,19 @@ export const LANDING_CSS = `
       overflow-x: auto;
       overscroll-behavior-x: contain;
       padding-bottom: 14px;
+      /* The scrollport reaches the screen edge. This keeps the old
+         floor-areas inset on the cards so the first one still starts inset. */
+      padding-left: 22px;
+      padding-right: 18px;
+    }
+    .floor-areas {
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .floor-block .area-head {
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
     }
     .scene-card-slot {
       flex: 0 0 calc(50% - 8px);
@@ -1795,7 +1812,7 @@ function renderEmptyHero(panel) {
       ),
       panel._t(
         "frontend.empty.auto_configure_body",
-        "Auto configure creates a circadian scene for every area that has lights, using the default theme. You can edit variables and themes here anytime — lights update the next time a scene runs."
+        "Auto configure creates a circadian scene for every area that has lights, using the default circadian preset. You can edit color presets and circadian presets here anytime — lights update the next time a scene runs."
       ),
     ],
     learnMore: true,
@@ -2080,12 +2097,12 @@ function renderLibrary(panel, { compact } = {}) {
   if (!compact) {
     const title = document.createElement("h1");
     title.className = "library-title";
-    title.textContent = panel._t("frontend.library.title", "Variables & themes");
+    title.textContent = panel._t("frontend.library.title", "Presets");
     const hint = document.createElement("p");
     hint.className = "library-hint";
     hint.textContent = panel._t(
       "frontend.library.hint",
-      "Changing a variable or theme updates scenes that still use it. Lights change on the next activate or automatic update — not instantly."
+      "Changing a color preset or circadian preset updates scenes that still use it. Lights change on the next activate or automatic update — not instantly."
     );
     wrap.append(title, hint);
   }
@@ -2097,10 +2114,10 @@ function renderLibrary(panel, { compact } = {}) {
   varHead.className = "area-head";
   const varLabel = document.createElement("div");
   varLabel.className = "floor-label";
-  varLabel.textContent = panel._t("frontend.library.variables", "Variables");
+  varLabel.textContent = panel._t("frontend.library.variables", "Color presets");
   const addVar = iconButton(
     "mdi:plus",
-    panel._t("frontend.library.add_variable", "Add variable")
+    panel._t("frontend.library.add_variable", "Add color preset")
   );
   addVar.addEventListener("click", (ev) => {
     ev.stopPropagation();
@@ -2133,10 +2150,10 @@ function renderLibrary(panel, { compact } = {}) {
   palHead.className = "area-head";
   const palLabel = document.createElement("div");
   palLabel.className = "floor-label";
-  palLabel.textContent = panel._t("frontend.library.palettes", "Palettes");
+  palLabel.textContent = panel._t("frontend.library.palettes", "Scene presets");
   const addPal = iconButton(
     "mdi:plus",
-    panel._t("frontend.library.add_palette", "Add palette")
+    panel._t("frontend.library.add_palette", "Add scene preset")
   );
   addPal.addEventListener("click", (ev) => {
     ev.stopPropagation();
@@ -2187,10 +2204,10 @@ function renderLibrary(panel, { compact } = {}) {
   themeHead.className = "area-head";
   const themeLabel = document.createElement("div");
   themeLabel.className = "floor-label";
-  themeLabel.textContent = panel._t("frontend.library.themes", "Circadian themes");
+  themeLabel.textContent = panel._t("frontend.library.themes", "Circadian presets");
   const addTheme = iconButton(
     "mdi:plus",
-    panel._t("frontend.library.add_theme", "Add theme")
+    panel._t("frontend.library.add_theme", "Add circadian preset")
   );
   addTheme.addEventListener("click", (ev) => {
     ev.stopPropagation();
@@ -2357,7 +2374,7 @@ function renderPaletteSplit(panel) {
     split.appendChild(shuffle);
     const edit = document.createElement("ha-icon-button");
     edit.className = "scene-palette-edit";
-    edit.label = panel._t("frontend.dialogs.scene_palette_edit", "Edit palette");
+    edit.label = panel._t("frontend.dialogs.scene_palette_edit", "Edit scene preset");
     const icon = document.createElement("ha-icon");
     icon.setAttribute("icon", "mdi:pencil");
     edit.appendChild(icon);
@@ -2385,7 +2402,7 @@ function renderThemeSplit(panel) {
   const name = document.createElement("span");
   if (!theme) {
     button.classList.add("is-placeholder");
-    name.textContent = panel._t("frontend.dialogs.scene_theme_select", "Select a theme");
+    name.textContent = panel._t("frontend.dialogs.scene_theme_select", "Select a circadian preset");
   } else {
     name.textContent = theme.name || themeId;
     const swatch = document.createElement("span");
@@ -2400,7 +2417,7 @@ function renderThemeSplit(panel) {
   if (theme) {
     const edit = document.createElement("ha-icon-button");
     edit.className = "scene-palette-edit";
-    edit.label = panel._t("frontend.dialogs.scene_theme_edit", "Edit theme");
+    edit.label = panel._t("frontend.dialogs.scene_theme_edit", "Edit circadian preset");
     const icon = document.createElement("ha-icon");
     icon.setAttribute("icon", "mdi:pencil");
     edit.appendChild(icon);

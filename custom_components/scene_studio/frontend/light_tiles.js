@@ -1013,6 +1013,8 @@ export function playLightStripLayout(root, before, { matchedOnly = false } = {})
       el.style.zIndex = "";
       if (placeholder?.isConnected) {
         placeholder.replaceWith(el);
+      } else if (host?.isConnected && el.parentElement === root) {
+        host.appendChild(el);
       }
     };
     anim.addEventListener("finish", restore);

@@ -584,6 +584,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     `${members
       .map((id) => `${id}:${lightIsUnavailable(id) ? "unavailable" : groupOf(id)}`)
       .join("|")}|${removedMembers.join(",")}`;
+  // Select-all stays on the strip. A member tile there is ungrouped, except
+  // while a flight has lifted it (position absolute) and will put it back.
+  const stripHasUngroupedTiles = () =>
+    [...tiles.children].some(
+      (el) =>
+        el.classList.contains("simple-light-selector") &&
+        !el.classList.contains("select-all-tile") &&
+        el.style.position !== "absolute"
+    );
 
   const cardDots = () =>
     members.map((eid) => {
@@ -721,7 +730,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           persistLight(eid);
         }
         const nextGroups = tileGroupSignature();
-        if (nextGroups !== stripGroupSignature) {
+        if (nextGroups !== stripGroupSignature || stripHasUngroupedTiles()) {
           syncTiles();
           return;
         }
@@ -2149,7 +2158,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     getPalette: () =>
       (panel._variables || []).filter((item) => !variableIsPalette(item)),
     onAddPalette: (draft) => panel._addVariableFromCurrentDraft(draft),
-    addVariableLabel: panel._t("frontend.library.add_variable", "Add variable"),
+    addVariableLabel: panel._t("frontend.library.add_variable", "Add color preset"),
   });
   wheels.appendChild(wheel.el);
 
@@ -2660,7 +2669,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     createLightTilesHint(
       panel._t(
         "frontend.lights.tiles_hint_palette",
-        "Edits here are reflected in all scenes using this palette"
+        "Edits here are reflected in all scenes using this scene preset"
       )
     )
   );
