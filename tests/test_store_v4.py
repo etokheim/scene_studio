@@ -252,6 +252,7 @@ class TestMigrateV3ToV4:
         assert scene["scene_dawn"] == "scene.dawn"
         # v3-only setting dropped.
         assert "hide_managed_native_scenes" not in result["settings"]
+        assert result["managed_native_scene_ids"] == ["x"]
 
     def test_empty_store(self):
         result = _migrate_v3_to_v4({})
@@ -266,6 +267,9 @@ def _bare_store() -> SceneStudioStore:
     store.themes = {}
     store.scenes = {}
     store.settings = {}
+    store.managed_native_scene_ids = []
+    store.pending_hide_sync = False
+    store._mutation_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     return store
 
@@ -418,7 +422,10 @@ def test_ensure_default_theme_adds_the_starter_once():
         assert theme["id"] == "default"
         assert theme["name"] == "Default"
         assert theme["builtin_id"] == "default"
-        assert set(store.variables) == {"custom", *(f"default_{event}" for event in SOLAR_EVENTS)}
+        assert set(store.variables) == {
+            "custom",
+            *(f"default_{event}" for event in SOLAR_EVENTS),
+        }
         for event in SOLAR_EVENTS:
             assert theme["events"][event]["color"][VARIABLE_REF] == f"default_{event}"
         store.themes["default"]["name"] = "Renamed"
@@ -453,5 +460,75 @@ def test_reset_restores_the_fresh_install_store():
         assert store.managed_native_scene_ids == []
         assert store.pending_hide_sync is False
         store.async_save.assert_awaited()
+
+    asyncio.run(run())
+
+
+def test_failed_reset_keeps_the_previous_store():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"a": {"id": "a", "kind": KIND_SIMPLE}}
+        store.variables = {"custom": {"id": "custom"}}
+        store.themes = {"custom": {"id": "custom"}}
+        store.settings = {"automatically_update_lights_interval": 60}
+        store.managed_native_scene_ids = ["native"]
+        store.async_save.side_effect = OSError("disk full")
+        with pytest.raises(OSError, match="disk full"):
+            await store.async_reset_to_fresh()
+        assert list(store.scenes) == ["a"]
+        assert list(store.variables) == ["custom"]
+        assert list(store.themes) == ["custom"]
+        assert store.settings["automatically_update_lights_interval"] == 60
+        assert store.managed_native_scene_ids == ["native"]
+
+    asyncio.run(run())
+
+
+def test_settings_validation_is_atomic():
+    async def run():
+        store = _bare_store()
+        store.settings = dict(DEFAULT_SETTINGS)
+        with pytest.raises(HomeAssistantError, match="must be an integer"):
+            await store.async_update_settings(
+                {
+                    "dusk_minimum_time_of_day": 21 * 3600,
+                    "automatically_update_lights_interval": "invalid",
+                }
+            )
+        assert store.settings == DEFAULT_SETTINGS
+        store.async_save.assert_not_awaited()
+
+    asyncio.run(run())
+
+
+def test_failed_save_cannot_roll_back_a_later_scene_update():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"a": {"id": "a", "kind": KIND_SIMPLE, SCENE_NAME: "First"}}
+        first_started = asyncio.Event()
+        release_first = asyncio.Event()
+        calls = 0
+
+        async def save():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                first_started.set()
+                await release_first.wait()
+                raise OSError("disk full")
+
+        store.async_save.side_effect = save
+        first = asyncio.create_task(
+            store.async_upsert({"id": "a", "kind": KIND_SIMPLE, SCENE_NAME: "Failed"})
+        )
+        await first_started.wait()
+        second = asyncio.create_task(
+            store.async_upsert({"id": "a", "kind": KIND_SIMPLE, SCENE_NAME: "Latest"})
+        )
+        release_first.set()
+        with pytest.raises(OSError, match="disk full"):
+            await first
+        await second
+        assert store.scenes["a"][SCENE_NAME] == "Latest"
 
     asyncio.run(run())

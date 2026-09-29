@@ -315,7 +315,8 @@ async def ws_reset(
     native YAML are removed first so a failed reset can put them back.
     """
     store = _store(hass)
-    scene_ids = list(store.scenes)
+    previous_scenes = {item["id"]: item for item in store.list()}
+    scene_ids = list(previous_scenes)
     managed = list(store.managed_native_scene_ids)
     removed: list[str] = []
     try:
@@ -323,14 +324,10 @@ async def ws_reset(
         for scene_id in scene_ids:
             await async_remove_entity(entities, scene_id)
             removed.append(scene_id)
-        if managed:
-            await async_delete_managed_yaml(hass, managed)
         await store.async_reset_to_fresh()
     except Exception as err:  # pylint: disable=broad-exception-caught
         for scene_id in removed:
-            item = store.get(scene_id)
-            if item is None:
-                continue
+            item = previous_scenes[scene_id]
             await async_create_or_update_entity(
                 hass,
                 hass.data[DOMAIN][DATA_CONFIG_ENTRY],
@@ -340,6 +337,12 @@ async def ws_reset(
             )
         connection.send_error(msg["id"], "reset_failed", str(err))
         return
+    if managed:
+        try:
+            await async_delete_managed_yaml(hass, managed)
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            connection.send_error(msg["id"], "cleanup_failed", str(err))
+            return
     invalidate_activation_cache(hass)
     connection.send_result(msg["id"], {"ok": True})
 

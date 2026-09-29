@@ -7,10 +7,11 @@ Native HA YAML scenes are no longer the source of truth.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from copy import deepcopy
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -47,6 +48,7 @@ from .const import (
 from .palette import KIND_PALETTE, normalize_palette_slots, optional_builtin_id
 
 _LOGGER = logging.getLogger(__name__)
+_Result = TypeVar("_Result")
 
 # --- Storage version ---
 # v2 (dev-only): continuous → follow_up.
@@ -354,7 +356,8 @@ def _migrate_v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
     (needs hass to load scenes.yaml). This structural migration:
     - Seeds variables + default theme if absent.
     - Adds kind=circadian and empty membership/overrides to old scene items.
-    - Drops managed_native_scene_ids, hide_managed_native_scenes.
+    - Keeps managed_native_scene_ids until managed YAML cleanup is durable.
+    - Drops hide_managed_native_scenes.
     - Keeps legacy scene_dawn…scene_dusk keys so the runtime migrator can
       look up native scenes before removing them.
     """
@@ -388,6 +391,7 @@ def _migrate_v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
         "themes": themes,
         "scenes": scenes,
         "settings": settings,
+        "managed_native_scene_ids": list(data.get("managed_native_scene_ids") or []),
     }
 
 
@@ -560,6 +564,7 @@ class SceneStudioStore:
         # Legacy — only populated during v3→v4 migration.
         self.managed_native_scene_ids: list[str] = []
         self.pending_hide_sync = False
+        self._mutation_lock = asyncio.Lock()
 
     async def async_load(self) -> None:
         """Load from disk (migrate from an older domain's store once)."""
@@ -646,6 +651,46 @@ class SceneStudioStore:
             payload["managed_native_scene_ids"] = list(self.managed_native_scene_ids)
         await self._store.async_save(payload)
 
+    async def _async_mutate(
+        self, change: Callable[[], _Result], *, skip_if_unchanged: bool = False
+    ) -> _Result:
+        """Serialize a complete in-memory change and restore it if saving fails."""
+        async with self._mutation_lock:
+            previous = (
+                deepcopy(self.scenes),
+                deepcopy(self.variables),
+                deepcopy(self.themes),
+                deepcopy(self.settings),
+                list(self.managed_native_scene_ids),
+                self.pending_hide_sync,
+            )
+            try:
+                result = change()
+                if (
+                    not skip_if_unchanged
+                    or (
+                        self.scenes,
+                        self.variables,
+                        self.themes,
+                        self.settings,
+                        self.managed_native_scene_ids,
+                        self.pending_hide_sync,
+                    )
+                    != previous
+                ):
+                    await self.async_save()
+            except Exception:
+                (
+                    self.scenes,
+                    self.variables,
+                    self.themes,
+                    self.settings,
+                    self.managed_native_scene_ids,
+                    self.pending_hide_sync,
+                ) = previous
+                raise
+            return result
+
     # --- Variable CRUD ---
 
     def list_variables(self) -> list[dict[str, Any]]:
@@ -684,17 +729,12 @@ class SceneStudioStore:
                 "color": color,
                 "brightness": raw.get("brightness", 255),
             }
-        previous = deepcopy(self.variables.get(var_id))
-        self.variables[var_id] = var
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            if previous is None:
-                self.variables.pop(var_id, None)
-            else:
-                self.variables[var_id] = previous
-            raise
-        return var
+
+        def change() -> dict[str, Any]:
+            self.variables[var_id] = var
+            return var
+
+        return await self._async_mutate(change)
 
     async def async_delete_variable(self, var_id: str) -> bool:
         """Delete a variable.  Raises if still referenced by themes or scenes."""
@@ -757,13 +797,9 @@ class SceneStudioStore:
                             )
                         ):
                             still_used(f"scene {scene_name}")
-        previous = self.variables.pop(var_id)
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.variables[var_id] = previous
-            raise
-        return True
+        return await self._async_mutate(
+            lambda: self.variables.pop(var_id, None) is not None
+        )
 
     # --- Theme CRUD ---
 
@@ -782,20 +818,18 @@ class SceneStudioStore:
         preset references them. An existing theme with id ``default`` is
         left as the user saved it.
         """
-        changed = False
-        for var_id, var in seed_variables().items():
-            if var_id not in self.variables:
-                self.variables[var_id] = var
-                changed = True
-        theme = self.themes.get("default")
-        if theme is None:
-            theme = seed_default_theme(self.variables)["default"]
-            theme["builtin_id"] = "default"
-            self.themes["default"] = theme
-            changed = True
-        if changed:
-            await self.async_save()
-        return theme
+
+        def change() -> dict[str, Any]:
+            for var_id, var in seed_variables().items():
+                self.variables.setdefault(var_id, var)
+            theme = self.themes.get("default")
+            if theme is None:
+                theme = seed_default_theme(self.variables)["default"]
+                theme["builtin_id"] = "default"
+                self.themes["default"] = theme
+            return theme
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
 
     async def async_upsert_theme(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a circadian theme."""
@@ -830,17 +864,12 @@ class SceneStudioStore:
         builtin_id = optional_builtin_id(raw)
         if builtin_id:
             theme["builtin_id"] = builtin_id
-        previous = deepcopy(self.themes.get(theme_id))
-        self.themes[theme_id] = theme
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            if previous is None:
-                self.themes.pop(theme_id, None)
-            else:
-                self.themes[theme_id] = previous
-            raise
-        return theme
+
+        def change() -> dict[str, Any]:
+            self.themes[theme_id] = theme
+            return theme
+
+        return await self._async_mutate(change)
 
     async def async_delete_theme(self, theme_id: str) -> bool:
         """Delete a theme.  Raises if still referenced by circadian scenes."""
@@ -852,13 +881,9 @@ class SceneStudioStore:
                     f"Theme {theme_id!r} is still referenced by "
                     f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
                 )
-        previous = self.themes.pop(theme_id)
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.themes[theme_id] = previous
-            raise
-        return True
+        return await self._async_mutate(
+            lambda: self.themes.pop(theme_id, None) is not None
+        )
 
     # --- Scene CRUD ---
 
@@ -887,28 +912,26 @@ class SceneStudioStore:
                 ),
             }
         item = normalize_scene(raw, scene_id=scene_id)
-        previous = deepcopy(self.scenes.get(item["id"]))
-        self.scenes[item["id"]] = item
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            if previous is None:
-                self.scenes.pop(item["id"], None)
-            else:
-                self.scenes[item["id"]] = previous
-            raise
-        return item
+
+        def change() -> dict[str, Any]:
+            self.scenes[item["id"]] = item
+            return item
+
+        return await self._async_mutate(change)
 
     async def async_set_automatically_update_lights(
         self, scene_id: str, automatically_update_lights: bool
     ) -> dict[str, Any] | None:
         """Toggle per-scene automatic light-update preference."""
-        item = self.scenes.get(scene_id)
-        if item is None:
+        if scene_id not in self.scenes:
             return None
-        item[AUTOMATICALLY_UPDATE_LIGHTS] = bool(automatically_update_lights)
-        await self.async_save()
-        return item
+
+        def change() -> dict[str, Any]:
+            item = self.scenes[scene_id]
+            item[AUTOMATICALLY_UPDATE_LIGHTS] = bool(automatically_update_lights)
+            return item
+
+        return await self._async_mutate(change)
 
     async def async_reset_to_fresh(self) -> None:
         """Replace scenes, library, and settings with a fresh install.
@@ -916,28 +939,28 @@ class SceneStudioStore:
         The config entry stays. Callers remove scene entities and managed
         native YAML before this, then drop the activation cache after.
         """
-        self.scenes = {}
-        self.variables = seed_variables()
-        self.themes = {}
-        self.settings = dict(DEFAULT_SETTINGS)
-        self.managed_native_scene_ids = []
-        self.pending_hide_sync = False
-        await self.async_save()
+
+        def change() -> None:
+            self.scenes = {}
+            self.variables = seed_variables()
+            self.themes = {}
+            self.settings = dict(DEFAULT_SETTINGS)
+            self.managed_native_scene_ids = []
+            self.pending_hide_sync = False
+
+        await self._async_mutate(change)
 
     async def async_delete(self, scene_id: str) -> bool:
         """Delete a scene config."""
         if scene_id not in self.scenes:
             return False
-        previous = self.scenes.pop(scene_id)
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.scenes[scene_id] = previous
-            raise
-        return True
+        return await self._async_mutate(
+            lambda: self.scenes.pop(scene_id, None) is not None
+        )
 
     async def async_update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
         """Merge integration-wide settings and persist."""
+        validated = {}
         for key, value in patch.items():
             if key not in DEFAULT_SETTINGS:
                 continue
@@ -963,9 +986,13 @@ class SceneStudioStore:
                     raise HomeAssistantError(
                         "dusk_minimum_time_of_day must be 0–86400 seconds"
                     )
-            self.settings[key] = value
-        await self.async_save()
-        return dict(self.settings)
+            validated[key] = value
+
+        def change() -> dict[str, Any]:
+            self.settings.update(validated)
+            return dict(self.settings)
+
+        return await self._async_mutate(change)
 
     # --- Legacy helpers (migration only, will be removed) ---
 
@@ -974,18 +1001,20 @@ class SceneStudioStore:
         cid = str(config_id)
         if cid in self.managed_native_scene_ids:
             return
-        self.managed_native_scene_ids.append(cid)
-        await self.async_save()
+        await self._async_mutate(lambda: self.managed_native_scene_ids.append(cid))
 
     async def async_unregister_managed_native_scene(self, config_id: str) -> None:
         """Drop a managed YAML scene id after delete."""
         cid = str(config_id)
         if cid not in self.managed_native_scene_ids:
             return
-        self.managed_native_scene_ids = [
-            item for item in self.managed_native_scene_ids if item != cid
-        ]
-        await self.async_save()
+        await self._async_mutate(
+            lambda: setattr(
+                self,
+                "managed_native_scene_ids",
+                [item for item in self.managed_native_scene_ids if item != cid],
+            )
+        )
 
     async def async_import_legacy(
         self, entry_data: dict[str, Any], options: dict[str, Any]
@@ -999,6 +1028,5 @@ class SceneStudioStore:
             _LOGGER.exception("Could not migrate legacy %s entry", DOMAIN)
             return None
         if item["id"] not in self.scenes:
-            self.scenes[item["id"]] = item
-            await self.async_save()
+            await self._async_mutate(lambda: self.scenes.__setitem__(item["id"], item))
         return item
