@@ -58,7 +58,10 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
 
 
 def _store(hass: HomeAssistant) -> SceneStudioStore:
-    return hass.data[DOMAIN][DATA_STORE]
+    domain_data = hass.data.get(DOMAIN)
+    if not domain_data or domain_data.get(DATA_CONFIG_ENTRY) is None:
+        raise HomeAssistantError("Scene Studio is not loaded")
+    return domain_data[DATA_STORE]
 
 
 def _registry_entry(hass: HomeAssistant, scene_id: str):
