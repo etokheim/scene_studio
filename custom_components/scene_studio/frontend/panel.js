@@ -32,6 +32,7 @@ import {
   galleryTheme,
   galleryThemes,
   paletteMatchesGallery,
+  seedThemeEvents,
   themeDraftSignature,
   themeEventSignature,
   themeMatchesGallery,
@@ -588,6 +589,7 @@ class SceneStudioPanel extends HTMLElement {
           color: var(--primary-text-color);
           --scene-sidebar-gutter: 0px;
           --scene-sidebar-content-gutter: 0px;
+          --selected-ring-color: rgb(255 255 255 / 75%);
           /* Night wedges: warm gray in light; near-black in dark. */
           --clock-night-outer: ${CLOCK_NIGHT_OUTER_LIGHT};
           --clock-night-deep: ${CLOCK_NIGHT_DEEP_LIGHT};
@@ -3311,12 +3313,17 @@ class SceneStudioPanel extends HTMLElement {
           display: flex;
           flex-direction: column;
           align-items: stretch;
-          gap: 8px;
+          gap: 4px;
           margin-top: 16px;
           box-sizing: border-box;
         }
         .scene-sidebar .dusk-minimum-row ha-selector {
           width: 100%;
+        }
+        /* ha-selector's own top margin is the field label's slot. The title
+           already sits above this row, so the flex gap is the only space. */
+        .dusk-minimum-row ha-selector {
+          margin-top: 0;
         }
         .scene-sidebar-footer:has(.sidebar-actions-bar) {
           flex-direction: column;
@@ -4720,6 +4727,11 @@ class SceneStudioPanel extends HTMLElement {
         .list-settings-dialog .automatically-update-lights-interval-row ha-selector {
           width: 100%;
           margin-top: 8px;
+        }
+        .list-settings-dialog .dusk-minimum-row {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 4px;
         }
         .row .row-actions {
           display: flex;
@@ -7757,7 +7769,36 @@ class SceneStudioPanel extends HTMLElement {
     return saved;
   }
 
+  async _ensureDefaultTheme({ adoptDraft = true } = {}) {
+    const result = await this._hass.callWS({
+      type: `${DOMAIN}/ensure_default_theme`,
+    });
+    if (Array.isArray(result?.variables)) {
+      this._variables = result.variables;
+    }
+    const theme = result?.theme;
+    if (!theme) {
+      throw new Error("Default circadian preset was not created");
+    }
+    if (adoptDraft) {
+      this._adoptSavedTheme(theme);
+    } else {
+      const themes = [...(this._themes || [])];
+      const index = themes.findIndex((item) => item.id === theme.id);
+      if (index >= 0) {
+        themes[index] = structuredClone(theme);
+      } else {
+        themes.push(structuredClone(theme));
+      }
+      this._themes = themes;
+    }
+    return theme;
+  }
+
   async _copyThemePreset(preset) {
+    if (preset?.seed) {
+      return this._ensureDefaultTheme();
+    }
     const events = {};
     const copied = new Map();
     for (const eventId of ["dawn", "sunrise", "noon", "sunset", "dusk"]) {
@@ -7888,6 +7929,18 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     this._commitUndo();
+    if (preset.seed) {
+      await this._ensureDefaultTheme({ adoptDraft: false });
+      this._themeDraft = {
+        ...this._themeDraft,
+        builtin_id: preset.id,
+        events: seedThemeEvents(preset),
+      };
+      this._saveSoon();
+      this._rebuildThemeDial();
+      this._render();
+      return;
+    }
     const events = {};
     for (const eventId of ["dawn", "sunrise", "noon", "sunset", "dusk"]) {
       const spec = preset.events?.[eventId];
@@ -8062,6 +8115,9 @@ class SceneStudioPanel extends HTMLElement {
         list.append(yours, yoursGrid);
       }
       const adopted = new Set(themes.map((item) => item.builtin_id).filter(Boolean));
+      if (themes.some((item) => item.id === "default")) {
+        adopted.add("default");
+      }
       const presets = galleryThemes().filter((item) => !adopted.has(item.id));
       if (presets.length) {
         const presetsLabel = document.createElement("p");
@@ -8194,9 +8250,11 @@ class SceneStudioPanel extends HTMLElement {
         if (!choice) {
           return;
         }
-        const theme = choice.preset
-          ? await this._copyThemePreset(choice.preset)
-          : choice.theme;
+        const theme = choice.custom
+          ? await this._ensureDefaultTheme({ adoptDraft: false })
+          : choice.preset
+            ? await this._copyThemePreset(choice.preset)
+            : choice.theme;
         const saved = await this._hass.callWS({
           type: `${DOMAIN}/save`,
           data: {
@@ -8205,7 +8263,7 @@ class SceneStudioPanel extends HTMLElement {
               ? this._sceneNameInArea(areaId, this._untitledLabel())
               : this._sceneNameInArea(areaId, theme?.name),
             area: areaId || null,
-            theme_id: choice.custom ? "default" : theme.id,
+            theme_id: theme.id,
             membership: { exclude: [], include: [] },
             overrides: {},
             lights: {},
@@ -10478,7 +10536,7 @@ class SceneStudioPanel extends HTMLElement {
     const text = document.createElement("p");
     text.textContent = this._t(
       "frontend.settings.reset_confirm",
-      "This deletes every Scene Studio scene and its Home Assistant scene. Palettes, other color variables, and themes are replaced with the five default colors and the Default theme, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone."
+      "This deletes every Scene Studio scene and its Home Assistant scene. Scene presets and circadian presets are removed. Color presets are replaced with the five default colors, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone."
     );
     dialog.appendChild(text);
     const footer = customElements.get("ha-dialog-footer")
@@ -10564,10 +10622,6 @@ class SceneStudioPanel extends HTMLElement {
     const picker = document.createElement("ha-selector");
     picker.classList.add("dusk-minimum-picker");
     picker.hass = this._hass;
-    picker.label = this._t(
-      "frontend.settings.dusk_minimum_time_of_day",
-      "Earliest time for dusk"
-    );
     picker.value = secondsToTime(this._duskMinimumSeconds());
     picker.selector = { time: {} };
     let saveTimer;

@@ -27,6 +27,9 @@
       "extrapolation_example": "Create a scene for a room from an area, or auto configure all areas that have lights.",
       "auto_configure_body": "Auto configure creates a circadian scene for every area that has lights, using the default circadian preset. You can edit color presets and circadian presets here anytime — lights update the next time a scene runs.",
       "area_no_scenes": "No scenes yet — create one for this area",
+      "library_no_colors": "No color presets yet — create one",
+      "library_no_palettes": "No scene presets yet — create one",
+      "library_no_themes": "No circadian presets yet — create one",
       "select_scene": "Select a scene to get started",
       "select_scene_body": "Choose a scene from the list to edit its lights through the day, or add a scene from an area.",
       "no_areas": "No Home Assistant areas yet. Add floors and areas in Settings, then come back.",
@@ -35,6 +38,7 @@
     "library": {
       "title": "Presets",
       "hint": "Changing a color preset or circadian preset updates scenes that still use it. Lights change on the next activate or automatic update — not instantly.",
+      "reusable": "This is the library. It holds reusable presets. Changing anything here changes every scene that uses it.",
       "variables": "Color presets",
       "palettes": "Scene presets",
       "tab_scenes": "Scenes",
@@ -108,7 +112,7 @@
       "dusk_minimum_time_of_day_helper": "To avoid lights dimming too much, too early. Applies to every circadian scene and circadian preset.",
       "reset": "Delete and reset everything",
       "reset_title": "Delete and reset everything?",
-      "reset_confirm": "This deletes every Scene Studio scene and its Home Assistant scene. Scene presets, color presets, and circadian presets are replaced with the five default colors and the Default circadian preset, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone."
+      "reset_confirm": "This deletes every Scene Studio scene and its Home Assistant scene. Scene presets and circadian presets are removed. Color presets are replaced with the five default colors, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone."
     },
     "common": {
       "untitled": "Untitled",
@@ -189,6 +193,7 @@
     "gallery": {
       "reset_slot": "Reset {name} to the original color",
       "reset_event": "Reset {name} to the original",
+      "theme_default": "Default",
       "theme_daylight": "Daylight",
       "theme_hearth": "Hearth",
       "theme_blue_hour": "Blue hour",

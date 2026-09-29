@@ -52,6 +52,7 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_list_themes)
     websocket_api.async_register_command(hass, ws_save_theme)
     websocket_api.async_register_command(hass, ws_delete_theme)
+    websocket_api.async_register_command(hass, ws_ensure_default_theme)
     websocket_api.async_register_command(hass, ws_auto_configure)
     websocket_api.async_register_command(hass, ws_areas)
 
@@ -568,6 +569,25 @@ async def ws_save_theme(
 
 
 @websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/ensure_default_theme"}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_ensure_default_theme(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Add the Default circadian preset when the library does not have it."""
+    store = _store(hass)
+    theme = await store.async_ensure_default_theme()
+    connection.send_result(
+        msg["id"],
+        {"theme": theme, "variables": store.list_variables()},
+    )
+
+
+@websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/delete_theme",
         vol.Required("theme_id"): str,
@@ -617,6 +637,7 @@ async def ws_auto_configure(
             msg["id"], "not_loaded", "Scene platform is not ready yet"
         )
         return
+    await store.async_ensure_default_theme()
     created = []
     area_reg = ar.async_get(hass)
     for area in area_reg.areas.values():

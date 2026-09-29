@@ -394,11 +394,12 @@ def _migrate_v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
 def _migrate_store(old_version: int, data: dict[str, Any]) -> dict[str, Any]:
     """Migrate persisted store payloads between STORAGE_VERSION values."""
     if data is None:
-        variables = seed_variables()
-        themes = seed_default_theme(variables)
+        # Colors only. The Default circadian preset is a starter the user
+        # adds, or that Auto configure adds. A v3 upgrade still seeds it,
+        # because those scenes already point at theme id "default".
         return {
-            "variables": variables,
-            "themes": themes,
+            "variables": seed_variables(),
+            "themes": {},
             "scenes": [],
             "settings": dict(DEFAULT_SETTINGS),
         }
@@ -587,9 +588,9 @@ class SceneStudioStore:
         self.variables = vars_raw
 
         # --- Themes ---
+        # An empty library stays empty. Default is added by Auto configure
+        # or by adopting the starter preset, not by opening the integration.
         themes_raw = raw.get("themes") or {}
-        if not themes_raw:
-            themes_raw = seed_default_theme(self.variables)
         if isinstance(themes_raw, list):
             themes_raw = {t["id"]: t for t in themes_raw if "id" in t}
         self.themes = themes_raw
@@ -774,6 +775,28 @@ class SceneStudioStore:
         """Return one theme."""
         return self.themes.get(theme_id)
 
+    async def async_ensure_default_theme(self) -> dict[str, Any]:
+        """Return the Default circadian preset, creating it when missing.
+
+        Restores any of the five seed colors that were deleted, because the
+        preset references them. An existing theme with id ``default`` is
+        left as the user saved it.
+        """
+        changed = False
+        for var_id, var in seed_variables().items():
+            if var_id not in self.variables:
+                self.variables[var_id] = var
+                changed = True
+        theme = self.themes.get("default")
+        if theme is None:
+            theme = seed_default_theme(self.variables)["default"]
+            theme["builtin_id"] = "default"
+            self.themes["default"] = theme
+            changed = True
+        if changed:
+            await self.async_save()
+        return theme
+
     async def async_upsert_theme(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a circadian theme."""
         theme_id = raw.get("id") or str(uuid.uuid4())
@@ -895,7 +918,7 @@ class SceneStudioStore:
         """
         self.scenes = {}
         self.variables = seed_variables()
-        self.themes = seed_default_theme(self.variables)
+        self.themes = {}
         self.settings = dict(DEFAULT_SETTINGS)
         self.managed_native_scene_ids = []
         self.pending_hide_sync = False

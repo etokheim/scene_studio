@@ -1,5 +1,13 @@
 # Decisions
 
+## Default is a starter, and selected rings share 75%
+
+- **Date:** 2026-09-29
+- **Supersedes in part:** “Scene cards scale, and their menu matches the library” — the selected ring is 75% white, not 85%.
+- **Decision:** Opening the integration does not create the Default circadian preset. A fresh store and Reset still install the five default colors. Reset removes scene presets and circadian presets. Default is the first starter preset. Adopting it, creating a circadian scene from scratch, or running Auto configure adds that preset (and any missing seed colors) and uses it. A v3 upgrade still seeds it, because those scenes already use theme id `default`. An existing theme with that id is not overwritten. The selected color-preset ring and the selected scene-card ring both use `--selected-ring-color` at 75% white. The color-preset ring is inset `-6px` (a 2px border, then a 4px gap). In light mode the color-preset ring is the primary color at 75%.
+- **Why:** The library was never empty of a circadian preset, so the starter list had no Default and Reset described a preset the user had not chosen. The two selection rings had drifted to different opacities, and the color-preset ring sat on the pill.
+- **Do not reverse without user ask.**
+
 ## A selected color preset is a pill
 
 - **Date:** 2026-09-28
@@ -83,6 +91,8 @@
 - **Do not reverse without user ask.**
 
 ## Scene cards scale, and their menu matches the library
+
+- **Superseded in part (2026-09-29):** selected ring opacity. See “Default is a starter, and selected rings share 75%”.
 
 - **Date:** 2026-09-27
 - **Decision:** Scene cards and library square cards share one overflow. It stays hidden until hover on a fine pointer, a 500ms touch hold, or keyboard focus. While that menu is open the slot keeps pointer events, because the menu hangs outside the card and inherits `pointer-events` from the slot. A tap still opens the card. Selected scale is 1.1 and hover is 1.06, both in 120ms. The selected class is added on the frame after first paint, because the card is created in that state and a same-turn class never transitions. The selected ring is a 2px border at 85% white, then a 2px gap, then the card. The corner palette photo has no drop shadow. Card padding contains the 1.1 scale so a horizontal scene row does not grow a vertical scrollbar.

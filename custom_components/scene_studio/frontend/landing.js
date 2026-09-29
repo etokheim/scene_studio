@@ -111,6 +111,24 @@ export const LANDING_CSS = `
     border: 1px solid var(--divider-color);
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
   }
+  /* Scene tab only. The library tab keeps the tighter gap under Live edit. */
+  .area-rail-body[data-tab="scenes"] .rail-live-edit {
+    margin-bottom: 12px;
+  }
+  .library-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 12px 12px 4px;
+    color: var(--secondary-text-color);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .library-note ha-icon {
+    flex: 0 0 auto;
+    --mdc-icon-size: 18px;
+    color: var(--secondary-text-color);
+  }
   .rail-live-edit-copy {
     display: flex;
     flex-direction: column;
@@ -784,7 +802,7 @@ export const LANDING_CSS = `
     pointer-events: none;
     box-sizing: border-box;
     border-radius: 20px;
-    border: 2px solid rgba(255, 255, 255, 0.85);
+    border: 2px solid var(--selected-ring-color, rgb(255 255 255 / 75%));
   }
   .scene-card .card-bg {
     position: absolute;
@@ -957,19 +975,21 @@ export const LANDING_CSS = `
     box-shadow: 0 2px 8px rgba(0,0,0,0.25);
     transition: width 120ms cubic-bezier(0.2, 0, 0, 1);
   }
-  /* Ring sits outside the fill. Radius grows with the inset so it stays concentric. */
+  /* Ring sits outside the fill. Radius grows with the inset so it stays concentric.
+     inset -6px and a 2px border leave a 4px gap. Same 75% as the scene-card ring. */
   .var-dot::after {
     content: "";
     position: absolute;
-    inset: -4px;
-    border-radius: 24px;
-    border: 2px solid #fff;
+    inset: -6px;
+    box-sizing: border-box;
+    border-radius: 26px;
+    border: 2px solid var(--selected-ring-color, rgb(255 255 255 / 75%));
     opacity: 0;
     pointer-events: none;
     transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
   }
   :host(:not([data-dark-mode])) .var-chip.selected .var-dot::after {
-    border-color: var(--primary-color);
+    border-color: color-mix(in srgb, var(--primary-color) 75%, transparent);
   }
   .var-chip {
     display: flex;
@@ -1134,6 +1154,9 @@ export const LANDING_CSS = `
     box-shadow: none;
   }
   .library-block .scene-cards {
+    margin: 0 0 12px;
+  }
+  .library-block > .area-empty {
     margin: 0 0 12px;
   }
   .theme-chip {
@@ -1489,7 +1512,11 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   const scenesLive = renderRailLiveEdit(panel);
   const libraryLive = renderRailLiveEdit(panel);
   scenesBody.appendChild(scenesLive);
-  libraryBody.append(libraryLive, renderLibrary(panel, { compact: true }));
+  libraryBody.append(
+    renderLibraryNote(panel),
+    libraryLive,
+    renderLibrary(panel, { compact: true })
+  );
   panel._roomPreviewSwitch = scenesLive.querySelector("ha-switch");
   rail.append(tabs, scenesBody, libraryBody);
 
@@ -2407,6 +2434,29 @@ function presetResetButton(panel, kind) {
   return reset;
 }
 
+function renderLibraryNote(panel) {
+  const note = document.createElement("p");
+  note.className = "library-note";
+  const icon = document.createElement("ha-icon");
+  icon.setAttribute("icon", "mdi:information-outline");
+  const text = document.createElement("span");
+  text.textContent = panel._t(
+    "frontend.library.reusable",
+    "This is the library. It holds reusable presets. Changing anything here changes every scene that uses it."
+  );
+  note.append(icon, text);
+  return note;
+}
+
+function libraryEmptyButton(panel, key, fallback, onClick) {
+  const empty = document.createElement("button");
+  empty.type = "button";
+  empty.className = "area-empty";
+  empty.textContent = panel._t(key, fallback);
+  empty.addEventListener("click", onClick);
+  return empty;
+}
+
 function renderLibrary(panel, { compact } = {}) {
   const wrap = document.createElement("div");
   if (!compact) {
@@ -2473,7 +2523,19 @@ function renderLibrary(panel, { compact } = {}) {
     });
     varRow.appendChild(libraryChip(panel, chip, "variable", variable));
   }
-  wrap.appendChild(libraryBlock(varHead, varRow));
+  wrap.appendChild(
+    libraryBlock(
+      varHead,
+      colors.length
+        ? varRow
+        : libraryEmptyButton(
+            panel,
+            "frontend.empty.library_no_colors",
+            "No color presets yet — create one",
+            () => panel._openCreateVariableDialog()
+          )
+    )
+  );
 
   const palHead = document.createElement("div");
   palHead.className = "area-head";
@@ -2514,7 +2576,19 @@ function renderLibrary(panel, { compact } = {}) {
       })
     );
   }
-  wrap.appendChild(libraryBlock(palHead, palCards));
+  wrap.appendChild(
+    libraryBlock(
+      palHead,
+      palettes.length
+        ? palCards
+        : libraryEmptyButton(
+            panel,
+            "frontend.empty.library_no_palettes",
+            "No scene presets yet — create one",
+            () => panel._openCreatePaletteDialog()
+          )
+    )
+  );
 
   const themeHead = document.createElement("div");
   themeHead.className = "area-head";
@@ -2549,7 +2623,20 @@ function renderLibrary(panel, { compact } = {}) {
       })
     );
   }
-  wrap.appendChild(libraryBlock(themeHead, themeRow));
+  const themes = panel._themes || [];
+  wrap.appendChild(
+    libraryBlock(
+      themeHead,
+      themes.length
+        ? themeRow
+        : libraryEmptyButton(
+            panel,
+            "frontend.empty.library_no_themes",
+            "No circadian presets yet — create one",
+            () => panel._openCreateThemeDialog()
+          )
+    )
+  );
   return wrap;
 }
 
