@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.core import Context
+from homeassistant.exceptions import (
+    HomeAssistantError,
+    ServiceValidationError,
+    Unauthorized,
+)
 
-from custom_components.scene_studio import _validate_turn_on_parameters
+from custom_components.scene_studio import _validate_turn_on_parameters, async_setup
 from custom_components.scene_studio.apply_entities import (
     apply_entities_parallel,
     apply_single_entity,
 )
+from custom_components.scene_studio.const import DATA_ENTITIES, DOMAIN
 from custom_components.scene_studio.extrapolation_math import (
     current_sun_event_index,
     extrapolate_number,
@@ -83,6 +90,58 @@ def test_turn_on_parameters_raise_service_validation_error(
 ):
     with pytest.raises(ServiceValidationError):
         _validate_turn_on_parameters(brightness, transition, percent)
+
+
+def test_custom_service_requires_owned_entities_and_user_control_before_activation():
+    async def run():
+        owned = SimpleNamespace(entity_id="scene.owned", async_activate=AsyncMock())
+        foreign = SimpleNamespace(entity_id="scene.foreign", async_activate=AsyncMock())
+        handlers = {}
+        user = SimpleNamespace(
+            permissions=SimpleNamespace(
+                check_entity=Mock(
+                    side_effect=lambda entity_id, _policy: entity_id == "scene.owned"
+                )
+            )
+        )
+        hass = SimpleNamespace(
+            data={
+                DOMAIN: {DATA_ENTITIES: {"owned-id": owned}},
+                "scene": SimpleNamespace(entities=[foreign]),
+            },
+            services=SimpleNamespace(
+                async_register=lambda _domain, name, handler, **_kwargs: handlers.setdefault(
+                    name, handler
+                )
+            ),
+            states=SimpleNamespace(get=lambda entity_id: object()),
+            auth=SimpleNamespace(async_get_user=AsyncMock(return_value=user)),
+        )
+        await async_setup(hass, {})
+        context = Context(user_id="limited-user")
+
+        async def call(entity_ids):
+            await handlers["turn_on"](
+                SimpleNamespace(data={"entity_id": entity_ids}, context=context)
+            )
+
+        with pytest.raises(ServiceValidationError, match="not owned"):
+            await call(["scene.foreign"])
+        with pytest.raises(ServiceValidationError, match="not owned"):
+            await call(["scene.owned", "scene.foreign"])
+        owned.async_activate.assert_not_awaited()
+
+        await call(["scene.owned"])
+        owned.async_activate.assert_awaited_once()
+        assert owned.async_activate.await_args.kwargs["context"] is context
+
+        user.permissions.check_entity.return_value = False
+        user.permissions.check_entity.side_effect = None
+        with pytest.raises(Unauthorized):
+            await call(["scene.owned"])
+        owned.async_activate.assert_awaited_once()
+
+    asyncio.run(run())
 
 
 def test_transition_boundaries_and_midnight_wrap():

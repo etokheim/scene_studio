@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
+from homeassistant.auth.permissions.const import POLICY_CONTROL
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import Event, HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError, Unauthorized, UnknownUser
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 from homeassistant.helpers.event import async_call_later
@@ -78,33 +79,33 @@ async def async_setup(hass, config):
             brightness_modifier, transition, transition_percent
         )
 
+        owned = hass.data.get(DOMAIN, {}).get(DATA_ENTITIES, {})
+        scenes = {scene.entity_id: scene for scene in owned.values()}
         for entity_id in entity_ids:
             if not entity_id.startswith("scene."):
                 raise ServiceValidationError(
                     f"Entity {entity_id!r} is not a scene entity"
                 )
-            scene_entity = hass.states.get(entity_id)
-            if not scene_entity:
-                raise ServiceValidationError(
-                    f"Scene entity {entity_id!r} was not found"
-                )
-            scene_platform = hass.data.get("scene")
-            if not scene_platform:
-                raise ServiceValidationError("Scene platform is not loaded")
-            for scene in scene_platform.entities:
-                if scene.entity_id == entity_id:
-                    await scene.async_activate(
-                        transition=transition,
-                        brightness_modifier=brightness_modifier,
-                        transition_percent=transition_percent,
-                        target_date_time=target_date_time,
-                        location=location,
-                    )
-                    break
-            else:
+            if entity_id not in scenes or not hass.states.get(entity_id):
                 raise ServiceValidationError(
                     f"Scene entity {entity_id!r} is not owned by Scene Studio"
                 )
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None:
+                raise UnknownUser(context=call.context)
+            for entity_id in entity_ids:
+                if not user.permissions.check_entity(entity_id, POLICY_CONTROL):
+                    raise Unauthorized(context=call.context, entity_id=entity_id)
+        for entity_id in entity_ids:
+            await scenes[entity_id].async_activate(
+                transition=transition,
+                brightness_modifier=brightness_modifier,
+                transition_percent=transition_percent,
+                target_date_time=target_date_time,
+                location=location,
+                context=call.context,
+            )
 
     hass.services.async_register(
         DOMAIN,

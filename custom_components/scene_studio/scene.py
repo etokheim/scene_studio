@@ -139,9 +139,7 @@ def _palette_image_attributes(
     store = hass.data.get(DOMAIN, {}).get(DATA_STORE)
     if store is None:
         return {}
-    return scene_palette_image_attributes(
-        scene_config, store.variables, store.themes
-    )
+    return scene_palette_image_attributes(scene_config, store.variables, store.themes)
 
 
 def _palette_image_state_key(hass: HomeAssistant, scene_config: dict) -> tuple:
@@ -592,6 +590,7 @@ class CircadianScene(Scene):
         transition_percent=None,
         target_date_time=None,
         location=None,
+        context: Context | None = None,
     ):
         """Activate the scene.
 
@@ -891,7 +890,12 @@ class CircadianScene(Scene):
                 item[ATTR_ENTITY_ID]: snapshot_from_command(item)
                 for item in light_changes
             }
-        self._apply_context = Context()
+        if is_auto_update_tick and (
+            generation != self._automatically_update_lights_generation
+            or not self._is_last_activated_in_area()
+        ):
+            return
+        self._apply_context = context or self._context or Context()
         self._apply_until = time.time() + float(apply_transition or 0)
         if entity_changes:
             await apply_entities_parallel(
@@ -1087,7 +1091,9 @@ class SimpleScene(Scene):
         updates["categories"] = categories
         entity_reg.async_update_entity(self.entity_id, **updates)
 
-    async def async_activate(self, transition=0, **kwargs):
+    async def async_activate(
+        self, transition=0, context: Context | None = None, **kwargs
+    ):
         """Apply the resolved fixed snapshot."""
         store = self.hass.data[DOMAIN][DATA_STORE]
         anchor = simple_anchor(self.hass, store, self._scene_config)
@@ -1100,6 +1106,7 @@ class SimpleScene(Scene):
                 entity_changes,
                 self.hass,
                 transition,
+                context=context or self._context,
             )
         if hasattr(self, "_async_record_activation"):
             self._async_record_activation()
