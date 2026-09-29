@@ -166,6 +166,7 @@ async def apply_single_entity(
             service=service_type,
             service_data=entity_applied,
             context=context,
+            blocking=True,
         )
     except Exception as error:  # pylint: disable=broad-exception-caught
         raise HomeAssistantError(

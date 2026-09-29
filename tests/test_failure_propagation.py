@@ -51,6 +51,24 @@ def test_parallel_apply_propagates_service_failure():
     asyncio.run(run())
 
 
+def test_apply_waits_for_service_handler_completion():
+    async def run():
+        async def call(**kwargs):
+            if kwargs.get("blocking"):
+                raise RuntimeError("handler failed after scheduling")
+
+        hass = _Hass()
+        hass.services.async_call.side_effect = call
+        with pytest.raises(HomeAssistantError, match="handler failed after scheduling"):
+            await apply_single_entity(
+                {"entity_id": "light.desk", "state": "on", "brightness": 100},
+                hass,
+            )
+        assert hass.services.async_call.await_args.kwargs["blocking"] is True
+
+    asyncio.run(run())
+
+
 def test_extrapolate_number_rejects_non_numeric_endpoint():
     with pytest.raises(HomeAssistantError, match="must be numbers"):
         extrapolate_number("100", 200, 50)
