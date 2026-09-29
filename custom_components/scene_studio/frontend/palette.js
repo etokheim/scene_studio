@@ -6,6 +6,11 @@ export function variableIsPalette(variable) {
   return Boolean(variable && (variable.kind === "palette" || variable.slots));
 }
 
+/** A scene event palette takes precedence over the shared theme event. */
+export function sceneEventPaletteId(scene, eventId) {
+  return scene?.event_palettes?.[eventId]?.palette_id || null;
+}
+
 /** A color preset (not a scene preset) stored as kelvin. */
 export function variableIsTemperaturePreset(variable) {
   if (!variable || variableIsPalette(variable)) {

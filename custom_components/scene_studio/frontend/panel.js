@@ -37,7 +37,7 @@ import {
   themeEventSignature,
   themeMatchesGallery,
 } from "./gallery.js";
-import { defaultPaletteSlots, paletteIsMixed, paletteIsTemperatureOnly, paletteSwatchCss, samplePaletteWheel, variableIsPalette } from "./palette.js";
+import { defaultPaletteSlots, paletteIsMixed, paletteIsTemperatureOnly, paletteSwatchCss, samplePaletteWheel, sceneEventPaletteId, variableIsPalette } from "./palette.js";
 import {
   isoYear,
   daysInYear,
@@ -9596,7 +9596,8 @@ class SceneStudioPanel extends HTMLElement {
       return adapt({ state: ov.state || "on", ...ov });
     }
     const row = (light.event_states || []).find((item) => item.event === eventId);
-    const themeEv = this._themeDraft?.events?.[eventId];
+    const scenePalette = sceneEventPaletteId(this._formData, eventId);
+    const themeEv = scenePalette ? null : this._themeDraft?.events?.[eventId];
     const ref = themeEv?.color?.variable_ref;
     if (row?.present && row.state) {
       const merged = { ...row.state };
@@ -9610,7 +9611,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         merged.assignment_seed = themeEv.assignment_seed;
       }
-      if (this._themeDraft) {
+      if (this._themeDraft && !scenePalette) {
         const themeBri = Number(this._themeEventDraft(eventId).brightness);
         if (Number.isFinite(themeBri)) {
           merged.brightness = themeBri;
@@ -9618,7 +9619,7 @@ class SceneStudioPanel extends HTMLElement {
       }
       return adapt(merged);
     }
-    if (this._themeDraft) {
+    if (this._themeDraft && !scenePalette) {
       return adapt(this._themeEventDraft(eventId));
     }
     return adapt(this._eventDefaultLightState(light.entity_id, eventId));
@@ -9746,7 +9747,12 @@ class SceneStudioPanel extends HTMLElement {
         if (this._nativeDrafts[sceneId]?.entities?.[light.entity_id] === null) {
           return { ...row, present: false, state: null };
         }
-        if (applyTheme && this._themeDraft && row.event) {
+        if (
+          applyTheme &&
+          this._themeDraft &&
+          row.event &&
+          !sceneEventPaletteId(this._formData, row.event)
+        ) {
           return {
             ...row,
             present: true,
@@ -17139,6 +17145,7 @@ class SceneStudioPanel extends HTMLElement {
       // Without the scene and theme, the mounted dial keeps the previous colors.
       scene: this._editId || null,
       theme: this._formData?.theme_id || null,
+      eventPalettes: this._formData?.event_palettes || {},
       membership: this._formData.membership || { exclude: [], include: [] },
     });
   }
@@ -17319,6 +17326,7 @@ class SceneStudioPanel extends HTMLElement {
                   include: [],
                 },
                 overrides: this._formData.overrides || {},
+                event_palettes: this._formData.event_palettes || {},
                 lights: this._formData.lights || {},
               },
             };
@@ -17730,20 +17738,19 @@ class SceneStudioPanel extends HTMLElement {
 
     const searchRow = document.createElement("div");
     searchRow.className = "location-search";
-    const searchField = customElements.get("ha-textfield")
-      ? document.createElement("ha-textfield")
-      : document.createElement("input");
-    if (searchField.localName === "ha-textfield") {
-      searchField.label = "Search";
-      searchField.placeholder = "City or address";
-    } else {
-      searchField.type = "search";
-      searchField.placeholder = "City or address";
-      searchField.setAttribute("aria-label", "Search");
-    }
+    const searchField = this._haInput("Search", "");
+    searchField.placeholder = this._t(
+      "frontend.location.search_placeholder",
+      "City or address"
+    );
     const searchBtn = document.createElement("ha-button");
     searchBtn.textContent = "Search";
     searchRow.append(searchField, searchBtn);
+    const searchDisclosure = document.createElement("p");
+    searchDisclosure.textContent = this._t(
+      "frontend.location.search_disclosure",
+      "Search sends your query and browser IP to Photon (Komoot) when you search."
+    );
 
     const searchError = document.createElement("p");
     searchError.className = "error";
@@ -17817,7 +17824,7 @@ class SceneStudioPanel extends HTMLElement {
       }
     });
 
-    dialog.append(help, searchRow, searchError, results, picker);
+    dialog.append(help, searchRow, searchDisclosure, searchError, results, picker);
 
     const footer = customElements.get("ha-dialog-footer")
       ? document.createElement("ha-dialog-footer")
