@@ -860,29 +860,36 @@ export const LANDING_CSS = `
     flex-wrap: wrap;
     gap: 12px;
     margin: 0 0 16px;
+    /* Room for scale(1.1) and the ring. The rail clips overflow-x. */
+    padding: 10px 4px 8px;
   }
   .var-dot {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 56px;
+    height: 56px;
     box-sizing: border-box;
-    /* Fixed radius so a wider selected chip is a pill, not a stretched ellipse. */
-    border-radius: 22px;
+    /* Half the height, so the 56px dot is a circle and a wider pill keeps round ends. */
+    border-radius: 28px;
     border: 2px solid rgba(255,255,255,0.35);
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+    transform-origin: center center;
+    transition:
+      width 120ms cubic-bezier(0.2, 0, 0, 1),
+      transform 120ms cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 120ms ease;
   }
-  /* Outside the fill, 2px away, same as a selected color-mode disc. */
+  /* 4px outside the fill (2px further than the color-mode disc), 2px stroke.
+     Radius grows with the inset so the ring stays concentric. */
   .var-dot::after {
     content: "";
     position: absolute;
-    inset: -4px;
-    border-radius: 26px;
+    inset: -6px;
+    border-radius: 34px;
     border: 2px solid #fff;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1);
+    transition: opacity 120ms cubic-bezier(0.2, 0, 0, 1);
   }
   :host(:not([data-dark-mode])) .var-chip.selected .var-dot::after {
     border-color: var(--primary-color);
@@ -902,6 +909,9 @@ export const LANDING_CSS = `
     position: relative;
     display: flex;
     max-width: 100%;
+  }
+  .library-chip:has(.var-chip.selected) {
+    z-index: 2;
   }
   /* Dots sit on the swatch. The store still refuses a delete while a scene,
      theme, or palette references the item. */
@@ -924,7 +934,11 @@ export const LANDING_CSS = `
     transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1);
   }
   .var-chip.selected .var-dot {
-    width: 88px;
+    width: 112px;
+    transform: scale(1.1);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 14px 32px rgba(0, 0, 0, 0.42);
   }
   .var-chip.selected .var-dot::after {
     opacity: 1;

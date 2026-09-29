@@ -3,7 +3,7 @@
 ## A selected color preset is a pill
 
 - **Date:** 2026-09-28
-- **Decision:** A selected color preset grows from a 44px circle to an 88px pill with the same 22px corner radius. The white ring sits 2px outside the fill, like a selected color-mode disc. The overflow menu fades in on the right half of that pill. Reset to preset default is a plain text button beside the source chip, and it is hidden while the copy still matches the gallery preset. “Used in N scenes” is a plain text button too.
+- **Decision:** A selected color preset grows from a 56px circle to a 112px pill with a 28px corner radius, then scales to 1.1 with the same shadow as a selected scene card. The white ring sits 4px outside the fill. The overflow menu fades in on the right half of that pill. Reset to preset default is a plain text button beside the source chip, and it is hidden while the copy still matches the gallery preset. “Used in N scenes” is a plain text button too.
 - **Why:** Stretching the circle with an inset border covered the color and left no room for the menu. A bare text node had no hover or press state. The reset action was always on screen, including when there was nothing to restore.
 - **Do not reverse without user ask.**
 
