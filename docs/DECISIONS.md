@@ -4,7 +4,7 @@
 
 - **Date:** 2026-09-28
 - **Superseded in part (2026-09-29):** circle size, pill width, and the selected scale. See “Preset uses are one menu”.
-- **Decision:** A selected color preset grows from a 40px circle to an 80px pill with a 20px corner radius. It does not scale up. The white ring sits outside the fill. The overflow menu is a smaller icon button and fades in on the right half of that pill. Reset to preset default is a plain text button beside the source chip, and it is hidden while the copy still matches the gallery preset. “Used in N scenes” is a plain text button too.
+- **Decision:** A selected color preset grows from a 40px circle to an 80px pill with a 20px corner radius. It does not scale up. The white ring sits outside the fill. The overflow menu is a 32px circle, 4px inside the pill, and fades in on the right half. Reset to preset default is a plain text button beside the source chip, and it is hidden while the copy still matches the gallery preset. “Used in N scenes” is a plain text button too.
 - **Why:** Stretching the circle with an inset border covered the color and left no room for the menu. A bare text node had no hover or press state. The reset action was always on screen, including when there was nothing to restore.
 - **Do not reverse without user ask.**
 

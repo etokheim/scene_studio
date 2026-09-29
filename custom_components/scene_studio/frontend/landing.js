@@ -992,12 +992,14 @@ export const LANDING_CSS = `
     color: var(--primary-text-color);
   }
   /* The menu rides the right half of the pill. Hidden until the chip is selected
-     so it does not cover the round swatch. */
+     so it does not cover the round swatch. The circle is 32px: 4px inside the
+     40px pill on the top, bottom, and right. ha-icon-button sizes from
+     --ha-icon-button-size, not the old mdc variable. */
   .var-dot > .library-chip-menu {
     top: 50%;
-    right: 0;
+    right: 2px;
     transform: translateY(-50%);
-    --mdc-icon-button-size: 20px;
+    --ha-icon-button-size: 32px;
     --mdc-icon-size: 14px;
     opacity: 0;
     pointer-events: none;
@@ -1017,6 +1019,11 @@ export const LANDING_CSS = `
     border-radius: 50%;
     background: var(--app-header-background-color, var(--sidebar-background-color));
     color: var(--primary-text-color);
+  }
+  .var-dot > .library-chip-menu ha-icon-button {
+    --ha-icon-button-size: 32px;
+    width: 32px;
+    height: 32px;
   }
   .var-chip.selected span,
   .theme-chip.selected span {
