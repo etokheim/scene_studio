@@ -8,6 +8,6 @@ alwaysApply: true
 When making a non-obvious choice (architecture, UX priority, load path, convention, “don’t do X”), record **why** in the same change set as the code.
 
 1. Prefer a short **inline code comment** next to the constraint.
-2. Otherwise add/update an entry in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+2. Otherwise add/update an entry in [`docs/DECISIONS.md`](../../docs/DECISIONS.md).
 
-Keep rule files short — link here instead of restating full rationale. If you change behavior that contradicts a recorded decision, update or supersede that entry before committing.
+Keep rule files short — link here instead of restating full rationale. If you change behavior that contradicts a recorded decision, update that entry and delete superseded guidance before committing. Keep still-valid constraints and rationale. Do not create an archive; Git preserves history.

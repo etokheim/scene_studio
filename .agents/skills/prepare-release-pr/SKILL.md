@@ -18,6 +18,8 @@ Work from **`dev`**. Feature branches merge to `dev` first.
 
 ## 0. Branch
 
+Inspect the working tree before switching branches; preserve unrelated WIP. Keep configured commit signing enabled. Setup troubleshooting: [agent setup](../../../docs/AGENT_SETUP.md).
+
 ```bash
 git fetch origin
 git checkout dev
@@ -141,7 +143,7 @@ gh label create release:major --color "B60205" --description "Major release when
 If a PR from `dev` to `master` is already open, stop after the push (do not open a second one). Otherwise:
 
 ```bash
-gh pr create --base master --head dev --label "release:<patch|minor|major>" --title "Release: <one-line why>" --body "$(cat <<'EOF'
+cat > /tmp/scene-studio-release-pr-body.md <<'EOF'
 ## Summary
 - <user-visible why this ships>
 
@@ -154,8 +156,10 @@ gh pr create --base master --head dev --label "release:<patch|minor|major>" --ti
 - [ ] CI green on the PR
 - [ ] Translation check (`check_translations.py`) passed locally
 EOF
-)"
+gh pr create --base master --head dev --label "release:<patch|minor|major>" --title "Release: <one-line why>" --body-file /tmp/scene-studio-release-pr-body.md
 ```
+
+When the host provides a PR attachment tool, attach the created PR (or the existing PR being updated) to the current chat.
 
 Pushing `dev` is required to open the PR. Never force-push. Do not merge unless
 the user asked.

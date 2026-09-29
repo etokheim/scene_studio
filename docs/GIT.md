@@ -7,7 +7,7 @@
 | **`dev`** | Default place for work. Feature branches merge here. |
 | **`master`** | Released code. A merged PR into `master` publishes a GitHub / HACS release. |
 
-Do not open feature PRs against `master`. To ship: [`.cursor/skills/prepare-release-pr/SKILL.md`](../.cursor/skills/prepare-release-pr/SKILL.md) (translations + changelog, then `dev` → `master`). The merge runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which assigns the version. Details: [`RELEASE.md`](../RELEASE.md).
+Do not open feature PRs against `master`. To ship: [`.agents/skills/prepare-release-pr/SKILL.md`](../.agents/skills/prepare-release-pr/SKILL.md) (translations + changelog, then `dev` → `master`). The merge runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which assigns the version. Details: [`RELEASE.md`](../RELEASE.md).
 
 If `origin/dev` does not exist yet:
 
@@ -21,7 +21,7 @@ After clone, check out `dev` before starting work (`git checkout dev`). GitHub�
 ## What is versioned
 
 - Integration: `custom_components/scene_studio/`
-- Agent instructions: `AGENTS.md`, `.cursor/`, `docs/`
+- Agent instructions: `AGENTS.md`, `.agents/`, `.cursor/`, `docs/`
 - Local sandbox **starter** YAML: `dev/config/configuration.yaml`, `packages/`, `area_map.yaml`, `apply_area_map.py`, plus empty `automations.yaml` / `scripts.yaml`
 - Tooling: `docker-compose.yml`, `pyproject.toml`, `DEVELOPMENT.md`, CI under `.github/`
 

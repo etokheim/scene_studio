@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Editor lives in the main column
 
-The workspace **stage** (`.stage-col`, the wide column beside the area rail) is the only editor surface.
+The workspace **stage** (`.stage-col`, the wide column beside the area rail) is the editor for scene and library item contents. Shared requirements: [AGENTS.md](../../AGENTS.md).
 
 ## Do this
 
@@ -14,7 +14,7 @@ The workspace **stage** (`.stage-col`, the wide column beside the area rail) is 
 
 ## Do not
 
-- Do not put add/edit UI for variables, palettes, or themes in `ha-dialog` / `_libraryDialog`.
+- Creation dialogs may choose a starter or existing preset, then create the item and open the stage. Do not put name/color/slot/theme editing in `ha-dialog` / `_libraryDialog`. Rename, settings, confirmations, and light sidebars remain supporting surfaces.
 - Do not use a separate full-page library column as the editor (the rail stays a picker).
 
 Rationale: [`docs/DECISIONS.md`](../../docs/DECISIONS.md) (“Main column is the editor”).

@@ -37,8 +37,8 @@ After that:
 
 1. **Settings → Devices & services → Add integration → Scene Studio** (once; the form is empty)
 2. Open **Scene Studio** in the sidebar
-3. **Add** a scene (area + native dag/kveld/natt scenes)
-4. Activate the generated `scene.*` from **Developer tools → States**
+3. Use an area’s plus to **Create scene** or **Create circadian scene**, choosing a library or starter preset when needed
+4. Activate the generated `scene.*` with **Developer tools → Actions** (`scene.turn_on`)
 
 Logs: `dev/config/home-assistant.log` or `docker compose logs -f`.
 
@@ -82,8 +82,10 @@ Config, onboarding, and your test entities persist in `dev/config/` (runtime fil
 
 ## Agent REST token (optional)
 
-To let Cursor agents call the sandbox REST API, create a long-lived token in the sandbox UI (Profile → Long-Lived Access Tokens), copy `dev/config/secrets.yaml.example` to `dev/config/secrets.yaml`, and set `cursor_ha_token`. See [`.cursor/skills/home-assistant-api/SKILL.md`](.cursor/skills/home-assistant-api/SKILL.md).
+To let Codex or Cursor agents call the sandbox REST API, create a long-lived token in the sandbox UI (Profile → Long-Lived Access Tokens), copy `dev/config/secrets.yaml.example` to `dev/config/secrets.yaml`, and set `cursor_ha_token`. See [`.agents/skills/home-assistant-api/SKILL.md`](.agents/skills/home-assistant-api/SKILL.md).
 
 ## Agent UI login (optional)
 
 Same `secrets.yaml` holds `sandbox_ha_username` and `sandbox_ha_password` for Chrome DevTools MCP against `http://127.0.0.1:8123/scene_studio`. If those keys are missing, agents should ask. Do not commit `secrets.yaml`.
+
+Agent prerequisites and permission troubleshooting: [docs/AGENT_SETUP.md](docs/AGENT_SETUP.md). Panel revision/reload and layout checks: [browser verification skill](.agents/skills/scene-studio-browser-verification/SKILL.md).

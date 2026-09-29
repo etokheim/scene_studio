@@ -21,16 +21,14 @@ This repo talks to the **local Scene Studio sandbox**, not the live home `/confi
 - **Never** open/browse the whole secrets file. Extract **only** the keys for this step.
 - If a login key is missing or `CHANGEME`, ask the user. Do not guess.
 - **Never** print, log, or echo tokens or passwords. Follow
-  [`.cursor/rules/secrets-handling.mdc`](../../rules/secrets-handling.mdc).
+  [`.cursor/rules/secrets-handling.mdc`](../../../.cursor/rules/secrets-handling.mdc).
 - **Never** read production `/config/secrets.yaml` or copy live-home tokens into this workspace.
 
 ## Panel UI (Chrome DevTools MCP)
 
-Verify Scene Studio in Chrome DevTools MCP, not a Cursor-owned HA tab ([`.cursor/rules/no-browser-reload.mdc`](../../rules/no-browser-reload.mdc)):
-
-1. `http://127.0.0.1:8123/scene_studio`
-2. Login with `sandbox_ha_username` / `sandbox_ha_password` from `secrets.yaml` when the authorize form appears.
-3. After `PANEL_ASSET_REV` + `docker compose restart`, use a **normal** reload (`ignoreCache` off) and confirm the `panel.js` URL rev before judging layout.
+Use the [browser verification skill](../scene-studio-browser-verification/SKILL.md)
+for revision checks, sandbox restart, normal reload, viewports, and console
+inspection. Use the existing sandbox Chrome tab at `/scene_studio`.
 
 ## Base URL
 
@@ -49,10 +47,29 @@ Run from the **repo root**. Extract only `cursor_ha_token`; never print it.
 ```bash
 python3 - <<'PY'
 from pathlib import Path
-import json, urllib.request, yaml
+import json, re, urllib.request, yaml
 
-secrets = yaml.safe_load(Path("dev/config/secrets.yaml").read_text())
-token = secrets["cursor_ha_token"]  # do not print
+def sandbox_secret(key):
+    # Read a top-level, single-line scalar only; never parse the whole store.
+    # Keep the credential file's supported format in secrets.yaml.example.
+    with Path("dev/config/secrets.yaml").open() as stream:
+        rows = [line for line in stream if re.match(rf"^{re.escape(key)}\s*:", line)]
+    if len(rows) != 1:
+        raise ValueError(f"Missing or duplicate sandbox key: {key}")
+    scalar = rows[0].split(":", 1)[1].strip()
+    if scalar.startswith(("|", ">", "!", "&", "*")):
+        raise ValueError(f"Sandbox key needs a plain or quoted one-line value: {key}")
+    # Never include parser errors or their input snippets in tool output.
+    try:
+        value = yaml.safe_load(rows[0])[key]
+    except yaml.YAMLError:
+        raise ValueError(f"Invalid one-line sandbox key: {key}") from None
+    if not isinstance(value, str) or not value.strip() or value == "CHANGEME":
+        raise ValueError(f"Sandbox key needs a configured value: {key}")
+    return value
+
+# Keep credentials in-process; do not print token or sandbox login values.
+token = sandbox_secret("cursor_ha_token")
 base = "http://127.0.0.1:8123"
 
 def ha(path, method="GET", body=None):
@@ -76,6 +93,11 @@ print(st["state"], st.get("attributes", {}).get("brightness"))
 PY
 ```
 
+For UI login, the same selective helper can extract just the two login keys.
+Use a host-supported credential handoff to fill the form without exposing values
+in tool output. If the host cannot do that, let the user complete login; do not
+print credentials so they can be copied into a later tool call.
+
 ## High-value endpoints
 
 | Goal | Method | Path / body |
@@ -87,7 +109,7 @@ PY
 | Render template | POST | `/api/template` body `{"template": "{{ … }}"}` |
 | Config info | GET | `/api/config` |
 | Check config | POST | `/api/services/homeassistant/check_config` |
-| Areas | GET | `/api/config/area_registry/list` via WS — or use REST where available; for registries prefer Websocket or existing YAML/helpers |
+| Areas | WebSocket command | `config/area_registry/list` (not a REST endpoint); prefer the registry WebSocket API |
 
 Service call example (sandbox dummy lights / native scenes):
 
