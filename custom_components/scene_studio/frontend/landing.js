@@ -771,14 +771,20 @@ export const LANDING_CSS = `
       pointer-events: auto;
     }
   }
+  .scene-card.selected {
+    overflow: visible;
+  }
+  /* Border, then a 2px gap, then the card. The card clips its photo, so the
+     ring has to paint outside that box. 16px radius plus the 4px offset. */
   .scene-card.selected::after {
     content: "";
     position: absolute;
-    inset: 0;
+    inset: -4px;
     z-index: 4;
     pointer-events: none;
-    border-radius: inherit;
-    box-shadow: inset 0 0 0 2px #fff;
+    box-sizing: border-box;
+    border-radius: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.85);
   }
   .scene-card .card-bg {
     position: absolute;
@@ -843,33 +849,36 @@ export const LANDING_CSS = `
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  /* Selected preset cards ease the title up by opening this row under it. */
+  /* Selected cards open this row above the title, so the title eases down. */
   .card-palette {
     display: flex;
     align-items: center;
     height: 0;
-    margin-top: 0;
+    margin-bottom: 0;
     opacity: 0;
     overflow: hidden;
     pointer-events: none;
     transition:
       height 120ms cubic-bezier(0.2, 0, 0, 1),
-      margin-top 120ms cubic-bezier(0.2, 0, 0, 1),
+      margin-bottom 120ms cubic-bezier(0.2, 0, 0, 1),
       opacity 120ms ease;
   }
   .scene-card.selected .card-palette {
-    height: 18px;
-    margin-top: 6px;
+    height: 22px;
+    margin-bottom: 6px;
     opacity: 1;
+    overflow: visible;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55));
   }
   .card-palette-dot {
-    --palette-dot: 16px;
-    --palette-overlap: 4px;
+    --palette-dot: 18px;
+    --palette-overlap: 2px;
     --palette-gap: 1.5px;
     width: var(--palette-dot);
     height: var(--palette-dot);
     border-radius: 50%;
     flex: 0 0 auto;
+    box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.15);
   }
   /* The old white stroke is a hole in the dot underneath the next one. */
   .card-palette-dot:not(:last-child) {
@@ -1854,7 +1863,7 @@ export function syncSceneCardFace(panel, scene) {
   }
   const name = body.querySelector(".card-name");
   if (name) {
-    name.after(row);
+    name.before(row);
   } else {
     body.prepend(row);
   }
@@ -1878,7 +1887,12 @@ function appendCardPalette(body, palette, catalog) {
     );
     row.appendChild(dot);
   }
-  body.appendChild(row);
+  const name = body.querySelector(".card-name");
+  if (name) {
+    name.before(row);
+  } else {
+    body.prepend(row);
+  }
 }
 
 function renderSceneCard(panel, scene) {
