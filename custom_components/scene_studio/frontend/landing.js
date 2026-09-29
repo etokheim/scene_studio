@@ -802,7 +802,7 @@ export const LANDING_CSS = `
     pointer-events: none;
     box-sizing: border-box;
     border-radius: 20px;
-    border: 2px solid rgb(255 255 255 / 85%);
+    border: 2px solid var(--selected-ring-color, rgb(255 255 255 / 75%));
   }
   .scene-card .card-bg {
     position: absolute;
@@ -976,7 +976,8 @@ export const LANDING_CSS = `
     transition: width 120ms cubic-bezier(0.2, 0, 0, 1);
   }
   /* Ring sits outside the fill. Radius grows with the inset so it stays concentric.
-     inset -6px and a 2px border leave a 4px gap. Same 75% as the scene-card ring. */
+     inset -6px accounts for the dot’s own 2px border and leaves a 2px gap.
+     Same 75% opacity as the scene-card ring. */
   .var-dot::after {
     content: "";
     position: absolute;

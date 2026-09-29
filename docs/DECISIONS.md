@@ -1,5 +1,12 @@
 # Decisions
 
+## Library onboarding and shared selection opacity
+
+- **Date:** 2026-09-29
+- **Supersedes in part:** “Selected scene card styling” — scene-card selection returns to the shared 75% opacity requested for color presets.
+- **Decision:** The library explains reusable presets with an information icon and offers creation buttons for each empty preset category. Creating a circadian preset opens the starter chooser even when the library is empty. Default remains a starter, adopted when requested or by Auto configure; loading an empty store does not create it. Reset removes scene and circadian presets and restores five default colors. The scene tab adds 8px below Live edit, and dusk has one title and a 4px gap above its field. Color-preset rings retain their offset and share 75% opacity with scene cards.
+- **Why:** Explain the effect of shared edits and keep an empty library useful without silently adopting a circadian preset.
+
 ## Selected scene card styling
 
 - **Date:** 2026-09-29

@@ -8336,19 +8336,22 @@ class SceneStudioPanel extends HTMLElement {
         return;
       }
       if (kind === "theme") {
-        const source = (this._themes || [])[0];
-        if (!source?.events) {
-          this._error = this._t("frontend.library.theme_missing", "Circadian preset not found");
-          this._render();
+        const choice = await this._chooseCircadianTheme();
+        if (!choice) {
           return;
         }
-        const saved = await this._hass.callWS({
-          type: `${DOMAIN}/save_theme`,
-          data: {
-            name: this._untitledLabel(),
-            events: structuredClone(source.events),
-          },
-        });
+        const source = choice.theme || galleryTheme("default");
+        const saved = choice.preset
+          ? await this._copyThemePreset(choice.preset)
+          : await this._hass.callWS({
+              type: `${DOMAIN}/save_theme`,
+              data: {
+                name: choice.theme
+                  ? galleryCopyName(source.name, (this._themes || []).map((item) => item.name))
+                  : this._untitledLabel(),
+                events: structuredClone(source.events),
+              },
+            });
         this._commitCreatedUndo({
           kind: "theme",
           id: saved.id,
@@ -8945,15 +8948,7 @@ class SceneStudioPanel extends HTMLElement {
       this._floors = payload?.floors || [];
       this._adoptSettings(payload?.settings);
       if (themeId === "new") {
-        const source = (this._themes || [])[0];
-        if (!source?.events) {
-          this._error = this._t("frontend.library.theme_missing", "Circadian preset not found");
-          this._view = "list";
-          this._themeId = null;
-          this._themeDraft = null;
-          this._render();
-          return;
-        }
+        const source = (this._themes || [])[0] || galleryTheme("default");
         this._themeId = null;
         this._themeDraft = {
           name: "",

@@ -392,6 +392,43 @@ class TestStripSceneDuskMinimum:
         assert strip_scene_dusk_minimum(scenes) is None
 
 
+@pytest.mark.parametrize("data", [None, {"variables": seed_variables(), "themes": {}}])
+def test_load_keeps_the_circadian_preset_library_empty(data):
+    async def run():
+        store = _bare_store()
+        store._store = AsyncMock()
+        store._store.async_load.return_value = data
+        store._legacy_stores = []
+        await store.async_load()
+        assert store.themes == {}
+        assert set(store.variables) == {f"default_{event}" for event in SOLAR_EVENTS}
+        store.async_save.assert_not_awaited()
+        theme = await store.async_ensure_default_theme()
+        assert theme["id"] == "default"
+        assert store.themes["default"] == theme
+
+    asyncio.run(run())
+
+
+def test_ensure_default_theme_adds_the_starter_once():
+    async def run():
+        store = _bare_store()
+        store.variables = {"custom": {"id": "custom", "name": "Custom"}}
+        theme = await store.async_ensure_default_theme()
+        assert theme["id"] == "default"
+        assert theme["name"] == "Default"
+        assert theme["builtin_id"] == "default"
+        assert set(store.variables) == {"custom", *(f"default_{event}" for event in SOLAR_EVENTS)}
+        for event in SOLAR_EVENTS:
+            assert theme["events"][event]["color"][VARIABLE_REF] == f"default_{event}"
+        store.themes["default"]["name"] = "Renamed"
+        again = await store.async_ensure_default_theme()
+        assert again["name"] == "Renamed"
+        assert store.async_save.await_count == 1
+
+    asyncio.run(run())
+
+
 def test_auto_configure_scene_name_uses_the_default_theme():
     themes = seed_default_theme(seed_variables())
     assert auto_configure_scene_name(themes) == "Default"
@@ -411,8 +448,7 @@ def test_reset_restores_the_fresh_install_store():
         await store.async_reset_to_fresh()
         assert store.scenes == {}
         assert set(store.variables) == {f"default_{event}" for event in SOLAR_EVENTS}
-        assert set(store.themes) == {"default"}
-        assert store.themes["default"]["name"] == "Default"
+        assert store.themes == {}
         assert store.settings == DEFAULT_SETTINGS
         assert store.managed_native_scene_ids == []
         assert store.pending_hide_sync is False

@@ -12,6 +12,21 @@ import {
   themeMatchesGallery,
 } from "../../custom_components/scene_studio/frontend/gallery.js";
 
+test("the default starter matches refs to the five seed colors", () => {
+  const preset = galleryTheme("default");
+  assert.equal(preset.seed, true);
+  const events = {};
+  for (const id of ["dawn", "sunrise", "noon", "sunset", "dusk"]) {
+    events[id] = {
+      color: { variable_ref: `default_${id}` },
+      brightness: preset.events[id].brightness,
+    };
+  }
+  assert.equal(themeMatchesGallery({ builtin_id: "default", events }, []), true);
+  events.noon = { ...events.noon, brightness: 1 };
+  assert.equal(themeMatchesGallery({ builtin_id: "default", events }, []), false);
+});
+
 test("a repeated picture palette gets the next free name", () => {
   assert.equal(galleryCopyName("Mantel", []), "Mantel");
   assert.equal(galleryCopyName("Mantel", ["Mantel"]), "Mantel 2");
