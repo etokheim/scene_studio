@@ -1,5 +1,12 @@
 # Decisions
 
+## Selected scene card styling
+
+- **Date:** 2026-09-29
+- **Supersedes in part:** “Default is a starter, and selected rings share 75%” — scene-card rings use 85% white, as requested. Color-preset rings keep their existing styling.
+- **Decision:** The selected scene card shows its palette above its title. Palette dots are 18px with 2px overlap, a 0.5px inner white border at 15% opacity, and a shadow under the stack. The 2px selection border sits outside the card with a 2px gap and uses 85% white.
+- **Why:** Finish the requested scene-card styling without changing the Default starter behavior.
+
 ## Default is a starter, and selected rings share 75%
 
 - **Date:** 2026-09-29

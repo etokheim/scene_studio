@@ -802,7 +802,7 @@ export const LANDING_CSS = `
     pointer-events: none;
     box-sizing: border-box;
     border-radius: 20px;
-    border: 2px solid var(--selected-ring-color, rgb(255 255 255 / 75%));
+    border: 2px solid rgb(255 255 255 / 85%);
   }
   .scene-card .card-bg {
     position: absolute;
