@@ -1,5 +1,8 @@
 """Palette cover URLs exposed on scene entities."""
 
+from pathlib import Path
+from unittest.mock import patch
+
 from custom_components.scene_studio.const import KIND_CIRCADIAN, KIND_SIMPLE
 from custom_components.scene_studio.palette import (
     gallery_cover_url,
@@ -12,6 +15,14 @@ def test_gallery_cover_url_is_a_stable_path():
     assert gallery_cover_url("not-a-palette") is None
     assert gallery_cover_url("../reading") is None
     assert gallery_cover_url(None) is None
+
+
+def test_gallery_attribute_lookups_do_not_check_files():
+    with patch.object(Path, "is_file", side_effect=AssertionError("synchronous stat")):
+        for _ in range(10):
+            assert (
+                gallery_cover_url("reading") == "/api/scene_studio/gallery/reading.jpg"
+            )
 
 
 def test_simple_scene_image_comes_from_its_palette():
@@ -76,7 +87,9 @@ def test_circadian_scene_falls_back_to_the_theme_palette():
     themes = {
         "day": {
             "id": "day",
-            "events": {"noon": {"color": {"variable_ref": "noon_pal"}, "brightness": 200}},
+            "events": {
+                "noon": {"color": {"variable_ref": "noon_pal"}, "brightness": 200}
+            },
         }
     }
     attrs = scene_palette_image_attributes(

@@ -13,6 +13,9 @@ from .const import KIND_SIMPLE, SOLAR_EVENTS, VARIABLE_REF
 # Stable path. The versioned panel asset URL changes on every frontend rev.
 GALLERY_DIR = Path(__file__).resolve().parent / "frontend" / "gallery"
 GALLERY_URL_PREFIX = "/api/scene_studio/gallery"
+# Shipped covers are immutable until the integration is reloaded. Discover them
+# once so entity attribute construction never performs synchronous file stats.
+GALLERY_COVER_IDS = frozenset(path.stem for path in GALLERY_DIR.glob("*.jpg"))
 
 PALETTE_SLOT_COUNT = 5
 KIND_COLOR = "color"
@@ -43,7 +46,7 @@ def gallery_cover_url(builtin_id: str | None) -> str | None:
     name = builtin_id.strip()
     if not name or any(part in name for part in ("/", "\\", "..")):
         return None
-    if not (GALLERY_DIR / f"{name}.jpg").is_file():
+    if name not in GALLERY_COVER_IDS:
         return None
     return f"{GALLERY_URL_PREFIX}/{name}.jpg"
 
