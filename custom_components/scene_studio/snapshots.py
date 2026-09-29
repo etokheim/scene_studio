@@ -47,16 +47,22 @@ def circadian_anchor(
     store: SceneStudioStore,
     scene: dict[str, Any],
     event: str,
+    *,
+    members: list[str] | None = None,
+    modes: dict[str, set[str] | None] | None = None,
 ) -> dict[str, Any]:
     """In-memory scene dict for one solar event (extrapolate_entities shape)."""
-    members = scene_members(hass, scene)
+    if members is None:
+        members = scene_members(hass, scene)
+    if modes is None:
+        modes = modes_map(hass, members)
     entities = build_circadian_event_snapshot(
         scene,
         event,
         store.variables,
         store.themes,
         members,
-        modes_map(hass, members),
+        modes,
     )
     return {
         "name": event,
@@ -116,6 +122,7 @@ def card_colors(
         return {"kind": KIND_SIMPLE, "dots": dots}
     ramps = []
     if scene.get("kind") == KIND_CIRCADIAN:
+        modes = modes_map(hass, members)
         per_event = {
             event: build_circadian_event_snapshot(
                 scene,
@@ -123,7 +130,7 @@ def card_colors(
                 store.variables,
                 store.themes,
                 members,
-                modes_map(hass, members),
+                modes,
             )
             for event in SOLAR_EVENTS
         }

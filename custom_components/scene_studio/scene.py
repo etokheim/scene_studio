@@ -66,7 +66,7 @@ from .extrapolation_math import (
 )
 from .native_scene import scenes_in_area
 from .palette import scene_palette_image_attributes
-from .snapshots import circadian_anchor, simple_anchor
+from .snapshots import circadian_anchor, modes_map, scene_members, simple_anchor
 from .solar import EVENT_ORDER, dusk_start_seconds
 from .store import dusk_minimum_seconds
 
@@ -705,8 +705,17 @@ class CircadianScene(Scene):
         dusk_original_time = dusk_solar_seconds if dusk_was_overridden else None
 
         store = self.hass.data[DOMAIN][DATA_STORE]
+        members = scene_members(self.hass, self._scene_config)
+        modes = modes_map(self.hass, members)
         anchors = {
-            event: circadian_anchor(self.hass, store, self._scene_config, event)
+            event: circadian_anchor(
+                self.hass,
+                store,
+                self._scene_config,
+                event,
+                members=members,
+                modes=modes,
+            )
             for event in SOLAR_EVENTS
         }
         sun_events = {
