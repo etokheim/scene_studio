@@ -819,6 +819,42 @@ export const LANDING_CSS = `
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+  /* Selected preset cards ease the title up by opening this row under it. */
+  .card-palette {
+    display: flex;
+    align-items: center;
+    height: 0;
+    margin-top: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition:
+      height 120ms cubic-bezier(0.2, 0, 0, 1),
+      margin-top 120ms cubic-bezier(0.2, 0, 0, 1),
+      opacity 120ms ease;
+  }
+  .scene-card.selected .card-palette {
+    height: 16px;
+    margin-top: 6px;
+    opacity: 1;
+  }
+  .card-palette-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    border: 1.5px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  .card-palette-dot + .card-palette-dot {
+    margin-left: -5px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card-palette {
+      transition: none;
+    }
+  }
   .scene-card .card-sub,
   .scene-card .card-category,
   .scene-card .card-flag {
@@ -1720,6 +1756,27 @@ function sceneCardIcon(scene) {
   return scene.kind === "simple" ? "mdi:palette" : "mdi:auto-fix";
 }
 
+function appendCardPalette(body, palette, catalog) {
+  if (!variableIsPalette(palette)) {
+    return;
+  }
+  const row = document.createElement("div");
+  row.className = "card-palette";
+  row.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < PALETTE_SLOT_COUNT; i += 1) {
+    const slot = resolveSlot(palette, i, catalog || []);
+    const dot = document.createElement("span");
+    dot.className = "card-palette-dot";
+    dot.style.zIndex = String(i + 1);
+    dot.style.background = variableSwatchCss(
+      { color: slot, brightness: slot.brightness, kind: "color" },
+      catalog || []
+    );
+    row.appendChild(dot);
+  }
+  body.appendChild(row);
+}
+
 function renderSceneCard(panel, scene) {
   const slot = document.createElement("div");
   slot.className = "scene-card-slot";
@@ -1743,14 +1800,18 @@ function renderSceneCard(panel, scene) {
     scene.name ||
     panel._t("frontend.common.untitled", "Untitled");
   name.textContent = stripAreaPrefix(rawName, scene.area_name) || rawName;
+  body.appendChild(name);
+  const paletteId = scene.palette_id || scene.form?.palette_id;
+  if (paletteId) {
+    const palette = (panel._variables || []).find((item) => item.id === paletteId);
+    appendCardPalette(body, palette, panel._variables);
+  }
   const category = sceneCategoryName(panel, scene.category || scene.form?.category);
   if (category) {
     const cat = document.createElement("div");
     cat.className = "card-category";
     cat.textContent = category;
-    body.append(name, cat);
-  } else {
-    body.appendChild(name);
+    body.appendChild(cat);
   }
   const labels = sceneLabelEntries(panel, scene.labels || scene.form?.labels);
   if (labels.length) {
@@ -2115,7 +2176,14 @@ function bindCardOverflowReveal(card, overflowSlot) {
   );
 }
 
-export function createPresetSceneCard({ name, paint, selected = false, asButton = false }) {
+export function createPresetSceneCard({
+  name,
+  paint,
+  selected = false,
+  asButton = false,
+  palette = null,
+  catalog = null,
+} = {}) {
   const slot = document.createElement("div");
   slot.className = "scene-card-slot";
   const card = document.createElement(asButton ? "button" : "div");
@@ -2132,6 +2200,7 @@ export function createPresetSceneCard({ name, paint, selected = false, asButton 
   title.className = "card-name";
   title.textContent = name || "";
   body.appendChild(title);
+  appendCardPalette(body, palette, catalog);
   const ripple = document.createElement("ha-ripple");
   card.append(bg, body, ripple);
   const glow = bg.cloneNode(true);
@@ -2150,7 +2219,13 @@ export function createPresetSceneCard({ name, paint, selected = false, asButton 
 }
 
 function renderLibrarySquareCard(panel, { id, name, selected, onOpen, paint, kind, item }) {
-  const { slot, card } = createPresetSceneCard({ name, paint, selected });
+  const { slot, card } = createPresetSceneCard({
+    name,
+    paint,
+    selected,
+    palette: kind === "palette" ? item : null,
+    catalog: panel._variables,
+  });
   card.dataset.itemId = id || "";
   card.setAttribute("role", "button");
   card.tabIndex = 0;

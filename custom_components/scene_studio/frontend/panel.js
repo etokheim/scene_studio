@@ -64,6 +64,7 @@ import {
 } from "./dial_clock.js";
 import {
   LANDING_CSS,
+  PALETTE_RANDOMIZE_ICON,
   renderLanding,
   renderListStageEmpty,
   renderSceneUsed,
@@ -3463,8 +3464,15 @@ class SceneStudioPanel extends HTMLElement {
         .live-edit-toggle ha-switch {
           --mdc-switch-track-width: 36px;
         }
+        .scene-palette-dialog {
+          /* Dialog content padding sits outside this list and clips the
+             card shadow, leaves a band above the footer, and shrinks the
+             view. The inset lives on the scroller instead. */
+          --dialog-content-padding: 0;
+        }
         .scene-palette-dialog .scene-palette-hint {
-          margin: 0 0 12px;
+          margin: 0;
+          padding: 4px 40px 8px;
           color: var(--secondary-text-color);
           font-size: 14px;
           line-height: 20px;
@@ -3472,9 +3480,14 @@ class SceneStudioPanel extends HTMLElement {
         .scene-palette-body {
           display: flex;
           flex-direction: column;
-          height: calc(92vh - 168px);
+          box-sizing: border-box;
           min-height: 240px;
-          max-height: calc(92vh - 168px);
+          /* wa-dialog tops out at 100dvh - 80px. Header and footer are 68px
+             each, so this is the content band. A taller body makes that
+             dialog scroll and clips the card shadow above the footer. */
+          height: calc(100dvh - 216px);
+          max-height: calc(100dvh - 216px);
+          overflow: hidden;
         }
         .scene-palette-list {
           display: flex;
@@ -3483,9 +3496,12 @@ class SceneStudioPanel extends HTMLElement {
           flex: 1 1 auto;
           min-height: 0;
           max-height: none;
-          overflow: auto;
-          /* Room for a selected card's scale(1.1) inside the scrollport. */
-          padding: 14px 12px 18px;
+          overflow-x: hidden;
+          overflow-y: auto;
+          /* Inside the scroller, so scale(1.1) and the 32px shadow are not
+             clipped and this inset does not sit between the list and the footer. */
+          padding: 36px 40px 40px;
+          box-sizing: border-box;
         }
         .scene-palette-dialog .live-edit-toggle {
           display: flex;
@@ -3553,9 +3569,10 @@ class SceneStudioPanel extends HTMLElement {
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 20px;
           width: 100%;
+          box-sizing: border-box;
           flex-wrap: wrap;
           overflow: visible;
-          padding: 12px 8px 16px;
+          padding: 0;
         }
         .scene-palette-list .scene-card-slot {
           width: auto;
@@ -3586,6 +3603,9 @@ class SceneStudioPanel extends HTMLElement {
           top: 8px;
           right: 8px;
           z-index: 3;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
           padding: 2px 8px;
           border-radius: 999px;
           background: rgba(0, 0, 0, 0.45);
@@ -3594,6 +3614,11 @@ class SceneStudioPanel extends HTMLElement {
           font-weight: 600;
           letter-spacing: 0.02em;
           pointer-events: none;
+        }
+        .scene-palette-randomize-label ha-icon {
+          --mdc-icon-size: 14px;
+          width: 14px;
+          height: 14px;
         }
         .scene-palette-randomize-label[hidden] {
           display: none !important;
@@ -6213,7 +6238,7 @@ class SceneStudioPanel extends HTMLElement {
     if (this._view === "edit") {
       this._renderEditor({ keepRail });
     } else if (this._view === "theme") {
-      this._renderThemeEditor();
+      this._renderThemeEditor({ keepRail });
     } else if (this._view === "variable" || this._view === "palette") {
       this._renderVariableEditor({ keepRail });
     } else {
@@ -6537,14 +6562,17 @@ class SceneStudioPanel extends HTMLElement {
       this._railTab !== "library" &&
       (this._view === "edit" || this._view === "list") &&
       (hash === "" || /^edit\/.+/.test(hash || ""));
-    // Color preset → color preset keeps the chips so the pill can ease in
-    // and the previous one can ease back to a circle.
+    // Already on the library tab. Keep the rail and do not recenter.
+    // Load, and arrival from the scenes tab, still reveal when the item
+    // is outside the scrollport.
     const libraryToLibrary =
       !this._narrow &&
       nextTab === "library" &&
       this._railTab === "library" &&
-      this._view === "variable" &&
-      /^variable\/(?!new$).+/.test(hash || "");
+      (this._view === "variables" ||
+        this._view === "variable" ||
+        this._view === "palette" ||
+        this._view === "theme");
     this._railTab = nextTab;
     if (libraryToLibrary) {
       this._keepAreaRail = true;
@@ -7435,15 +7463,26 @@ class SceneStudioPanel extends HTMLElement {
         paintSelection();
         void applyPreview();
       };
-      const paletteChoiceCard = (name, paint) =>
-        createPresetSceneCard({ name, paint, asButton: true });
+      const paletteChoiceCard = (name, paint, palette) =>
+        createPresetSceneCard({
+          name,
+          paint,
+          asButton: true,
+          palette,
+          catalog: this._variables,
+        });
       const randomizeLabel = () => {
         const label = document.createElement("span");
         label.className = "scene-palette-randomize-label";
         label.hidden = true;
-        label.textContent = this._t(
-          "frontend.dialogs.scene_palette_randomize",
-          "Randomize"
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
+        icon.setAttribute("aria-hidden", "true");
+        label.append(
+          icon,
+          document.createTextNode(
+            this._t("frontend.dialogs.scene_palette_randomize", "Randomize")
+          )
         );
         return label;
       };
@@ -7518,7 +7557,7 @@ class SceneStudioPanel extends HTMLElement {
         const grid = document.createElement("div");
         grid.className = "scene-cards";
         for (const palette of palettesToShow) {
-          const choice = paletteChoiceCard(palette.name, paintFor(palette));
+          const choice = paletteChoiceCard(palette.name, paintFor(palette), palette);
           const label = randomizeLabel();
           choice.card.appendChild(label);
           choice.card.addEventListener("click", () => onUserPalette(palette));
@@ -7558,7 +7597,8 @@ class SceneStudioPanel extends HTMLElement {
             (bg) => {
               bg.classList.add("is-cover");
               bg.style.backgroundImage = `url("${galleryCoverUrl(item.id)}")`;
-            }
+            },
+            galleryAsPalette(item.id)
           );
           const randomLabel = randomizeLabel();
           choice.card.appendChild(randomLabel);
@@ -8601,34 +8641,35 @@ class SceneStudioPanel extends HTMLElement {
   _libraryRailCanStay(page) {
     const rail = page?.querySelector(":scope > .area-rail");
     const stage = page?.querySelector(":scope > .stage-col");
-    if (!rail || !stage || this._railTab !== "library" || this._view !== "variable") {
+    if (!rail || !stage || this._railTab !== "library") {
       return false;
     }
-    if (!this._variableId) {
-      return true;
+    const id = this._view === "theme" ? this._themeId : this._variableId;
+    if (!id || (this._view !== "variable" && this._view !== "palette" && this._view !== "theme")) {
+      return false;
     }
-    return Boolean(
-      rail.querySelector(
-        `.var-chip[data-item-id="${CSS.escape(this._variableId)}"]`
-      )
-    );
+    // The open item is already a card in this rail. Rebuilding would start
+    // the list at scroll 0 and the reveal would treat it as off-screen.
+    return Boolean(rail.querySelector(`[data-item-id="${CSS.escape(id)}"]`));
   }
 
   _paintVariableEditorInPlace() {
     const page = this._contentEl?.querySelector(":scope > .workspace");
-    if (!this._libraryRailCanStay(page)) {
+    if (!this._libraryRailCanStay(page) || (this._view !== "variable" && this._view !== "palette")) {
       return false;
     }
     const stage = page.querySelector(":scope > .stage-col");
+    const isPalette = this._view === "palette";
     const working = this._variableDraft || this._variableWorkingCopy(null);
-    working.kind = "color";
+    working.kind = isPalette ? "palette" : "color";
     this._variableDraft = working;
+    this._parkSunPath();
     const scroll = this._stageScrollEl(stage);
     if (scroll) {
       scroll.scrollTop = 0;
     }
     const host = document.createElement("div");
-    host.className = "library-editor";
+    host.className = isPalette ? "simple-editor-host" : "library-editor";
     if (this._error) {
       const error = document.createElement("p");
       error.className = "error";
@@ -8637,10 +8678,42 @@ class SceneStudioPanel extends HTMLElement {
     }
     scroll?.replaceChildren(host);
     this._mountPageBanners(stage);
-    this._fillVariableEditor(host);
+    if (isPalette) {
+      renderPaletteEditor(this, host, { glowHost: null });
+      this._syncSceneUsed();
+    } else {
+      this._fillVariableEditor(host);
+      this._syncLibraryUsedBy();
+    }
     this._syncWorkspaceScrollport();
     this._playSimpleEnterIfNeeded(host);
-    this._syncLibraryUsedBy();
+    this._syncRailSelection();
+    return true;
+  }
+
+  _paintThemeEditorInPlace() {
+    const page = this._contentEl?.querySelector(":scope > .workspace");
+    if (!this._libraryRailCanStay(page) || this._view !== "theme") {
+      return false;
+    }
+    const stage = page.querySelector(":scope > .stage-col");
+    const scroll = this._stageScrollEl(stage);
+    this._parkSunPath();
+    if (scroll) {
+      for (const child of [...scroll.children]) {
+        child.remove();
+      }
+      scroll.scrollTop = 0;
+    }
+    if (this._error && scroll) {
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = this._error;
+      scroll.appendChild(error);
+    }
+    this._mountSunPath(stage);
+    this._syncWorkspaceScrollport();
+    this._syncSceneUsed();
     this._syncRailSelection();
     return true;
   }
@@ -8654,7 +8727,7 @@ class SceneStudioPanel extends HTMLElement {
     this._contentEl.classList.add("wide");
     const split = !this._narrow;
     this._contentEl.classList.toggle("workspace-split", split);
-    if (keepRail && this._view === "variable" && this._paintVariableEditorInPlace()) {
+    if (keepRail && this._paintVariableEditorInPlace()) {
       return;
     }
     this._parkSunPath();
@@ -8837,7 +8910,7 @@ class SceneStudioPanel extends HTMLElement {
     this._render();
   }
 
-  _renderThemeEditor() {
+  _renderThemeEditor({ keepRail = false } = {}) {
     if (!this._headerEl) {
       return;
     }
@@ -8849,6 +8922,9 @@ class SceneStudioPanel extends HTMLElement {
     this._contentEl.classList.add("wide");
     const split = !this._narrow;
     this._contentEl.classList.toggle("workspace-split", split);
+    if (keepRail && this._paintThemeEditorInPlace()) {
+      return;
+    }
     this._parkSunPath();
     const page = renderLanding(this, { includeStage: true });
     const stage = page.querySelector(".stage-col");

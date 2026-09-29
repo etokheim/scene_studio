@@ -67,6 +67,20 @@
 - **Why:** Rebuilding the rail started it at scroll 0, so the reveal treated an on-screen card as off-screen and jumped. The late selected class also flashed the dimming.
 - **Do not reverse without user ask.**
 
+## Selecting in the library does not scroll the rail
+
+- **Date:** 2026-09-29
+- **Decision:** On a wide layout, choosing another color preset, scene preset, or circadian preset while the library tab is already open keeps `.area-rail` and leaves its scroll where it is. The rail scrolls to the open item only when that item is outside the scrollport, and only on first open or when arriving from the scenes tab.
+- **Why:** Rebuilding the rail started it at scroll 0, so the reveal treated an on-screen card as off-screen and jumped. Same rule as scene-to-scene.
+- **Do not reverse without user ask.**
+
+## A selected preset card shows its palette
+
+- **Date:** 2026-09-29
+- **Decision:** Selecting a scene preset card, or a scene that uses one palette, eases the title up and reveals that palette as five overlapping color dots. The dots are the resolved slots, in order, later slots on top. Circadian scenes stay title-only; they have a palette per solar event, not one preset.
+- **Why:** The cover is a photo or a blend. The slots are what the preset assigns.
+- **Do not reverse without user ask.**
+
 ## Scene cards scale, and their menu matches the library
 
 - **Date:** 2026-09-27
