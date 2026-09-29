@@ -742,7 +742,10 @@ export const LANDING_CSS = `
     transition: opacity 120ms ease;
   }
   .scene-card .card-overflow-slot.is-revealed,
-  .scene-card .card-overflow-slot:focus-within {
+  .scene-card .card-overflow-slot:focus-within,
+  /* The menu hangs outside the card. Leaving the card drops :hover, and
+     pointer-events is inherited, so an open menu would ignore the pointer. */
+  .scene-card .card-overflow-slot:has(ha-dropdown[open]) {
     opacity: 1;
     pointer-events: auto;
   }
@@ -855,21 +858,34 @@ export const LANDING_CSS = `
       opacity 120ms ease;
   }
   .scene-card.selected .card-palette {
-    height: 16px;
+    height: 18px;
     margin-top: 6px;
     opacity: 1;
   }
   .card-palette-dot {
-    width: 14px;
-    height: 14px;
+    --palette-dot: 16px;
+    --palette-overlap: 4px;
+    --palette-gap: 1.5px;
+    width: var(--palette-dot);
+    height: var(--palette-dot);
     border-radius: 50%;
     flex: 0 0 auto;
-    box-sizing: border-box;
-    border: 1.5px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  /* The old white stroke is a hole in the dot underneath the next one. */
+  .card-palette-dot:not(:last-child) {
+    -webkit-mask-image: radial-gradient(
+      circle at calc(var(--palette-dot) - var(--palette-overlap) + var(--palette-dot) / 2) 50%,
+      transparent calc(var(--palette-dot) / 2 + var(--palette-gap)),
+      #000 calc(var(--palette-dot) / 2 + var(--palette-gap) + 0.5px)
+    );
+    mask-image: radial-gradient(
+      circle at calc(var(--palette-dot) - var(--palette-overlap) + var(--palette-dot) / 2) 50%,
+      transparent calc(var(--palette-dot) / 2 + var(--palette-gap)),
+      #000 calc(var(--palette-dot) / 2 + var(--palette-gap) + 0.5px)
+    );
   }
   .card-palette-dot + .card-palette-dot {
-    margin-left: -5px;
+    margin-left: calc(var(--palette-overlap) * -1);
   }
   @media (prefers-reduced-motion: reduce) {
     .card-palette {
