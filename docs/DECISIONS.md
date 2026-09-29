@@ -3,7 +3,8 @@
 ## A selected color preset is a pill
 
 - **Date:** 2026-09-28
-- **Decision:** A selected color preset grows from a 56px circle to a 112px pill with a 28px corner radius, then scales to 1.1 with the same shadow as a selected scene card. The white ring sits 4px outside the fill. The overflow menu fades in on the right half of that pill. Reset to preset default is a plain text button beside the source chip, and it is hidden while the copy still matches the gallery preset. “Used in N scenes” is a plain text button too.
+- **Superseded in part (2026-09-29):** circle size, pill width, and the selected scale. See “Preset uses are one menu”.
+- **Decision:** A selected color preset grows from a 40px circle to an 80px pill with a 20px corner radius. It does not scale up. The white ring sits outside the fill. The overflow menu is a smaller icon button and fades in on the right half of that pill. Reset to preset default is a plain text button beside the source chip, and it is hidden while the copy still matches the gallery preset. “Used in N scenes” is a plain text button too.
 - **Why:** Stretching the circle with an inset border covered the color and left no room for the menu. A bare text node had no hover or press state. The reset action was always on screen, including when there was nothing to restore.
 - **Do not reverse without user ask.**
 
@@ -177,9 +178,19 @@
 - **Why:** The selection ring was clipped and the hover transform shoved the selected row. A palette disk had no slot list. The used-item row was still taking height on the dial, and the 12px page inset kept the mobile editor off the screen edge.
 - **Do not reverse without user ask.**
 
+## Preset uses are one menu
+
+- **Date:** 2026-09-29
+- **Supersedes in part:** “A selected color preset is a pill” — the dot is 40px, the pill is 80px, and selecting it does not scale the dot.
+- **Supersedes in part:** “Theme split and palette mode button” — the extra used-item chips are one menu. The hue-preset row does not offer “Select a scene preset”.
+- **Decision:** A library editor keeps the source chip (the preset this copy is based on). Scenes that use it are the “Used in N scenes” button, not a second row of chips. A scene keeps its theme or scene-preset split. Other presets it uses directly are one button: “Uses N scene presets”, “Uses N color presets”, or “Uses N presets” when both. The menu row shows a color dot, a preset photo, or a preset gradient; a scene row shows that scene’s preset photo or gradient. The empty scene-preset control in the mode pill is the same dashed plus as “add color preset”, in the text color. The hue-preset row lists only presets the selected lights can use. A mixed selection still shows a preset when any selected light can take it, and applying it skips the lights that cannot. Clearing a scene preset updates that scene card’s photo before the list reload.
+- **Why:** The used-in button was painted on top of the chips it replaced. The color dots had grown, and then scaled again, to fit a full-size overflow button. A temperature bulb was offered color presets, and clearing a preset left the photo on the card until the next reload.
+- **Do not reverse without user ask.**
+
 ## Theme split and palette mode button
 
 - **Date:** 2026-09-25
+- **Superseded in part (2026-09-29):** used-item chips, and the dashed “+” in the mode pill. See “Preset uses are one menu”.
 - **Supersedes in part:** “Scene base palette is a corner split button, not a preset” — the corner split is the theme. The palette is a mode-pill button.
 - **Supersedes in part:** “First column is the scene list; library is a second tab” — the circadian used-items row sits under Play scene live.
 - **Decision:** The split button is the scene’s base palette in the simple editor and the base theme in the circadian editor. The name opens that list; the pencil opens the item. Randomize is a shuffle icon on that palette split, not a button in the variable list, and the same icon sits on Randomize in the palette dialog. A simple scene has one base palette (`palette_id`) and may have no theme. A circadian scene always has one theme, and one palette per solar event on `event_palettes`. Chips list the other library items the scene uses: color variables, and on a circadian scene the event palettes. A light pointing at a palette does not add a second base palette. The palette face in the mode pill still switches the disk. With no palette it is a dashed “+” and opens the palette list immediately. With a palette, the first click activates that mode and the next click on the whole button opens the list. The pencil on the active button opens the palette editor. Opening either list from the editor must not mint a scene. A variable, palette, or theme editor lists the scenes that use it as the same chips; choosing one opens that scene.

@@ -73,6 +73,7 @@ import {
   renderThemePresetSource,
   createPresetSceneCard,
   sceneCoverUrl,
+  syncSceneCardFace,
   applyCircularRamp,
   bindStickyTitles,
   previewRampsForTheme,
@@ -2400,16 +2401,26 @@ class SceneStudioPanel extends HTMLElement {
           border-color: #fff;
         }
         .wheel-mode-pill .wheel-wrapper.palette-add {
-          border: 1px dashed var(--secondary-text-color);
-        }
-        .wheel-mode-pill .wheel-wrapper.palette-add .palette-add-mark {
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          border-color: transparent;
           color: var(--primary-text-color);
-          font-size: 18px;
-          line-height: 1;
+          -webkit-text-fill-color: var(--primary-text-color);
+        }
+        .wheel-mode-pill .wheel-wrapper.palette-add .wheel {
+          box-sizing: border-box;
+          display: grid;
+          place-items: center;
+          box-shadow: none;
           background: transparent;
+          border: 2px dashed
+            color-mix(in srgb, var(--primary-text-color) 55%, transparent);
+          color: var(--primary-text-color);
+        }
+        .wheel-mode-pill .wheel-wrapper.palette-add ha-icon {
+          --mdc-icon-size: 14px;
+          width: 14px;
+          height: 14px;
+          color: var(--primary-text-color);
+          -webkit-text-fill-color: var(--primary-text-color);
         }
         .wheel-mode-pill .wheel-wrapper.palette-active,
         :host(:not([data-dark-mode])) .wheel-mode-pill .wheel-wrapper.palette-active {
@@ -3024,6 +3035,11 @@ class SceneStudioPanel extends HTMLElement {
           border: 2px dashed
             color-mix(in srgb, var(--primary-text-color) 55%, transparent);
           flex: 0 0 auto;
+        }
+        .hue-preset.add,
+        .hue-preset.add ha-icon {
+          color: var(--primary-text-color);
+          -webkit-text-fill-color: var(--primary-text-color);
         }
         .hue-preset.add ha-icon {
           --mdc-icon-size: 14px;
@@ -7223,8 +7239,10 @@ class SceneStudioPanel extends HTMLElement {
       }
       scene.lights = lights;
       this._simpleSelectedIds = [...picked];
+      this._stampListPreset();
       this._saveSoon();
       this._render();
+      this._syncOpenSceneCardFace();
       return;
     }
     const eventId = this._editedSolarEventId();
@@ -7261,9 +7279,11 @@ class SceneStudioPanel extends HTMLElement {
       scene.overrides = overrides;
       this._assignOpenLightToPalette?.(next, seed);
     }
+    this._stampListPreset();
     this._saveSoon();
     this._syncOpenSceneWheel?.();
     this._syncSceneUsed();
+    this._syncOpenSceneCardFace();
   }
 
   async _pickSceneTheme() {
@@ -18354,7 +18374,12 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _syncLibraryUsedBy() {
-    this.shadowRoot?.querySelector(".library-used-by")?.remove();
+    // The scene editor's "Uses N presets" row shares this class. Leave it.
+    for (const row of this.shadowRoot?.querySelectorAll(
+      ".library-used-by:not(.scene-preset-uses)"
+    ) || []) {
+      row.remove();
+    }
     let kind = null;
     let id = null;
     let host = null;
@@ -18378,10 +18403,43 @@ class SceneStudioPanel extends HTMLElement {
     if (!row) {
       return;
     }
+    const used = host.querySelector(":scope > .scene-used");
+    if (used) {
+      used.appendChild(row);
+      return;
+    }
     if (this._view === "theme") {
       host.append(row);
     } else {
       host.prepend(row);
+    }
+  }
+
+  _stampListPreset() {
+    const scene = this._formData;
+    if (!scene?.id) {
+      return null;
+    }
+    const item = (this._items || []).find((row) => row.id === scene.id);
+    if (!item) {
+      return scene;
+    }
+    item.palette_id = scene.palette_id || null;
+    item.event_palettes = scene.event_palettes || {};
+    if (item.form) {
+      item.form = {
+        ...item.form,
+        palette_id: item.palette_id,
+        event_palettes: item.event_palettes,
+      };
+    }
+    return item;
+  }
+
+  _syncOpenSceneCardFace() {
+    const item = this._stampListPreset();
+    if (item) {
+      syncSceneCardFace(this, item);
     }
   }
 

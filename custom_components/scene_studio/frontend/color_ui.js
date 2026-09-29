@@ -4,12 +4,14 @@
 import {
   PALETTE_SLOT_COUNT,
   assignmentTR,
+  colorPresetShownForCaps,
   paletteIsMixed,
   paletteIsTemperatureOnly,
   paletteSwatchCss,
   resolveSlot,
   samplePaletteWheel,
   variableIsPalette,
+  variableIsTemperaturePreset,
 } from "./palette.js";
 import { MODE_COLOR_ICON, MODE_TEMP_ICON } from "./hue_mode_icons.js";
 
@@ -3541,10 +3543,15 @@ function createSceneColorWheel({
         face.style.backgroundImage = "none";
         face.style.background = paletteSwatchCss(palVar, paletteCatalog(), draftRgb);
       } else if (offerPalette) {
-        face.textContent = "+";
         face.classList.add("palette-add-mark");
+        const plus = document.createElement("ha-icon");
+        plus.setAttribute("icon", "mdi:plus");
+        face.appendChild(plus);
       }
       wrap.append(name, face);
+      if (offerPalette && !palVar) {
+        wrap.setAttribute("aria-label", name.textContent);
+      }
       if (!entry.supported && !offerPalette) {
         const tip = document.createElement("ha-tooltip");
         tip.placement = "right";
@@ -3838,8 +3845,16 @@ function createSceneColorWheel({
     }
     syncPaletteColors();
     presetTrack.replaceChildren();
+    const pickedRows = selectedIdsOf(state)
+      .map((id) => scenes.find((row) => row.id === id))
+      .filter(Boolean);
+    const anyColor = pickedRows.some((row) => capsOf(row).hasColor);
+    const anyTemp = pickedRows.some((row) => capsOf(row).hasTemp);
     for (const variable of palette) {
       if (variableIsPalette(variable)) {
+        continue;
+      }
+      if (!colorPresetShownForCaps(variable, { anyColor, anyTemp })) {
         continue;
       }
       const btn = document.createElement("button");
@@ -3884,10 +3899,14 @@ function createSceneColorWheel({
           .map((id) => stateNow.scenes.find((row) => row.id === id))
           .filter((row) => row?.draft);
         const targets = picked.length ? picked : active?.draft ? [active] : [];
-        if (!targets.length) {
+        const compatible = targets.filter((row) => {
+          const caps = capsOf(row);
+          return variableIsTemperaturePreset(variable) ? caps.hasTemp : caps.hasColor;
+        });
+        if (!compatible.length) {
           return;
         }
-        for (const row of targets) {
+        for (const row of compatible) {
           applyVariableToDraft(row.draft, variable, {
             entityId: entityIdOf(row),
             seed: seedNow(),
@@ -3905,28 +3924,6 @@ function createSceneColorWheel({
         sync();
       });
       presetTrack.appendChild(btn);
-    }
-    if (typeof onPickPalette === "function") {
-      const pick = document.createElement("button");
-      pick.type = "button";
-      pick.className = "hue-preset add";
-      pick.setAttribute("role", "listitem");
-      const pickLabel = t("frontend.dialogs.scene_palette_select", "Select a scene preset");
-      pick.title = pickLabel;
-      const pickFace = document.createElement("span");
-      pickFace.className = "hue-preset-add-face";
-      const pickIcon = document.createElement("ha-icon");
-      pickIcon.setAttribute("icon", "mdi:palette");
-      pickFace.appendChild(pickIcon);
-      const pickName = document.createElement("span");
-      pickName.className = "hue-preset-name";
-      pickName.textContent = pickLabel;
-      pick.append(pickFace, pickName);
-      pick.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        onPickPalette();
-      });
-      presetTrack.appendChild(pick);
     }
     if (typeof onAddPalette === "function") {
       const add = document.createElement("button");

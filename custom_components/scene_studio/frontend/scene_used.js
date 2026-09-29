@@ -77,6 +77,74 @@ export function sceneLibraryUses({ scene, theme, themes, variables }) {
   return used;
 }
 
+/**
+ * Presets a scene uses directly. The base palette of a simple scene is the
+ * corner split, not this list. Slot colors inside a scene preset are not
+ * counted again. Theme event colors belong to the theme, not the scene.
+ *
+ * @returns {{ palettes: {kind: "palette", id: string}[], colors: {kind: "variable", id: string}[] }}
+ */
+export function scenePresetUses({ scene, variables }) {
+  const palettes = [];
+  const colors = [];
+  const seen = new Set();
+  const add = (id) => {
+    if (!id || seen.has(id)) {
+      return;
+    }
+    const variable = (variables || []).find((item) => item.id === id);
+    if (!variable) {
+      return;
+    }
+    seen.add(id);
+    if (variableIsPalette(variable)) {
+      palettes.push({ kind: "palette", id });
+    } else {
+      colors.push({ kind: "variable", id });
+    }
+  };
+  if (!scene) {
+    return { palettes, colors };
+  }
+  if (scene.kind === "simple") {
+    const base = scene.palette_id || null;
+    for (const light of Object.values(scene.lights || {})) {
+      const ref = light?.variable_ref;
+      if (!ref || ref === base) {
+        continue;
+      }
+      add(ref);
+    }
+    return { palettes, colors };
+  }
+  for (const entry of Object.values(scene.event_palettes || {})) {
+    if (entry?.palette_id) {
+      add(entry.palette_id);
+    }
+  }
+  const walk = (node) => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        walk(item);
+      }
+      return;
+    }
+    if (typeof node.variable_ref === "string") {
+      add(node.variable_ref);
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") {
+        walk(value);
+      }
+    }
+  };
+  walk(scene.overrides);
+  return { palettes, colors };
+}
+
 /** Scenes whose library uses include this theme, palette, or color variable. */
 export function scenesUsingLibraryItem({ kind, id, scenes, themes, variables }) {
   if (!id) {

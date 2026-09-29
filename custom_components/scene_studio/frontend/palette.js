@@ -6,6 +6,27 @@ export function variableIsPalette(variable) {
   return Boolean(variable && (variable.kind === "palette" || variable.slots));
 }
 
+/** A color preset (not a scene preset) stored as kelvin. */
+export function variableIsTemperaturePreset(variable) {
+  if (!variable || variableIsPalette(variable)) {
+    return false;
+  }
+  const color =
+    variable.color && typeof variable.color === "object" ? variable.color : variable;
+  return slotIsTemperature(color);
+}
+
+/**
+ * Show a color preset when any selected light can take it.
+ * Temperature presets need kelvin; the rest need color.
+ */
+export function colorPresetShownForCaps(variable, { anyColor = false, anyTemp = false } = {}) {
+  if (!variable || variableIsPalette(variable)) {
+    return false;
+  }
+  return variableIsTemperaturePreset(variable) ? Boolean(anyTemp) : Boolean(anyColor);
+}
+
 /** Kelvin slot. A hue or RGB channel means this slot is not temperature. */
 export function slotIsTemperature(color) {
   if (!color || typeof color !== "object") {
