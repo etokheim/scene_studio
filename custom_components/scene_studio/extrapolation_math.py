@@ -236,7 +236,7 @@ async def extrapolate_entities(
         if ("state" in from_entity and from_entity["state"] == STATE_UNAVAILABLE) or (
             "state" in to_entity and to_entity["state"] == STATE_UNAVAILABLE
         ):
-            _LOGGER.warning("%s is unavailable and therefor skipped", from_entity_id)
+            _LOGGER.debug("%s is unavailable and skipped", from_entity_id)
             return None
 
         # Handle state
@@ -248,12 +248,9 @@ async def extrapolate_entities(
                 scene_transition_progress_percent,
             )
         else:
-            _LOGGER.error(
-                "From or to entity does not have a state and is therefor skipped. from_entity: %s, to_entity: %s",
-                from_entity,
-                to_entity,
+            raise HomeAssistantError(
+                f"Cannot extrapolate {from_entity_id}: an anchor is missing its state"
             )
-            return None
 
         # Let's make sure that if one of from/to_entities has a color mode, the other one has got one too.
         # If from_entity or to_entity is missing a color mode, we'll set it to the other's color mode

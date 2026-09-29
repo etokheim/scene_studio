@@ -153,7 +153,7 @@ def resolve_solar_events(
             else:
                 events[name] = event_time.astimezone(tz)
     except ValueError:
-        _LOGGER.info(
+        _LOGGER.debug(
             "Could not calculate solar events for %s (sun always below/above horizon). "
             "Using seasonal fallback times",
             target.date(),
@@ -171,7 +171,7 @@ def resolve_solar_events(
             previous_plus_offset = events[prev_name] + timedelta(minutes=30)
             fallback_time = max(previous_plus_offset, seasonal)
             if fallback_time == previous_plus_offset:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Could not calculate %s for %s. Using %s + 30min: %s",
                     event_name,
                     target.date(),
@@ -179,7 +179,7 @@ def resolve_solar_events(
                     fallback_time.strftime("%H:%M"),
                 )
             else:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Could not calculate %s for %s. Using seasonal fallback "
                     "(later than %s + 30min): %02d:%02d",
                     event_name,
@@ -189,7 +189,7 @@ def resolve_solar_events(
                     minute,
                 )
         else:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Could not calculate %s for %s. Using seasonal fallback: %02d:%02d",
                 event_name,
                 target.date(),

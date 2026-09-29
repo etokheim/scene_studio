@@ -73,6 +73,20 @@ from .store import dusk_minimum_seconds
 _LOGGER = logging.getLogger(__name__)
 
 
+def _local_target_datetime(value: datetime | str | None, time_zone: str) -> datetime:
+    """Resolve an activation instant on the configured local calendar day."""
+    local_zone = ZoneInfo(time_zone)
+    if value is None:
+        return datetime.now(tz=local_zone)
+    if isinstance(value, str):
+        value = dt_util.parse_datetime(value)
+    if not isinstance(value, datetime):
+        raise ValueError("Invalid target datetime")
+    if value.tzinfo is None:
+        return value.replace(tzinfo=local_zone)
+    return value.astimezone(local_zone)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -465,7 +479,7 @@ class CircadianScene(Scene):
             if kind == "interrupt":
                 self._interrupted.add(entity_id)
             elif kind == "override":
-                _LOGGER.info(
+                _LOGGER.debug(
                     "%s: %s looks manually overridden; skipping on automatic light update",
                     self.entity_id,
                     entity_id,
@@ -525,7 +539,7 @@ class CircadianScene(Scene):
                 self._write_ha_state_if_attrs_changed()
             return
         if kind == "recover":
-            _LOGGER.info(
+            _LOGGER.debug(
                 "%s: %s restored after interrupt; re-applying circadian target",
                 self.entity_id,
                 entity_id,
@@ -536,7 +550,7 @@ class CircadianScene(Scene):
             return
         if kind != "override":
             return
-        _LOGGER.info(
+        _LOGGER.debug(
             "%s: %s marked as manually overridden",
             self.entity_id,
             entity_id,
@@ -640,29 +654,12 @@ class CircadianScene(Scene):
         # how the room should look at now+interval.
         apply_transition = transition
 
-        # Use target_date_time if provided, otherwise use current time
-        if target_date_time is None:
-            target_date_time = datetime.now(tz=ZoneInfo(self.time_zone))
-        elif isinstance(target_date_time, str):
-            # Parse string to datetime if needed
-            parsed_datetime = dt_util.parse_datetime(target_date_time)
-            if parsed_datetime is None:
-                raise ValueError(f"Invalid datetime string: {target_date_time}")
-            target_date_time = parsed_datetime
-            # Ensure target_date_time has timezone info if it doesn't
-            if target_date_time.tzinfo is None:
-                target_date_time = target_date_time.replace(
-                    tzinfo=ZoneInfo(self.time_zone)
-                )
-        elif isinstance(target_date_time, datetime):
-            # Ensure target_date_time has timezone info if it doesn't
-            if target_date_time.tzinfo is None:
-                target_date_time = target_date_time.replace(
-                    tzinfo=ZoneInfo(self.time_zone)
-                )
+        # Only an explicit target pins the state attribute to a historical day.
+        explicit_target = target_date_time is not None
+        target_date_time = _local_target_datetime(target_date_time, self.time_zone)
 
-        # Store target_date_time for use in calculations
-        self._target_date_time = target_date_time
+        # Ordinary activation follows the clock on subsequent attribute writes.
+        self._target_date_time = target_date_time if explicit_target else None
 
         start_time = time.time()  # Used for performance monitoring
 
@@ -785,20 +782,20 @@ class CircadianScene(Scene):
                 scene_transition_progress_percent,
             )
 
-        # Only run logging code if log level is info or higher
-        if _LOGGER.isEnabledFor(logging.INFO):
+        # Build the detailed activation trace only when debug logging is enabled.
+        if _LOGGER.isEnabledFor(logging.DEBUG):
             current_time_str = self._format_seconds_to_time(current_seconds)
             final_time_str = self._format_seconds_to_time(final_time)
 
-            _LOGGER.info("=" * 60)
-            _LOGGER.info("Scene Activation Details")
-            _LOGGER.info("=" * 60)
-            _LOGGER.info(
+            _LOGGER.debug("=" * 60)
+            _LOGGER.debug("Scene Activation Details")
+            _LOGGER.debug("=" * 60)
+            _LOGGER.debug(
                 "Brightness modifier %s, transition time %ss",
                 brightness_modifier,
                 apply_transition,
             )
-            _LOGGER.info("")
+            _LOGGER.debug("")
             if (
                 hasattr(self, "_target_date_time")
                 and self._target_date_time is not None
@@ -806,22 +803,22 @@ class CircadianScene(Scene):
                 target_datetime_str = self._target_date_time.strftime(
                     "%Y-%m-%d %H:%M:%S"
                 )
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Target datetime: %s (extrapolation based on this date/time)",
                     target_datetime_str,
                 )
-                _LOGGER.info("Base time:       %s", current_time_str)
+                _LOGGER.debug("Base time:       %s", current_time_str)
             else:
-                _LOGGER.info("Current time:    %s", current_time_str)
-            _LOGGER.info("Apply as of:     %s", final_time_str)
-            _LOGGER.info(
+                _LOGGER.debug("Current time:    %s", current_time_str)
+            _LOGGER.debug("Apply as of:     %s", final_time_str)
+            _LOGGER.debug(
                 "Day transition:  %s%% (%s)",
                 round(day_percent, 1),
                 "manual" if self._transition_percent_manual else "auto",
             )
 
-            _LOGGER.info("")
-            _LOGGER.info("Solar Events:")
+            _LOGGER.debug("")
+            _LOGGER.debug("Solar Events:")
 
             sorted_sun_events = sorted(sun_events.values(), key=lambda x: x.start_time)
             for sun_event in sorted_sun_events:
@@ -831,20 +828,20 @@ class CircadianScene(Scene):
                     event_time_str = (
                         f"{event_time_str} ({dusk_original_str} was overridden)"
                     )
-                _LOGGER.info(
+                _LOGGER.debug(
                     "  %s %s",
                     (sun_event.name + ":").ljust(14),
                     event_time_str,
                 )
 
-            _LOGGER.info("")
-            _LOGGER.info(
+            _LOGGER.debug("")
+            _LOGGER.debug(
                 "Current state:   %s%% transitioned from %s to %s",
                 round(scene_transition_progress_percent, 1),
                 current_sun_event.name,
                 next_sun_event.name,
             )
-            _LOGGER.info("=" * 60)
+            _LOGGER.debug("=" * 60)
 
         _LOGGER.debug(
             "Time calculating solar events: %.3fs",

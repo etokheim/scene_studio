@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -22,9 +23,14 @@ from custom_components.scene_studio.apply_entities import (
 from custom_components.scene_studio.const import DATA_ENTITIES, DOMAIN
 from custom_components.scene_studio.extrapolation_math import (
     current_sun_event_index,
+    extrapolate_entities,
     extrapolate_number,
     scene_keys_from_day_percent,
     transition_progress_percent,
+)
+from custom_components.scene_studio.scene import (
+    CircadianScene,
+    _local_target_datetime,
 )
 
 
@@ -79,6 +85,20 @@ def test_apply_waits_for_service_handler_completion():
 def test_extrapolate_number_rejects_non_numeric_endpoint():
     with pytest.raises(HomeAssistantError, match="must be numbers"):
         extrapolate_number("100", 200, 50)
+
+
+def test_extrapolation_rejects_missing_anchor_state_without_dumping_attributes():
+    async def run():
+        with pytest.raises(HomeAssistantError, match="missing its state") as error:
+            await extrapolate_entities(
+                {"entities": {"light.desk": {"brightness": 80, "secret": "private"}}},
+                {"entities": {"light.desk": {"state": "on"}}},
+                50,
+                SimpleNamespace(),
+            )
+        assert "private" not in str(error.value)
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(
@@ -170,3 +190,22 @@ def test_wrapped_dusk_stays_after_sunset_on_the_clock():
     assert transition_progress_percent(sunset, dusk, 0) == 50
     assert transition_progress_percent(sunset, dusk, 1 * 3600) == 100
     assert transition_progress_percent(dusk, dawn, 2 * 3600) == 50
+
+
+def test_explicit_offset_target_uses_local_date_and_dst_offset():
+    winter = _local_target_datetime("2026-01-01T23:30:00+00:00", "Europe/Oslo")
+    assert (winter.year, winter.month, winter.day, winter.hour) == (2026, 1, 2, 0)
+    summer = _local_target_datetime(
+        datetime(2026, 7, 1, 22, 30, tzinfo=timezone.utc), "Europe/Oslo"
+    )
+    assert (summer.day, summer.hour) == (2, 0)
+
+
+def test_ordinary_day_position_reads_the_clock_when_no_explicit_target():
+    scene = object.__new__(CircadianScene)
+    scene._target_date_time = None
+    scene.hass = SimpleNamespace(config=SimpleNamespace(time_zone="Europe/Oslo"))
+    actual = CircadianScene.seconds_since_midnight(scene, 0)
+    now = _local_target_datetime(None, "Europe/Oslo")
+    expected = now.hour * 3600 + now.minute * 60 + now.second
+    assert abs(actual - expected) < 2
