@@ -31,3 +31,19 @@ test("an empty scene list must repaint when its areas arrive", () => {
   assert.notEqual(sceneRailCatalogKey(floors, [{ id: "scene", area: "kitchen" }]),
     sceneRailCatalogKey(floors, [{ id: "scene", area: "bedroom" }]));
 });
+
+test("mobile Auto configure belongs to the dismissed-placeholder list", async () => {
+  const { mobileAutoConfigureCard } = await import("../../custom_components/scene_studio/frontend/panel_state.js");
+  assert.equal(mobileAutoConfigureCard(true, "scenes", 0, false), false);
+  assert.equal(mobileAutoConfigureCard(true, "scenes", 0, true), true);
+  assert.equal(mobileAutoConfigureCard(false, "scenes", 0, true), false);
+  assert.equal(mobileAutoConfigureCard(true, "library", 0, true), false);
+  assert.equal(mobileAutoConfigureCard(true, "scenes", 1, true), false);
+});
+
+test("the selected Library color toggles back to the overview", async () => {
+  const { libraryColorTarget } = await import("../../custom_components/scene_studio/frontend/panel_state.js");
+  assert.equal(libraryColorTarget("dawn", "dawn"), "variables");
+  assert.equal(libraryColorTarget("dawn", "noon"), "variable/noon");
+  assert.equal(libraryColorTarget(null, "noon"), "variable/noon");
+});

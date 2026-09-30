@@ -12,7 +12,7 @@ import {
   themeMatchesGallery,
 } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, paletteSwatchCss, resolveSlot, variableIsPalette } from "./palette.js";
-import { mobileSceneOnboarding, sceneRailCatalogKey, showNoAreasMessage } from "./panel_state.js";
+import { mobileAutoConfigureCard, mobileSceneOnboarding, sceneRailCatalogKey, showNoAreasMessage } from "./panel_state.js";
 import { scenePresetUses, scenesUsingLibraryItem } from "./scene_used.js";
 
 const AREA_RAIL_PX = 340;
@@ -812,7 +812,6 @@ export const LANDING_CSS = `
   }
   @media (hover: hover) and (pointer: fine) {
     .scene-card-slot:hover .scene-card:not(.selected) {
-      transform: scale(1.06);
       box-shadow:
         inset 0 0 0 1px rgba(255, 255, 255, 0.08),
         0 8px 20px rgba(0, 0, 0, 0.32);
@@ -1040,6 +1039,25 @@ export const LANDING_CSS = `
     position: relative;
     display: flex;
     max-width: 100%;
+  }
+  .var-row > .library-chip {
+    width: 96px;
+    flex: 0 0 96px;
+  }
+  .var-row .var-chip {
+    width: 100%;
+    min-width: 0;
+  }
+  .var-row .var-chip > span {
+    width: 100%;
+    height: 2.5em;
+    line-height: 1.25;
+    text-align: center;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
   }
   .library-chip:has(.var-chip.selected) {
     z-index: 2;
@@ -1723,7 +1741,7 @@ export function sceneCoverUrl(panel) {
 function renderRailLiveEdit(panel, tab) {
   const liveBar = document.createElement("div");
   liveBar.className = "rail-live-edit";
-  if (mobileSceneOnboarding(panel._narrow, tab, (panel._items || []).length)) {
+  if (mobileAutoConfigureCard(panel._narrow, tab, (panel._items || []).length, panel._mobileManualEmpty)) {
     liveBar.classList.add("is-auto-configure");
     const button = document.createElement("ha-button");
     button.variant = "brand";
@@ -1814,7 +1832,8 @@ function renderAreaBlock(panel, area, scenes) {
   const areaCount = document.createElement("span");
   areaCount.className = "area-count";
   areaCount.textContent = String(scenes.length);
-  title.append(areaName, areaCount);
+  title.appendChild(areaName);
+  if (scenes.length) title.appendChild(areaCount);
   if (area.deleted) {
     const deleted = document.createElement("span");
     deleted.className = "area-deleted-label";
@@ -2598,6 +2617,7 @@ function renderLibrary(panel, { compact } = {}) {
     dot.style.background = variableSwatchCss(variable, panel._variables);
     const name = document.createElement("span");
     name.textContent = variable.name;
+    chip.title = variable.name || "";
     chip.append(dot, name);
     const open = () => panel._openVariableEditor(variable);
     chip.addEventListener("click", (ev) => {

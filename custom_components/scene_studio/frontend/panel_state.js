@@ -12,6 +12,14 @@ export function mobileSceneOnboarding(narrow, tab, sceneCount) {
   return Boolean(narrow && tab === "scenes" && sceneCount === 0);
 }
 
+export function mobileAutoConfigureCard(narrow, tab, sceneCount, listVisible) {
+  return mobileSceneOnboarding(narrow, tab, sceneCount) && Boolean(listVisible);
+}
+
+export function libraryColorTarget(currentId, clickedId) {
+  return currentId === clickedId ? "variables" : `variable/${clickedId}`;
+}
+
 /** Zero scene cards cannot tell us whether the area catalog has arrived. */
 export function sceneRailCatalogKey(floors, scenes) {
   return JSON.stringify([floors, scenes.map(({ id, area }) => [id, area])]);

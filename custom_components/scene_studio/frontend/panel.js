@@ -84,7 +84,7 @@ import {
 } from "./landing.js";
 import { lightDisplayName } from "./display_names.js";
 import { createOnOffEventGraph, toggleOnOffDraft } from "./onoff_graph.js";
-import { defaultOnPreference, sceneRailCatalogKey } from "./panel_state.js";
+import { defaultOnPreference, libraryColorTarget, sceneRailCatalogKey } from "./panel_state.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
@@ -8950,7 +8950,7 @@ class SceneStudioPanel extends HTMLElement {
       this._go(
         variableIsPalette(variable)
           ? `palette/${variable.id}`
-          : `variable/${variable.id}`
+          : libraryColorTarget(this._view === "variable" ? this._variableId : null, variable.id)
       );
       return;
     }
