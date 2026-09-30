@@ -266,6 +266,7 @@ def _bare_store() -> SceneStudioStore:
     store.variables = {}
     store.themes = {}
     store.scenes = {}
+    store.area_names = {}
     store.settings = {}
     store.managed_native_scene_ids = []
     store.pending_hide_sync = False
@@ -370,6 +371,38 @@ def test_scene_memory_rolls_back_when_save_fails():
     asyncio.run(run())
 
 
+def test_last_known_area_name_is_kept_after_registry_removal():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"scene": {"id": "scene", "area": "old-area"}}
+        await store.async_remember_area_names({"old-area": "Living room"})
+        await store.async_remember_area_names({})
+        assert store.area_names == {"old-area": "Living room"}
+        store.async_save.assert_awaited_once()
+
+    asyncio.run(run())
+
+
+def test_auto_configure_is_one_write_and_compensates_entity_failure():
+    async def run():
+        store = _bare_store()
+        items, variables, theme = await store.async_auto_configure(
+            [("kitchen", "Kitchen"), ("bed", "Bedroom")]
+        )
+        assert len(items) == 2
+        assert store.async_save.await_count == 1
+        assert store.area_names == {"kitchen": "Kitchen", "bed": "Bedroom"}
+        await store.async_compensate_auto_configure(
+            [item["id"] for item in items], variables, theme
+        )
+        assert store.scenes == {}
+        assert store.themes == {}
+        assert store.variables == {}
+        assert store.area_names == {}
+
+    asyncio.run(run())
+
+
 class TestStripSceneDuskMinimum:
     def test_lifts_first_scene_value_and_strips(self):
         from custom_components.scene_studio.store import strip_scene_dusk_minimum
@@ -457,7 +490,7 @@ def test_reset_restores_the_fresh_install_store():
         assert set(store.variables) == {f"default_{event}" for event in SOLAR_EVENTS}
         assert store.themes == {}
         assert store.settings == DEFAULT_SETTINGS
-        assert store.managed_native_scene_ids == []
+        assert store.managed_native_scene_ids == ["old_yaml"]
         assert store.pending_hide_sync is False
         store.async_save.assert_awaited()
 

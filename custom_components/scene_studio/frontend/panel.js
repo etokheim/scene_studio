@@ -370,6 +370,8 @@ class SceneStudioPanel extends HTMLElement {
       void this._leaveLiveEdits();
     };
     this._onLandscapeChange = () => this._syncYearScrubLayout();
+    this._areaRegistryUnsub = null;
+    this._areaRegistrySubscription = null;
     this._onWindowResize = () => {
       if (this._resizeRaf) {
         return;
@@ -383,7 +385,12 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   set hass(hass) {
+    if (this._hass?.connection && this._hass.connection !== hass?.connection) {
+      this._areaRegistryUnsub?.();
+      this._areaRegistryUnsub = null;
+    }
     this._hass = hass;
+    if (this.isConnected) this._subscribeAreaRegistry();
     this._syncDarkModeAttr();
     if (this._menuButtonEl) {
       this._menuButtonEl.hass = hass;
@@ -448,6 +455,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   connectedCallback() {
+    this._subscribeAreaRegistry();
     window.addEventListener("hashchange", this._onHashChange);
     window.addEventListener("location-changed", this._onLocationChanged);
     window.addEventListener("popstate", this._onLocationChanged);
@@ -495,6 +503,8 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._areaRegistryUnsub?.();
+    this._areaRegistryUnsub = null;
     void this._leaveLiveEdits();
     this._closeSceneSidebar();
     window.removeEventListener("hashchange", this._onHashChange);
@@ -5860,7 +5870,9 @@ class SceneStudioPanel extends HTMLElement {
     for (const floor of this._floors || []) {
       for (const area of floor.areas || []) {
         if (area.id === areaId) {
-          return area.name || "";
+          return area.name || (area.deleted
+            ? `${this._t("frontend.areas.unknown", "Deleted area")} (${area.id})`
+            : "");
         }
       }
     }
@@ -7072,6 +7084,148 @@ class SceneStudioPanel extends HTMLElement {
       }
     });
     return menu;
+  }
+
+  _applyAreaCatalog(payload) {
+    this._items = payload?.scenes || this._items;
+    this._floors = payload?.floors || this._floors;
+    const rail = this._contentEl?.querySelector(":scope > .workspace > .area-rail");
+    if (!rail) {
+      this._render();
+      return;
+    }
+    const scroll = rail.querySelector('.area-rail-body[data-tab="scenes"]');
+    const scrollTop = scroll?.scrollTop || 0;
+    const replacement = renderLanding(this, { includeStage: false }).querySelector(".area-rail");
+    rail.replaceWith(replacement);
+    const nextScroll = replacement.querySelector('.area-rail-body[data-tab="scenes"]');
+    if (nextScroll) {
+      nextScroll.scrollTop = scrollTop;
+      this._bindAreaRailScroll(nextScroll);
+    }
+    this._syncRailSelection();
+  }
+
+  _subscribeAreaRegistry() {
+    if (!this._hass?.connection?.subscribeEvents || this._areaRegistrySubscription || this._areaRegistryUnsub) return;
+    this._areaRegistrySubscription = this._hass.connection.subscribeEvents(
+      () => { void this._refreshAreasFromRegistry(); },
+      "area_registry_updated"
+    ).then((unsubscribe) => {
+      this._areaRegistrySubscription = null;
+      if (!this.isConnected) {
+        unsubscribe();
+      } else {
+        this._areaRegistryUnsub = unsubscribe;
+      }
+    }).catch((error) => {
+      this._areaRegistrySubscription = null;
+      this._error = error.message || String(error);
+    });
+  }
+
+  async _refreshAreasFromRegistry() {
+    try {
+      const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      if (this.isConnected) this._applyAreaCatalog(payload);
+    } catch (error) {
+      this._error = error.message || String(error);
+    }
+  }
+
+  _moveDeletedArea(area) {
+    this.shadowRoot.querySelector("ha-dialog.deleted-area-dialog")?.remove();
+    const choices = (this._floors || []).flatMap((floor) =>
+      (floor.areas || []).filter((item) => !item.deleted && item.id !== area.id)
+    );
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "deleted-area-dialog";
+    dialog.setAttribute("header-title", this._t("frontend.areas.move_title", "Move scenes"));
+    dialog.open = true;
+    const field = document.createElement("ha-selector");
+    field.hass = this._hass;
+    field.label = this._t("frontend.areas.target", "Target area");
+    field.selector = { select: { mode: "dropdown", options: choices.map((item) => ({ value: item.id, label: item.name })) } };
+    let targetId = null;
+    field.addEventListener("value-changed", (event) => { targetId = event.detail?.value || null; });
+    const errorText = document.createElement("p");
+    errorText.style.color = "var(--error-color)";
+    errorText.setAttribute("role", "alert");
+    const footer = document.createElement("ha-dialog-footer");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._loc("ui.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => { dialog.open = false; });
+    const move = document.createElement("ha-button");
+    move.slot = "primaryAction";
+    move.variant = "brand";
+    move.textContent = this._t("frontend.areas.move", "Move");
+    move.addEventListener("click", async () => {
+      if (!targetId) return;
+      move.disabled = true;
+      try {
+        const payload = await this._hass.callWS({ type: `${DOMAIN}/move_deleted_area`, area_id: area.id, target_area_id: targetId });
+        dialog.open = false;
+        if (this._view === "edit" && this._formData?.area === area.id) {
+          this._formData.area = targetId;
+          this._formData.membership = { exclude: [], include: [] };
+          this._clearPreviewCache();
+          this._schedulePreview();
+        }
+        this._applyAreaCatalog(payload);
+      } catch (error) {
+        errorText.textContent = error.message || String(error);
+        move.disabled = false;
+      }
+    });
+    footer.append(cancel, move);
+    dialog.append(field, errorText, footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
+  }
+
+  _deleteDeletedArea(area, count) {
+    this.shadowRoot.querySelector("ha-dialog.deleted-area-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "deleted-area-dialog";
+    dialog.setAttribute("header-title", this._t("frontend.areas.delete_title", "Delete scenes?"));
+    dialog.open = true;
+    const detail = document.createElement("p");
+    detail.textContent = this._t("frontend.areas.delete_confirm", "Delete all {count} scenes in {name}?", { count, name: area.name || `${this._t("frontend.areas.unknown", "Deleted area")} (${area.id})` });
+    const errorText = document.createElement("p");
+    errorText.style.color = "var(--error-color)";
+    errorText.setAttribute("role", "alert");
+    const footer = document.createElement("ha-dialog-footer");
+    footer.slot = "footer";
+    const cancel = document.createElement("ha-button");
+    cancel.slot = "secondaryAction";
+    cancel.appearance = "plain";
+    cancel.textContent = this._loc("ui.common.cancel", "Cancel");
+    cancel.addEventListener("click", () => { dialog.open = false; });
+    const remove = document.createElement("ha-button");
+    remove.slot = "primaryAction";
+    remove.variant = "danger";
+    remove.textContent = this._loc("ui.common.delete", "Delete");
+    remove.addEventListener("click", async () => {
+      remove.disabled = true;
+      try {
+        const payload = await this._hass.callWS({ type: `${DOMAIN}/delete_deleted_area`, area_id: area.id });
+        dialog.open = false;
+        if (this._view === "edit" && this._formData?.area === area.id) {
+          this._go("");
+        }
+        this._applyAreaCatalog(payload);
+      } catch (error) {
+        errorText.textContent = error.message || String(error);
+        remove.disabled = false;
+      }
+    });
+    footer.append(cancel, remove);
+    dialog.append(detail, errorText, footer);
+    dialog.addEventListener("closed", () => dialog.remove());
+    this.shadowRoot.appendChild(dialog);
   }
 
   _openCreateDialog({ areaId, areaName } = {}) {

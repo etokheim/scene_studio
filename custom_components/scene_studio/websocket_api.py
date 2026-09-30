@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from functools import wraps
 from typing import Any
 
 import voluptuous as vol
@@ -13,23 +15,21 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 
+from .activation_cache import invalidate_activation_cache
 from .const import (
     DATA_ADD_ENTITIES,
     DATA_CONFIG_ENTRY,
     DATA_ENTITIES,
     DATA_STORE,
     DOMAIN,
-    KIND_CIRCADIAN,
-    SCENE_NAME,
 )
-from .activation_cache import invalidate_activation_cache
 from .migrate_native import async_delete_managed_yaml
 from .native_scene import lights_in_area
 from .preview import build_preview
 from .scene import async_create_or_update_entity, async_remove_entity
 from .snapshots import card_colors
 from .solar import build_sun_path
-from .store import SceneStudioStore, auto_configure_scene_name, to_form_data
+from .store import SceneStudioStore, to_form_data
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +55,8 @@ def async_setup_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_ensure_default_theme)
     websocket_api.async_register_command(hass, ws_auto_configure)
     websocket_api.async_register_command(hass, ws_areas)
+    websocket_api.async_register_command(hass, ws_move_deleted_area)
+    websocket_api.async_register_command(hass, ws_delete_deleted_area)
 
 
 def _store(hass: HomeAssistant) -> SceneStudioStore:
@@ -62,6 +64,22 @@ def _store(hass: HomeAssistant) -> SceneStudioStore:
     if not domain_data or domain_data.get(DATA_CONFIG_ENTRY) is None:
         raise HomeAssistantError("Scene Studio is not loaded")
     return domain_data[DATA_STORE]
+
+
+def _scene_operation_lock(hass: HomeAssistant) -> asyncio.Lock:
+    """Keep store writes and HA entity compensation in one scene operation."""
+    return hass.data[DOMAIN].setdefault("scene_operation_lock", asyncio.Lock())
+
+
+def _serialized_write(handler):
+    """Serialize a store write with scene/entity compensation operations."""
+
+    @wraps(handler)
+    async def wrapped(hass, connection, msg):
+        async with _scene_operation_lock(hass):
+            await handler(hass, connection, msg)
+
+    return wrapped
 
 
 def _registry_entry(hass: HomeAssistant, scene_id: str):
@@ -107,6 +125,23 @@ def _area_tree(hass: HomeAssistant) -> list[dict[str, Any]]:
             floors[area.floor_id]["areas"].append(row)
         else:
             unfloored["areas"].append(row)
+    store = _store(hass)
+    missing_ids = {
+        item.get("area")
+        for item in store.list()
+        if item.get("area") and item["area"] not in area_reg.areas
+    }
+    for area_id in missing_ids:
+        unfloored["areas"].append(
+            {
+                "id": area_id,
+                "name": store.area_names.get(area_id),
+                "icon": None,
+                "floor_id": None,
+                "lights": [],
+                "deleted": True,
+            }
+        )
     ordered = sorted(
         floors.values(),
         key=lambda item: (
@@ -116,10 +151,12 @@ def _area_tree(hass: HomeAssistant) -> list[dict[str, Any]]:
         ),
     )
     if unfloored["areas"]:
-        unfloored["areas"].sort(key=lambda item: item["name"].casefold())
+        unfloored["areas"].sort(
+            key=lambda item: (item["name"] or item["id"]).casefold()
+        )
         ordered.append(unfloored)
     for floor in ordered:
-        floor["areas"].sort(key=lambda item: item["name"].casefold())
+        floor["areas"].sort(key=lambda item: (item["name"] or item["id"]).casefold())
     return ordered
 
 
@@ -129,6 +166,8 @@ def _scene_payload(hass: HomeAssistant, item: dict[str, Any]) -> dict[str, Any]:
     area_name = None
     if area_id and area_id in area_reg.areas:
         area_name = area_reg.areas[area_id].name
+    elif area_id:
+        area_name = _store(hass).area_names.get(area_id)
     entry = _registry_entry(hass, item["id"])
     form = _form_payload(item, entry)
     store = _store(hass)
@@ -219,6 +258,12 @@ async def ws_save(
     msg: dict[str, Any],
 ) -> None:
     """Create or update a scene."""
+    async with _scene_operation_lock(hass):
+        await _ws_save_locked(hass, connection, msg)
+
+
+async def _ws_save_locked(hass, connection, msg) -> None:
+    """Complete persistence, entity sync, and compensation as one operation."""
     domain_data = hass.data[DOMAIN]
     add_entities = domain_data.get(DATA_ADD_ENTITIES)
     if add_entities is None:
@@ -230,8 +275,11 @@ async def ws_save(
     if msg.get("scene_id"):
         raw["id"] = msg["scene_id"]
     previous = _store(hass).get(raw.get("id")) if raw.get("id") else None
+    area = ar.async_get(hass).areas.get(raw.get("area"))
     try:
-        item = await _store(hass).async_upsert(raw)
+        item = await _store(hass).async_upsert(
+            raw, area_name=area.name if area else None
+        )
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
@@ -278,6 +326,12 @@ async def ws_delete(
     msg: dict[str, Any],
 ) -> None:
     """Delete a scene."""
+    async with _scene_operation_lock(hass):
+        await _ws_delete_locked(hass, connection, msg)
+
+
+async def _ws_delete_locked(hass, connection, msg) -> None:
+    """Complete deletion and entity removal under the scene operation lock."""
     scene_id = msg["scene_id"]
     previous = _store(hass).get(scene_id)
     if previous is None:
@@ -317,6 +371,12 @@ async def ws_reset(
     Lights, areas, and the config entry stay. Scene entities and managed
     native YAML are removed first so a failed reset can put them back.
     """
+    async with _scene_operation_lock(hass):
+        await _ws_reset_locked(hass, connection, msg)
+
+
+async def _ws_reset_locked(hass, connection, msg) -> None:
+    """Reset persistence and entity state under the scene operation lock."""
     store = _store(hass)
     previous_scenes = {item["id"]: item for item in store.list()}
     scene_ids = list(previous_scenes)
@@ -343,6 +403,9 @@ async def ws_reset(
     if managed:
         try:
             await async_delete_managed_yaml(hass, managed)
+            await store._async_mutate(  # pylint: disable=protected-access
+                store.managed_native_scene_ids.clear
+            )
         except Exception as err:  # pylint: disable=broad-exception-caught
             connection.send_error(msg["id"], "cleanup_failed", str(err))
             return
@@ -433,6 +496,7 @@ def ws_get_settings(
 )
 @websocket_api.require_admin
 @websocket_api.async_response
+@_serialized_write
 async def ws_update_settings(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -467,6 +531,12 @@ async def ws_set_automatically_update_lights(
     msg: dict[str, Any],
 ) -> None:
     """Toggle per-scene automatic light-update preference."""
+    async with _scene_operation_lock(hass):
+        await _ws_set_automatically_update_lights_locked(hass, connection, msg)
+
+
+async def _ws_set_automatically_update_lights_locked(hass, connection, msg) -> None:
+    """Keep the saved preference and entity config in one scene operation."""
     item = await _store(hass).async_set_automatically_update_lights(
         msg["scene_id"], bool(msg["automatically_update_lights"])
     )
@@ -499,6 +569,7 @@ def ws_list_variables(
 )
 @websocket_api.require_admin
 @websocket_api.async_response
+@_serialized_write
 async def ws_save_variable(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -521,6 +592,7 @@ async def ws_save_variable(
 )
 @websocket_api.require_admin
 @websocket_api.async_response
+@_serialized_write
 async def ws_delete_variable(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -560,6 +632,7 @@ def ws_list_themes(
 )
 @websocket_api.require_admin
 @websocket_api.async_response
+@_serialized_write
 async def ws_save_theme(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -579,6 +652,7 @@ async def ws_save_theme(
 )
 @websocket_api.require_admin
 @websocket_api.async_response
+@_serialized_write
 async def ws_ensure_default_theme(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -601,6 +675,7 @@ async def ws_ensure_default_theme(
 )
 @websocket_api.require_admin
 @websocket_api.async_response
+@_serialized_write
 async def ws_delete_theme(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -630,6 +705,12 @@ async def ws_auto_configure(
 
     Only allowed when the store has zero scenes (empty-state onboarding).
     """
+    async with _scene_operation_lock(hass):
+        await _ws_auto_configure_locked(hass, connection, msg)
+
+
+async def _ws_auto_configure_locked(hass, connection, msg) -> None:
+    """Persist and register auto-configured scenes without another scene write."""
     store = _store(hass)
     if store.list():
         connection.send_error(
@@ -643,27 +724,135 @@ async def ws_auto_configure(
             msg["id"], "not_loaded", "Scene platform is not ready yet"
         )
         return
-    await store.async_ensure_default_theme()
-    created = []
     area_reg = ar.async_get(hass)
+    selected = []
     for area in area_reg.areas.values():
         lights = lights_in_area(hass, area.id)
         if not lights:
             continue
-        item = await store.async_upsert(
-            {
-                "kind": KIND_CIRCADIAN,
-                SCENE_NAME: auto_configure_scene_name(store.themes),
-                "area": area.id,
-                "theme_id": "default",
-            }
+        selected.append((area.id, area.name))
+    items, created_variables, created_theme = await store.async_auto_configure(selected)
+    try:
+        for item in items:
+            await async_create_or_update_entity(
+                hass,
+                hass.data[DOMAIN][DATA_CONFIG_ENTRY],
+                item,
+                hass.data[DOMAIN][DATA_ADD_ENTITIES],
+                hass.data[DOMAIN][DATA_ENTITIES],
+            )
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        await store.async_compensate_auto_configure(
+            [item["id"] for item in items], created_variables, created_theme
         )
-        await async_create_or_update_entity(
-            hass,
-            hass.data[DOMAIN][DATA_CONFIG_ENTRY],
-            item,
-            hass.data[DOMAIN][DATA_ADD_ENTITIES],
-            hass.data[DOMAIN][DATA_ENTITIES],
-        )
-        created.append(_scene_payload(hass, item))
+        for item in items:
+            await async_remove_entity(hass.data[DOMAIN][DATA_ENTITIES], item["id"])
+        connection.send_error(msg["id"], "auto_configure_failed", str(err))
+        return
+    created = [_scene_payload(hass, item) for item in items]
     connection.send_result(msg["id"], {"scenes": created, **_list_payload(hass)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/move_deleted_area",
+        vol.Required("area_id"): str,
+        vol.Required("target_area_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_move_deleted_area(hass, connection, msg) -> None:
+    """Move all scenes from an orphan area to a current area."""
+    async with _scene_operation_lock(hass):
+        await _ws_move_deleted_area_locked(hass, connection, msg)
+
+
+async def _ws_move_deleted_area_locked(hass, connection, msg) -> None:
+    """Move an orphan area's scenes under the scene operation lock."""
+    area_id = msg["area_id"]
+    target_id = msg["target_area_id"]
+    areas = ar.async_get(hass).areas
+    if area_id in areas or target_id not in areas or area_id == target_id:
+        connection.send_error(msg["id"], "invalid_area", "Select a current target area")
+        return
+    store = _store(hass)
+    previous = [item.copy() for item in store.list() if item.get("area") == area_id]
+    if not previous:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Area has no scenes"
+        )
+        return
+    old_name = store.area_names.get(area_id)
+    try:
+        moved = await store.async_move_area(area_id, target_id)
+        for item in moved:
+            await async_create_or_update_entity(
+                hass,
+                hass.data[DOMAIN][DATA_CONFIG_ENTRY],
+                item,
+                hass.data[DOMAIN][DATA_ADD_ENTITIES],
+                hass.data[DOMAIN][DATA_ENTITIES],
+            )
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        await store.async_restore_area(previous, area_id, old_name)
+        for item in previous:
+            await async_create_or_update_entity(
+                hass,
+                hass.data[DOMAIN][DATA_CONFIG_ENTRY],
+                item,
+                hass.data[DOMAIN][DATA_ADD_ENTITIES],
+                hass.data[DOMAIN][DATA_ENTITIES],
+            )
+        connection.send_error(msg["id"], "move_failed", str(err))
+        return
+    invalidate_activation_cache(hass)
+    connection.send_result(msg["id"], _list_payload(hass))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/delete_deleted_area",
+        vol.Required("area_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_delete_deleted_area(hass, connection, msg) -> None:
+    """Delete all scenes in an orphan area as a recoverable operation."""
+    async with _scene_operation_lock(hass):
+        await _ws_delete_deleted_area_locked(hass, connection, msg)
+
+
+async def _ws_delete_deleted_area_locked(hass, connection, msg) -> None:
+    """Remove an orphan area's scenes under the scene operation lock."""
+    area_id = msg["area_id"]
+    if area_id in ar.async_get(hass).areas:
+        connection.send_error(msg["id"], "invalid_area", "Area still exists")
+        return
+    store = _store(hass)
+    previous = [item.copy() for item in store.list() if item.get("area") == area_id]
+    old_name = store.area_names.get(area_id)
+    if not previous:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_NOT_FOUND, "Area has no scenes"
+        )
+        return
+    try:
+        await store.async_delete_area(area_id)
+        for item in previous:
+            await async_remove_entity(hass.data[DOMAIN][DATA_ENTITIES], item["id"])
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        await store.async_restore_area(previous, area_id, old_name)
+        for item in previous:
+            await async_create_or_update_entity(
+                hass,
+                hass.data[DOMAIN][DATA_CONFIG_ENTRY],
+                item,
+                hass.data[DOMAIN][DATA_ADD_ENTITIES],
+                hass.data[DOMAIN][DATA_ENTITIES],
+            )
+        connection.send_error(msg["id"], "delete_failed", str(err))
+        return
+    invalidate_activation_cache(hass)
+    connection.send_result(msg["id"], _list_payload(hass))

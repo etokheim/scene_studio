@@ -547,7 +547,7 @@ class _ScenesStore(Store):
         return _migrate_store(old_major_version, old_data)
 
 
-class SceneStudioStore:
+class SceneStudioStore:  # pylint: disable=too-many-public-methods
     """Load and persist circadian scene configs, variables, and themes."""
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -560,6 +560,7 @@ class SceneStudioStore:
         self.variables: dict[str, dict[str, Any]] = {}
         self.themes: dict[str, dict[str, Any]] = {}
         self.scenes: dict[str, dict[str, Any]] = {}
+        self.area_names: dict[str, str] = {}
         self.settings: dict[str, Any] = dict(DEFAULT_SETTINGS)
         # Legacy — only populated during v3→v4 migration.
         self.managed_native_scene_ids: list[str] = []
@@ -616,6 +617,11 @@ class SceneStudioStore:
             for alias in ("continuous", "follow_up"):
                 item.pop(alias, None)
             self.scenes[item["id"]] = item
+        self.area_names = {
+            area_id: name
+            for area_id, name in (raw.get("area_names") or {}).items()
+            if isinstance(area_id, str) and isinstance(name, str) and name.strip()
+        }
 
         # --- Settings ---
         raw_settings = dict(raw.get("settings") or {})
@@ -644,6 +650,7 @@ class SceneStudioStore:
             "variables": self.variables,
             "themes": self.themes,
             "scenes": list(self.scenes.values()),
+            "area_names": dict(self.area_names),
             "settings": dict(self.settings),
         }
         # Keep managed ids during migration transition; drop when empty.
@@ -658,6 +665,7 @@ class SceneStudioStore:
         async with self._mutation_lock:
             previous = (
                 deepcopy(self.scenes),
+                deepcopy(self.area_names),
                 deepcopy(self.variables),
                 deepcopy(self.themes),
                 deepcopy(self.settings),
@@ -670,6 +678,7 @@ class SceneStudioStore:
                     not skip_if_unchanged
                     or (
                         self.scenes,
+                        self.area_names,
                         self.variables,
                         self.themes,
                         self.settings,
@@ -682,6 +691,7 @@ class SceneStudioStore:
             except Exception:
                 (
                     self.scenes,
+                    self.area_names,
                     self.variables,
                     self.themes,
                     self.settings,
@@ -831,6 +841,58 @@ class SceneStudioStore:
 
         return await self._async_mutate(change, skip_if_unchanged=True)
 
+    async def async_auto_configure(
+        self, areas: list[tuple[str, str]]
+    ) -> tuple[list[dict[str, Any]], list[str], bool]:
+        """Create the starter theme and all area scenes in one durable write."""
+
+        def change() -> tuple[list[dict[str, Any]], list[str], bool]:
+            if self.scenes:
+                raise HomeAssistantError("Auto configure requires an empty scene store")
+            created_variables = []
+            for var_id, var in seed_variables().items():
+                if var_id not in self.variables:
+                    self.variables[var_id] = var
+                    created_variables.append(var_id)
+            created_theme = "default" not in self.themes
+            if created_theme:
+                theme = seed_default_theme(self.variables)["default"]
+                theme["builtin_id"] = "default"
+                self.themes["default"] = theme
+            items = []
+            for area_id, area_name in areas:
+                item = normalize_scene(
+                    {
+                        "kind": KIND_CIRCADIAN,
+                        SCENE_NAME: auto_configure_scene_name(self.themes),
+                        AREA: area_id,
+                        "theme_id": "default",
+                    }
+                )
+                self.scenes[item["id"]] = item
+                self.area_names[area_id] = area_name
+                items.append(item)
+            return items, created_variables, created_theme
+
+        return await self._async_mutate(change)
+
+    async def async_compensate_auto_configure(
+        self, scene_ids: list[str], variable_ids: list[str], created_theme: bool
+    ) -> None:
+        """Restore the previous empty state if entity registration fails."""
+
+        def change() -> None:
+            for scene_id in scene_ids:
+                item = self.scenes.pop(scene_id, None)
+                if item:
+                    self.area_names.pop(item.get(AREA), None)
+            for variable_id in variable_ids:
+                self.variables.pop(variable_id, None)
+            if created_theme:
+                self.themes.pop("default", None)
+
+        await self._async_mutate(change)
+
     async def async_upsert_theme(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a circadian theme."""
         theme_id = raw.get("id") or str(uuid.uuid4())
@@ -891,11 +953,71 @@ class SceneStudioStore:
         """Return all scene configs."""
         return list(self.scenes.values())
 
+    async def async_remember_area_names(self, names: dict[str, str]) -> None:
+        """Retain the last known names of areas that own saved scenes."""
+
+        def change() -> None:
+            used = {item.get(AREA) for item in self.scenes.values()}
+            for area_id in used:
+                if area_id in names and names[area_id].strip():
+                    self.area_names[area_id] = names[area_id]
+
+        await self._async_mutate(change, skip_if_unchanged=True)
+
+    async def async_move_area(
+        self, old_area_id: str, target_area_id: str
+    ) -> list[dict[str, Any]]:
+        """Move every scene together; target membership comes from its area."""
+
+        def change() -> list[dict[str, Any]]:
+            moved = []
+            for scene_id, item in self.scenes.items():
+                if item.get(AREA) != old_area_id:
+                    continue
+                next_item = deepcopy(item)
+                next_item[AREA] = target_area_id
+                next_item["membership"] = {"exclude": [], "include": []}
+                self.scenes[scene_id] = next_item
+                moved.append(next_item)
+            self.area_names.pop(old_area_id, None)
+            return moved
+
+        return await self._async_mutate(change)
+
+    async def async_delete_area(self, area_id: str) -> list[dict[str, Any]]:
+        """Delete all scenes in a removed area and forget its name together."""
+
+        def change() -> list[dict[str, Any]]:
+            removed = [
+                item for item in self.scenes.values() if item.get(AREA) == area_id
+            ]
+            for item in removed:
+                self.scenes.pop(item["id"])
+            self.area_names.pop(area_id, None)
+            return removed
+
+        return await self._async_mutate(change)
+
+    async def async_restore_area(
+        self, scenes: list[dict[str, Any]], area_id: str, area_name: str | None
+    ) -> None:
+        """Compensate a failed HA entity update after an area batch write."""
+
+        def change() -> None:
+            for item in scenes:
+                self.scenes[item["id"]] = deepcopy(item)
+            if area_name:
+                self.area_names[area_id] = area_name
+
+        await self._async_mutate(change)
+
     def get(self, scene_id: str) -> dict[str, Any] | None:
         """Return one scene config."""
         return self.scenes.get(scene_id)
 
-    async def async_upsert(self, raw: dict[str, Any]) -> dict[str, Any]:
+    async def async_upsert(
+        self, raw: dict[str, Any], area_name: str | None = None
+    ) -> dict[str, Any]:
         """Create or update a scene config."""
         scene_id = raw.get("id")
         # Preserve play/pause preference when editor omits it.
@@ -915,6 +1037,8 @@ class SceneStudioStore:
 
         def change() -> dict[str, Any]:
             self.scenes[item["id"]] = item
+            if area_name and item.get(AREA):
+                self.area_names[item[AREA]] = area_name
             return item
 
         return await self._async_mutate(change)
@@ -936,16 +1060,17 @@ class SceneStudioStore:
     async def async_reset_to_fresh(self) -> None:
         """Replace scenes, library, and settings with a fresh install.
 
-        The config entry stays. Callers remove scene entities and managed
-        native YAML before this, then drop the activation cache after.
+        The config entry stays. Managed YAML ids remain until cleanup is
+        confirmed, so a failed cleanup can be retried after restart.
         """
 
         def change() -> None:
             self.scenes = {}
+            self.area_names = {}
             self.variables = seed_variables()
             self.themes = {}
             self.settings = dict(DEFAULT_SETTINGS)
-            self.managed_native_scene_ids = []
+            # Keep cleanup metadata until managed YAML deletion succeeds.
             self.pending_hide_sync = False
 
         await self._async_mutate(change)

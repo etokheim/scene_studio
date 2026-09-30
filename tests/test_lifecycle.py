@@ -48,11 +48,15 @@ def test_failed_setup_removes_its_panel_and_start_listener():
             listeners[event_type] = handler
             return lambda: listeners.pop(event_type, None)
 
+        def listen(event_type, handler):
+            listeners[event_type] = handler
+            return lambda: listeners.pop(event_type, None)
+
         entry = SimpleNamespace(data={}, options={}, entry_id="one")
         hass = SimpleNamespace(
             data={},
             is_running=False,
-            bus=SimpleNamespace(async_listen_once=listen_once),
+            bus=SimpleNamespace(async_listen_once=listen_once, async_listen=listen),
             config_entries=SimpleNamespace(
                 async_forward_entry_setups=AsyncMock(
                     side_effect=RuntimeError("failed")
@@ -61,8 +65,16 @@ def test_failed_setup_removes_its_panel_and_start_listener():
             ),
             async_create_task=Mock(side_effect=lambda coroutine: coroutine.close()),
         )
-        store = SimpleNamespace(async_load=AsyncMock(), list=Mock(return_value=[]))
+        store = SimpleNamespace(
+            async_load=AsyncMock(),
+            async_remember_area_names=AsyncMock(),
+            list=Mock(return_value=[]),
+        )
         with (
+            patch(
+                "custom_components.scene_studio.ar.async_get",
+                return_value=SimpleNamespace(areas={}),
+            ),
             patch(
                 "custom_components.scene_studio.SceneStudioStore", return_value=store
             ),
@@ -93,15 +105,21 @@ def test_unload_cancels_retry_for_partially_loaded_native_scenes():
         hass = SimpleNamespace(
             data={"scene": object()},
             is_running=True,
+            bus=SimpleNamespace(async_listen=Mock(return_value=Mock())),
             config_entries=config_entries,
             async_create_task=Mock(side_effect=lambda coroutine: coroutine.close()),
         )
         store = SimpleNamespace(
             async_load=AsyncMock(),
+            async_remember_area_names=AsyncMock(),
             list=Mock(return_value=[{"kind": "circadian", "scene_dawn": "scene.late"}]),
         )
         cancel_retry = Mock()
         with (
+            patch(
+                "custom_components.scene_studio.ar.async_get",
+                return_value=SimpleNamespace(areas={}),
+            ),
             patch(
                 "custom_components.scene_studio.SceneStudioStore", return_value=store
             ),

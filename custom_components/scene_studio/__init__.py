@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError, Unauthorized, UnknownUser
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 from homeassistant.helpers.event import async_call_later
@@ -204,6 +205,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             "legacy_entities_purged": False,
             "freeze_start_unsub": None,
             "freeze_retry_unsub": None,
+            "area_unsub": None,
+            "area_tasks": set(),
         },
     )
     store: SceneStudioStore = domain_data[DATA_STORE]
@@ -213,6 +216,24 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         if not domain_data["store_loaded"]:
             await store.async_load()
             domain_data["store_loaded"] = True
+
+        async def _remember_areas(_event: Event | None = None) -> None:
+            names = {area.id: area.name for area in ar.async_get(hass).areas.values()}
+            await store.async_remember_area_names(names)
+
+        await _remember_areas()
+        if domain_data["area_unsub"] is None:
+
+            def _queue_area_refresh(event: Event) -> None:
+                task = hass.async_create_task(_remember_areas(event))
+                if task is not None:
+                    domain_data["area_tasks"].add(task)
+                    task.add_done_callback(domain_data["area_tasks"].discard)
+
+            domain_data["area_unsub"] = hass.bus.async_listen(
+                ar.EVENT_AREA_REGISTRY_UPDATED,
+                _queue_area_refresh,
+            )
 
         if not domain_data["legacy_entities_purged"]:
             _purge_legacy_platform_entities(hass)
@@ -294,6 +315,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             unsubscribe()
         if unsubscribe := domain_data.get("freeze_retry_unsub"):
             unsubscribe()
+        if unsubscribe := domain_data.get("area_unsub"):
+            unsubscribe()
+        for task in domain_data["area_tasks"]:
+            task.cancel()
         unload_activation_cache(hass)
         hass.data.pop(DOMAIN, None)
         raise
@@ -327,6 +352,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             unsubscribe()
         if unsubscribe := domain_data.get("freeze_retry_unsub"):
             unsubscribe()
+        if unsubscribe := domain_data.get("area_unsub"):
+            unsubscribe()
+        for task in domain_data["area_tasks"]:
+            task.cancel()
         unload_activation_cache(hass)
         hass.data.pop(DOMAIN, None)
     return unload_ok

@@ -21,6 +21,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import Context, Event, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
@@ -66,7 +67,13 @@ from .extrapolation_math import (
 )
 from .native_scene import scenes_in_area
 from .palette import scene_palette_image_attributes
-from .snapshots import circadian_anchor, modes_map, scene_members, simple_anchor
+from .snapshots import (
+    circadian_anchor,
+    modes_map,
+    scene_area_exists,
+    scene_members,
+    simple_anchor,
+)
 from .solar import EVENT_ORDER, dusk_start_seconds
 from .store import dusk_minimum_seconds
 
@@ -421,6 +428,9 @@ class CircadianScene(Scene):
 
     async def _async_automatically_update_lights(self) -> None:
         """Re-apply the scene if it is still the last one activated in the area."""
+        if not scene_area_exists(self.hass, self._scene_config):
+            self._stop_automatically_update_lights()
+            return
         interval = automatically_update_lights_interval_seconds(self.hass)
         if not should_arm_automatically_update_lights(
             interval,
@@ -617,6 +627,8 @@ class CircadianScene(Scene):
             location: Optional dict with 'latitude' and 'longitude' keys to override location
                      (defaults to Home Assistant's configured location)
         """
+        if not scene_area_exists(self.hass, self._scene_config):
+            raise HomeAssistantError("Scene Studio area has been deleted")
         is_auto_update_tick = self._activating_automatically_update_lights
         self._activating_automatically_update_lights = False
         only_ids = self._only_entity_ids
@@ -1101,6 +1113,8 @@ class SimpleScene(Scene):
         self, transition=0, context: Context | None = None, **kwargs
     ):
         """Apply the resolved fixed snapshot."""
+        if not scene_area_exists(self.hass, self._scene_config):
+            raise HomeAssistantError("Scene Studio area has been deleted")
         store = self.hass.data[DOMAIN][DATA_STORE]
         anchor = simple_anchor(self.hass, store, self._scene_config)
         entity_changes = []

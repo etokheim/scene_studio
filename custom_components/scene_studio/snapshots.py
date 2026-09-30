@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
 
 from .color_math import entity_rgb
 from .const import KIND_CIRCADIAN, KIND_SIMPLE, SOLAR_EVENTS
@@ -31,10 +32,18 @@ def supported_modes(hass: HomeAssistant, entity_id: str) -> set[str] | None:
 def scene_members(hass: HomeAssistant, scene: dict[str, Any]) -> list[str]:
     """Resolve membership for a stored scene."""
     area_id = scene.get("area")
+    if area_id and area_id not in ar.async_get(hass).areas:
+        return []
     area_lights = lights_in_area(hass, area_id) if area_id else []
     return without_redundant_light_groups(
         hass, resolve_membership(area_lights, scene.get("membership") or {})
     )
+
+
+def scene_area_exists(hass: HomeAssistant, scene: dict[str, Any]) -> bool:
+    """Whether a configured area is still present in Home Assistant."""
+    area_id = scene.get("area")
+    return not area_id or area_id in ar.async_get(hass).areas
 
 
 def modes_map(hass: HomeAssistant, entity_ids: list[str]) -> dict[str, set[str] | None]:

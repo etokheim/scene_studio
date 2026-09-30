@@ -631,6 +631,27 @@ export const LANDING_CSS = `
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .area-block.is-deleted .area-name {
+    text-decoration: line-through;
+  }
+  .area-deleted-label {
+    color: var(--error-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .area-deleted-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .area-deleted-actions button {
+    background: transparent;
+    border: 0;
+    color: var(--primary-text-color);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 4px;
+  }
   .area-count {
     flex: 0 0 auto;
     font-size: 13px;
@@ -1743,6 +1764,7 @@ function renderFloorBlock(panel, floor, byArea) {
 function renderAreaBlock(panel, area, scenes) {
   const block = document.createElement("div");
   block.className = "area-block";
+  block.classList.toggle("is-deleted", Boolean(area.deleted));
   const head = document.createElement("div");
   head.className = "area-head";
   const title = document.createElement("h2");
@@ -1753,21 +1775,44 @@ function renderAreaBlock(panel, area, scenes) {
   }
   const areaName = document.createElement("span");
   areaName.className = "area-name";
-  areaName.textContent = area.name || "";
+  areaName.textContent = area.name || (area.deleted
+    ? `${panel._t("frontend.areas.unknown", "Deleted area")} (${area.id})`
+    : "");
   const areaCount = document.createElement("span");
   areaCount.className = "area-count";
   areaCount.textContent = String(scenes.length);
   title.append(areaName, areaCount);
-  const add = iconButton(
-    "mdi:plus",
-    panel._t("frontend.actions.add_scene", "Add scene")
-  );
-  head.append(
-    stickyBg("area"),
-    title,
-    panel._areaCreateDropdown(add, { areaId: area.id, areaName: area.name })
-  );
-  block.appendChild(head);
+  if (area.deleted) {
+    const deleted = document.createElement("span");
+    deleted.className = "area-deleted-label";
+    deleted.textContent = panel._t("frontend.areas.deleted", "Deleted");
+    title.appendChild(deleted);
+    const actions = document.createElement("div");
+    actions.className = "area-deleted-actions";
+    for (const [label, action] of [
+      [panel._t("frontend.areas.move", "Move"), () => panel._moveDeletedArea(area)],
+      [panel._loc("ui.common.delete", "Delete"), () => panel._deleteDeletedArea(area, scenes.length)],
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.addEventListener("click", action);
+      actions.appendChild(button);
+    }
+    head.append(stickyBg("area"), title, actions);
+    block.appendChild(head);
+  } else {
+    const add = iconButton(
+      "mdi:plus",
+      panel._t("frontend.actions.add_scene", "Add scene")
+    );
+    head.append(
+      stickyBg("area"),
+      title,
+      panel._areaCreateDropdown(add, { areaId: area.id, areaName: area.name })
+    );
+    block.appendChild(head);
+  }
   if (!scenes.length) {
     const empty = document.createElement("button");
     empty.type = "button";
