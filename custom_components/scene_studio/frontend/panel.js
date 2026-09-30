@@ -82,6 +82,8 @@ import {
   paintThemeDial,
 } from "./landing.js";
 import { lightDisplayName } from "./display_names.js";
+import { createOnOffEventGraph, toggleOnOffDraft } from "./onoff_graph.js";
+import { defaultOnPreference } from "./panel_state.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
@@ -284,6 +286,8 @@ class SceneStudioPanel extends HTMLElement {
     this._variables = [];
     this._themes = [];
     this._floors = [];
+    this._areaCatalogLoaded = false;
+    this._mobileManualEmpty = false;
     this._settings = {
       automatically_update_lights_interval: 300,
       dusk_minimum_time_of_day: 22 * 3600,
@@ -1700,6 +1704,12 @@ class SceneStudioPanel extends HTMLElement {
         .clock-ring-hover-name[hidden] {
           display: none;
         }
+        .clock-ring-hover-caps {
+          margin-left: 0.35em;
+          color: var(--secondary-text-color);
+          font-size: 0.82em;
+          font-weight: 400;
+        }
         .sun-light-clock-overlay {
           position: absolute;
           inset: 0;
@@ -3109,6 +3119,48 @@ class SceneStudioPanel extends HTMLElement {
           line-height: 1.25;
           color: var(--secondary-text-color);
         }
+        .light-onoff-graph {
+          margin: 12px 0;
+        }
+        .light-onoff-events {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding: 4px 1px;
+        }
+        .light-onoff-event {
+          display: flex;
+          flex: 1 0 64px;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          padding: 10px 6px;
+          border: 1px solid var(--divider-color);
+          border-radius: 12px;
+          background: var(--card-background-color);
+          color: var(--secondary-text-color);
+          font: inherit;
+          cursor: pointer;
+        }
+        .light-onoff-event.is-on {
+          border-color: var(--primary-color);
+          background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color));
+          color: var(--primary-text-color);
+        }
+        .light-onoff-event.is-active {
+          box-shadow: 0 0 0 1px var(--primary-color);
+        }
+        .light-onoff-event:disabled {
+          opacity: 0.45;
+          cursor: default;
+        }
+        .light-onoff-event-name {
+          font-size: 11px;
+        }
+        .light-onoff-event-state {
+          font-size: 13px;
+          font-weight: 600;
+        }
         .light-brightness-graph-plot {
           touch-action: none;
           user-select: none;
@@ -3530,7 +3582,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         .scene-palette-dialog .scene-palette-hint {
           margin: 0;
-          padding: 4px 40px 8px;
+          padding: 0 0 12px;
           color: var(--secondary-text-color);
           font-size: 14px;
           line-height: 20px;
@@ -3558,7 +3610,7 @@ class SceneStudioPanel extends HTMLElement {
           overflow-y: auto;
           /* Inside the scroller, so scale(1.1) and the 32px shadow are not
              clipped and this inset does not sit between the list and the footer. */
-          padding: 36px 40px 40px;
+          padding: 16px 20px 20px;
           box-sizing: border-box;
         }
         .scene-palette-dialog .live-edit-toggle {
@@ -5473,6 +5525,7 @@ class SceneStudioPanel extends HTMLElement {
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
+      this._areaCatalogLoaded = Array.isArray(payload?.floors);
       this._adoptSettings(payload?.settings);
       this._error = null;
     } catch (err) {
@@ -5480,10 +5533,7 @@ class SceneStudioPanel extends HTMLElement {
         return;
       }
       this._error = err.message || String(err);
-      this._items = [];
-      this._variables = [];
-      this._themes = [];
-      this._floors = [];
+      // Do not turn a failed refresh into an empty area catalog.
     }
     if (!this._panelLoadIsCurrent(token)) {
       return;
@@ -5574,6 +5624,7 @@ class SceneStudioPanel extends HTMLElement {
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
+      this._areaCatalogLoaded = Array.isArray(payload?.floors);
       this._adoptSettings(payload?.settings);
       this._error = null;
     } catch (err) {
@@ -7103,6 +7154,7 @@ class SceneStudioPanel extends HTMLElement {
     };
     this._items = payload?.scenes || this._items;
     this._floors = payload?.floors || this._floors;
+    if (Array.isArray(payload?.floors)) this._areaCatalogLoaded = true;
     this._themes = payload?.themes || this._themes;
     this._variables = payload?.variables || this._variables;
     const changes = railCatalogChanges(before, {
@@ -7939,21 +7991,20 @@ class SceneStudioPanel extends HTMLElement {
             "Clear preset"
           );
         } else {
-          useBtn.textContent = hasPreset
-            ? this._t(
-                "frontend.dialogs.scene_palette_from_preset",
-                "Create from this preset"
-              )
-            : this._t(
-                "frontend.dialogs.scene_palette_from_scratch",
-                "Create from scratch"
-              );
+          useBtn.textContent = this._t(
+            "frontend.dialogs.scene_palette_from_preset",
+            "Create from this preset"
+          );
+          useBtn.hidden = !hasPreset;
           scratchBtn.textContent = this._t(
             "frontend.dialogs.scene_palette_start_scratch",
             "Start from scratch"
           );
+          scratchBtn.slot = hasPreset ? "secondaryAction" : "primaryAction";
+          scratchBtn.appearance = hasPreset ? "plain" : "filled";
+          scratchBtn.variant = hasPreset ? "neutral" : "brand";
         }
-        scratchBtn.hidden = !hasPreset;
+        scratchBtn.hidden = mode === "edit" && !hasPreset;
         useBtn.disabled = false;
         useBtn.toggleAttribute("disabled", false);
       };
@@ -8041,7 +8092,8 @@ class SceneStudioPanel extends HTMLElement {
       }
       const body = document.createElement("div");
       body.className = "scene-palette-body";
-      body.append(hint, list);
+      list.prepend(hint);
+      body.append(list);
       dialog.append(liveToggle, body);
       const footer = customElements.get("ha-dialog-footer")
         ? document.createElement("ha-dialog-footer")
@@ -8051,20 +8103,18 @@ class SceneStudioPanel extends HTMLElement {
         void restoreSnaps().then(() => finish({ palette: null }));
       };
       const scratchBtn = document.createElement("ha-button");
-      scratchBtn.slot = "secondaryAction";
-      scratchBtn.appearance = "plain";
-      scratchBtn.hidden = true;
+      scratchBtn.slot = mode === "edit" ? "secondaryAction" : "primaryAction";
+      scratchBtn.appearance = mode === "edit" ? "plain" : "filled";
+      scratchBtn.variant = "brand";
+      scratchBtn.hidden = mode === "edit";
       scratchBtn.addEventListener("click", () => finishScratch());
       const useBtn = document.createElement("ha-button");
       useBtn.slot = "primaryAction";
       useBtn.variant = "brand";
-      useBtn.textContent =
-        mode === "edit"
-          ? this._t("frontend.dialogs.scene_palette_clear", "Clear preset")
-          : this._t(
-              "frontend.dialogs.scene_palette_from_scratch",
-              "Create from scratch"
-            );
+      useBtn.textContent = mode === "edit"
+        ? this._t("frontend.dialogs.scene_palette_clear", "Clear preset")
+        : this._t("frontend.dialogs.scene_palette_from_preset", "Create from this preset");
+      useBtn.hidden = mode !== "edit";
       useBtn.addEventListener("click", () => {
         if (!selectedKind) {
           finishScratch();
@@ -8535,7 +8585,8 @@ class SceneStudioPanel extends HTMLElement {
       }
       const body = document.createElement("div");
       body.className = "scene-palette-body";
-      body.append(hint, list);
+      list.prepend(hint);
+      body.append(list);
       dialog.append(liveToggle, body);
       const footer = customElements.get("ha-dialog-footer")
         ? document.createElement("ha-dialog-footer")
@@ -8545,9 +8596,9 @@ class SceneStudioPanel extends HTMLElement {
         void restoreSnaps().then(() => finish({ custom: true }));
       };
       const scratchBtn = document.createElement("ha-button");
-      scratchBtn.slot = "secondaryAction";
-      scratchBtn.appearance = "plain";
-      scratchBtn.hidden = true;
+      scratchBtn.slot = "primaryAction";
+      scratchBtn.appearance = "filled";
+      scratchBtn.variant = "brand";
       scratchBtn.textContent = this._t(
         "frontend.dialogs.scene_theme_start_scratch",
         "Start from scratch"
@@ -8557,9 +8608,10 @@ class SceneStudioPanel extends HTMLElement {
       useBtn.slot = "primaryAction";
       useBtn.variant = "brand";
       useBtn.textContent = this._t(
-        "frontend.dialogs.scene_theme_from_scratch",
-        "Create from scratch"
+        "frontend.dialogs.scene_theme_from_preset",
+        "Create from this preset"
       );
+      useBtn.hidden = true;
       const markChoice = (row, on) => {
         row.card.classList.toggle("selected", on);
         row.slot.classList.toggle("glow-on", on);
@@ -8578,16 +8630,10 @@ class SceneStudioPanel extends HTMLElement {
           markChoice(card, selectedKind === "preset" && card.id === selectedId);
         }
         const hasPreset = Boolean(selectedKind && selectedRecord());
-        useBtn.textContent = hasPreset
-          ? this._t(
-              "frontend.dialogs.scene_theme_from_preset",
-              "Create from this preset"
-            )
-          : this._t(
-              "frontend.dialogs.scene_theme_from_scratch",
-              "Create from scratch"
-            );
-        scratchBtn.hidden = !hasPreset;
+        useBtn.hidden = !hasPreset;
+        scratchBtn.slot = hasPreset ? "secondaryAction" : "primaryAction";
+        scratchBtn.appearance = hasPreset ? "plain" : "filled";
+        scratchBtn.variant = hasPreset ? "neutral" : "brand";
       };
       useBtn.addEventListener("click", () => {
         if (!selectedKind) {
@@ -9010,6 +9056,7 @@ class SceneStudioPanel extends HTMLElement {
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
+      this._areaCatalogLoaded = Array.isArray(payload?.floors);
       this._adoptSettings(payload?.settings);
       if (variableId === "new") {
         this._variableId = null;
@@ -9433,6 +9480,7 @@ class SceneStudioPanel extends HTMLElement {
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
       this._floors = payload?.floors || [];
+      this._areaCatalogLoaded = Array.isArray(payload?.floors);
       this._adoptSettings(payload?.settings);
       if (themeId === "new") {
         const source = (this._themes || [])[0] || galleryTheme("default");
@@ -9665,12 +9713,14 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _lightSupportsSubtitle(entityId) {
-    const modes =
-      this._hass?.states?.[entityId]?.attributes?.supported_color_modes || [];
+    const attrs = this._hass?.states?.[entityId]?.attributes || {};
+    const modes = attrs.supported_color_modes || [];
     const hasColor = modes.some((mode) =>
       ["hs", "rgb", "rgbw", "rgbww", "xy"].includes(mode)
     );
-    const hasTemp = modes.includes("color_temp");
+    const hasTemp = modes.includes("color_temp") || modes.includes("rgbww") ||
+      attrs.min_color_temp_kelvin != null;
+    const hasWhite = modes.some((mode) => ["white", "rgbw", "rgbww"].includes(mode));
     const onOff = modes.length > 0 && modes.every((mode) => mode === "onoff");
     const parts = [];
     if (hasColor) {
@@ -9679,7 +9729,10 @@ class SceneStudioPanel extends HTMLElement {
     if (hasTemp) {
       parts.push(this._t("frontend.lights.group_temp", "Temperature"));
     }
-    if (!hasColor && !hasTemp && !onOff) {
+    if (hasWhite) {
+      parts.push(this._t("frontend.lights.group_white", "White"));
+    }
+    if (!hasColor && !hasTemp && !hasWhite && !onOff) {
       parts.push(this._t("frontend.lights.group_brightness", "Brightness"));
     }
     if (onOff) {
@@ -10729,6 +10782,23 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
+  _resetLocalEditPreferences() {
+    try {
+      for (const key of [
+        this._liveEditStorageKey(),
+        ...this._legacyLiveEditStorageKey(),
+        this._roomPreviewStorageKey(),
+        ...this._legacyRoomPreviewStorageKey(),
+      ]) {
+        window.localStorage.removeItem(key);
+      }
+    } catch (_err) {
+      // Private mode can throw on localStorage; defaults still apply now.
+    }
+    this._liveEdit = true;
+    this._mobileManualEmpty = false;
+  }
+
   async _resetEverything() {
     try {
       await this._hass.callWS({ type: `${DOMAIN}/reset` });
@@ -10738,6 +10808,7 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     this._clearSceneStudioDrafts();
+    this._resetLocalEditPreferences();
     this._items = [];
     this._formData = null;
     this._editId = null;
@@ -11505,11 +11576,7 @@ class SceneStudioPanel extends HTMLElement {
       this._liveEditStorageKey(),
       this._legacyLiveEditStorageKey()
     );
-    if (raw === "0" || raw === "false") {
-      return false;
-    }
-    // Default on when unset.
-    return true;
+    return defaultOnPreference(raw);
   }
 
   _writeLiveEditPref(on) {
@@ -11521,12 +11588,11 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _readRoomPreviewPref() {
-    return (
-      this._readLocalStorage(
-        this._roomPreviewStorageKey(),
-        this._legacyRoomPreviewStorageKey()
-      ) === "1"
+    const raw = this._readLocalStorage(
+      this._roomPreviewStorageKey(),
+      this._legacyRoomPreviewStorageKey()
     );
+    return defaultOnPreference(raw);
   }
 
   _writeRoomPreviewPref(on) {
@@ -13586,7 +13652,6 @@ class SceneStudioPanel extends HTMLElement {
     }
     const name = root.querySelector(".clock-ring-hover-name");
     if (name) {
-      name.textContent = "";
       name.hidden = true;
     }
   }
@@ -14994,6 +15059,7 @@ class SceneStudioPanel extends HTMLElement {
     const snapshot = this._snapshotLight(light.entity_id);
     const attrs = this._hass.states[light.entity_id]?.attributes || {};
     const supported = attrs.supported_color_modes || [];
+    const onOffOnly = supported.length > 0 && supported.every((mode) => mode === "onoff");
     const hasColor = supported.some((mode) =>
       ["hs", "rgb", "rgbw", "rgbww", "xy"].includes(mode)
     );
@@ -15042,7 +15108,7 @@ class SceneStudioPanel extends HTMLElement {
     // One undo point for the first edit in this sidebar open; later ticks
     // (drag, wheel) update the same session drafts until close.
     let undoCommitted = false;
-    const applyToSession = () => {
+    const applyToSession = ({ eventId: editedEventId = currentEvent.id } = {}) => {
       const dirty = dirtyEntries();
       if (!dirty.length) {
         return;
@@ -15051,7 +15117,7 @@ class SceneStudioPanel extends HTMLElement {
         this._commitUndo({
           type: "light",
           lightId: light.entity_id,
-          eventId: currentEvent.id,
+          eventId: editedEventId,
         });
         undoCommitted = true;
       }
@@ -15453,13 +15519,14 @@ class SceneStudioPanel extends HTMLElement {
         const theme = this._themeEventDraft(item.id);
         const bri = Number(payload.brightness);
         const themeBri = this._themeEventBrightness(item.id);
-        const briOver =
+        const briOver = !onOffOnly &&
           Number.isFinite(bri) &&
           Math.abs(bri - themeBri) > THEME_BRIGHTNESS_SNAP;
-        const colorOver =
+        const colorOver = !onOffOnly &&
           this._lightDraftLookFingerprint(payload) !==
           this._lightDraftLookFingerprint(theme);
-        return briOver || colorOver;
+        const powerOver = onOffOnly && (payload.state === "off") !== (theme.state === "off");
+        return briOver || colorOver || powerOver;
       });
       overridesMount.replaceChildren();
       if (!rows.length) {
@@ -15476,13 +15543,14 @@ class SceneStudioPanel extends HTMLElement {
         const theme = this._themeEventDraft(item.id);
         const bri = Number(payload?.brightness);
         const themeBri = this._themeEventBrightness(item.id);
-        const briOver =
+        const briOver = !onOffOnly &&
           Number.isFinite(bri) &&
           Math.abs(bri - themeBri) > THEME_BRIGHTNESS_SNAP;
-        const colorOver =
+        const colorOver = !onOffOnly &&
           this._lightDraftLookFingerprint(payload) !==
           this._lightDraftLookFingerprint(theme);
-        if (!briOver && !colorOver) {
+        const powerOver = onOffOnly && (payload.state === "off") !== (theme.state === "off");
+        if (!briOver && !colorOver && !powerOver) {
           continue;
         }
         const btn = document.createElement("button");
@@ -15508,6 +15576,11 @@ class SceneStudioPanel extends HTMLElement {
         }
         if (colorOver) {
           bits.push(this._t("frontend.lights.override_color", "Color"));
+        }
+        if (powerOver) {
+          bits.push(payload.state === "off"
+            ? this._t("frontend.lights.off", "Off")
+            : this._t("frontend.lights.power", "On"));
         }
         meta.textContent = bits.join(" · ");
         btn.append(name, meta);
@@ -15590,79 +15663,107 @@ class SceneStudioPanel extends HTMLElement {
       await scheduleLive({ dragging: Boolean(meta.dragging) });
     };
 
-    brightnessGraphCtl = createLightBrightnessGraph({
-      title: this._t("frontend.lights.brightness", "Brightness"),
-      subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
-      getPoints: () => {
-        return events.map((item) => {
+    if (onOffOnly) {
+      brightnessGraphCtl = createOnOffEventGraph({
+        title: this._t("frontend.lights.group_onoff", "On/off"),
+        subtitle: this._t("frontend.lights.onoff_events_hint", "Switch each solar event on or off"),
+        onLabel: this._t("frontend.lights.power", "On"),
+        offLabel: this._t("frontend.lights.off", "Off"),
+        getEvents: () => events.map((item) => {
           const entry = drafts.get(item.id);
-          const member = Boolean(entry?.member && entry.draft);
-          const draft = entry?.draft;
-          const brightness = member
-            ? draft.state === "off"
-              ? 0
-              : Number(draft.brightness) || 0
-            : 0;
           return {
-            eventId: item.id,
-            sceneId: item.id,
-            seconds: item.seconds,
+            id: item.id,
             name: item.name,
-            icon: item.icon,
-            member,
-            brightness,
-            themeBrightness: this._themeEventBrightness(item.id),
-            rgb: member ? draftRgb(draft) : [128, 128, 128],
-            draft: member ? draft : null,
-            active: member && item.id === currentEvent.id,
+            member: Boolean(entry?.member && entry.draft),
+            on: Boolean(entry?.member && entry.draft && entry.draft.state !== "off"),
+            active: item.id === currentEvent.id,
           };
-        });
-      },
-      onSelect: (eventId) => {
-        const next = events.find((item) => item.id === eventId);
-        if (next) {
-          selectScene(next);
-        }
-      },
-      onBrightness: async (sceneId, brightness) => {
-        const entry = drafts.get(sceneId);
-        if (!entry?.member || !entry.draft) {
-          return;
-        }
-        this._beginBrightnessScrub();
-        const theme = this._themeEventDraft(sceneId);
-        const snapped = this._snapLightEventBrightness(sceneId, brightness);
-        entry.draft.brightness = snapped;
-        if (snapped > 0) {
-          entry.draft.state = "on";
-        }
-        delete entry.draft.variable_ref;
-        const lookMatchesTheme =
-          this._lightDraftLookFingerprint(entry.draft) ===
-          this._lightDraftLookFingerprint(theme);
-        if (
-          snapped === this._themeEventBrightness(sceneId) &&
-          lookMatchesTheme
-        ) {
-          entry.draft = { ...theme };
-          this._deleteLightEventOverride(light.entity_id, sceneId);
-          entry.saved = lightDraftFingerprint(entry.draft);
-        }
-        applyToSession();
-        if (this._eventBrightnessIsLive()) {
-          this._paintLiveEventBrightness();
-        }
-        brightnessGraphCtl?.sync();
-        colorBriGraphCtl?.sync();
-        whiteBriGraphCtl?.sync();
-        paintOverrides();
-        await applyLive();
-      },
-      onDragEnd: () => {
-        this._endBrightnessScrub();
-        wheelCtl?.sync();
-      },
-    });
+        }),
+        onToggle: async (eventId) => {
+          const entry = drafts.get(eventId);
+          if (!entry?.member || !entry.draft) return;
+          toggleOnOffDraft(entry.draft);
+          applyToSession({ eventId });
+          brightnessGraphCtl.sync();
+          paintOverrides();
+          if (eventId === currentEvent.id) await applyLive();
+        },
+      });
+    } else {
+      brightnessGraphCtl = createLightBrightnessGraph({
+        title: this._t("frontend.lights.brightness", "Brightness"),
+        subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
+        getPoints: () => {
+          return events.map((item) => {
+            const entry = drafts.get(item.id);
+            const member = Boolean(entry?.member && entry.draft);
+            const draft = entry?.draft;
+            const brightness = member
+              ? draft.state === "off"
+                ? 0
+                : Number(draft.brightness) || 0
+              : 0;
+            return {
+              eventId: item.id,
+              sceneId: item.id,
+              seconds: item.seconds,
+              name: item.name,
+              icon: item.icon,
+              member,
+              brightness,
+              themeBrightness: this._themeEventBrightness(item.id),
+              rgb: member ? draftRgb(draft) : [128, 128, 128],
+              draft: member ? draft : null,
+              active: member && item.id === currentEvent.id,
+            };
+          });
+        },
+        onSelect: (eventId) => {
+          const next = events.find((item) => item.id === eventId);
+          if (next) {
+            selectScene(next);
+          }
+        },
+        onBrightness: async (sceneId, brightness) => {
+          const entry = drafts.get(sceneId);
+          if (!entry?.member || !entry.draft) {
+            return;
+          }
+          this._beginBrightnessScrub();
+          const theme = this._themeEventDraft(sceneId);
+          const snapped = this._snapLightEventBrightness(sceneId, brightness);
+          entry.draft.brightness = snapped;
+          if (snapped > 0) {
+            entry.draft.state = "on";
+          }
+          delete entry.draft.variable_ref;
+          const lookMatchesTheme =
+            this._lightDraftLookFingerprint(entry.draft) ===
+            this._lightDraftLookFingerprint(theme);
+          if (
+            snapped === this._themeEventBrightness(sceneId) &&
+            lookMatchesTheme
+          ) {
+            entry.draft = { ...theme };
+            this._deleteLightEventOverride(light.entity_id, sceneId);
+            entry.saved = lightDraftFingerprint(entry.draft);
+          }
+          applyToSession();
+          if (this._eventBrightnessIsLive()) {
+            this._paintLiveEventBrightness();
+          }
+          brightnessGraphCtl?.sync();
+          colorBriGraphCtl?.sync();
+          whiteBriGraphCtl?.sync();
+          paintOverrides();
+          await applyLive();
+        },
+        onDragEnd: () => {
+          this._endBrightnessScrub();
+          wheelCtl?.sync();
+        },
+      });
+    }
     brightnessGraphMount.appendChild(brightnessGraphCtl.el);
 
     if (whiteKind) {
@@ -20088,32 +20189,42 @@ class SceneStudioPanel extends HTMLElement {
       fill.style.webkitMaskImage = mask;
       fill.style.maskImage = mask;
       ring.appendChild(fill);
-      ring.title = this._lightDisplayName(light.entity_id, {
+      const lightName = this._lightDisplayName(light.entity_id, {
         fallback: light.name,
       });
+      const capabilities = this._lightSupportsSubtitle(light.entity_id);
+      ring.title = capabilities ? `${lightName} · ${capabilities}` : lightName;
+      ring.dataset.lightName = lightName;
+      ring.dataset.capabilities = capabilities;
       ringsHost.appendChild(ring);
     }
     const hoverName = document.createElement("div");
     hoverName.className = "clock-ring-hover-name";
     hoverName.setAttribute("aria-live", "polite");
     hoverName.hidden = true;
+    const hoverTitle = document.createElement("span");
+    const hoverCaps = document.createElement("span");
+    hoverCaps.className = "clock-ring-hover-caps";
+    hoverName.append(hoverTitle, hoverCaps);
     // On the core (not ringsHost — glow clones copy ringsHost). Positioned at
     // the rings inset so the pill sits flush above the outer light ring.
     const setHoveredRing = (entityId) => {
       let label = "";
+      let capabilities = "";
       for (const ring of ringsHost.querySelectorAll(".clock-ring")) {
         const on =
           Boolean(entityId) && ring.dataset.entityId === entityId;
         ring.classList.toggle("hovered", on);
         if (on) {
-          label = ring.title || "";
+          label = ring.dataset.lightName || "";
+          capabilities = ring.dataset.capabilities || "";
         }
       }
       if (label) {
-        hoverName.textContent = label;
+        if (hoverTitle.textContent !== label) hoverTitle.textContent = label;
+        if (hoverCaps.textContent !== capabilities) hoverCaps.textContent = capabilities ? `· ${capabilities}` : "";
         hoverName.hidden = false;
       } else {
-        hoverName.textContent = "";
         hoverName.hidden = true;
       }
     };

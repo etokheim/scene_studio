@@ -163,6 +163,8 @@
     },
     "actions": {
       "auto_configure": "Auto configure",
+      "auto_configure_hint": "Automatically configure circadian scenes",
+      "manual_configuration": "Manual configuration",
       "add_scene": "Add scene",
       "live_edit": "Live edit",
       "live_edit_hint": "Apply the scene and changes in real-time",
@@ -379,6 +381,7 @@
       "color_brightness": "Color brightness",
       "white_brightness": "White brightness",
       "graph_sub": "0–100% by solar event",
+      "onoff_events_hint": "Switch each solar event on or off",
       "overrides": "Overrides",
       "override_brightness": "Brightness {percent}% · preset {theme}%",
       "override_color": "Color",

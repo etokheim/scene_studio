@@ -11,6 +11,7 @@ import {
   themeMatchesGallery,
 } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, paletteSwatchCss, resolveSlot, variableIsPalette } from "./palette.js";
+import { showNoAreasMessage } from "./panel_state.js";
 import { scenePresetUses, scenesUsingLibraryItem } from "./scene_used.js";
 
 const AREA_RAIL_PX = 340;
@@ -111,6 +112,16 @@ export const LANDING_CSS = `
     border: 1px solid var(--divider-color);
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
   }
+  .rail-live-edit.is-auto-configure {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background-color));
+  }
+  .rail-live-edit.is-auto-configure > ha-button {
+    flex: 0 0 auto;
+  }
+  .rail-live-edit.is-auto-configure > .rail-live-edit-hint {
+    min-width: 0;
+  }
   /* Scene tab only. The library tab keeps the tighter gap under Live edit. */
   .area-rail-body[data-tab="scenes"] .rail-live-edit {
     margin-bottom: 12px;
@@ -204,10 +215,10 @@ export const LANDING_CSS = `
   }
   .scene-used {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     flex-wrap: nowrap;
-    align-items: flex-start;
-    gap: 2px;
+    align-items: center;
+    gap: 8px;
     flex: 0 0 auto;
     align-self: flex-start;
     min-width: 0;
@@ -888,23 +899,23 @@ export const LANDING_CSS = `
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  /* Selected cards open this row above the title, so the title eases down. */
+  /* Selected cards open the palette beneath the title. */
   .card-palette {
     display: flex;
     align-items: center;
     height: 0;
-    margin-bottom: 0;
+    margin-top: 0;
     opacity: 0;
     overflow: hidden;
     pointer-events: none;
     transition:
       height 120ms cubic-bezier(0.2, 0, 0, 1),
-      margin-bottom 120ms cubic-bezier(0.2, 0, 0, 1),
+      margin-top 120ms cubic-bezier(0.2, 0, 0, 1),
       opacity 120ms ease;
   }
   .scene-card.selected .card-palette {
     height: 22px;
-    margin-bottom: 6px;
+    margin-top: 0;
     opacity: 1;
     overflow: visible;
     filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55));
@@ -1553,7 +1564,12 @@ export function renderLanding(panel, { includeStage = true } = {}) {
     byArea.get(key).push(item);
   }
 
-  if (!floors.length) {
+  const mobileEmptyHero = panel._narrow && !items.length && !panel._mobileManualEmpty;
+  if (mobileEmptyHero) {
+    scenesBody.appendChild(renderEmptyHero(panel));
+  }
+
+  if (showNoAreasMessage(panel._areaCatalogLoaded, floors) && !mobileEmptyHero) {
     const empty = document.createElement("p");
     empty.className = "library-hint";
     empty.textContent = panel._t(
@@ -1563,8 +1579,10 @@ export function renderLanding(panel, { includeStage = true } = {}) {
     scenesBody.appendChild(empty);
   }
 
-  for (const floor of floors) {
-    scenesBody.appendChild(renderFloorBlock(panel, floor, byArea));
+  if (!mobileEmptyHero) {
+    for (const floor of floors) {
+      scenesBody.appendChild(renderFloorBlock(panel, floor, byArea));
+    }
   }
 
   if (panel._narrow) {
@@ -1705,6 +1723,21 @@ export function sceneCoverUrl(panel) {
 function renderRailLiveEdit(panel) {
   const liveBar = document.createElement("div");
   liveBar.className = "rail-live-edit";
+  if (!(panel._items || []).length) {
+    liveBar.classList.add("is-auto-configure");
+    const button = document.createElement("ha-button");
+    button.variant = "brand";
+    button.textContent = panel._t("frontend.actions.auto_configure", "Auto configure");
+    button.addEventListener("click", () => panel._autoConfigure());
+    const description = document.createElement("span");
+    description.className = "rail-live-edit-hint";
+    description.textContent = panel._t(
+      "frontend.actions.auto_configure_hint",
+      "Automatically configure circadian scenes"
+    );
+    liveBar.append(button, description);
+    return liveBar;
+  }
   const liveCopy = document.createElement("div");
   liveCopy.className = "rail-live-edit-copy";
   const liveTitle = document.createElement("span");
@@ -1936,7 +1969,7 @@ export function syncSceneCardFace(panel, scene) {
   }
   const name = body.querySelector(".card-name");
   if (name) {
-    name.before(row);
+    name.after(row);
   } else {
     body.prepend(row);
   }
@@ -1962,7 +1995,7 @@ function appendCardPalette(body, palette, catalog) {
   }
   const name = body.querySelector(".card-name");
   if (name) {
-    name.before(row);
+    name.after(row);
   } else {
     body.prepend(row);
   }
@@ -2160,6 +2193,16 @@ function renderEmptyHero(panel) {
   );
   btn.addEventListener("click", () => panel._autoConfigure());
   el.appendChild(btn);
+  if (panel._narrow) {
+    const manual = document.createElement("ha-button");
+    manual.appearance = "plain";
+    manual.textContent = panel._t("frontend.actions.manual_configuration", "Manual configuration");
+    manual.addEventListener("click", () => {
+      panel._mobileManualEmpty = true;
+      panel._render();
+    });
+    el.appendChild(manual);
+  }
   return el;
 }
 
@@ -2306,7 +2349,7 @@ function libraryOverflow(panel, kind, item) {
 
 const CARD_OVERFLOW_HOLD_MS = 500;
 
-/** Touch long-press reveals the menu. A fine pointer uses hover CSS. */
+/** Touch long-press opens the card's menu. A fine pointer uses hover CSS. */
 function bindCardOverflowReveal(card, overflowSlot) {
   let timer = 0;
   let startX = 0;
@@ -2332,6 +2375,8 @@ function bindCardOverflowReveal(card, overflowSlot) {
       timer = 0;
       suppressClick = true;
       reveal();
+      const menu = overflowSlot.querySelector("ha-dropdown");
+      if (menu) menu.open = true;
     }, CARD_OVERFLOW_HOLD_MS);
   });
   card.addEventListener("pointerup", cancelHold);
