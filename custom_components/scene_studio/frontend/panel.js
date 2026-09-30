@@ -1,4 +1,4 @@
-import { waitForSurfaceAnimation } from "./editor_shell.js";
+import { createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
   buildClientSunDay,
   resampleLightsForEvents,
@@ -529,6 +529,8 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._editorShellObserver?.disconnect();
+    this._editorShellObserver = null;
     this._areaRegistryUnsub?.();
     this._areaRegistryUnsub = null;
     this._changeUnsub?.();
@@ -5173,6 +5175,8 @@ class SceneStudioPanel extends HTMLElement {
         }
         ${LANDING_CSS}
         ${SIMPLE_EDITOR_CSS}
+        ${EDITOR_SHELL_CSS}
+        ${EDITOR_SHELL_LAYOUT_CSS}
       </style>
       <ha-top-app-bar-fixed>
         <div slot="title"></div>
@@ -6446,7 +6450,66 @@ class SceneStudioPanel extends HTMLElement {
     return el;
   }
 
+  _syncSharedEditorShell() {
+    if (this._syncingEditorShell || this._error) return;
+    this._syncingEditorShell = true;
+    try {
+      const root = this.shadowRoot;
+      const simple = this._view === "palette" || (this._view === "edit" && this._formData?.kind === "simple");
+      const dial = this._isDialView();
+      const visual = dial ? this._sunPathEl : simple ? root.querySelector(".simple-editor-host") :
+        this._view === "variable" ? root.querySelector(".library-editor") :
+        !this._narrow ? root.querySelector(".stage-scroll > .empty-state, .editor-preview > .empty-state") : null;
+      if (!visual?.isConnected || visual.hidden) return;
+      const stage = this._contentEl?.querySelector(".stage-col");
+      const mount = this._stageScrollEl(stage) || this._contentEl;
+      const shell = this._sharedEditorShell ||= createEditorShell();
+      const toolbar = [];
+      if (dial && this._dateToolbar) toolbar.push(this._dateToolbar);
+      if (!dial) {
+        toolbar.push(...[...visual.querySelectorAll(".scene-used, .library-name-field, .library-hint, .library-used-by:not(.scene-preset-uses)")]
+          .filter(node => node.classList.contains("scene-used") || !node.closest(".scene-used")));
+        if (this._view === "variable") toolbar.push(...visual.querySelectorAll(":scope > ha-input"));
+      }
+      // Existing handlers stay on the fresh destination nodes, outside the
+      // transitioning preview. Only the outer hosts survive editor changes.
+      const lights = this._view === "edit" ? (dial ? this._clockLegendEl : visual.querySelector(".light-tiles-block")) : null;
+      const currentLights = lights || (this._view === "edit" ? shell.lights.firstChild : null);
+      if (!dial && shell.preview.contains(visual)) {
+        const freshClasses = new Set(toolbar.map(node => node.className));
+        toolbar.unshift(...[...shell.toolbar.children].filter(node => !freshClasses.has(node.className)));
+      }
+      mountEditorRegions(shell, { mount, visual, toolbar, lights: currentLights });
+      shell.el.dataset.kind = dial ? "dial" : simple ? "wheel" : this._view === "variable" ? "library" : "empty";
+      const bottom = stage ? mount.getBoundingClientRect().bottom :
+        this.shadowRoot.querySelector(".page-shell").getBoundingClientRect().bottom;
+      shell.el.style.height = `${Math.max(120, stage ? mount.clientHeight : bottom - shell.el.getBoundingClientRect().top)}px`;
+      if (!this._editorShellObserver) {
+        this._editorShellObserver = new ResizeObserver(() => this._sizeSharedEditorPreview());
+        this._editorShellObserver.observe(shell.preview);
+      }
+      this._sizeSharedEditorPreview();
+    } finally {
+      this._syncingEditorShell = false;
+    }
+  }
+
+  _sizeSharedEditorPreview() {
+    const shell = this._sharedEditorShell;
+    if (!shell?.el.isConnected) return;
+    const h = shell.preview.clientHeight;
+    const w = shell.preview.clientWidth;
+    if (!h || !w) return;
+    const min = this._narrow ? 1 : WHEEL_FACE_MIN_PX;
+    const size = Math.min(WHEEL_FACE_MAX_PX, w, Math.max(min, h - 56));
+    const value = `${Math.floor(size)}px`;
+    shell.el.style.setProperty("--dial-face-max", value);
+    this._sunPathEl?.style.setProperty("--dial-face-max", value);
+    this._layoutDialChromeFn?.();
+  }
+
   _syncWorkspaceScrollport() {
+    this._syncSharedEditorShell();
     const workspace = this._contentEl?.querySelector(".workspace");
     const scroller = this._appBarScroller();
     const editorFills =
@@ -6738,6 +6801,10 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _syncStageFaceMax() {
+    if (this._sharedEditorShell?.el.isConnected) {
+      this._sizeSharedEditorPreview();
+      return;
+    }
     if (this._faceSyncing) {
       return;
     }
@@ -17586,7 +17653,7 @@ class SceneStudioPanel extends HTMLElement {
   _syncSceneUsed() {
     if (this._view === "theme") {
       const strip = renderThemePresetSource(this);
-      const host = this._toolbarChrome;
+      const host = this._hoverReadout || this._toolbarChrome;
       const previous = this.shadowRoot?.querySelector(".scene-used");
       if (!host || !strip) {
         previous?.remove();
@@ -17622,7 +17689,7 @@ class SceneStudioPanel extends HTMLElement {
     const chrome = this._toolbarChrome;
     const host =
       simple ||
-      (this._view === "edit" && this._formData?.kind !== "simple" ? chrome : null);
+      (this._view === "edit" && this._formData?.kind !== "simple" ? (this._hoverReadout || chrome) : null);
     const previous = this.shadowRoot?.querySelector(".scene-used");
     if (!host || !strip) {
       previous?.remove();
@@ -17648,7 +17715,7 @@ class SceneStudioPanel extends HTMLElement {
     if (this._view === "theme" && this._themeId) {
       kind = "theme";
       id = this._themeId;
-      host = this._toolbarChrome;
+      host = this._hoverReadout || this._toolbarChrome;
     } else if (this._view === "palette" && this._variableId) {
       kind = "palette";
       id = this._variableId;
@@ -17777,6 +17844,7 @@ class SceneStudioPanel extends HTMLElement {
     this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
     this._syncSceneUsed();
     this._displayedSunPath = this._sunPath;
+    this._syncSharedEditorShell();
     this._restoreHeldTileScroll();
   }
   _patchHoverReadoutClock(seconds) {
@@ -17847,11 +17915,14 @@ class SceneStudioPanel extends HTMLElement {
       });
       resetSlot.appendChild(reset);
     }
-    if (this._canPlayScenePreview() && !this._narrow) {
+    if (this._canPlayScenePreview()) {
       readout.append(this._ensureScenePlayButton(), time, sun, resetSlot);
     } else {
       readout.append(time, sun, resetSlot);
     }
+    this._syncSceneUsed();
+    const used = readout.querySelector(".scene-used, .library-used-by");
+    if (used) readout.insertBefore(used, time);
     this._syncNarrowPlayAction();
   }
 
