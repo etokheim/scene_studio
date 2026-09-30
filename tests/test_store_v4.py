@@ -354,7 +354,7 @@ def test_theme_event_shape_is_validated():
             for event in SOLAR_EVENTS
         }
         bad_events["dusk"] = {"color": {"hs_color": [0, 0]}, "brightness": "dim"}
-        with pytest.raises(ValueError, match="brightness must be a number"):
+        with pytest.raises(ValueError, match="brightness must be a finite number"):
             await store.async_upsert_theme({"name": "Bad", "events": bad_events})
 
     asyncio.run(run())

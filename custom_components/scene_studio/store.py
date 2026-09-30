@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 
+from .collaboration import ItemDeleted, RevisionConflict, merge_fields, revision_for
 from .const import (
     AREA,
     AUTOMATICALLY_UPDATE_LIGHTS,
@@ -46,6 +47,11 @@ from .const import (
     VARIABLE_REF,
 )
 from .palette import KIND_PALETTE, normalize_palette_slots, optional_builtin_id
+from .validation import (
+    validate_scene_input,
+    validate_theme_input,
+    validate_variable_input,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _Result = TypeVar("_Result")
@@ -529,6 +535,68 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def normalize_variable(raw: dict[str, Any], var_id: str) -> dict[str, Any]:
+    """Validate and shape one shared color or palette library item."""
+    validate_variable_input(raw)
+    kind = raw.get("kind") or ("palette" if raw.get("slots") else "color")
+    name = (raw.get("name") or "").strip()
+    if not name:
+        raise ValueError("Variable name is required")
+    if kind == "palette":
+        var = {
+            "id": var_id,
+            "name": name,
+            "kind": KIND_PALETTE,
+            "slots": normalize_palette_slots(raw.get("slots")),
+        }
+        builtin_id = optional_builtin_id(raw)
+        if builtin_id:
+            var["builtin_id"] = builtin_id
+        return var
+    color = raw.get("color")
+    if not color or not isinstance(color, dict):
+        raise ValueError("Variable must have a color dict")
+    return {
+        "id": var_id,
+        "name": name,
+        "kind": "color",
+        "color": color,
+        "brightness": raw.get("brightness", 255),
+    }
+
+
+def normalize_theme(raw: dict[str, Any], theme_id: str) -> dict[str, Any]:
+    """Validate and shape one shared circadian theme."""
+    validate_theme_input(raw)
+    name = (raw.get("name") or "").strip()
+    if not name:
+        raise ValueError("Theme name is required")
+    events = raw.get("events")
+    if not events or not isinstance(events, dict):
+        raise ValueError("Theme must have an events dict")
+    missing = [event for event in SOLAR_EVENTS if event not in events]
+    if missing:
+        raise ValueError(f"Theme is missing events: {', '.join(missing)}")
+    for event in SOLAR_EVENTS:
+        value = events[event]
+        if not isinstance(value, dict) or not isinstance(value.get("color"), dict):
+            raise ValueError(f"Theme event {event!r} must have a color dict")
+        brightness = value.get("brightness")
+        if (
+            not isinstance(brightness, (int, float))
+            or isinstance(brightness, bool)
+            or not 0 <= brightness <= 255
+        ):
+            raise ValueError(
+                f"Theme event {event!r} brightness must be a number from 0 to 255"
+            )
+    theme = {"id": theme_id, "name": name, "events": events}
+    builtin_id = optional_builtin_id(raw)
+    if builtin_id:
+        theme["builtin_id"] = builtin_id
+    return theme
+
+
 # ---------------------------------------------------------------------------
 # Store class
 # ---------------------------------------------------------------------------
@@ -714,37 +782,36 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
     async def async_upsert_variable(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a color variable."""
         var_id = raw.get("id") or str(uuid.uuid4())
-        kind = raw.get("kind") or ("palette" if raw.get("slots") else "color")
-        name = (raw.get("name") or "").strip()
-        if not name:
-            raise ValueError("Variable name is required")
-        if kind == "palette":
-            var = {
-                "id": var_id,
-                "name": name,
-                "kind": KIND_PALETTE,
-                "slots": normalize_palette_slots(raw.get("slots")),
-            }
-            builtin_id = optional_builtin_id(raw)
-            if builtin_id:
-                var["builtin_id"] = builtin_id
-        else:
-            color = raw.get("color")
-            if not color or not isinstance(color, dict):
-                raise ValueError("Variable must have a color dict")
-            var = {
-                "id": var_id,
-                "name": name,
-                "kind": "color",
-                "color": color,
-                "brightness": raw.get("brightness", 255),
-            }
+        var = normalize_variable(raw, var_id)
 
         def change() -> dict[str, Any]:
             self.variables[var_id] = var
             return var
 
         return await self._async_mutate(change)
+
+    async def async_rebase_variable(
+        self, raw: dict[str, Any], base: dict[str, Any], base_revision: str
+    ) -> dict[str, Any]:
+        """Merge a variable update under the same lock as persistence."""
+        var_id = raw.get("id")
+        if not var_id or revision_for(base) != base_revision:
+            raise ValueError("Variable base snapshot and revision do not match")
+
+        def change() -> dict[str, Any]:
+            current = self.variables.get(var_id)
+            if current is None:
+                raise ItemDeleted("Variable was deleted")
+            merged, conflicts = merge_fields(base, raw, current)
+            if conflicts:
+                raise RevisionConflict(conflicts, current, revision_for(current))
+            if merged.get("id") != var_id:
+                raise ValueError("Variable ID cannot change")
+            item = normalize_variable(merged, var_id)
+            self.variables[var_id] = item
+            return item
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
 
     async def async_delete_variable(self, var_id: str) -> bool:
         """Delete a variable.  Raises if still referenced by themes or scenes."""
@@ -896,42 +963,36 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
     async def async_upsert_theme(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a circadian theme."""
         theme_id = raw.get("id") or str(uuid.uuid4())
-        name = (raw.get("name") or "").strip()
-        if not name:
-            raise ValueError("Theme name is required")
-        events = raw.get("events")
-        if not events or not isinstance(events, dict):
-            raise ValueError("Theme must have an events dict")
-        missing = [e for e in SOLAR_EVENTS if e not in events]
-        if missing:
-            raise ValueError(f"Theme is missing events: {', '.join(missing)}")
-        for event in SOLAR_EVENTS:
-            value = events[event]
-            if not isinstance(value, dict) or not isinstance(value.get("color"), dict):
-                raise ValueError(f"Theme event {event!r} must have a color dict")
-            brightness = value.get("brightness")
-            if (
-                not isinstance(brightness, (int, float))
-                or isinstance(brightness, bool)
-                or not 0 <= brightness <= 255
-            ):
-                raise ValueError(
-                    f"Theme event {event!r} brightness must be a number from 0 to 255"
-                )
-        theme = {
-            "id": theme_id,
-            "name": name,
-            "events": events,
-        }
-        builtin_id = optional_builtin_id(raw)
-        if builtin_id:
-            theme["builtin_id"] = builtin_id
+        theme = normalize_theme(raw, theme_id)
 
         def change() -> dict[str, Any]:
             self.themes[theme_id] = theme
             return theme
 
         return await self._async_mutate(change)
+
+    async def async_rebase_theme(
+        self, raw: dict[str, Any], base: dict[str, Any], base_revision: str
+    ) -> dict[str, Any]:
+        """Merge a theme update under the same lock as persistence."""
+        theme_id = raw.get("id")
+        if not theme_id or revision_for(base) != base_revision:
+            raise ValueError("Theme base snapshot and revision do not match")
+
+        def change() -> dict[str, Any]:
+            current = self.themes.get(theme_id)
+            if current is None:
+                raise ItemDeleted("Theme was deleted")
+            merged, conflicts = merge_fields(base, raw, current)
+            if conflicts:
+                raise RevisionConflict(conflicts, current, revision_for(current))
+            if merged.get("id") != theme_id:
+                raise ValueError("Theme ID cannot change")
+            item = normalize_theme(merged, theme_id)
+            self.themes[theme_id] = item
+            return item
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
 
     async def async_delete_theme(self, theme_id: str) -> bool:
         """Delete a theme.  Raises if still referenced by circadian scenes."""
@@ -1043,6 +1104,41 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
 
         return await self._async_mutate(change)
 
+    async def async_rebase_scene(
+        self,
+        raw: dict[str, Any],
+        base: dict[str, Any],
+        base_revision: str,
+        form_of: Callable[[dict[str, Any]], dict[str, Any]],
+        area_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Validate and merge a scene update inside the persistence lock."""
+        scene_id = raw.get("id")
+        if not scene_id or not isinstance(base, dict):
+            raise ValueError("A saved scene and base snapshot are required")
+        if revision_for(base) != base_revision:
+            raise ValueError("Base snapshot and revision do not match")
+
+        def change() -> dict[str, Any]:
+            current = self.scenes.get(scene_id)
+            if current is None:
+                raise ItemDeleted("Scene was deleted")
+            current_form = form_of(current)
+            current_revision = revision_for(current_form)
+            merged, conflicts = merge_fields(base, raw, current_form)
+            if conflicts:
+                raise RevisionConflict(conflicts, current_form, current_revision)
+            if merged.get("id") != scene_id:
+                raise ValueError("Scene ID cannot change")
+            validate_scene_input(merged)
+            item = normalize_scene(merged, scene_id=scene_id)
+            self.scenes[scene_id] = item
+            if area_name and item.get(AREA):
+                self.area_names[item[AREA]] = area_name
+            return item
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
+
     async def async_set_automatically_update_lights(
         self, scene_id: str, automatically_update_lights: bool
     ) -> dict[str, Any] | None:
@@ -1088,19 +1184,21 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
         validated = {}
         for key, value in patch.items():
             if key not in DEFAULT_SETTINGS:
-                continue
+                raise HomeAssistantError(f"Unknown setting {key!r}")
             if key == "automatically_update_lights_interval":
-                try:
-                    value = int(value)
-                except (TypeError, ValueError) as err:
+                if isinstance(value, bool) or not isinstance(value, int):
                     raise HomeAssistantError(
                         "automatically_update_lights_interval must be an integer"
-                    ) from err
+                    )
                 if value < 0 or value > 30 * 60:
                     raise HomeAssistantError(
                         "automatically_update_lights_interval must be 0–1800 seconds"
                     )
             if key == SETTINGS_DUSK_MINIMUM_TIME_OF_DAY:
+                if isinstance(value, bool) or (not isinstance(value, (str, int))):
+                    raise HomeAssistantError(
+                        "dusk_minimum_time_of_day must be a time or whole seconds"
+                    )
                 try:
                     value = time_to_seconds(value)
                 except (TypeError, ValueError) as err:

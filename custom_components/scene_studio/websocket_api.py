@@ -14,8 +14,13 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 
 from .activation_cache import invalidate_activation_cache
+from .collaboration import ItemDeleted, RevisionConflict, revision_for
 from .const import (
     DATA_ADD_ENTITIES,
     DATA_CONFIG_ENTRY,
@@ -30,13 +35,16 @@ from .scene import async_create_or_update_entity, async_remove_entity
 from .snapshots import card_colors
 from .solar import build_sun_path
 from .store import SceneStudioStore, to_form_data
+from .validation import validate_scene_input
 
 _LOGGER = logging.getLogger(__name__)
+_CHANGED_SIGNAL = f"{DOMAIN}_editor_changed"
 
 
 def async_setup_websocket(hass: HomeAssistant) -> None:
     """Register websocket commands."""
     websocket_api.async_register_command(hass, ws_list)
+    websocket_api.async_register_command(hass, ws_subscribe_changes)
     websocket_api.async_register_command(hass, ws_get)
     websocket_api.async_register_command(hass, ws_save)
     websocket_api.async_register_command(hass, ws_delete)
@@ -64,6 +72,18 @@ def _store(hass: HomeAssistant) -> SceneStudioStore:
     if not domain_data or domain_data.get(DATA_CONFIG_ENTRY) is None:
         raise HomeAssistantError("Scene Studio is not loaded")
     return domain_data[DATA_STORE]
+
+
+def _publish_change(
+    hass: HomeAssistant, connection, kind: str, item_id: str | None, action: str
+) -> None:
+    """Notify connected editors after the whole saved operation succeeds."""
+    async_dispatcher_send(
+        hass,
+        _CHANGED_SIGNAL,
+        connection,
+        {"kind": kind, "id": item_id, "action": action},
+    )
 
 
 def _scene_operation_lock(hass: HomeAssistant) -> asyncio.Lock:
@@ -181,8 +201,14 @@ def _scene_payload(hass: HomeAssistant, item: dict[str, Any]) -> dict[str, Any]:
         "hidden": bool(getattr(entry, "hidden_by", None)) if entry else False,
         "disabled": bool(getattr(entry, "disabled_by", None)) if entry else False,
         "form": form,
+        "revision": revision_for(form),
         "card": colors,
     }
+
+
+def _revisioned(item: dict[str, Any]) -> dict[str, Any]:
+    """Expose an immutable item revision without putting it in storage."""
+    return {**item, "revision": revision_for(item)}
 
 
 def _list_payload(hass: HomeAssistant) -> dict[str, Any]:
@@ -191,8 +217,8 @@ def _list_payload(hass: HomeAssistant) -> dict[str, Any]:
     scenes.sort(key=lambda item: (item.get("scene_name") or "").casefold())
     return {
         "scenes": scenes,
-        "variables": store.list_variables(),
-        "themes": store.list_themes(),
+        "variables": [_revisioned(item) for item in store.list_variables()],
+        "themes": [_revisioned(item) for item in store.list_themes()],
         "floors": _area_tree(hass),
         "settings": dict(store.settings),
     }
@@ -208,6 +234,26 @@ def ws_list(
 ) -> None:
     """List scenes, variables, themes, and the area tree."""
     connection.send_result(msg["id"], _list_payload(hass))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/subscribe_changes"})
+@websocket_api.require_admin
+@callback
+def ws_subscribe_changes(hass, connection, msg) -> None:
+    """Admin-only stream of successfully saved editor changes."""
+    subscription_id = msg["id"]
+
+    def notify(source, event) -> None:
+        if source is not connection:
+            connection.send_event(subscription_id, event)
+
+    unsubscribe = async_dispatcher_connect(
+        hass,
+        _CHANGED_SIGNAL,
+        notify,
+    )
+    connection.subscriptions[subscription_id] = unsubscribe
+    connection.send_result(subscription_id)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/areas"})
@@ -248,6 +294,8 @@ def ws_get(
         vol.Required("type"): f"{DOMAIN}/save",
         vol.Optional("scene_id"): str,
         vol.Required("data"): dict,
+        vol.Optional("base"): dict,
+        vol.Optional("base_revision"): str,
     }
 )
 @websocket_api.require_admin
@@ -277,9 +325,40 @@ async def _ws_save_locked(hass, connection, msg) -> None:
     previous = _store(hass).get(raw.get("id")) if raw.get("id") else None
     area = ar.async_get(hass).areas.get(raw.get("area"))
     try:
-        item = await _store(hass).async_upsert(
-            raw, area_name=area.name if area else None
+        validate_scene_input(raw)
+        if msg.get("scene_id"):
+            if "base" not in msg or "base_revision" not in msg:
+                connection.send_error(
+                    msg["id"], "reload_required", "Reload this scene before saving"
+                )
+                return
+            item = await _store(hass).async_rebase_scene(
+                raw,
+                msg["base"],
+                msg["base_revision"],
+                lambda current: _form_payload(
+                    current, _registry_entry(hass, current["id"])
+                ),
+                area_name=area.name if area else None,
+            )
+        else:
+            item = await _store(hass).async_upsert(
+                raw, area_name=area.name if area else None
+            )
+    except RevisionConflict as err:
+        connection.send_result(
+            msg["id"],
+            {
+                "status": "conflict",
+                "fields": err.fields,
+                "current": err.current,
+                "revision": err.revision,
+            },
         )
+        return
+    except ItemDeleted:
+        connection.send_error(msg["id"], "deleted", "Scene was deleted")
+        return
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
@@ -310,6 +389,7 @@ async def _ws_save_locked(hass, connection, msg) -> None:
         connection.send_error(msg["id"], "save_failed", str(err))
         return
     connection.send_result(msg["id"], _scene_payload(hass, item))
+    _publish_change(hass, connection, "scene", item["id"], "save")
 
 
 @websocket_api.websocket_command(
@@ -356,6 +436,7 @@ async def _ws_delete_locked(hass, connection, msg) -> None:
         connection.send_error(msg["id"], "delete_failed", str(err))
         return
     connection.send_result(msg["id"], {"scene_id": scene_id})
+    _publish_change(hass, connection, "scene", scene_id, "delete")
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/reset"})
@@ -411,6 +492,7 @@ async def _ws_reset_locked(hass, connection, msg) -> None:
             return
     invalidate_activation_cache(hass)
     connection.send_result(msg["id"], {"ok": True})
+    _publish_change(hass, connection, "catalog", None, "reset")
 
 
 @websocket_api.websocket_command(
@@ -547,6 +629,7 @@ async def _ws_set_automatically_update_lights_locked(hass, connection, msg) -> N
     if entity is not None and hasattr(entity, "async_update_config"):
         await entity.async_update_config(item)
     connection.send_result(msg["id"], _scene_payload(hass, item))
+    _publish_change(hass, connection, "scene", item["id"], "save")
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list_variables"})
@@ -558,13 +641,17 @@ def ws_list_variables(
     msg: dict[str, Any],
 ) -> None:
     """List color variables."""
-    connection.send_result(msg["id"], _store(hass).list_variables())
+    connection.send_result(
+        msg["id"], [_revisioned(item) for item in _store(hass).list_variables()]
+    )
 
 
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/save_variable",
         vol.Required("data"): dict,
+        vol.Optional("base"): dict,
+        vol.Optional("base_revision"): str,
     }
 )
 @websocket_api.require_admin
@@ -576,12 +663,38 @@ async def ws_save_variable(
     msg: dict[str, Any],
 ) -> None:
     """Create or update a color variable."""
+    raw = dict(msg["data"])
     try:
-        item = await _store(hass).async_upsert_variable(dict(msg["data"]))
+        if raw.get("id"):
+            if "base" not in msg or "base_revision" not in msg:
+                connection.send_error(
+                    msg["id"], "reload_required", "Reload this preset before saving"
+                )
+                return
+            item = await _store(hass).async_rebase_variable(
+                raw, msg["base"], msg["base_revision"]
+            )
+        else:
+            item = await _store(hass).async_upsert_variable(raw)
+    except RevisionConflict as err:
+        connection.send_result(
+            msg["id"],
+            {
+                "status": "conflict",
+                "fields": err.fields,
+                "current": err.current,
+                "revision": err.revision,
+            },
+        )
+        return
+    except ItemDeleted:
+        connection.send_error(msg["id"], "deleted", "Preset was deleted")
+        return
     except (ValueError, HomeAssistantError) as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
-    connection.send_result(msg["id"], item)
+    connection.send_result(msg["id"], _revisioned(item))
+    _publish_change(hass, connection, "variable", item["id"], "save")
 
 
 @websocket_api.websocket_command(
@@ -610,6 +723,7 @@ async def ws_delete_variable(
         )
         return
     connection.send_result(msg["id"], {"variable_id": msg["variable_id"]})
+    _publish_change(hass, connection, "variable", msg["variable_id"], "delete")
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list_themes"})
@@ -621,13 +735,17 @@ def ws_list_themes(
     msg: dict[str, Any],
 ) -> None:
     """List circadian themes."""
-    connection.send_result(msg["id"], _store(hass).list_themes())
+    connection.send_result(
+        msg["id"], [_revisioned(item) for item in _store(hass).list_themes()]
+    )
 
 
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/save_theme",
         vol.Required("data"): dict,
+        vol.Optional("base"): dict,
+        vol.Optional("base_revision"): str,
     }
 )
 @websocket_api.require_admin
@@ -639,12 +757,38 @@ async def ws_save_theme(
     msg: dict[str, Any],
 ) -> None:
     """Create or update a circadian theme."""
+    raw = dict(msg["data"])
     try:
-        item = await _store(hass).async_upsert_theme(dict(msg["data"]))
+        if raw.get("id"):
+            if "base" not in msg or "base_revision" not in msg:
+                connection.send_error(
+                    msg["id"], "reload_required", "Reload this preset before saving"
+                )
+                return
+            item = await _store(hass).async_rebase_theme(
+                raw, msg["base"], msg["base_revision"]
+            )
+        else:
+            item = await _store(hass).async_upsert_theme(raw)
+    except RevisionConflict as err:
+        connection.send_result(
+            msg["id"],
+            {
+                "status": "conflict",
+                "fields": err.fields,
+                "current": err.current,
+                "revision": err.revision,
+            },
+        )
+        return
+    except ItemDeleted:
+        connection.send_error(msg["id"], "deleted", "Preset was deleted")
+        return
     except (ValueError, HomeAssistantError) as err:
         connection.send_error(msg["id"], "invalid_format", str(err))
         return
-    connection.send_result(msg["id"], item)
+    connection.send_result(msg["id"], _revisioned(item))
+    _publish_change(hass, connection, "theme", item["id"], "save")
 
 
 @websocket_api.websocket_command(
@@ -663,8 +807,12 @@ async def ws_ensure_default_theme(
     theme = await store.async_ensure_default_theme()
     connection.send_result(
         msg["id"],
-        {"theme": theme, "variables": store.list_variables()},
+        {
+            "theme": _revisioned(theme),
+            "variables": [_revisioned(item) for item in store.list_variables()],
+        },
     )
+    _publish_change(hass, connection, "theme", theme["id"], "save")
 
 
 @websocket_api.websocket_command(
@@ -691,6 +839,7 @@ async def ws_delete_theme(
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Theme not found")
         return
     connection.send_result(msg["id"], {"theme_id": msg["theme_id"]})
+    _publish_change(hass, connection, "theme", msg["theme_id"], "delete")
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/auto_configure"})
@@ -751,6 +900,7 @@ async def _ws_auto_configure_locked(hass, connection, msg) -> None:
         return
     created = [_scene_payload(hass, item) for item in items]
     connection.send_result(msg["id"], {"scenes": created, **_list_payload(hass)})
+    _publish_change(hass, connection, "catalog", None, "auto_configure")
 
 
 @websocket_api.websocket_command(
@@ -808,6 +958,7 @@ async def _ws_move_deleted_area_locked(hass, connection, msg) -> None:
         return
     invalidate_activation_cache(hass)
     connection.send_result(msg["id"], _list_payload(hass))
+    _publish_change(hass, connection, "area", area_id, "move")
 
 
 @websocket_api.websocket_command(
@@ -856,3 +1007,4 @@ async def _ws_delete_deleted_area_locked(hass, connection, msg) -> None:
         return
     invalidate_activation_cache(hass)
     connection.send_result(msg["id"], _list_payload(hass))
+    _publish_change(hass, connection, "area", area_id, "delete")

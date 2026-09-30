@@ -15,6 +15,16 @@
     }
   },
   "frontend": {
+    "conflict": {
+      "title": "Another editor changed this item",
+      "field": "Choose a value for {field}",
+      "mine": "Your value",
+      "saved": "Newly saved value",
+      "use_mine": "Use my value",
+      "use_saved": "Use newly saved value",
+      "deleted": "This item was deleted. Your unsaved draft remains here for copying.",
+      "reload": "Reload this item before saving"
+    },
     "title": "Scene Studio",
     "tabs": {
       "extrapolation": "Circadian scenes",

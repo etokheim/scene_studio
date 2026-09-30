@@ -2,6 +2,7 @@ import {
   buildClientSunDay,
   resampleLightsForEvents,
 } from "./client_solar.js";
+import { mergeFields, patchInPlace, reconcileSaveResponse, useSavedField } from "./collaboration.js";
 import {
   draftRgb,
   draftWheelMode,
@@ -272,6 +273,8 @@ class SceneStudioPanel extends HTMLElement {
     this._themeDraft = null;
     this._variableId = null;
     this._variableDraft = null;
+    this._variableBase = null;
+    this._themeBase = null;
     this._pendingVariableFromDraft = null;
     this._themeSaveTimer = null;
     this._saveSoonTimer = null;
@@ -289,6 +292,12 @@ class SceneStudioPanel extends HTMLElement {
     this._translationsReady = false;
     this._leaveConfirmDone = false;
     this._formData = emptyFormData();
+    this._sceneBase = null;
+    this._sceneRevision = null;
+    this._sceneConflict = null;
+    this._sceneDeleted = false;
+    this._sharedConflict = false;
+    this._sharedDeleted = false;
     this._entityId = null;
     this._pendingNewForm = null;
     this._areaPromptOpen = false;
@@ -372,6 +381,10 @@ class SceneStudioPanel extends HTMLElement {
     this._onLandscapeChange = () => this._syncYearScrubLayout();
     this._areaRegistryUnsub = null;
     this._areaRegistrySubscription = null;
+    this._changeUnsub = null;
+    this._changeSubscription = null;
+    this._changeConnection = null;
+    this._collabRefreshGeneration = 0;
     this._onWindowResize = () => {
       if (this._resizeRaf) {
         return;
@@ -388,9 +401,16 @@ class SceneStudioPanel extends HTMLElement {
     if (this._hass?.connection && this._hass.connection !== hass?.connection) {
       this._areaRegistryUnsub?.();
       this._areaRegistryUnsub = null;
+      this._changeUnsub?.();
+      this._changeUnsub = null;
+      this._changeSubscription = null;
+      this._changeConnection = null;
     }
     this._hass = hass;
-    if (this.isConnected) this._subscribeAreaRegistry();
+    if (this.isConnected) {
+      this._subscribeAreaRegistry();
+      void this._ensureChangeSubscription();
+    }
     this._syncDarkModeAttr();
     if (this._menuButtonEl) {
       this._menuButtonEl.hass = hass;
@@ -456,6 +476,7 @@ class SceneStudioPanel extends HTMLElement {
 
   connectedCallback() {
     this._subscribeAreaRegistry();
+    void this._ensureChangeSubscription();
     window.addEventListener("hashchange", this._onHashChange);
     window.addEventListener("location-changed", this._onLocationChanged);
     window.addEventListener("popstate", this._onLocationChanged);
@@ -505,6 +526,10 @@ class SceneStudioPanel extends HTMLElement {
   disconnectedCallback() {
     this._areaRegistryUnsub?.();
     this._areaRegistryUnsub = null;
+    this._changeUnsub?.();
+    this._changeUnsub = null;
+    this._changeSubscription = null;
+    this._changeConnection = null;
     void this._leaveLiveEdits();
     this._closeSceneSidebar();
     window.removeEventListener("hashchange", this._onHashChange);
@@ -5428,6 +5453,8 @@ class SceneStudioPanel extends HTMLElement {
 
   async _loadList() {
     const token = this._startPanelLoad();
+    await this._ensureChangeSubscription();
+    if (!this._panelLoadIsCurrent(token)) return;
     // The cached paint consumes the flag. The payload paint below has to
     // keep the rail too, or deselect rebuilds the cards and the scale snaps.
     const keepRail = Boolean(this._keepAreaRail);
@@ -5515,6 +5542,9 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   async _loadItem(sceneId) {
+    const token = this._startPanelLoad();
+    await this._ensureChangeSubscription();
+    if (!this._panelLoadIsCurrent(token)) return;
     const sidebar = this.shadowRoot?.querySelector(".scene-sidebar.light-dialog");
     if (sidebar?._sceneId && sidebar._sceneId !== sceneId) {
       await this._restoreOpenLightPreview();
@@ -5523,7 +5553,6 @@ class SceneStudioPanel extends HTMLElement {
     if (this._scenePreviewOwnerId && this._scenePreviewOwnerId !== sceneId) {
       await this._abandonScenePreview();
     }
-    const token = this._startPanelLoad();
     try {
       const [item, payload] = await Promise.all([
         this._hass.callWS({
@@ -5537,6 +5566,10 @@ class SceneStudioPanel extends HTMLElement {
       }
       this._entityId = item.entity_id || null;
       this._formData = { ...emptyFormData(), ...(item.form || item) };
+      this._sceneBase = structuredClone(item.form || item);
+      this._sceneRevision = item.revision || null;
+      this._sceneConflict = null;
+      this._sceneDeleted = false;
       this._items = payload?.scenes || [];
       this._variables = payload?.variables || [];
       this._themes = payload?.themes || [];
@@ -5550,6 +5583,8 @@ class SceneStudioPanel extends HTMLElement {
       this._error = err.message || String(err);
       this._entityId = null;
       this._formData = emptyFormData();
+      this._sceneBase = null;
+      this._sceneRevision = null;
     }
     if (!this._panelLoadIsCurrent(token)) {
       return;
@@ -7091,14 +7126,15 @@ class SceneStudioPanel extends HTMLElement {
     this._floors = payload?.floors || this._floors;
     const rail = this._contentEl?.querySelector(":scope > .workspace > .area-rail");
     if (!rail) {
-      this._render();
+      if (this._view === "list" || this._view === "variables") this._render();
       return;
     }
-    const scroll = rail.querySelector('.area-rail-body[data-tab="scenes"]');
+    const scroll = rail.querySelector('.area-rail-body:not([hidden])');
+    const scrollTab = scroll?.dataset.tab || "scenes";
     const scrollTop = scroll?.scrollTop || 0;
     const replacement = renderLanding(this, { includeStage: false }).querySelector(".area-rail");
     rail.replaceWith(replacement);
-    const nextScroll = replacement.querySelector('.area-rail-body[data-tab="scenes"]');
+    const nextScroll = replacement.querySelector(`.area-rail-body[data-tab="${scrollTab}"]`);
     if (nextScroll) {
       nextScroll.scrollTop = scrollTop;
       this._bindAreaRailScroll(nextScroll);
@@ -7122,6 +7158,194 @@ class SceneStudioPanel extends HTMLElement {
       this._areaRegistrySubscription = null;
       this._error = error.message || String(error);
     });
+  }
+
+  async _ensureChangeSubscription() {
+    const connection = this._hass?.connection;
+    if (!connection?.subscribeMessage || !this.isConnected) return;
+    if (this._changeConnection === connection && this._changeUnsub) return;
+    if (this._changeConnection === connection && this._changeSubscription) {
+      await this._changeSubscription;
+      return;
+    }
+    const hadCatalog = Boolean(this._items?.length || this._themes?.length || this._variables?.length);
+    this._changeConnection = connection;
+    this._changeSubscription = connection.subscribeMessage(
+      (event) => { void this._receiveSavedChange(event); },
+      { type: `${DOMAIN}/subscribe_changes` }
+    );
+    try {
+      const unsubscribe = await this._changeSubscription;
+      if (!this.isConnected || this._changeConnection !== connection) {
+        unsubscribe();
+        return;
+      }
+      this._changeUnsub = unsubscribe;
+      this._changeSubscription = null;
+      if (hadCatalog) void this._receiveSavedChange({ kind: "catalog", action: "resync" });
+    } catch (error) {
+      if (this._changeConnection === connection) {
+        this._changeSubscription = null;
+        this._error = error.message || String(error);
+      }
+    }
+  }
+
+  _rebaseSceneHistory(before, after) {
+    for (const entry of [...this._undoStack, ...this._redoStack]) {
+      if (entry.target?.view !== "edit" || entry.target.editId !== this._editId) continue;
+      for (const snapshot of [entry.session, entry.after]) {
+        if (snapshot?.form) snapshot.form = mergeFields(before, snapshot.form, after).value;
+      }
+    }
+  }
+
+  _rebaseLibraryHistory(kind, before, after) {
+    const field = kind === "theme" ? "theme" : "variable";
+    const targetField = kind === "theme" ? "themeId" : "variableId";
+    const openId = kind === "theme" ? this._themeId : this._variableId;
+    for (const entry of [...this._undoStack, ...this._redoStack]) {
+      if (entry.target?.[targetField] !== openId) continue;
+      for (const snapshot of [entry.session, entry.after]) {
+        if (snapshot?.[field]) snapshot[field] = mergeFields(before, snapshot[field], after).value;
+      }
+    }
+  }
+
+  async _applyRemoteLibrary(kind, itemId, item) {
+    const isTheme = kind === "theme";
+    const active = isTheme
+      ? this._themeDraft?.id === itemId || this._themeId === itemId
+      : this._variableId === itemId;
+    if (!active) return;
+    if (this._sharedConflict) return;
+    if (!item) {
+      this._sharedDeleted = true;
+      window.clearTimeout(this._saveSoonTimer);
+      this._saveSoonTimer = null;
+      this._showDeletedDraftBanner();
+      return;
+    }
+    const baseItem = isTheme ? this._themeBase : this._variableBase;
+    if (!baseItem || baseItem.revision === item.revision) return;
+    const base = structuredClone(baseItem);
+    const current = structuredClone(item);
+    delete base.revision;
+    delete current.revision;
+    const before = isTheme ? base : this._variableWorkingCopy(base);
+    const after = isTheme ? current : this._variableWorkingCopy(current);
+    const draft = isTheme ? this._themeDraft : this._variableDraft;
+    if (!draft) return;
+    const result = mergeFields(before, draft, after);
+    let resolved = result.value;
+    if (result.conflicts.length) {
+      this._sharedConflict = true;
+      window.clearTimeout(this._saveSoonTimer);
+      this._saveSoonTimer = null;
+      try {
+        resolved = await this._chooseConflictValues(
+          { base: before, current: after, fields: result.conflicts },
+          draft
+        );
+      } finally {
+        this._sharedConflict = false;
+      }
+    }
+    this._rebaseLibraryHistory(kind, before, after);
+    if (isTheme) {
+      patchInPlace(this._themeDraft, resolved);
+      this._themeBase = structuredClone(item);
+      this._patchDialFromSession({ applyTheme: true });
+      this._syncThemePreviewSurfaces();
+    } else {
+      patchInPlace(this._variableDraft, resolved);
+      this._variableBase = structuredClone(item);
+      this._variableWheel?.sync();
+      const brightnessField = [...(this.shadowRoot?.querySelectorAll(".library-editor ha-input") || [])]
+        .find((field) => field.label === this._t("frontend.lights.brightness", "Brightness"));
+      if (brightnessField && this._view === "variable") {
+        brightnessField.value = String(this._variableDraft.colorDraft?.brightness ?? 255);
+      }
+    }
+    this._syncAppBarTitle();
+    if (JSON.stringify(resolved) !== JSON.stringify(after)) this._saveSoon();
+    else this._sessionBaseline = this._snapshotSession();
+  }
+
+  _showDeletedDraftBanner() {
+    const stage = this._contentEl?.querySelector(".stage-col");
+    const scroll = (stage && this._stageScrollEl(stage)) ||
+      this._contentEl?.querySelector(".library-editor, .simple-editor-host") || this._contentEl;
+    if (!scroll || scroll.querySelector(".deleted-draft-banner")) return;
+    const banner = document.createElement("p");
+    banner.className = "deleted-draft-banner error";
+    banner.setAttribute("role", "alert");
+    banner.textContent = this._t("frontend.conflict.deleted", "This item was deleted. Your unsaved draft remains here for copying.");
+    scroll.prepend(banner);
+  }
+
+  async _receiveSavedChange(event) {
+    const generation = ++this._collabRefreshGeneration;
+    try {
+      const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      if (!this.isConnected || generation !== this._collabRefreshGeneration) return;
+      const before = this._sceneBase;
+      const openId = this._view === "edit" ? this._editId : null;
+      const saved = openId && (payload.scenes || []).find((item) => item.id === openId);
+      this._variables = payload.variables || [];
+      this._themes = payload.themes || [];
+      this._applyAreaCatalog(payload);
+      if (this._themeDraft?.id) {
+        await this._applyRemoteLibrary(
+          "theme", this._themeDraft.id,
+          this._themes.find((item) => item.id === this._themeDraft.id) || null
+        );
+      }
+      if (this._variableId) {
+        await this._applyRemoteLibrary(
+          "variable", this._variableId,
+          this._variables.find((item) => item.id === this._variableId) || null
+        );
+      }
+      if (event.kind === "theme" || event.kind === "variable") {
+        this._clearPreviewCache();
+        this._patchDialFromSession({ applyTheme: true });
+      }
+      if (!openId) return;
+      if (!saved) {
+        this._sceneDeleted = true;
+        window.clearTimeout(this._saveSoonTimer);
+        this._saveSoonTimer = null;
+        this._showDeletedDraftBanner();
+        return;
+      }
+      if (!before || !saved.revision || saved.revision === this._sceneRevision) return;
+      if (this._sceneConflict?.revision === saved.revision) return;
+      const next = mergeFields(before, this._formData, saved.form);
+      if (next.conflicts.length) {
+        this._sceneConflict = {
+          fields: next.conflicts,
+          current: saved.form,
+          revision: saved.revision,
+          base: before,
+        };
+        window.clearTimeout(this._saveSoonTimer);
+        this._saveSoonTimer = null;
+        this._showSceneConflict();
+        return;
+      }
+      this._rebaseSceneHistory(before, saved.form);
+      patchInPlace(this._formData, next.value);
+      this._sceneBase = structuredClone(saved.form);
+      this._sceneRevision = saved.revision;
+      this._syncAppBarTitle();
+      this._patchDialFromSession();
+      this._syncSceneUsed();
+      if (JSON.stringify(next.value) !== JSON.stringify(saved.form)) this._saveSoon();
+      else this._sessionBaseline = this._snapshotSession();
+    } catch (error) {
+      this._error = error.message || String(error);
+    }
   }
 
   async _refreshAreasFromRegistry() {
@@ -8638,10 +8862,11 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     if (created.kind === "scene") {
+      const data = structuredClone(created.record.form || created.record);
+      delete data.id;
       const saved = await this._hass.callWS({
         type: `${DOMAIN}/save`,
-        scene_id: created.id,
-        data: created.record.form || created.record,
+        data,
       });
       created.id = saved.id;
       created.record = saved;
@@ -8649,18 +8874,24 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     if (created.kind === "theme") {
+      const data = structuredClone(created.record);
+      delete data.id;
+      delete data.revision;
       const saved = await this._hass.callWS({
         type: `${DOMAIN}/save_theme`,
-        data: created.record,
+        data,
       });
       created.id = saved.id;
       created.record = saved;
       this._adoptSavedTheme(saved);
       return;
     }
+    const data = structuredClone(created.record);
+    delete data.id;
+    delete data.revision;
     const saved = await this._hass.callWS({
       type: `${DOMAIN}/save_variable`,
-      data: created.record,
+      data,
     });
     created.id = saved.id;
     created.record = saved;
@@ -8752,6 +8983,9 @@ class SceneStudioPanel extends HTMLElement {
 
   async _loadVariable(variableId) {
     const token = this._startPanelLoad();
+    await this._ensureChangeSubscription();
+    if (!this._panelLoadIsCurrent(token)) return;
+    this._sharedDeleted = false;
     try {
       const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
       if (!this._panelLoadIsCurrent(token)) {
@@ -8764,6 +8998,7 @@ class SceneStudioPanel extends HTMLElement {
       this._adoptSettings(payload?.settings);
       if (variableId === "new") {
         this._variableId = null;
+        this._variableBase = null;
         this._variableDraft = this._variableWorkingCopy(null);
         this._error = null;
         this._resetSession();
@@ -8784,6 +9019,7 @@ class SceneStudioPanel extends HTMLElement {
         return;
       }
       this._variableId = variable.id;
+      this._variableBase = structuredClone(variable);
       this._alignLibraryView(variable);
       this._variableDraft = this._variableWorkingCopy(variable);
       this._error = null;
@@ -8834,8 +9070,70 @@ class SceneStudioPanel extends HTMLElement {
     };
   }
 
+  async _saveLibraryItem(kind, data, baseItem = null) {
+    const type = kind === "theme" ? "save_theme" : "save_variable";
+    let base = baseItem || (kind === "theme" ? this._themes : this._variables)?.find((item) => item.id === data.id);
+    let revision = base?.revision;
+    if (base) {
+      base = structuredClone(base);
+      delete base.revision;
+    }
+    if (data.id && (!base || !revision)) {
+      throw new Error(this._t("frontend.conflict.reload", "Reload this item before saving"));
+    }
+    let draft = structuredClone(data);
+    for (;;) {
+      const result = await this._hass.callWS({
+        type: `${DOMAIN}/${type}`,
+        data: draft,
+        ...(data.id ? { base, base_revision: revision } : {}),
+      });
+      if (result.status !== "conflict") return result;
+      this._sharedConflict = true;
+      try {
+        draft = await this._chooseConflictValues(
+          { base, current: result.current, fields: result.fields },
+          draft
+        );
+      } finally {
+        this._sharedConflict = false;
+      }
+      base = structuredClone(result.current);
+      revision = result.revision;
+    }
+  }
+
+  async _saveSceneItem(scene, data) {
+    let base = structuredClone(scene.form || scene);
+    let revision = scene.revision;
+    if (!revision) throw new Error(this._t("frontend.conflict.reload", "Reload this item before saving"));
+    let draft = structuredClone(data);
+    for (;;) {
+      const result = await this._hass.callWS({
+        type: `${DOMAIN}/save`,
+        scene_id: scene.id,
+        data: draft,
+        base,
+        base_revision: revision,
+      });
+      if (result.status !== "conflict") return result;
+      this._sharedConflict = true;
+      try {
+        draft = await this._chooseConflictValues(
+          { base, current: result.current, fields: result.fields },
+          draft
+        );
+      } finally {
+        this._sharedConflict = false;
+      }
+      base = structuredClone(result.current);
+      revision = result.revision;
+    }
+  }
+
   async _saveVariableQuiet() {
-    const data = this._variableSavePayload();
+    const payload = this._variableSavePayload();
+    const data = payload && structuredClone(payload);
     if (!data) {
       return;
     }
@@ -8844,12 +9142,16 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     this._saving = true;
+    const editingId = this._variableId;
+    const editingView = this._view;
+    const savingRevision = this._variableBase?.revision;
     try {
-      const saved = await this._hass.callWS({
-        type: `${DOMAIN}/save_variable`,
-        data,
-      });
-      this._variableId = saved.id;
+      const saved = await this._saveLibraryItem("variable", data, this._variableBase);
+      if (this._sharedDeleted) return;
+      if (this._variableId === editingId && this._variableBase?.revision !== savingRevision) {
+        if (!this._sharedConflict && !this._sharedDeleted) this._saveSoon();
+        return;
+      }
       const list = [...(this._variables || [])];
       const index = list.findIndex((item) => item.id === saved.id);
       if (index >= 0) {
@@ -8858,8 +9160,29 @@ class SceneStudioPanel extends HTMLElement {
         list.push(saved);
       }
       this._variables = list;
+      if (this._variableId !== editingId || this._view !== editingView) return;
+      this._variableId = saved.id;
+      this._variableBase = structuredClone(saved);
       this._alignLibraryView(saved);
-      if (this._view === "variable" || this._view === "palette") {
+      const latest = this._variableSavePayload();
+      const next = reconcileSaveResponse(data, latest, saved);
+      if (next.conflicts.length) {
+        this._sharedConflict = true;
+        try {
+          const resolved = await this._chooseConflictValues(
+            { base: data, current: saved, fields: next.conflicts }, latest
+          );
+          patchInPlace(this._variableDraft, this._variableWorkingCopy(resolved));
+        } finally {
+          this._sharedConflict = false;
+        }
+        this._saveSoon();
+      } else {
+        patchInPlace(this._variableDraft, this._variableWorkingCopy(next.value));
+      }
+      if (next.changedDuringSave && !next.conflicts.length) {
+        this._saveSoon();
+      } else if (!next.conflicts.length && (this._view === "variable" || this._view === "palette")) {
         this._sessionBaseline = this._snapshotSession();
       }
       const hash = this._canonicalLibraryHash(saved);
@@ -9070,6 +9393,7 @@ class SceneStudioPanel extends HTMLElement {
         }
       },
     });
+    this._variableWheel = wheel;
     host.append(briInput, wheel.el);
     wheel.sync();
   }
@@ -9091,6 +9415,9 @@ class SceneStudioPanel extends HTMLElement {
 
   async _loadTheme(themeId) {
     const token = this._startPanelLoad();
+    await this._ensureChangeSubscription();
+    if (!this._panelLoadIsCurrent(token)) return;
+    this._sharedDeleted = false;
     try {
       const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
       if (!this._panelLoadIsCurrent(token)) {
@@ -9104,6 +9431,7 @@ class SceneStudioPanel extends HTMLElement {
       if (themeId === "new") {
         const source = (this._themes || [])[0] || galleryTheme("default");
         this._themeId = null;
+        this._themeBase = null;
         this._themeDraft = {
           name: "",
           events: structuredClone(source.events),
@@ -9122,6 +9450,8 @@ class SceneStudioPanel extends HTMLElement {
         return;
       }
       this._themeDraft = structuredClone(theme);
+      delete this._themeDraft.revision;
+      this._themeBase = structuredClone(theme);
       this._error = null;
     } catch (err) {
       if (!this._panelLoadIsCurrent(token)) {
@@ -9187,21 +9517,30 @@ class SceneStudioPanel extends HTMLElement {
     this._saving = true;
     this._error = null;
     try {
-      const saved = await this._hass.callWS({
-        type: `${DOMAIN}/save_theme`,
-        data: this._themeDraft,
-      });
-      this._themeDraft = structuredClone(saved);
+      const savingId = this._themeId;
+      const savingDraft = structuredClone(this._themeDraft);
+      const saved = await this._saveLibraryItem("theme", savingDraft, this._themeBase);
+      if (this._sharedDeleted) return;
+      const stayed = this._view === "theme" && this._themeId === savingId;
+      const changedDuringSave = stayed && JSON.stringify(this._themeDraft) !== JSON.stringify(savingDraft);
+      const latest = changedDuringSave
+        ? mergeFields(savingDraft, this._themeDraft, saved).value
+        : null;
+      this._adoptSavedTheme(saved, { adoptDraft: stayed && !changedDuringSave });
+      if (!stayed) return;
+      this._themeBase = structuredClone(saved);
+      if (changedDuringSave) {
+        this._themeDraft = latest;
+        this._saveSoon();
+      }
       if (this._view === "theme") {
         this._themeId = saved.id;
-        this._sessionBaseline = this._snapshotSession();
+        if (!changedDuringSave) this._sessionBaseline = this._snapshotSession();
         this._syncUndoButtons();
         this._syncSaveFab();
         if (this._headerEl) {
           this._headerEl.textContent = saved.name;
         }
-      } else {
-        this._adoptSavedTheme(saved);
       }
     } catch (err) {
       this._error = err.message || String(err);
@@ -9213,8 +9552,12 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
-  _adoptSavedTheme(saved) {
-    this._themeDraft = structuredClone(saved);
+  _adoptSavedTheme(saved, { adoptDraft = true } = {}) {
+    if (adoptDraft) {
+      this._themeDraft = structuredClone(saved);
+      delete this._themeDraft.revision;
+      this._themeBase = structuredClone(saved);
+    }
     const themes = [...(this._themes || [])];
     const index = themes.findIndex((item) => item.id === saved.id);
     if (index >= 0) {
@@ -9241,11 +9584,9 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     try {
-      const saved = await this._hass.callWS({
-        type: `${DOMAIN}/save_theme`,
-        data: this._themeDraft,
-      });
+      const saved = await this._saveLibraryItem("theme", this._themeDraft, this._themeBase);
       this._adoptSavedTheme(saved);
+      this._themeBase = structuredClone(saved);
       this._clearPreviewCache();
       this._sunPathKey = undefined;
       await this._ensureSunPath();
@@ -9270,6 +9611,8 @@ class SceneStudioPanel extends HTMLElement {
       return false;
     }
     this._themeDraft = structuredClone(theme);
+    delete this._themeDraft.revision;
+    this._themeBase = structuredClone(theme);
     if (!this._themeDraft.id) {
       this._themeDraft.id = themeId;
     }
@@ -11116,6 +11459,7 @@ class SceneStudioPanel extends HTMLElement {
     if (this._historyRestoring) {
       return;
     }
+    if (this._sceneConflict || this._sceneDeleted || this._sharedConflict || this._sharedDeleted) return;
     window.clearTimeout(this._saveSoonTimer);
     this._saveSoonTimer = window.setTimeout(() => {
       this._saveSoonTimer = null;
@@ -11123,10 +11467,79 @@ class SceneStudioPanel extends HTMLElement {
     }, 250);
   }
 
+  _chooseConflictValues(conflict, localValue) {
+    return new Promise((resolve) => {
+    this.shadowRoot.querySelector("ha-dialog.scene-conflict-dialog")?.remove();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "scene-conflict-dialog";
+    dialog.setAttribute("header-title", this._t("frontend.conflict.title", "Another editor changed this item"));
+    const detail = document.createElement("p");
+    const mine = document.createElement("pre");
+    const theirs = document.createElement("pre");
+    let resolved = mergeFields(conflict.base, localValue, conflict.current).value;
+    let index = 0;
+    const fieldValue = (object, field) => field.split(".").reduce((value, key) => value?.[key], object);
+    const show = () => {
+      const field = conflict.fields[index];
+      detail.textContent = this._t("frontend.conflict.field", "Choose a value for {field}", { field });
+      mine.textContent = `${this._t("frontend.conflict.mine", "Your value")}: ${JSON.stringify(fieldValue(resolved, field))}`;
+      theirs.textContent = `${this._t("frontend.conflict.saved", "Newly saved value")}: ${JSON.stringify(fieldValue(conflict.current, field))}`;
+    };
+    let finished = false;
+    const finish = () => {
+      index += 1;
+      if (index < conflict.fields.length) { show(); return; }
+      finished = true;
+      dialog.open = false;
+      resolve(resolved);
+    };
+    const footer = document.createElement("ha-dialog-footer");
+    footer.slot = "footer";
+    const local = document.createElement("ha-button");
+    local.slot = "secondaryAction";
+    local.appearance = "plain";
+    local.textContent = this._t("frontend.conflict.use_mine", "Use my value");
+    local.addEventListener("click", finish);
+    const saved = document.createElement("ha-button");
+    saved.slot = "primaryAction";
+    saved.variant = "brand";
+    saved.textContent = this._t("frontend.conflict.use_saved", "Use newly saved value");
+    saved.addEventListener("click", () => {
+      resolved = useSavedField(resolved, conflict.current, conflict.fields[index]);
+      finish();
+    });
+    footer.append(local, saved);
+    dialog.append(detail, mine, theirs, footer);
+    dialog.addEventListener("closed", () => {
+      if (!finished && dialog.isConnected) {
+        dialog.open = true;
+      } else {
+        dialog.remove();
+      }
+    });
+    this.shadowRoot.appendChild(dialog);
+    show();
+    dialog.open = true;
+    });
+  }
+
+  async _showSceneConflict() {
+    const conflict = this._sceneConflict;
+    if (!conflict || !conflict.fields.length) return;
+    const resolved = await this._chooseConflictValues(conflict, this._formData);
+    if (this._sceneConflict !== conflict || this._sceneDeleted) return;
+    patchInPlace(this._formData, resolved);
+    this._sceneBase = structuredClone(conflict.current);
+    this._sceneRevision = conflict.revision;
+    this._sceneConflict = null;
+    this._saveSoon();
+  }
+
   async _saveNow({ fromHistory = false } = {}) {
     window.clearTimeout(this._saveSoonTimer);
     this._saveSoonTimer = null;
     this._stampHistoryAfter();
+    if (this._sharedConflict || this._sharedDeleted) return;
     if (this._view === "theme" && this._themeDraft) {
       await this._saveThemeQuiet();
       return;
@@ -11138,6 +11551,7 @@ class SceneStudioPanel extends HTMLElement {
     if (this._view !== "edit") {
       return;
     }
+    if (this._sceneConflict || this._sceneDeleted) return;
     if (!this._formData?.area) {
       return;
     }
@@ -11146,17 +11560,39 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     const savingId = this._editId;
-    const savingData = this._formData;
+    const savingBase = this._sceneBase ? structuredClone(this._sceneBase) : null;
+    const savingRevision = this._sceneRevision;
     this._saving = true;
     this._error = null;
     try {
       await this._flushNativeDrafts();
+      const savingData = structuredClone(this._formData);
       const saved = await this._hass.callWS({
         type: `${DOMAIN}/save`,
         scene_id: savingId || undefined,
         data: savingData,
+        ...(savingId ? { base: savingBase, base_revision: savingRevision } : {}),
       });
-      this._upsertSceneInList(saved);
+      if (saved.status === "conflict") {
+        if (this._view === "edit" && this._editId === savingId) {
+          if (this._sceneRevision !== savingRevision) {
+            this._saveSoon();
+            return;
+          }
+          this._sceneConflict = {
+            fields: [...saved.fields],
+            current: saved.current,
+            revision: saved.revision,
+            base: savingBase,
+          };
+          this._showSceneConflict();
+        }
+        return;
+      }
+      // A collaborator's notification can arrive while this request is in
+      // flight. Its newer revision must remain the editor's source of truth.
+      const superseded = savingId && this._sceneRevision !== savingRevision;
+      if (!superseded) this._upsertSceneInList(saved);
       // A solar-event sidebar closes with an unawaited save. If the user
       // already opened another scene, writing this id back deselects that card.
       const stayed = this._view === "edit" && this._editId === savingId;
@@ -11164,11 +11600,32 @@ class SceneStudioPanel extends HTMLElement {
         this._syncRailSelection();
         return;
       }
+      if (superseded || this._sceneDeleted) {
+        if (!this._sceneConflict && !this._sceneDeleted) this._saveSoon();
+        return;
+      }
       const wasNew = !savingId;
       this._editId = saved.id;
-      this._sessionBaseline = this._snapshotSession();
-      this._clearPersistedDraft();
-      this._clearPersistedDraft("new");
+      this._sceneBase = structuredClone(saved.form || saved);
+      this._sceneRevision = saved.revision;
+      const next = reconcileSaveResponse(savingData, this._formData, this._sceneBase);
+      if (next.conflicts.length) {
+        this._sceneConflict = {
+          fields: next.conflicts,
+          current: this._sceneBase,
+          revision: this._sceneRevision,
+          base: savingData,
+        };
+        void this._showSceneConflict();
+      } else {
+        patchInPlace(this._formData, next.value);
+        if (next.changedDuringSave) this._saveSoon();
+        else this._sessionBaseline = this._snapshotSession();
+      }
+      if (!next.conflicts.length) {
+        this._clearPersistedDraft();
+        this._clearPersistedDraft("new");
+      }
       if (wasNew) {
         for (const entry of [...this._undoStack, ...this._redoStack]) {
           if (entry.target?.view === "edit" && !entry.target.editId) {
@@ -11199,17 +11656,43 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     const savingThemeId = this._themeId;
-    const savingDraft = this._themeDraft;
+    const savingDraft = structuredClone(this._themeDraft);
+    const savingRevision = this._themeBase?.revision;
     try {
-      const saved = await this._hass.callWS({
-        type: `${DOMAIN}/save_theme`,
-        data: savingDraft,
-      });
-      this._adoptSavedTheme(saved);
+      const saved = await this._saveLibraryItem("theme", savingDraft, this._themeBase);
+      if (this._sharedDeleted) return;
+      if (this._themeBase?.revision !== savingRevision) {
+        if (!this._sharedConflict && !this._sharedDeleted) this._saveSoon();
+        return;
+      }
       const stayed = this._view === "theme" && this._themeId === savingThemeId;
+      const sameDraft = this._themeDraft?.id === savingDraft.id &&
+        (this._view === "theme" || this._view === "edit");
+      const next = sameDraft
+        ? reconcileSaveResponse(savingDraft, this._themeDraft, saved)
+        : null;
+      this._adoptSavedTheme(saved, { adoptDraft: false });
+      if (sameDraft) this._themeBase = structuredClone(saved);
+      if (next?.conflicts.length) {
+        this._sharedConflict = true;
+        try {
+          const resolved = await this._chooseConflictValues(
+            { base: savingDraft, current: saved, fields: next.conflicts }, this._themeDraft
+          );
+          patchInPlace(this._themeDraft, resolved);
+        } finally {
+          this._sharedConflict = false;
+        }
+        this._saveSoon();
+      } else if (next) {
+        patchInPlace(this._themeDraft, next.value);
+        if (next.changedDuringSave) this._saveSoon();
+      }
       if (stayed) {
         this._themeId = saved.id;
-        this._sessionBaseline = this._snapshotSession();
+        if (!next?.changedDuringSave && !next?.conflicts.length) {
+          this._sessionBaseline = this._snapshotSession();
+        }
         if (this._currentHash() !== `theme/${saved.id}`) {
           history.replaceState(null, "", this._hashHref(`theme/${saved.id}`));
         }
@@ -13037,17 +13520,13 @@ class SceneStudioPanel extends HTMLElement {
         return;
       }
       try {
-        await this._hass.callWS({
-          type: `${DOMAIN}/save`,
-          scene_id: scene.id,
-          data: {
+        const saved = await this._saveSceneItem(scene, {
             ...form,
             scene_name: name,
             description: data.description,
             labels: data.labels,
             category: data.category || null,
             icon: data.icon || null,
-          },
         });
         dialog.open = false;
         if (this._editId === scene.id && this._formData) {
@@ -13057,22 +13536,7 @@ class SceneStudioPanel extends HTMLElement {
           this._formData.category = data.category || null;
           this._formData.icon = data.icon || null;
         }
-        this._upsertSceneInList({
-          ...scene,
-          scene_name: name,
-          description: data.description,
-          labels: data.labels,
-          category: data.category || null,
-          icon: data.icon || null,
-          form: {
-            ...form,
-            scene_name: name,
-            description: data.description,
-            labels: data.labels,
-            category: data.category || null,
-            icon: data.icon || null,
-          },
-        });
+        this._upsertSceneInList(saved);
         this._refreshVisibleSceneList();
         await this._loadList();
       } catch (err) {
@@ -13215,10 +13679,7 @@ class SceneStudioPanel extends HTMLElement {
       }
       save.disabled = true;
       try {
-        const saved = await this._hass.callWS({
-          type: `${DOMAIN}/save_variable`,
-          data: { ...item, name },
-        });
+        const saved = await this._saveLibraryItem("variable", { ...item, name }, item);
         this._variables = (this._variables || []).map((row) =>
           row.id === saved.id ? saved : row
         );
