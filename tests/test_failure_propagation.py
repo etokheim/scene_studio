@@ -82,6 +82,21 @@ def test_apply_waits_for_service_handler_completion():
     asyncio.run(run())
 
 
+def test_debug_logging_does_not_copy_service_payload(caplog):
+    async def run():
+        hass = _Hass()
+        await apply_single_entity(
+            {"entity_id": "switch.desk", "state": "on", "access_code": "private"},
+            hass,
+        )
+        assert hass.services.async_call.await_count == 1
+
+    with caplog.at_level("DEBUG"):
+        asyncio.run(run())
+    assert "private" not in caplog.text
+    assert "Applying switch.turn_on to switch.desk" in caplog.text
+
+
 def test_extrapolate_number_rejects_non_numeric_endpoint():
     with pytest.raises(HomeAssistantError, match="must be numbers"):
         extrapolate_number("100", 200, 50)

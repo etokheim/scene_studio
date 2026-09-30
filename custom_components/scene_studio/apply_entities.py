@@ -158,7 +158,9 @@ async def apply_single_entity(
             key: value for key, value in entity_applied.items() if value is not None
         }
 
-    _LOGGER.debug("%s.%s: %s", domain, service_type, entity_applied)
+    # Service data can contain sensitive attributes for migrated non-light
+    # entities. Keep debug logs useful without copying that payload.
+    _LOGGER.debug("Applying %s.%s to %s", domain, service_type, entity[ATTR_ENTITY_ID])
 
     try:
         await hass.services.async_call(

@@ -150,13 +150,12 @@ async def async_freeze_migrate(hass: HomeAssistant, store: SceneStudioStore) -> 
     managed = list(store.managed_native_scene_ids)
     if managed:
         removed = await async_delete_managed_yaml(hass, managed)
-        _LOGGER.info("Removed %s managed native YAML scenes after freeze", removed)
+        _LOGGER.debug("Removed %s managed native YAML scenes after freeze", removed)
+
         def clear_managed_ids() -> None:
             store.managed_native_scene_ids.clear()
 
-        await store._async_mutate(  # pylint: disable=protected-access
-            clear_managed_ids
-        )
+        await store._async_mutate(clear_managed_ids)  # pylint: disable=protected-access
     if changed:
-        _LOGGER.info("Freeze-migrated %s circadian scenes off native YAML", changed)
+        _LOGGER.debug("Freeze-migrated %s circadian scenes off native YAML", changed)
     return changed
