@@ -2,6 +2,12 @@
 
 Durable product and architecture guidance for Scene Studio. Keep current constraints and their reasons; delete superseded decisions when changing course. Git preserves history. Do not reverse an intentional product decision without the user's request.
 
+## Shared editor regions and retained preview pixels
+
+- **Date:** 2026-09-30
+- **Decision:** Scenes and library editors use one shell with toolbar, flexible preview, and bottom light or palette-slot region. Existing editors own their data and interactions. Incompatible previews retain live outgoing DOM, canvas pixels, backgrounds, and measured geometry until the incoming content is ready and the crossfade finishes. Toolbar and light hosts survive; destination controls and callbacks replace their contents. Revision gates prevent interrupted transitions and delayed navigation from cleaning up or reopening an older destination. Same-type morphs remain.
+- **Why:** Separate editor layouts reserved different space below their disks, and teardown before the exit animation finished caused visible jumps. Cloning a canvas would lose its pixels; retaining old light callbacks would act on the previous scene.
+
 ## Library onboarding and shared selection opacity
 
 - **Date:** 2026-09-29
@@ -11,7 +17,7 @@ Durable product and architecture guidance for Scene Studio. Keep current constra
 ## Selected scene card styling
 
 - **Date:** 2026-09-29
-- **Decision:** The selected scene card shows its palette above its title. Palette dots are 18px with 2px overlap, a 0.5px inner white border at 15% opacity, and a shadow under the stack. The 2px selection border sits outside the card with a 2px gap and uses 75% white.
+- **Decision:** The selected scene card shows its palette below its title. Selection scales the card; hover only changes its shadow and menu reveal. Palette dots are 18px with 2px overlap, a 0.5px inner white border at 15% opacity, and a shadow under the stack. The 2px selection border sits outside the card with a 2px gap and uses 75% white.
 - **Why:** Finish the requested scene-card styling without changing the Default starter behavior.
 
 ## Default is a starter, and selected rings share 75%
@@ -39,7 +45,7 @@ Durable product and architecture guidance for Scene Studio. Keep current constra
 ## A phone dial shrinks; presets are the user-facing names
 
 - **Date:** 2026-09-28
-- **Decision:** On a phone the circadian face is centered in the space above the light tiles and may shrink below the color-wheel floor so the page does not scroll. A wide dial keeps that floor. The face itself sits 24px lower; the play row and date chips stay at the top of the column. Light tiles are grouped again whenever a selector sits on the strip outside a group. The narrow overflow menu holds Live edit; undo and redo stay as header buttons. Library copy says scene presets, color presets, and circadian presets. Stored kinds stay `palette`, `variable`, and `theme`.
+- **Decision:** On a phone the circadian face is centered in the space above the light tiles and may shrink below the color-wheel floor so the page does not scroll. A wide dial keeps that floor. The face is vertically centered between the shared toolbar and light section; the play row and date chips stay in layout flow. Light tiles are grouped again whenever a selector sits on the strip outside a group. The narrow overflow menu holds Live edit; undo and redo stay as header buttons. Library copy says scene presets, color presets, and circadian presets. Stored kinds stay `palette`, `variable`, and `theme`.
 - **Why:** A matching group signature left a rebuilt tile list flat. The floor plus a scrollbar hid the tiles on a short phone. Palette, variable, and theme did not say how the three lists relate.
 - **Do not reverse without user ask.**
 

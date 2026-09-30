@@ -7,11 +7,13 @@ export function waitForSurfaceAnimation(el, name, fallbackMs) {
         return;
       }
       let done = false;
+      let timer;
       const finish = () => {
         if (done) {
           return;
         }
         done = true;
+        window.clearTimeout(timer);
         el.removeEventListener("animationend", onEnd);
         resolve();
       };
@@ -25,7 +27,7 @@ export function waitForSurfaceAnimation(el, name, fallbackMs) {
         finish();
       };
       el.addEventListener("animationend", onEnd);
-      window.setTimeout(finish, fallbackMs);
+      timer = window.setTimeout(finish, fallbackMs);
     });
 }
 
@@ -54,19 +56,25 @@ export function createEditorShell() {
   lights.className = "editor-lights";
   lights.hidden = true;
   el.append(toolbar, preview, lights);
-  return { el, toolbar, preview, lights };
+  return { el, toolbar, preview, lights, lightGate: createTransitionGate(), previewGate: createTransitionGate() };
 }
 
-export function mountEditorRegions(shell, { mount, visual, toolbar, lights }) {
+export function mountEditorRegions(shell, { mount, visual, toolbar, lights, animateLights = false, reducedMotion = false }) {
   if (shell.el.parentNode !== mount) mount.appendChild(shell.el);
   // Move controls before mounting their former parent into the preview.
   if (toolbar.length !== shell.toolbar.children.length ||
       toolbar.some((node, index) => shell.toolbar.children[index] !== node)) {
     shell.toolbar.replaceChildren(...toolbar);
   }
-  if (lights && shell.lights.firstChild !== lights) shell.lights.replaceChildren(lights);
-  shell.lights.hidden = !lights;
-  if (!lights) shell.lights.replaceChildren();
+  if (animateLights) {
+    const exiting = !lights && shell.lights.classList.contains("editor-lights-exit");
+    if (!exiting && (shell.lights.firstChild !== lights || shell.lights.hidden === Boolean(lights)))
+      void setLightRegion(shell, lights, { reducedMotion });
+  } else {
+    if (lights && shell.lights.firstChild !== lights) shell.lights.replaceChildren(lights);
+    shell.lights.hidden = !lights;
+    if (!lights) shell.lights.replaceChildren();
+  }
   if (shell.preview.firstChild !== visual) shell.preview.replaceChildren(visual);
 }
 
@@ -206,4 +214,148 @@ export const EDITOR_SHELL_LAYOUT_CSS = `
   .editor-lights .light-tiles-hint { margin: 4px 0 0; }
   :host([narrow]) .editor-lights .light-tiles-hint { min-height: 48px; }
   .editor-lights .light-tiles-scroller { padding-inline: 0; }
+`;
+
+/** Capture live pixels before editor teardown, without cloning canvas content. */
+export function capturePreviewExit(shell, surface, context = null, backgrounds = []) {
+  const previewRect = shell.preview.getBoundingClientRect();
+  const shellRect = shell.el.getBoundingClientRect();
+  const surfaceRect = surface.getBoundingClientRect();
+  for (const node of [surface, ...surface.querySelectorAll(".simple-editor-enter, .clock-face-enter, .stage-surface-enter")]) {
+    const computed = getComputedStyle(node);
+    const transform = computed.transform;
+    const opacity = computed.opacity;
+    node.getAnimations().forEach(animation => animation.cancel());
+    node.classList.remove("simple-editor-enter", "clock-face-enter", "stage-surface-enter");
+    if (transform !== "none") node.style.transform = transform;
+    node.style.opacity = opacity;
+  }
+  for (const face of surface.querySelectorAll(".sun-light-clock-face, .hue-wheel-canvas")) {
+    const rect = face.getBoundingClientRect();
+    face.style.width = `${rect.width}px`;
+    face.style.height = `${rect.height}px`;
+    face.style.maxWidth = "none";
+  }
+  const backgroundRects = backgrounds.map(node => [node, node.getBoundingClientRect()]);
+  const layer = document.createElement("div");
+  layer.className = "editor-preview-exit";
+  layer.style.cssText = `top:${previewRect.top - shellRect.top}px;left:${previewRect.left - shellRect.left}px;width:${previewRect.width}px;height:${previewRect.height}px;`;
+  const wrapper = context ? context.cloneNode(false) : document.createElement("div");
+  wrapper.classList.remove("simple-editor-enter", "clock-face-enter", "stage-surface-enter");
+  wrapper.style.cssText = "position:absolute;inset:0;width:100%;height:100%;";
+  surface.style.position = "absolute";
+  surface.style.left = `${surfaceRect.left - previewRect.left}px`;
+  surface.style.top = `${surfaceRect.top - previewRect.top}px`;
+  surface.style.width = `${surfaceRect.width}px`;
+  surface.style.height = `${surfaceRect.height}px`;
+  wrapper.appendChild(surface);
+  layer.appendChild(wrapper);
+  for (const [node, rect] of backgroundRects) {
+    node.style.left = `${rect.left - previewRect.left}px`;
+    node.style.top = `${rect.top - previewRect.top}px`;
+    node.style.width = `${rect.width}px`;
+    node.style.height = `${rect.height}px`;
+    node.style.transform = "none";
+    layer.insertBefore(node, wrapper);
+  }
+  shell.el.appendChild(layer);
+  return layer;
+}
+
+export function createTransitionGate() {
+  let revision = 0;
+  return {
+    next() { return ++revision; },
+    current(token) { return token === revision; },
+  };
+}
+
+export async function crossfadePreview(shell, outgoing, incoming, { reducedMotion = false, current = () => true } = {}) {
+  if (reducedMotion) { outgoing?.remove(); return; }
+  // Force layout once before starting both animations on the same frame.
+  void incoming.offsetWidth;
+  incoming.classList.add("editor-preview-enter");
+  outgoing?.classList.add("editor-preview-exit-active");
+  await waitForSurfaceAnimation(incoming, "stage-surface-enter-scale", 480);
+  if (!current()) return;
+  incoming.classList.remove("editor-preview-enter");
+  outgoing?.remove();
+}
+
+export async function setLightRegion(shell, content, { reducedMotion = false } = {}) {
+  const token = shell.lightGate.next();
+  const showing = !shell.lights.hidden;
+  if (content) {
+    shell.lights.classList.remove("editor-lights-exit", "editor-lights-enter");
+    shell.lights.replaceChildren(content);
+    shell.lights.hidden = false;
+    shell.lights.inert = false;
+    shell.lights.style.setProperty("--editor-lights-height", `${shell.lights.getBoundingClientRect().height}px`);
+    if (!showing && !reducedMotion) {
+      void shell.lights.offsetWidth;
+      shell.lights.classList.add("editor-lights-enter");
+      await waitForSurfaceAnimation(shell.lights, "editor-lights-rise", 480);
+      if (shell.lightGate.current(token)) shell.lights.classList.remove("editor-lights-enter");
+    }
+  } else if (showing) {
+    shell.lights.style.setProperty("--editor-lights-height", `${shell.lights.getBoundingClientRect().height}px`);
+    shell.lights.inert = true;
+    shell.lights.classList.remove("editor-lights-enter");
+    if (!reducedMotion) {
+      shell.lights.classList.add("editor-lights-exit");
+      await waitForSurfaceAnimation(shell.lights, "editor-lights-drop", 480);
+    }
+    if (!shell.lightGate.current(token)) return;
+    shell.lights.hidden = true;
+    shell.lights.classList.remove("editor-lights-exit");
+    shell.lights.replaceChildren();
+  }
+}
+
+export const EDITOR_SHELL_MOTION_CSS = `
+  .editor-preview-exit {
+    position: absolute;
+    z-index: 6;
+    pointer-events: none;
+    transform-origin: center;
+  }
+  .editor-preview-exit-active {
+    animation: stage-surface-fade-out 280ms cubic-bezier(0.2, 0, 0, 1) both,
+      stage-surface-exit-scale 400ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+  .editor-preview-enter {
+    transform-origin: center;
+    animation: stage-surface-fade-in 280ms cubic-bezier(0.2, 0, 0, 1) both,
+      stage-surface-enter-scale 400ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+  .editor-shell .simple-editor-host.simple-editor-enter,
+  .editor-shell .library-editor.simple-editor-enter,
+  .editor-shell .empty-state.stage-surface-enter,
+  .editor-shell .sun-light-clock-face.clock-face-enter { animation: none; }
+  .editor-lights { box-sizing: border-box; }
+  .editor-lights-enter {
+    animation: stage-surface-fade-in 280ms cubic-bezier(0.2, 0, 0, 1) both,
+      editor-lights-rise 400ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+  .editor-lights-exit {
+    animation: stage-surface-fade-out 280ms cubic-bezier(0.2, 0, 0, 1) both,
+      editor-lights-drop 400ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+  @keyframes editor-lights-rise { from { height: 0; padding-bottom: 0; transform: translateY(var(--editor-lights-height)); } to { height: var(--editor-lights-height); padding-bottom: 16px; transform: translateY(0); } }
+  @keyframes editor-lights-drop { from { height: var(--editor-lights-height); padding-bottom: 16px; transform: translateY(0); } to { height: 0; padding-bottom: 0; transform: translateY(var(--editor-lights-height)); } }
+  @media (prefers-reduced-motion: reduce) {
+    .editor-preview-enter, .editor-preview-exit-active, .editor-lights-enter, .editor-lights-exit { animation: none; }
+  }
+`;
+
+export const EDITOR_LIBRARY_PREVIEW_CSS = `
+  .editor-preview > .library-editor > .hue-wheel-stage {
+    width: min(100%, var(--dial-face-max, 650px));
+    height: 100%;
+    padding: 0;
+    margin: 0;
+  }
+  .editor-preview .library-editor .hue-wheel-face { justify-content: center; }
+  .editor-preview .library-editor .hue-wheel-canvas { width: 100%; max-width: none; flex: 0 0 auto; }
+  .editor-toolbar > .hue-wheel-chrome { position: static; width: 100%; }
 `;

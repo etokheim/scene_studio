@@ -58,3 +58,72 @@ test("switching visual editors retains region hosts and destination-owned light 
   assert.equal(shell.lights.hidden, true);
   assert.equal(shell.lights.firstChild, null);
 });
+
+test("superseded transition tokens cannot clean up the latest preview", async () => {
+  const { createTransitionGate, crossfadePreview } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  const gate = createTransitionGate();
+  const token = gate.next();
+  const names = new Set();
+  const incoming = new EventTarget();
+  incoming.offsetWidth = 100;
+  incoming.classList = { add: name => names.add(name), remove: name => names.delete(name) };
+  let removed = false;
+  const waiting = crossfadePreview({}, { classList: { add() {} }, remove() { removed = true; } }, incoming,
+    { current: () => gate.current(token) });
+  gate.next();
+  const end = new Event("animationend"); end.animationName = "stage-surface-enter-scale";
+  incoming.dispatchEvent(end);
+  await waiting;
+  assert.equal(removed, false);
+  assert.equal(gate.current(token), false);
+});
+
+test("a light-region exit cannot hide destination controls after rapid navigation", async () => {
+  const { createTransitionGate, setLightRegion } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  const lights = new EventTarget();
+  const region = new Region();
+  lights.hidden = false;
+  lights.children = region.children;
+  lights.replaceChildren = (...nodes) => region.replaceChildren(...nodes);
+  lights.getBoundingClientRect = () => ({ height: 200 });
+  lights.style = { setProperty() {} };
+  lights.classList = { add() {}, remove() {} };
+  const shell = { lights, lightGate: createTransitionGate() };
+  const exiting = setLightRegion(shell, null);
+  const destination = new Region(); destination.owner = "new";
+  await setLightRegion(shell, destination, { reducedMotion: true });
+  const end = new Event("animationend"); end.animationName = "editor-lights-drop";
+  lights.dispatchEvent(end);
+  await exiting;
+  assert.equal(lights.hidden, false);
+  assert.equal(lights.inert, false);
+  assert.equal(region.firstChild, destination);
+});
+
+test("reduced motion removes the outgoing preview without starting animations", async () => {
+  const { crossfadePreview } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  let removed = false;
+  await crossfadePreview({}, { remove() { removed = true; } }, null, { reducedMotion: true });
+  assert.equal(removed, true);
+});
+
+test("repeated shell reconciliation does not restart a pending light exit", async () => {
+  const { createTransitionGate, mountEditorRegions, setLightRegion } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  const names = new Set(), lights = new EventTarget(), oldContent = new Region();
+  lights.firstChild = oldContent;
+  lights.hidden = false;
+  lights.classList = { add: name => names.add(name), remove: (...keys) => keys.forEach(key => names.delete(key)), contains: name => names.has(name) };
+  lights.style = { setProperty() {} };
+  lights.getBoundingClientRect = () => ({ height: 200 });
+  lights.replaceChildren = () => { lights.firstChild = null; };
+  const shell = { el: new Region(), toolbar: new Region(), preview: new Region(), lights, lightGate: createTransitionGate() };
+  const exit = setLightRegion(shell, null);
+  const mount = new Region(), visual = new Region();
+  for (let i = 0; i < 3; i++) mountEditorRegions(shell, { mount, visual, toolbar: [], lights: null, animateLights: true });
+  assert.equal(shell.lightGate.current(1), true);
+  const end = new Event("animationend"); end.animationName = "editor-lights-drop";
+  lights.dispatchEvent(end);
+  await exit;
+  assert.equal(lights.hidden, true);
+  assert.equal(lights.firstChild, null);
+});

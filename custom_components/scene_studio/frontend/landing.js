@@ -2217,10 +2217,7 @@ function renderEmptyHero(panel) {
     const manual = document.createElement("ha-button");
     manual.appearance = "outlined";
     manual.textContent = panel._t("frontend.actions.manual_configuration", "Manual configuration");
-    manual.addEventListener("click", () => {
-      panel._mobileManualEmpty = true;
-      panel._render();
-    });
+    manual.addEventListener("click", () => void panel._dismissMobileOnboarding());
     actions.append(btn, manual);
     el.appendChild(actions);
   } else {

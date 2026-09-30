@@ -1,4 +1,4 @@
-import { createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
+import { capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
   buildClientSunDay,
   resampleLightsForEvents,
@@ -529,6 +529,10 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._sharedEditorShell?.previewGate.next();
+    this._sharedEditorShell?.lightGate.next();
+    this._outgoingStageLayer?.remove();
+    this._outgoingStageLayer = null;
     this._editorShellObserver?.disconnect();
     this._editorShellObserver = null;
     this._areaRegistryUnsub?.();
@@ -5177,6 +5181,8 @@ class SceneStudioPanel extends HTMLElement {
         ${SIMPLE_EDITOR_CSS}
         ${EDITOR_SHELL_CSS}
         ${EDITOR_SHELL_LAYOUT_CSS}
+        ${EDITOR_SHELL_MOTION_CSS}
+        ${EDITOR_LIBRARY_PREVIEW_CSS}
       </style>
       <ha-top-app-bar-fixed>
         <div slot="title"></div>
@@ -5292,10 +5298,14 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   async _go(hash) {
+    const gate = this._navigationGate ||= createTransitionGate();
+    const token = gate.next();
     if (!(await this._confirmLeaveEditor())) {
       return;
     }
+    if (!gate.current(token)) return;
     await this._restoreOpenLightPreview();
+    if (!gate.current(token)) return;
     this._abortPreview();
     this._forceCloseSceneSidebar();
     const previous = (window.location.hash || "#").replace(/^#/, "");
@@ -5736,6 +5746,7 @@ class SceneStudioPanel extends HTMLElement {
     if (!layer) {
       return;
     }
+    if (layer.classList.contains("editor-preview-exit")) { layer.remove(); return; }
     const hadSun = this._sunPathEl && layer.contains(this._sunPathEl);
     layer.remove();
     if (hadSun) {
@@ -5764,6 +5775,24 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _liftOutgoingStageLayer() {
+    const shell = this._sharedEditorShell;
+    if (shell?.el.isConnected) {
+      this._outgoingStageLayer?.remove();
+      shell.previewGate.next();
+      const visual = shell.preview.firstElementChild;
+      const surface = visual?.querySelector(".sun-light-clock") || visual;
+      if (surface) {
+        this._outgoingStageLayer = capturePreviewExit(shell, surface,
+          surface !== visual ? visual : null,
+          this._clockHorizonBackEl?.isConnected ? [this._clockHorizonBackEl] : []);
+        // The dial root is reused; its interrupted entrance must not restart
+        // when it is mounted again after visiting another editor type.
+        visual.classList.remove("editor-preview-enter");
+        this._sharedEnterRequested = true;
+      }
+      return;
+    }
+
     if (this._outgoingStageLayer) {
       return;
     }
@@ -5812,6 +5841,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _attachOutgoingStageLayer(stage) {
+    if (this._outgoingStageLayer?.classList.contains("editor-preview-exit")) return;
     const layer = this._outgoingStageLayer;
     if (!layer) {
       return;
@@ -5880,6 +5910,10 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   async _transitionSurfaces(fromKind, toKind) {
+    if (this._sharedEditorShell?.el.isConnected) {
+      this._sharedEditorShell.lights.inert = true;
+      this._sharedEditorShell.toolbar.inert = true;
+    }
     const from = fromKind || "none";
     const to = toKind || "none";
     if (from !== to && !this._prefersReducedMotion()) {
@@ -6336,6 +6370,7 @@ class SceneStudioPanel extends HTMLElement {
     } else {
       this._renderList({ keepRail });
     }
+    this._syncSharedEditorShell();
     if (this._view === "edit" || this._view === "theme") {
       this._ensureSunPath();
     }
@@ -6455,40 +6490,60 @@ class SceneStudioPanel extends HTMLElement {
     this._syncingEditorShell = true;
     try {
       const root = this.shadowRoot;
+      const active = selector => [...root.querySelectorAll(selector)].find(node => !node.closest(".editor-preview-exit"));
       const simple = this._view === "palette" || (this._view === "edit" && this._formData?.kind === "simple");
       const dial = this._isDialView();
-      const visual = dial ? this._sunPathEl : simple ? root.querySelector(".simple-editor-host") :
-        this._view === "variable" ? root.querySelector(".library-editor") :
-        !this._narrow ? root.querySelector(".stage-scroll > .empty-state, .editor-preview > .empty-state") : null;
+      const visual = dial ? this._sunPathEl : simple ? active(".simple-editor-host") :
+        this._view === "variable" ? active(".library-editor") :
+        active(".stage-scroll > .empty-state, .editor-preview > .empty-state, .area-rail-body[data-tab=scenes] > .empty-state");
       if (!visual?.isConnected || visual.hidden) return;
       const stage = this._contentEl?.querySelector(".stage-col");
-      const mount = this._stageScrollEl(stage) || this._contentEl;
+      const emptyMobile = this._narrow && !simple && !dial && this._view !== "variable";
+      const mount = emptyMobile ? root.querySelector(".area-rail-body[data-tab=scenes]") : this._stageScrollEl(stage) || this._contentEl;
       const shell = this._sharedEditorShell ||= createEditorShell();
       const toolbar = [];
       if (dial && this._dateToolbar) toolbar.push(this._dateToolbar);
       if (!dial) {
         toolbar.push(...[...visual.querySelectorAll(".scene-used, .library-name-field, .library-hint, .library-used-by:not(.scene-preset-uses)")]
           .filter(node => node.classList.contains("scene-used") || !node.closest(".scene-used")));
-        if (this._view === "variable") toolbar.push(...visual.querySelectorAll(":scope > ha-input"));
+        if (this._view === "variable") toolbar.push(...visual.querySelectorAll(":scope > ha-input, .hue-wheel-chrome"));
       }
       // Existing handlers stay on the fresh destination nodes, outside the
       // transitioning preview. Only the outer hosts survive editor changes.
-      const lights = this._view === "edit" ? (dial ? this._clockLegendEl : visual.querySelector(".light-tiles-block")) : null;
-      const currentLights = lights || (this._view === "edit" ? shell.lights.firstChild : null);
+      const hasLights = this._view === "edit" || this._view === "palette";
+      const lights = hasLights ? (dial ? this._clockLegendEl : visual.querySelector(".light-tiles-block")) : null;
+      const currentLights = lights || (hasLights ? shell.lights.firstChild : null);
       if (!dial && shell.preview.contains(visual)) {
         const freshClasses = new Set(toolbar.map(node => node.className));
         toolbar.unshift(...[...shell.toolbar.children].filter(node => !freshClasses.has(node.className)));
       }
-      mountEditorRegions(shell, { mount, visual, toolbar, lights: currentLights });
+      mountEditorRegions(shell, { mount, visual, toolbar, lights: currentLights, animateLights: true, reducedMotion: this._prefersReducedMotion() });
       shell.el.dataset.kind = dial ? "dial" : simple ? "wheel" : this._view === "variable" ? "library" : "empty";
       const bottom = stage ? mount.getBoundingClientRect().bottom :
         this.shadowRoot.querySelector(".page-shell").getBoundingClientRect().bottom;
-      shell.el.style.height = `${Math.max(120, stage ? mount.clientHeight : bottom - shell.el.getBoundingClientRect().top)}px`;
+      shell.el.style.height = `${Math.max(120, stage || emptyMobile ? mount.clientHeight : bottom - shell.el.getBoundingClientRect().top)}px`;
       if (!this._editorShellObserver) {
         this._editorShellObserver = new ResizeObserver(() => this._sizeSharedEditorPreview());
         this._editorShellObserver.observe(shell.preview);
       }
       this._sizeSharedEditorPreview();
+      const ready = !dial || (Boolean(visual.querySelector(".sun-light-clock")) && this._sunPathMatchesChart());
+      if (ready) {
+        shell.toolbar.inert = false;
+        shell.lights.inert = !hasLights;
+      }
+      const enter = this._sharedEnterRequested || !shell.preview.dataset.entered;
+      if (ready && enter) {
+        this._sharedEnterRequested = false;
+        shell.preview.dataset.entered = "1";
+        const token = shell.previewGate.next();
+        const outgoing = this._outgoingStageLayer;
+        void crossfadePreview(shell, outgoing, visual, {
+          reducedMotion: this._prefersReducedMotion(), current: () => shell.previewGate.current(token),
+        }).then(() => {
+          if (shell.previewGate.current(token) && this._outgoingStageLayer === outgoing) this._outgoingStageLayer = null;
+        });
+      }
     } finally {
       this._syncingEditorShell = false;
     }
@@ -6779,7 +6834,7 @@ class SceneStudioPanel extends HTMLElement {
   _mountWorkspacePage(page, { resetStageScroll = true } = {}) {
     this._captureAreaRailScroll();
     const overlay = this._outgoingStageLayer;
-    overlay?.remove();
+    if (!overlay?.classList.contains("editor-preview-exit")) overlay?.remove();
     const covers = [...(this._contentEl?.querySelectorAll(".scene-cover") || [])];
     const previous = covers.find((cover) => !cover.classList.contains("is-leaving"));
     previous?.remove();
@@ -7136,6 +7191,20 @@ class SceneStudioPanel extends HTMLElement {
       this._error = err.message || String(err);
       this._renderList();
     }
+  }
+
+  async _dismissMobileOnboarding() {
+    this._mobileManualEmpty = true;
+    if (!this._prefersReducedMotion()) {
+      this._liftOutgoingStageLayer();
+      const layer = this._outgoingStageLayer;
+      layer?.classList.add("editor-preview-exit-active");
+      await this._waitForAnimation(layer, "stage-surface-exit-scale", 480);
+      if (this._outgoingStageLayer !== layer) return;
+      this._disposeOutgoingStageLayer();
+    }
+    this._sharedEnterRequested = false;
+    this._render();
   }
 
   _paintSimpleSceneCard(dots) {
@@ -19922,7 +19991,7 @@ class SceneStudioPanel extends HTMLElement {
     this._layoutDialChromeFn = undefined;
     if (!keepOverlay) {
       this._clockHorizonBackEl?.remove();
-      this._dropClockLegends();
+      if (!this._sharedEditorShell?.lights.contains(this._clockLegendEl)) this._dropClockLegends();
     }
     this._clockHorizonBackEl = undefined;
     this._clockFaceEl = undefined;
