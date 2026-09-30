@@ -18,13 +18,15 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - Library guidance, starter choices, and usage counts make color, scene, and circadian presets easier to find and reuse.
 - Picture covers and color dots on scene and preset cards show the look before you open it.
 - On/off lights get simple solar-event buttons instead of a brightness graph. Hovering a dial ring shows the light's capabilities, and a touch hold opens a scene card's menu.
-- The phone's empty Scenes tab includes Auto configure and an outlined Manual configuration action beside it for the current visit. Its Auto configure card explains what it creates; desktop and Library keep Live edit.
+- The phone's empty Scenes tab includes Auto configure and an outlined Manual configuration action beside it for the current visit. After choosing configuration, its area list includes an Auto configure card explaining what it creates; desktop and Library keep Live edit.
 
 ### Changed
 
 - The library now calls shared looks **presets** throughout the editor. New scenes can start from a preset or the room's current lights.
 - The selected scene rail stays in place while you switch scenes or presets. The phone dial and light tiles fit together without horizontal scrolling.
 - Scene-card palettes sit just below their titles, and preset usage shares a row with the preset controls.
+- Scenes and presets share a toolbar, centered preview, and bottom light or slot section on desktop and phone. Changing editor type crossfades the preview while keeping the toolbar and light section in place; same-type dial and disk morphs remain.
+- Color presets use consistent cards with two name lines and full-name tooltips. Select the open color preset again to return to the Library overview. Scene cards grow on selection rather than hover, and empty areas omit their scene counter.
 - Both new-scene preset pickers have more room to scroll. Start from scratch stays the same action, becoming secondary when you select a preset.
 - Live edit defaults to on; Reset restores that default in the browser performing the reset.
 - Searching for another preview location now explains that Search sends the query and browser IP to Photon (Komoot); the map and optional search remain.
@@ -38,6 +40,7 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - Ordinary day-position attributes follow local time; explicit preview times land on the right local date through midnight and daylight-saving changes.
 - A collaborator's delayed save or deletion no longer overwrites a newer draft or silently brings a deleted item back.
 - Loading or refreshing the panel no longer claims that Home Assistant has no areas before the area catalog is available, or leaves the desktop area list empty after those areas arrive.
+- The preview-date reset icon reserves its own space beside the date suggestions. Interrupted editor navigation keeps the latest destination without removing outgoing preview pixels early or leaving stale light actions behind.
 
 ## [6.0.0] - 2026-09-26
 
