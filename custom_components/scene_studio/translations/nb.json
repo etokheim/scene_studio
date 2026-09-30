@@ -25,46 +25,63 @@
       "extrapolation_title": "Begynn å lyse med solen",
       "extrapolation_body": "Scene Studio blander rommets lys mellom solhendelser — daggry, soloppgang, middag, solnedgang og skumring — så lysstyrke og farge følger dagen.",
       "extrapolation_example": "Opprett en scene for et rom fra en sone, eller auto-konfigurer alle soner som har lys.",
-      "auto_configure_body": "Auto-konfigurer oppretter en circadian-scene for hver sone som har lys, med standardtemaet. Du kan redigere variabler og temaer her når som helst — lysene oppdateres neste gang en scene kjører.",
+      "auto_configure_body": "Auto-konfigurer oppretter en circadian-scene for hver sone med lys, med standardforvalget for døgnrytme. Du kan redigere fargeforvalg og døgnrytmeforvalg her når som helst — lysene oppdateres neste gang en scene kjører.",
       "area_no_scenes": "Ingen scener ennå — opprett en for denne sonen",
       "select_scene": "Velg en scene for å komme i gang",
       "select_scene_body": "Velg en scene fra listen for å redigere lysene gjennom dagen, eller legg til en scene fra en sone.",
       "no_areas": "Ingen Home Assistant-soner ennå. Legg til etasjer og soner under Innstillinger, og kom tilbake.",
-      "learn_more": "Les mer"
+      "learn_more": "Les mer",
+      "library_no_colors": "Ingen fargeforvalg ennå — opprett et",
+      "library_no_palettes": "Ingen sceneforvalg ennå — opprett et",
+      "library_no_themes": "Ingen døgnrytmeforvalg ennå — opprett et"
     },
     "library": {
-      "title": "Variabler og temaer",
-      "hint": "Endring av en variabel eller et tema oppdaterer scener som fortsatt bruker det. Lysene endres ved neste aktivering eller automatiske oppdatering — ikke med en gang.",
-      "variables": "Variabler",
-      "palettes": "Paletter",
+      "title": "Fargeforvalg og døgnrytmeforvalg",
+      "hint": "Når du endrer et fargeforvalg eller døgnrytmeforvalg, oppdateres scener som fortsatt bruker det. Lysene endres ved neste aktivering eller automatiske oppdatering — ikke med en gang.",
+      "variables": "Fargeforvalg",
+      "palettes": "Sceneforvalg",
       "tab_scenes": "Scener",
       "tab_library": "Bibliotek",
-      "themes": "Circadian-temaer",
-      "variable_edit_hint": "Farge og lysstyrke deles av hvert tema eller lys som fortsatt bruker denne variabelen.",
-      "palette_edit_hint": "En palett er fem farger. Lys som bruker den, velger et spor. Endring av paletten oppdaterer de lysene neste gang en scene kjører.",
-      "theme_hint": "Åpne et tema for å redigere farge og lysstyrke ved hver solhendelse. Endringer gjelder hver circadian-scene som fortsatt bruker temaet. Overstyringer per lys blir stående.",
-      "theme_edit_hint": "Redigering av {name} endrer hver circadian-scene som fortsatt bruker dette temaet. Overstyringer per lys på de scenene blir stående.",
-      "theme_event_subtitle": "Temaet {name}",
-      "theme_missing": "Tema ikke funnet",
+      "themes": "Døgnrytmeforvalg",
+      "variable_edit_hint": "Farge og lysstyrke deles av alle døgnrytmeforvalg og lys som fortsatt bruker dette fargeforvalget.",
+      "palette_edit_hint": "Et sceneforvalg består av fem farger. Lys som bruker det, velger en plass. Endrer du forvalget, oppdateres disse lysene neste gang en scene kjører.",
+      "theme_hint": "Åpne et døgnrytmeforvalg for å redigere farge og lysstyrke ved hver solhendelse. Endringer gjelder alle circadian-scener som fortsatt bruker forvalget. Overstyringer for enkeltlys beholdes.",
+      "theme_edit_hint": "Når du redigerer {name}, endres alle circadian-scener som fortsatt bruker dette døgnrytmeforvalget. Overstyringer for enkeltlys beholdes.",
+      "theme_event_subtitle": "Døgnrytmeforvalget {name}",
+      "theme_missing": "Døgnrytmeforvalg ikke funnet",
       "delete_menu": "Slett {name}",
-      "delete_variable": "Slette variabel?",
-      "delete_palette": "Slette palett?",
-      "delete_theme": "Slette tema?",
+      "delete_variable": "Slette fargeforvalg?",
+      "delete_palette": "Slette sceneforvalg?",
+      "delete_theme": "Slette døgnrytmeforvalg?",
       "delete_confirm": "Er du sikker på at du vil slette {name}?",
-      "add_variable": "Legg til variabel",
-      "add_new_variable": "Legg til ny variabel",
-      "add_palette": "Legg til palett",
-      "add_theme": "Legg til tema",
-      "new_variable": "Ny variabel",
-      "new_palette": "Ny palett",
-      "new_theme": "Nytt tema",
+      "add_variable": "Legg til fargeforvalg",
+      "add_new_variable": "Legg til nytt fargeforvalg",
+      "add_palette": "Legg til sceneforvalg",
+      "add_theme": "Legg til døgnrytmeforvalg",
+      "new_variable": "Nytt fargeforvalg",
+      "new_palette": "Nytt sceneforvalg",
+      "new_theme": "Nytt døgnrytmeforvalg",
       "slot_label": "Spor {n}",
       "slot": "Spor",
       "kelvin": "Kelvin",
       "slot_custom": "Egendefinert farge",
       "randomize": "Tilfeldig",
-      "variable_missing": "Variabel ikke funnet",
-      "palette_missing": "Palett ikke funnet"
+      "variable_missing": "Fargeforvalg ikke funnet",
+      "palette_missing": "Sceneforvalg ikke funnet",
+      "duplicate": "Dupliser",
+      "item_menu": "Meny for {name}",
+      "reset_preset": "Tilbakestill til standardforvalg",
+      "reset_preset_text": "Dette erstatter endringene dine med det opprinnelige forvalget. Du kan angre etterpå.",
+      "reset_preset_title": "Tilbakestille til standardforvalg?",
+      "reusable": "Dette er biblioteket. Her ligger forvalg som kan brukes om igjen. Endringer her påvirker alle scener som bruker dem.",
+      "used_in": "Brukes i {count} scener",
+      "used_in_one": "Brukes i 1 scene",
+      "uses_color_presets": "Bruker {count} fargeforvalg",
+      "uses_color_presets_one": "Bruker 1 fargeforvalg",
+      "uses_presets": "Bruker {count} forvalg",
+      "uses_presets_one": "Bruker 1 forvalg",
+      "uses_scene_presets": "Bruker {count} sceneforvalg",
+      "uses_scene_presets_one": "Bruker 1 sceneforvalg"
     },
     "kinds": {
       "circadian": "Circadian-scene",
@@ -92,7 +109,10 @@
       "scene_settings": "Sceneinnstillinger",
       "hidden_in_ha": "Skjult i Home Assistant",
       "dusk_minimum_time_of_day": "Tidligste tid for skumring",
-      "dusk_minimum_time_of_day_helper": "For å unngå at lysene dempes for mye, for tidlig. Gjelder alle circadian-scener og temaer."
+      "dusk_minimum_time_of_day_helper": "For å unngå at lysene dempes for mye og for tidlig. Gjelder alle circadian-scener og døgnrytmeforvalg.",
+      "reset": "Slett og tilbakestill alt",
+      "reset_confirm": "Dette sletter alle Scene Studio-scener og Home Assistant-scenene deres. Sceneforvalg og døgnrytmeforvalg fjernes. Fargeforvalg erstattes med de fem standardfargene, og innstillingene tilbakestilles. Lys, soner og andre integrasjoner beholdes. Dette kan ikke angres.",
+      "reset_title": "Slette og tilbakestille alt?"
     },
     "common": {
       "untitled": "Uten navn",
@@ -122,7 +142,10 @@
       "scene": "Scene",
       "location": "Sted",
       "save": "Lagre",
-      "rename": "Gi nytt navn"
+      "rename": "Gi nytt navn",
+      "disabled": "Deaktivert",
+      "edit": "Rediger",
+      "hidden": "Skjult"
     },
     "actions": {
       "auto_configure": "Auto-konfigurer",
@@ -139,10 +162,13 @@
       "preview_location": "Forhåndsvis et annet sted",
       "use_home_location": "Bruk hjemsted",
       "name_scene": "Gi scene navn",
-      "name_palette": "Gi palett navn",
-      "name_variable": "Gi variabel navn",
-      "name_theme": "Gi tema navn",
-      "reset_sun_now": "Tilbakestill sol til nå"
+      "name_palette": "Gi sceneforvalget navn",
+      "name_variable": "Gi fargeforvalget navn",
+      "name_theme": "Gi døgnrytmeforvalget navn",
+      "reset_sun_now": "Tilbakestill sol til nå",
+      "back_to_today": "Tilbake til i dag",
+      "choose_preview_date": "Velg forhåndsvisningsdato",
+      "live_edit_hint": "Bruk scenen og endringene i sanntid"
     },
     "save_warn": {
       "title": "Oppdatere eksterne scener?",
@@ -158,7 +184,8 @@
       "banner": "Forhåndsviser et annet sted",
       "dialog_title": "Forhåndsvis sted",
       "search_placeholder": "By eller adresse",
-      "no_matches": "Ingen treff. Prøv et bynavn eller flytt kartet."
+      "no_matches": "Ingen treff. Prøv et bynavn eller flytt kartet.",
+      "search_disclosure": "Når du søker, sendes søket ditt og nettleserens IP-adresse til Photon (Komoot)."
     },
     "gallery": {
       "reset_slot": "Tilbakestill {name} til den opprinnelige fargen",
@@ -221,7 +248,8 @@
       "aquarium_night": "Akvarienatt",
       "signal_violet": "Signalfiolett",
       "ice_and_magenta": "Is og magenta",
-      "afterimage": "Etterbilde"
+      "afterimage": "Etterbilde",
+      "theme_default": "Standard"
     },
     "dialogs": {
       "delete_scene_title": "Slette scene?",
@@ -229,23 +257,32 @@
       "linked_scenes": "Samme scene for daggry, soloppgang og solnedgang",
       "new_scene_step": "{step}/2 Ny circadian-scene",
       "scene_palette_title": "Ny scene",
-      "scene_palette_hint": "Velg en av palettene dine, eller start fra et bilde.",
-      "scene_palette_yours": "Dine paletter",
+      "scene_palette_hint": "Opprett en scene fra et forvalg, eller start fra bunnen av med gjeldende lys",
+      "scene_palette_yours": "Dine sceneforvalg",
       "scene_palette_custom": "Egendefinert",
       "scene_palette_none": "Ingen",
-      "scene_palette_select": "Velg en palett",
-      "scene_palette_edit": "Rediger palett",
-      "scene_theme_select": "Velg et tema",
-      "scene_theme_edit": "Rediger tema",
+      "scene_palette_select": "Velg et sceneforvalg",
+      "scene_palette_edit": "Rediger sceneforvalg",
+      "scene_theme_select": "Velg et døgnrytmeforvalg",
+      "scene_theme_edit": "Rediger døgnrytmeforvalg",
       "scene_theme_title": "Ny circadian-scene",
-      "scene_theme_hint": "Velg et av temaene dine, eller start fra en forhåndsinnstilling.",
-      "scene_theme_yours": "Dine temaer",
-      "scene_theme_presets": "Forhåndsinnstillinger",
-      "scene_theme_use": "Bruk tema",
-      "scene_palette_use": "Bruk palett",
+      "scene_theme_hint": "Opprett en døgnrytmestyrt scene fra et forvalg, eller start fra bunnen av",
+      "scene_theme_yours": "Dine døgnrytmeforvalg",
+      "scene_theme_presets": "Startforvalg",
+      "scene_theme_use": "Bruk døgnrytmeforvalg",
+      "scene_palette_use": "Bruk sceneforvalg",
       "scene_palette_randomize": "Tilfeldig",
       "unsaved_title": "Ulagrede endringer",
-      "unsaved_text": "Du har ulagrede endringer. Forkaste dem?"
+      "unsaved_text": "Du har ulagrede endringer. Forkaste dem?",
+      "scene_palette_clear": "Fjern forvalg",
+      "scene_palette_create": "Opprett fra bunnen av",
+      "scene_palette_from_preset": "Opprett fra dette forvalget",
+      "scene_palette_from_scratch": "Opprett fra bunnen av",
+      "scene_palette_live_preview": "Direkte forhåndsvisning",
+      "scene_palette_start_scratch": "Start fra bunnen av",
+      "scene_theme_from_preset": "Opprett fra dette forvalget",
+      "scene_theme_from_scratch": "Opprett fra bunnen av",
+      "scene_theme_start_scratch": "Start fra bunnen av"
     },
     "chart": {
       "fallback_note": "* Tiden bruker et sesongmessig fallback fordi solen ikke står opp eller går ned den dagen.",
@@ -259,9 +296,9 @@
     "naming": {
       "circadian_scene": "{area} circadian",
       "circadian_fallback": "Circadian",
-      "variable": "Variabel",
-      "palette": "Palett",
-      "theme": "Tema"
+      "variable": "Fargeforvalg",
+      "palette": "Sceneforvalg",
+      "theme": "Døgnrytmeforvalg"
     },
     "fields": {
       "scene_name": {
@@ -320,7 +357,7 @@
       "white_brightness": "Hvitlysstyrke",
       "graph_sub": "0–100 % per solhendelse",
       "overrides": "Overstyringer",
-      "override_brightness": "Lysstyrke {percent} % · tema {theme} %",
+      "override_brightness": "Lysstyrke {percent} % · døgnrytmeforvalg {theme} %",
       "override_color": "Farge",
       "solar_events": "Solhendelser",
       "select_all": "Velg alle",
@@ -328,7 +365,7 @@
       "deselect": "Fjern valg",
       "tiles_hint_brightness": "Dra eller rull på lysflisene for å endre lysstyrken",
       "tiles_hint_pick": "Velg en solhendelse eller et lys for å redigere det, eller dra solen for å forhåndsvise lysene på et tidspunkt",
-      "tiles_hint_palette": "Endringer her vises i alle scener som bruker denne paletten",
+      "tiles_hint_palette": "Endringer her gjelder alle scener som bruker dette sceneforvalget",
       "settings_named": "Innstillinger for {name}",
       "mode_not_supported": "Dette lyset støtter ikke denne modusen",
       "group_color": "Farge",
@@ -347,10 +384,34 @@
       "remove_named_from_scene": "Fjern {name} fra scenen",
       "add_light_title": "Legg til lys",
       "add_light_help": "Legg til et lys fra et annet område (eller et lys som ennå ikke er i disse scenene). Dagens utseende kopieres inn i alle tilordnede native scener.",
-      "light": "Lys"
+      "light": "Lys",
+      "none": "Ingen lys"
     },
     "defaults": {
       "circadian_scene": "Circadian"
+    },
+    "areas": {
+      "delete_confirm": "Slette alle {count} scenene i {name}?",
+      "delete_title": "Slette scener?",
+      "deleted": "Slettet",
+      "move": "Flytt",
+      "move_title": "Flytt scener",
+      "target": "Målsone",
+      "unknown": "Slettet sone"
+    },
+    "cards": {
+      "disabled": "Deaktivert",
+      "hidden": "Skjult"
+    },
+    "conflict": {
+      "deleted": "Dette elementet ble slettet. Det ulagrede utkastet ditt vises fortsatt her, så du kan kopiere det.",
+      "field": "Velg en verdi for {field}",
+      "mine": "Din verdi",
+      "reload": "Last inn dette elementet på nytt før du lagrer",
+      "saved": "Nylig lagret verdi",
+      "title": "En annen redigerer endret dette elementet",
+      "use_mine": "Bruk min verdi",
+      "use_saved": "Bruk nylig lagret verdi"
     }
   }
 }

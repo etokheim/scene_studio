@@ -25,46 +25,63 @@
       "extrapolation_title": "Mit der Sonne beleuchten",
       "extrapolation_body": "Scene Studio blendet die Lichter eines Raums zwischen Sonnenereignissen — Morgendämmerung, Sonnenaufgang, Mittag, Sonnenuntergang und Abenddämmerung — sodass Helligkeit und Farbe dem Tag folgen.",
       "extrapolation_example": "Erstelle eine Szene für einen Raum aus einem Bereich, oder richte alle Bereiche mit Lichtern automatisch ein.",
-      "auto_configure_body": "Automatisch einrichten legt für jeden Bereich mit Lichtern eine Circadian-Szene mit dem Standardthema an. Variablen und Themen kannst du hier jederzeit bearbeiten — die Lichter ändern sich beim nächsten Szenenlauf.",
+      "auto_configure_body": "Automatisch einrichten legt für jeden Bereich mit Lichtern eine Circadian-Szene mit der Standard-Circadian-Vorlage an. Farbvorlagen und Circadian-Vorlagen kannst du hier jederzeit bearbeiten — die Lichter ändern sich beim nächsten Szenenlauf.",
       "area_no_scenes": "Noch keine Szenen — erstelle eine für diesen Bereich",
       "select_scene": "Wähle eine Szene, um anzufangen",
       "select_scene_body": "Wähle eine Szene aus der Liste, um ihre Lichter über den Tag zu bearbeiten, oder füge eine Szene aus einem Bereich hinzu.",
       "no_areas": "Noch keine Home-Assistant-Bereiche. Lege Etagen und Bereiche unter Einstellungen an, und komm dann zurück.",
-      "learn_more": "Mehr erfahren"
+      "learn_more": "Mehr erfahren",
+      "library_no_colors": "Noch keine Farbvorlagen — erstelle eine",
+      "library_no_palettes": "Noch keine Szenenvorlagen — erstelle eine",
+      "library_no_themes": "Noch keine Circadian-Vorlagen — erstelle eine"
     },
     "library": {
-      "title": "Variablen und Themen",
-      "hint": "Eine Variable oder ein Thema zu ändern, aktualisiert Szenen, die es noch verwenden. Die Lichter ändern sich bei der nächsten Aktivierung oder automatischen Aktualisierung — nicht sofort.",
-      "variables": "Variablen",
-      "palettes": "Paletten",
+      "title": "Farbvorlagen und Circadian-Vorlagen",
+      "hint": "Wenn du eine Farbvorlage oder Circadian-Vorlage änderst, werden Szenen aktualisiert, die sie noch verwenden. Die Lichter ändern sich bei der nächsten Aktivierung oder automatischen Aktualisierung — nicht sofort.",
+      "variables": "Farbvorlagen",
+      "palettes": "Szenenvorlagen",
       "tab_scenes": "Szenen",
       "tab_library": "Bibliothek",
-      "themes": "Circadian-Themen",
-      "variable_edit_hint": "Farbe und Helligkeit teilen sich jedes Thema und jedes Licht, das diese Variable noch verwendet.",
-      "palette_edit_hint": "Eine Palette hat fünf Farben. Lichter, die sie nutzen, wählen einen Platz. Eine Änderung aktualisiert diese Lichter beim nächsten Szenenlauf.",
-      "theme_hint": "Öffne ein Thema, um Farbe und Helligkeit zu jedem Sonnenereignis zu bearbeiten. Änderungen gelten für jede Circadian-Szene, die das Thema noch nutzt. Überschreibungen je Licht bleiben.",
-      "theme_edit_hint": "{name} zu bearbeiten ändert jede Circadian-Szene, die dieses Thema noch nutzt. Überschreibungen je Licht bleiben.",
-      "theme_event_subtitle": "Thema {name}",
-      "theme_missing": "Thema nicht gefunden",
+      "themes": "Circadian-Vorlagen",
+      "variable_edit_hint": "Farbe und Helligkeit werden von allen Circadian-Vorlagen und Lichtern geteilt, die diese Farbvorlage noch verwenden.",
+      "palette_edit_hint": "Eine Szenenvorlage enthält fünf Farben. Lichter, die sie verwenden, wählen einen Platz. Änderungen an der Vorlage wirken sich beim nächsten Szenenlauf auf diese Lichter aus.",
+      "theme_hint": "Öffne eine Circadian-Vorlage, um Farbe und Helligkeit für jedes Sonnenereignis zu bearbeiten. Änderungen gelten für alle Circadian-Szenen, die die Vorlage noch verwenden. Überschreibungen einzelner Lichter bleiben erhalten.",
+      "theme_edit_hint": "Änderungen an {name} wirken sich auf alle Circadian-Szenen aus, die diese Vorlage noch verwenden. Überschreibungen einzelner Lichter bleiben erhalten.",
+      "theme_event_subtitle": "Circadian-Vorlage {name}",
+      "theme_missing": "Circadian-Vorlage nicht gefunden",
       "delete_menu": "{name} löschen",
-      "delete_variable": "Variable löschen?",
-      "delete_palette": "Palette löschen?",
-      "delete_theme": "Thema löschen?",
+      "delete_variable": "Farbvorlage löschen?",
+      "delete_palette": "Szenenvorlage löschen?",
+      "delete_theme": "Circadian-Vorlage löschen?",
       "delete_confirm": "Möchtest du {name} wirklich löschen?",
-      "add_variable": "Variable hinzufügen",
-      "add_new_variable": "Neue Variable hinzufügen",
-      "add_palette": "Palette hinzufügen",
-      "add_theme": "Thema hinzufügen",
-      "new_variable": "Neue Variable",
-      "new_palette": "Neue Palette",
-      "new_theme": "Neues Thema",
+      "add_variable": "Farbvorlage hinzufügen",
+      "add_new_variable": "Neue Farbvorlage hinzufügen",
+      "add_palette": "Szenenvorlage hinzufügen",
+      "add_theme": "Circadian-Vorlage hinzufügen",
+      "new_variable": "Neue Farbvorlage",
+      "new_palette": "Neue Szenenvorlage",
+      "new_theme": "Neue Circadian-Vorlage",
       "slot_label": "Platz {n}",
       "slot": "Platz",
       "kelvin": "Kelvin",
       "slot_custom": "Benutzerdefinierte Farbe",
       "randomize": "Zufällig",
-      "variable_missing": "Variable nicht gefunden",
-      "palette_missing": "Palette nicht gefunden"
+      "variable_missing": "Farbvorlage nicht gefunden",
+      "palette_missing": "Szenenvorlage nicht gefunden",
+      "duplicate": "Duplizieren",
+      "item_menu": "Menü für {name}",
+      "reset_preset": "Auf ursprüngliche Vorlage zurücksetzen",
+      "reset_preset_text": "Dies ersetzt deine Änderungen durch die ursprüngliche Vorlage. Du kannst es danach rückgängig machen.",
+      "reset_preset_title": "Auf ursprüngliche Vorlage zurücksetzen?",
+      "reusable": "Das ist die Bibliothek. Sie enthält wiederverwendbare Vorlagen. Änderungen hier wirken sich auf alle Szenen aus, die sie verwenden.",
+      "used_in": "In {count} Szenen verwendet",
+      "used_in_one": "In 1 Szene verwendet",
+      "uses_color_presets": "Verwendet {count} Farbvorlagen",
+      "uses_color_presets_one": "Verwendet 1 Farbvorlage",
+      "uses_presets": "Verwendet {count} Vorlagen",
+      "uses_presets_one": "Verwendet 1 Vorlage",
+      "uses_scene_presets": "Verwendet {count} Szenenvorlagen",
+      "uses_scene_presets_one": "Verwendet 1 Szenenvorlage"
     },
     "kinds": {
       "circadian": "Circadian-Szene",
@@ -92,7 +109,10 @@
       "scene_settings": "Szeneneinstellungen",
       "hidden_in_ha": "In Home Assistant ausgeblendet",
       "dusk_minimum_time_of_day": "Früheste Zeit für die Abenddämmerung",
-      "dusk_minimum_time_of_day_helper": "Damit die Lichter nicht zu früh zu dunkel werden. Gilt für jede Circadian-Szene und jedes Thema."
+      "dusk_minimum_time_of_day_helper": "Damit die Lichter nicht zu früh zu dunkel werden. Gilt für alle Circadian-Szenen und Circadian-Vorlagen.",
+      "reset": "Alles löschen und zurücksetzen",
+      "reset_confirm": "Dies löscht alle Scene-Studio-Szenen und ihre Home-Assistant-Szenen. Szenenvorlagen und Circadian-Vorlagen werden entfernt. Farbvorlagen werden durch die fünf Standardfarben ersetzt und die Einstellungen zurückgesetzt. Lichter, Bereiche und andere Integrationen bleiben erhalten. Dies kann nicht rückgängig gemacht werden.",
+      "reset_title": "Alles löschen und zurücksetzen?"
     },
     "common": {
       "untitled": "Ohne Titel",
@@ -122,7 +142,10 @@
       "scene": "Szene",
       "location": "Ort",
       "save": "Speichern",
-      "rename": "Umbenennen"
+      "rename": "Umbenennen",
+      "disabled": "Deaktiviert",
+      "edit": "Bearbeiten",
+      "hidden": "Ausgeblendet"
     },
     "actions": {
       "auto_configure": "Automatisch einrichten",
@@ -139,10 +162,13 @@
       "preview_location": "Anderen Ort vorschauen",
       "use_home_location": "Heimatort verwenden",
       "name_scene": "Szene benennen",
-      "name_palette": "Palette benennen",
-      "name_variable": "Variable benennen",
-      "name_theme": "Thema benennen",
-      "reset_sun_now": "Sonne auf aktuelle Zeit zurücksetzen"
+      "name_palette": "Szenenvorlage benennen",
+      "name_variable": "Farbvorlage benennen",
+      "name_theme": "Circadian-Vorlage benennen",
+      "reset_sun_now": "Sonne auf aktuelle Zeit zurücksetzen",
+      "back_to_today": "Zurück zu heute",
+      "choose_preview_date": "Vorschaudatum wählen",
+      "live_edit_hint": "Szene und Änderungen in Echtzeit anwenden"
     },
     "save_warn": {
       "title": "Externe Szenen aktualisieren?",
@@ -158,7 +184,8 @@
       "banner": "Vorschau eines anderen Orts",
       "dialog_title": "Ort vorschauen",
       "search_placeholder": "Stadt oder Adresse",
-      "no_matches": "Keine Treffer. Probiere einen Stadtnamen oder verschiebe die Karte."
+      "no_matches": "Keine Treffer. Probiere einen Stadtnamen oder verschiebe die Karte.",
+      "search_disclosure": "Bei der Suche werden deine Suchanfrage und die IP-Adresse deines Browsers an Photon (Komoot) gesendet."
     },
     "gallery": {
       "reset_slot": "{name} auf die ursprüngliche Farbe zurücksetzen",
@@ -221,7 +248,8 @@
       "aquarium_night": "Aquarium-Nacht",
       "signal_violet": "Signalviolett",
       "ice_and_magenta": "Eis und Magenta",
-      "afterimage": "Nachbild"
+      "afterimage": "Nachbild",
+      "theme_default": "Standard"
     },
     "dialogs": {
       "delete_scene_title": "Szene löschen?",
@@ -229,23 +257,32 @@
       "linked_scenes": "Gleiche Szene für Morgendämmerung, Sonnenaufgang und Sonnenuntergang",
       "new_scene_step": "{step}/2 Neue Circadian-Szene",
       "scene_palette_title": "Neue Szene",
-      "scene_palette_hint": "Wähle eine deiner Paletten, oder starte mit einem Bild.",
-      "scene_palette_yours": "Deine Paletten",
+      "scene_palette_hint": "Erstelle eine Szene aus einer Vorlage oder beginne mit der aktuellen Beleuchtung von Grund auf",
+      "scene_palette_yours": "Deine Szenenvorlagen",
       "scene_palette_custom": "Benutzerdefiniert",
       "scene_palette_none": "Keine",
-      "scene_palette_select": "Palette auswählen",
-      "scene_palette_edit": "Palette bearbeiten",
-      "scene_theme_select": "Thema auswählen",
-      "scene_theme_edit": "Thema bearbeiten",
+      "scene_palette_select": "Szenenvorlage auswählen",
+      "scene_palette_edit": "Szenenvorlage bearbeiten",
+      "scene_theme_select": "Circadian-Vorlage auswählen",
+      "scene_theme_edit": "Circadian-Vorlage bearbeiten",
       "scene_theme_title": "Neue Circadian-Szene",
-      "scene_theme_hint": "Wähle eines deiner Themen, oder starte mit einer Vorlage.",
-      "scene_theme_yours": "Deine Themen",
-      "scene_theme_presets": "Vorlagen",
-      "scene_theme_use": "Thema verwenden",
-      "scene_palette_use": "Palette verwenden",
+      "scene_theme_hint": "Erstelle eine Circadian-Szene aus einer Vorlage oder beginne von Grund auf",
+      "scene_theme_yours": "Deine Circadian-Vorlagen",
+      "scene_theme_presets": "Startvorlagen",
+      "scene_theme_use": "Circadian-Vorlage verwenden",
+      "scene_palette_use": "Szenenvorlage verwenden",
       "scene_palette_randomize": "Zufällig",
       "unsaved_title": "Ungespeicherte Änderungen",
-      "unsaved_text": "Du hast ungespeicherte Änderungen. Verwerfen?"
+      "unsaved_text": "Du hast ungespeicherte Änderungen. Verwerfen?",
+      "scene_palette_clear": "Vorlage entfernen",
+      "scene_palette_create": "Von Grund auf erstellen",
+      "scene_palette_from_preset": "Aus dieser Vorlage erstellen",
+      "scene_palette_from_scratch": "Von Grund auf erstellen",
+      "scene_palette_live_preview": "Live-Vorschau",
+      "scene_palette_start_scratch": "Von Grund auf beginnen",
+      "scene_theme_from_preset": "Aus dieser Vorlage erstellen",
+      "scene_theme_from_scratch": "Von Grund auf erstellen",
+      "scene_theme_start_scratch": "Von Grund auf beginnen"
     },
     "chart": {
       "fallback_note": "* Die Zeit nutzt einen saisonalen Fallback, weil die Sonne an diesem Tag nicht auf- oder untergeht.",
@@ -259,9 +296,9 @@
     "naming": {
       "circadian_scene": "{area} Circadian",
       "circadian_fallback": "Circadian",
-      "variable": "Variable",
-      "palette": "Palette",
-      "theme": "Thema"
+      "variable": "Farbvorlage",
+      "palette": "Szenenvorlage",
+      "theme": "Circadian-Vorlage"
     },
     "fields": {
       "scene_name": {
@@ -320,7 +357,7 @@
       "white_brightness": "Weißhelligkeit",
       "graph_sub": "0–100 % je Sonnenereignis",
       "overrides": "Überschreibungen",
-      "override_brightness": "Helligkeit {percent} % · Thema {theme} %",
+      "override_brightness": "Helligkeit {percent} % · Circadian-Vorlage {theme} %",
       "override_color": "Farbe",
       "solar_events": "Sonnenereignisse",
       "select_all": "Alle auswählen",
@@ -328,7 +365,7 @@
       "deselect": "Auswahl aufheben",
       "tiles_hint_brightness": "Ziehe oder scrolle auf den Lichtkacheln, um die Helligkeit zu ändern",
       "tiles_hint_pick": "Wähle ein Sonnenereignis oder ein Licht zum Bearbeiten, oder ziehe die Sonne, um die Lichter zu einem Zeitpunkt vorzuschauen",
-      "tiles_hint_palette": "Änderungen hier gelten für alle Szenen mit dieser Palette",
+      "tiles_hint_palette": "Änderungen hier gelten für alle Szenen mit dieser Szenenvorlage",
       "settings_named": "Einstellungen für {name}",
       "mode_not_supported": "Dieses Licht unterstützt diesen Modus nicht",
       "group_color": "Farbe",
@@ -347,10 +384,34 @@
       "remove_named_from_scene": "{name} aus der Szene entfernen",
       "add_light_title": "Licht hinzufügen",
       "add_light_help": "Füge ein Licht aus einem anderen Bereich hinzu (oder ein Licht, das noch nicht in diesen Szenen ist). Das aktuelle Aussehen wird in jede zugewiesene native Szene kopiert.",
-      "light": "Licht"
+      "light": "Licht",
+      "none": "Keine Lichter"
     },
     "defaults": {
       "circadian_scene": "Circadian"
+    },
+    "areas": {
+      "delete_confirm": "Alle {count} Szenen in {name} löschen?",
+      "delete_title": "Szenen löschen?",
+      "deleted": "Gelöscht",
+      "move": "Verschieben",
+      "move_title": "Szenen verschieben",
+      "target": "Zielbereich",
+      "unknown": "Gelöschter Bereich"
+    },
+    "cards": {
+      "disabled": "Deaktiviert",
+      "hidden": "Ausgeblendet"
+    },
+    "conflict": {
+      "deleted": "Dieses Element wurde gelöscht. Dein ungespeicherter Entwurf bleibt hier zum Kopieren sichtbar.",
+      "field": "Wert für {field} auswählen",
+      "mine": "Dein Wert",
+      "reload": "Dieses Element vor dem Speichern neu laden",
+      "saved": "Neu gespeicherter Wert",
+      "title": "Ein anderer Bearbeiter hat dieses Element geändert",
+      "use_mine": "Meinen Wert verwenden",
+      "use_saved": "Neu gespeicherten Wert verwenden"
     }
   }
 }
