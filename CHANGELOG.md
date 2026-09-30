@@ -17,11 +17,16 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - Areas deleted in Home Assistant stay visible with their last known name. Move all their scenes to another area, or delete them together after a confirmation.
 - Library guidance, starter choices, and usage counts make color, scene, and circadian presets easier to find and reuse.
 - Picture covers and color dots on scene and preset cards show the look before you open it.
+- On/off lights get simple solar-event buttons instead of a brightness graph. Hovering a dial ring shows the light's capabilities, and a touch hold opens a scene card's menu.
+- The phone's empty state includes Auto configure and a Manual configuration choice for the current visit. The Auto configure card explains what it creates.
 
 ### Changed
 
 - The library now calls shared looks **presets** throughout the editor. New scenes can start from a preset or the room's current lights.
 - The selected scene rail stays in place while you switch scenes or presets. The phone dial and light tiles fit together without horizontal scrolling.
+- Scene-card palettes sit just below their titles, and preset usage shares a row with the preset controls.
+- Both new-scene preset pickers have more room to scroll. Start from scratch stays the same action, becoming secondary when you select a preset.
+- Live edit defaults to on; Reset restores that default in the browser performing the reset.
 - Searching for another preview location now explains that Search sends the query and browser IP to Photon (Komoot); the map and optional search remain.
 - Project code is available under LGPL-2.1, with separate notices for the bundled SunCalc code and gallery photos.
 
@@ -32,6 +37,7 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - The scene's own event palette wins consistently in the dial, settled preview, Live edit, and the commands sent to lights.
 - Ordinary day-position attributes follow local time; explicit preview times land on the right local date through midnight and daylight-saving changes.
 - A collaborator's delayed save or deletion no longer overwrites a newer draft or silently brings a deleted item back.
+- Loading or refreshing the panel no longer claims that Home Assistant has no areas before the area catalog is available.
 
 ## [6.0.0] - 2026-09-26
 
