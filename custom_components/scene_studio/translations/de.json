@@ -149,6 +149,8 @@
     },
     "actions": {
       "auto_configure": "Automatisch einrichten",
+      "auto_configure_hint": "Circadian-Szenen automatisch konfigurieren",
+      "manual_configuration": "Manuelle Konfiguration",
       "add_scene": "Szene hinzufügen",
       "live_edit": "Live-Bearbeitung",
       "live_preview": "Live-Vorschau",
@@ -356,6 +358,7 @@
       "color_brightness": "Farbhelligkeit",
       "white_brightness": "Weißhelligkeit",
       "graph_sub": "0–100 % je Sonnenereignis",
+      "onoff_events_hint": "Jedes Sonnenereignis ein- oder ausschalten",
       "overrides": "Überschreibungen",
       "override_brightness": "Helligkeit {percent} % · Circadian-Vorlage {theme} %",
       "override_color": "Farbe",

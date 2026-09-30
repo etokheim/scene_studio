@@ -149,6 +149,8 @@
     },
     "actions": {
       "auto_configure": "Auto-konfigurer",
+      "auto_configure_hint": "Konfigurer circadian-scener automatisk",
+      "manual_configuration": "Manuell konfigurering",
       "add_scene": "Legg til scene",
       "live_edit": "Direkte redigering",
       "live_preview": "Direkte førehandsvising",
@@ -356,6 +358,7 @@
       "color_brightness": "Fargelystyrke",
       "white_brightness": "Kvitlystyrke",
       "graph_sub": "0–100 % per solhending",
+      "onoff_events_hint": "Slå kvar solhending av eller på",
       "overrides": "Overstyringar",
       "override_brightness": "Lysstyrke {percent} % · døgnrytmeforval {theme} %",
       "override_color": "Farge",

@@ -149,6 +149,8 @@
     },
     "actions": {
       "auto_configure": "Configurar automáticamente",
+      "auto_configure_hint": "Configura escenas circadianas automáticamente",
+      "manual_configuration": "Configuración manual",
       "add_scene": "Añadir escena",
       "live_edit": "Edición en vivo",
       "live_preview": "Vista previa en vivo",
@@ -356,6 +358,7 @@
       "color_brightness": "Brillo de color",
       "white_brightness": "Brillo blanco",
       "graph_sub": "0–100 % por evento solar",
+      "onoff_events_hint": "Activa o desactiva cada evento solar",
       "overrides": "Anulaciones",
       "override_brightness": "Brillo {percent} % · preajuste circadiano {theme} %",
       "override_color": "Color",
