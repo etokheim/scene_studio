@@ -177,19 +177,3 @@ async def apply_single_entity(
         ) from error
 
     return True
-
-
-def get_scene_by_uuid(scenes, uuid):
-    """Searches through the supplied array after the supplied scene uuid. Then returns that."""
-    if uuid is None:
-        raise HomeAssistantError(
-            "Developer goes: Ehhh... Something's wrong. I'm searching for an non-existant uuid... You've probably deleted one of the configured scenes. Please reconfigure the integration."
-        )
-
-    for scene in scenes:
-        if scene["entity_id"] == uuid:
-            return scene
-
-    raise HomeAssistantError(
-        "Hey - you have to configure the extension first! A scene field is missing a value (or have an incorrect one set)"
-    )
