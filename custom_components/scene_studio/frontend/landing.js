@@ -11,7 +11,7 @@ import {
   themeMatchesGallery,
 } from "./gallery.js";
 import { PALETTE_SLOT_COUNT, paletteSwatchCss, resolveSlot, variableIsPalette } from "./palette.js";
-import { showNoAreasMessage } from "./panel_state.js";
+import { mobileSceneOnboarding, sceneRailCatalogKey, showNoAreasMessage } from "./panel_state.js";
 import { scenePresetUses, scenesUsingLibraryItem } from "./scene_used.js";
 
 const AREA_RAIL_PX = 340;
@@ -1213,6 +1213,15 @@ export const LANDING_CSS = `
   .auto-configure {
     margin-top: 16px;
   }
+  .empty-state .empty-configuration-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .empty-state .empty-configuration-actions .auto-configure {
+    margin-top: 0;
+  }
   @media (max-width: 870px) {
     .workspace { flex-direction: column; }
     .area-rail {
@@ -1542,8 +1551,8 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   libraryBody.className = "area-rail-body";
   libraryBody.dataset.tab = "library";
   libraryBody.hidden = tab !== "library";
-  const scenesLive = renderRailLiveEdit(panel);
-  const libraryLive = renderRailLiveEdit(panel);
+  const scenesLive = renderRailLiveEdit(panel, "scenes");
+  const libraryLive = renderRailLiveEdit(panel, "library");
   scenesBody.appendChild(scenesLive);
   libraryBody.append(
     renderLibraryNote(panel),
@@ -1555,6 +1564,7 @@ export function renderLanding(panel, { includeStage = true } = {}) {
 
   const floors = panel._floors || [];
   const items = panel._items || [];
+  scenesBody.dataset.catalogKey = sceneRailCatalogKey(floors, items);
   const byArea = new Map();
   for (const item of items) {
     const key = item.area || "";
@@ -1564,7 +1574,7 @@ export function renderLanding(panel, { includeStage = true } = {}) {
     byArea.get(key).push(item);
   }
 
-  const mobileEmptyHero = panel._narrow && !items.length && !panel._mobileManualEmpty;
+  const mobileEmptyHero = mobileSceneOnboarding(panel._narrow, "scenes", items.length) && !panel._mobileManualEmpty;
   if (mobileEmptyHero) {
     scenesBody.appendChild(renderEmptyHero(panel));
   }
@@ -1720,10 +1730,10 @@ export function sceneCoverUrl(panel) {
   return galleryCoverUrl(builtin);
 }
 
-function renderRailLiveEdit(panel) {
+function renderRailLiveEdit(panel, tab) {
   const liveBar = document.createElement("div");
   liveBar.className = "rail-live-edit";
-  if (!(panel._items || []).length) {
+  if (mobileSceneOnboarding(panel._narrow, tab, (panel._items || []).length)) {
     liveBar.classList.add("is-auto-configure");
     const button = document.createElement("ha-button");
     button.variant = "brand";
@@ -2192,16 +2202,20 @@ function renderEmptyHero(panel) {
     "Auto configure"
   );
   btn.addEventListener("click", () => panel._autoConfigure());
-  el.appendChild(btn);
   if (panel._narrow) {
+    const actions = document.createElement("div");
+    actions.className = "empty-configuration-actions";
     const manual = document.createElement("ha-button");
-    manual.appearance = "plain";
+    manual.appearance = "outlined";
     manual.textContent = panel._t("frontend.actions.manual_configuration", "Manual configuration");
     manual.addEventListener("click", () => {
       panel._mobileManualEmpty = true;
       panel._render();
     });
-    el.appendChild(manual);
+    actions.append(btn, manual);
+    el.appendChild(actions);
+  } else {
+    el.appendChild(btn);
   }
   return el;
 }

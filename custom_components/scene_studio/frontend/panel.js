@@ -83,7 +83,7 @@ import {
 } from "./landing.js";
 import { lightDisplayName } from "./display_names.js";
 import { createOnOffEventGraph, toggleOnOffDraft } from "./onoff_graph.js";
-import { defaultOnPreference } from "./panel_state.js";
+import { defaultOnPreference, sceneRailCatalogKey } from "./panel_state.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
@@ -6945,9 +6945,11 @@ class SceneStudioPanel extends HTMLElement {
     const cards = rail.querySelectorAll(
       '.area-rail-body[data-tab="scenes"] .scene-card[data-scene-id]'
     );
-    // A rail painted before areas arrived has no cards. Rebuilding is the
-    // only way those scenes show up.
-    if (cards.length !== (this._items || []).length) {
+    // Keep the rail only if its areas and scene membership are still current,
+    // including the zero-scene case during startup.
+    const scenesBody = rail.querySelector('.area-rail-body[data-tab="scenes"]');
+    if (cards.length !== (this._items || []).length ||
+        scenesBody?.dataset.catalogKey !== sceneRailCatalogKey(this._floors || [], this._items || [])) {
       return false;
     }
     this._syncRailSelection();
@@ -7085,6 +7087,7 @@ class SceneStudioPanel extends HTMLElement {
   async _autoConfigure() {
     try {
       await this._hass.callWS({ type: `${DOMAIN}/auto_configure` });
+      this._mobileManualEmpty = true;
       await this._loadList();
     } catch (err) {
       this._error = err.message || String(err);
