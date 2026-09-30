@@ -2,11 +2,10 @@
 
 # Scene Studio
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/etokheim/scene_studio.svg)](https://github.com/etokheim/scene_studio/releases)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat-square&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/etokheim)
 
-Daylight that follows the sun between your scenes. The integration builds a Home Assistant scene that blends your day and evening looks from the sun’s cycle — cool by day, warm toward dusk — so activating it lights the room the way you want for *now*.
+Daylight that follows the sun between your chosen looks. The integration builds a Home Assistant scene that blends your day and evening looks from the sun’s cycle — cool by day, warm toward dusk — so activating it lights the room the way you want for *now*.
 
 **Built-in automatic light updates** (on by default) re-apply each circadian scene on an interval with a matching transition, so the room fades through the day without a separate automation. Pause per room from the sidebar list, or set the global interval to 0 to turn updates off.
 
@@ -14,7 +13,7 @@ Daylight that follows the sun between your scenes. The integration builds a Home
 
 ## Install
 
-1. Install via [HACS](https://hacs.xyz/) (search **Scene Studio**), or copy `custom_components/scene_studio` into your config.
+1. In HACS, add `https://github.com/etokheim/scene_studio` as a **custom repository** of type **Integration**, then install **Scene Studio**. Alternatively, copy `custom_components/scene_studio` into your Home Assistant config directory.
 2. Restart Home Assistant.
 3. Add the integration once: **Settings → Devices & services → Add integration → Scene Studio**.
 4. Open **Scene Studio** from the sidebar to create and edit rooms.
@@ -27,7 +26,7 @@ The domain and GitHub repo are now `scene_studio` (was `circadian_scenes`). Afte
 
 1. Remove the old **Circadian Scenes** config entry if Home Assistant still lists it.
 2. Add **Scene Studio** once.
-3. Room configs migrate from `circadian_scenes.scenes` to `scene_studio.scenes` when the new store is empty. Re-link HACS to [etokheim/scene_studio](https://github.com/etokheim/scene_studio) if needed.
+3. Room configs migrate from `circadian_scenes.scenes` to `scene_studio.scenes` when the new store is empty. If you used HACS, add this repository as a custom Integration repository before installing Scene Studio.
 
 ### Upgrading from Scene Extrapolation
 
@@ -35,9 +34,9 @@ v4 renamed `scene_extrapolation` to `circadian_scenes`. If that store is the onl
 
 ## Setup
 
-Create two (or more) **native** Home Assistant scenes for an area: how the room should look by day, and how it should look in the evening. You can also pin looks to dawn, sunrise, noon, sunset, and dusk.
+Create a scene in the Scene Studio sidebar and choose its Home Assistant area. A circadian scene starts from a built-in day-to-evening look; edit the colors and brightness at dawn, sunrise, noon, sunset, and dusk in the main editor. You can also create a fixed scene or reuse looks from the library. Scene Studio creates the Home Assistant scene entity for you.
 
-Then, in the Scene Studio sidebar, add a circadian scene for that area and assign those native scenes to the solar events you care about.
+An older installation that used native Home Assistant scenes can migrate its saved light looks into Scene Studio when all required source scenes are available. Native scenes are no longer needed for new scenes.
 
 You might already have fixed scenes like this:
 
@@ -57,29 +56,13 @@ A typical result:
 2. **Any colors** — not limited to white / warm white.
 3. **Effects** — e.g. fireplace after sunset, or Christmas lights that still follow the day.
 4. **Turn lights off or on** by time of day (bright undimmable lamp off in the evening; cozy lamp on only then).
-5. **Not only lights** — a scene can drive shades, locks, and other entities if you want.
-6. **Nightlights mode** — optionally use a dedicated scene when an `input_boolean` is on.
-7. **Automatic light updates** — keep the room tracking the sun after activation without fighting a “force lights on” loop.
+5. **Area-aware light membership** — a scene follows the area's lights, with per-light changes when you need them.
+6. **Automatic light updates** — keep the room tracking the sun after activation without fighting a “force lights on” loop.
 
 ## Limitations
 
-1. Works with scenes created in Home Assistant (not vendor scenes such as Hue-only scenes).
-2. You need at least two native scenes per area you want to control — and HA’s scene editor is still tedious.
-3. Activation is slower than a plain scene (~1 s vs ~200 ms in practice). Debug logging shows timing for your setup.
-
-<details>
-<summary>Example performance numbers</summary>
-
-```
-Loaded 5 scenes from in-memory entities
-Time getting native scenes:               2.6ms
-Time calculating solar events:            0.3ms
-Time getting sun events (precalculated):  0.6ms
-Time extrapolating:                     862.5ms
-Time total applying scene:              866.3ms
-```
-
-</details>
+1. Scene Studio currently controls lights. Existing native-scene migration keeps the light looks; other entity types from those source scenes are not imported.
+2. Automatic light updates run only while a Scene Studio scene owns its area. An unavailable light is skipped until it is available again.
 
 ### Alternatives
 
@@ -101,6 +84,8 @@ Keep the core simple, then add behavior with the rest of Home Assistant:
 ## Acknowledgements
 
 The color wheel is based on the wheel in [Hue Like Light Card](https://github.com/Gh61/lovelace-hue-like-light-card) by [Gh61](https://github.com/Gh61). [huemane-light-card](https://github.com/etokheim/huemane-light-card) is built on that card, and this panel’s wheel uses the same implementation as its starting point.
+
+Project code is licensed under [LGPL-2.1](LICENSE). The Hue Like Light Card wheel is also LGPL-2.1. The bundled SunCalc code and gallery photos have their own notices and credits in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [gallery/CREDITS.md](custom_components/scene_studio/frontend/gallery/CREDITS.md).
 
 ## Support
 
