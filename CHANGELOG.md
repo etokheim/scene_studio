@@ -7,11 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Summary:
+
+Scene Studio is easier to start with and safer to share. Pick a look from the library, keep your place while editing, and recover scenes if their Home Assistant area disappears.
+
 ### Added
+
+- ⭐ Edit with another admin in real time. Their saved changes appear in your open editor; if you both change the same field, choose which value to keep before saving.
+- Areas deleted in Home Assistant stay visible with their last known name. Move all their scenes to another area, or delete them together after a confirmation.
+- Library guidance, starter choices, and usage counts make color, scene, and circadian presets easier to find and reuse.
+- Picture covers and color dots on scene and preset cards show the look before you open it.
 
 ### Changed
 
+- The library now calls shared looks **presets** throughout the editor. New scenes can start from a preset or the room's current lights.
+- The selected scene rail stays in place while you switch scenes or presets. The phone dial and light tiles fit together without horizontal scrolling.
+- Searching for another preview location now explains that Search sends the query and browser IP to Photon (Komoot); the map and optional search remain.
+- Project code is available under LGPL-2.1, with separate notices for the bundled SunCalc code and gallery photos.
+
 ### Fixed
+
+- Saves, Reset, and Auto configure no longer leave half-written scenes or settings after a failure. Migration waits for every required old light scene before converting it or removing managed YAML.
+- Scene activation checks caller permissions, reports service errors, and stops an in-flight automatic update when another scene takes over.
+- The scene's own event palette wins consistently in the dial, settled preview, Live edit, and the commands sent to lights.
+- Ordinary day-position attributes follow local time; explicit preview times land on the right local date through midnight and daylight-saving changes.
+- A collaborator's delayed save or deletion no longer overwrites a newer draft or silently brings a deleted item back.
 
 ## [6.0.0] - 2026-09-26
 
