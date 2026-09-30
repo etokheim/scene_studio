@@ -1,3 +1,4 @@
+import { createStageColumn } from "./editor_shell.js";
 /** Area rail, scene cards, and variable/theme library for the list view. */
 
 import { createSimpleCardMesh } from "./card_mesh.js";
@@ -1602,7 +1603,7 @@ export function renderLanding(panel, { includeStage = true } = {}) {
 
   page.appendChild(rail);
   if (includeStage) {
-    const { stage, scroll } = makeStageCol();
+    const { stage, scroll } = createStageColumn();
     if (
       panel._view !== "edit" &&
       panel._view !== "theme" &&
@@ -1620,17 +1621,6 @@ export function renderLanding(panel, { includeStage = true } = {}) {
   return page;
 }
 
-function makeStageCol() {
-  const stage = document.createElement("div");
-  stage.className = "stage-col";
-  const bg = document.createElement("div");
-  bg.className = "stage-bg";
-  bg.setAttribute("aria-hidden", "true");
-  const scroll = document.createElement("div");
-  scroll.className = "stage-scroll";
-  stage.append(bg, scroll);
-  return { stage, bg, scroll };
-}
 
 function stickyBg(kind) {
   const bg = document.createElement("span");

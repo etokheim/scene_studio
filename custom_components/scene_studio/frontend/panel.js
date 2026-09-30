@@ -1,3 +1,4 @@
+import { waitForSurfaceAnimation } from "./editor_shell.js";
 import {
   buildClientSunDay,
   resampleLightsForEvents,
@@ -5722,32 +5723,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _waitForAnimation(el, name, fallbackMs) {
-    return new Promise((resolve) => {
-      if (!el) {
-        resolve();
-        return;
-      }
-      let done = false;
-      const finish = () => {
-        if (done) {
-          return;
-        }
-        done = true;
-        el.removeEventListener("animationend", onEnd);
-        resolve();
-      };
-      const onEnd = (ev) => {
-        if (ev.target !== el) {
-          return;
-        }
-        if (name && ev.animationName && ev.animationName !== name) {
-          return;
-        }
-        finish();
-      };
-      el.addEventListener("animationend", onEnd);
-      window.setTimeout(finish, fallbackMs);
-    });
+    return waitForSurfaceAnimation(el, name, fallbackMs);
   }
 
   _disposeOutgoingStageLayer() {
