@@ -18,7 +18,7 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - Library guidance, starter choices, and usage counts make color, scene, and circadian presets easier to find and reuse.
 - Picture covers and color dots on scene and preset cards show the look before you open it.
 - On/off lights get simple solar-event buttons instead of a brightness graph. Hovering a dial ring shows the light's capabilities, and a touch hold opens a scene card's menu.
-- The phone's empty state includes Auto configure and a Manual configuration choice for the current visit. The Auto configure card explains what it creates.
+- The phone's empty Scenes tab includes Auto configure and an outlined Manual configuration action beside it for the current visit. Its Auto configure card explains what it creates; desktop and Library keep Live edit.
 
 ### Changed
 
@@ -37,7 +37,7 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - The scene's own event palette wins consistently in the dial, settled preview, Live edit, and the commands sent to lights.
 - Ordinary day-position attributes follow local time; explicit preview times land on the right local date through midnight and daylight-saving changes.
 - A collaborator's delayed save or deletion no longer overwrites a newer draft or silently brings a deleted item back.
-- Loading or refreshing the panel no longer claims that Home Assistant has no areas before the area catalog is available.
+- Loading or refreshing the panel no longer claims that Home Assistant has no areas before the area catalog is available, or leaves the desktop area list empty after those areas arrive.
 
 ## [6.0.0] - 2026-09-26
 
