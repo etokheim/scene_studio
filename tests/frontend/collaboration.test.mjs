@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mergeFields, patchInPlace, reconcileSaveResponse, useSavedField } from "../../custom_components/scene_studio/frontend/collaboration.js";
+import { mergeFields, patchInPlace, railCatalogChanges, reconcileSaveResponse, useSavedField } from "../../custom_components/scene_studio/frontend/collaboration.js";
+
+test("a collaborator's scene edit refreshes its card without replacing the rail", () => {
+  const before = {
+    floors: [{ id: "floor", areas: [{ id: "area" }] }],
+    scenes: [{ id: "scene", area: "area", kind: "simple", scene_name: "Before" }],
+    themes: [], variables: [],
+  };
+  const renamed = { ...before, scenes: [{ ...before.scenes[0], scene_name: "After" }] };
+  const change = railCatalogChanges(before, renamed);
+  assert.equal(change.rebuild, false);
+  assert.deepEqual([...change.sceneIds], ["scene"]);
+  assert.equal(change.sharedChanged, false);
+  assert.equal(railCatalogChanges(before, { ...before, scenes: [{ ...renamed.scenes[0], area: "elsewhere" }] }).rebuild, true);
+});
 
 test("late save response brings remote fields into an unchanged draft", () => {
   assert.deepEqual(

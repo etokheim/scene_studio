@@ -2,7 +2,7 @@ import {
   buildClientSunDay,
   resampleLightsForEvents,
 } from "./client_solar.js";
-import { mergeFields, patchInPlace, reconcileSaveResponse, useSavedField } from "./collaboration.js";
+import { mergeFields, patchInPlace, railCatalogChanges, reconcileSaveResponse, useSavedField } from "./collaboration.js";
 import {
   draftRgb,
   draftWheelMode,
@@ -7095,8 +7095,22 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _applyAreaCatalog(payload) {
+    const before = {
+      scenes: this._items,
+      floors: this._floors,
+      themes: this._themes,
+      variables: this._variables,
+    };
     this._items = payload?.scenes || this._items;
     this._floors = payload?.floors || this._floors;
+    this._themes = payload?.themes || this._themes;
+    this._variables = payload?.variables || this._variables;
+    const changes = railCatalogChanges(before, {
+      scenes: this._items,
+      floors: this._floors,
+      themes: this._themes,
+      variables: this._variables,
+    });
     const rail = this._contentEl?.querySelector(":scope > .workspace > .area-rail");
     if (!rail) {
       if (this._view === "list" || this._view === "variables") this._render();
@@ -7106,6 +7120,40 @@ class SceneStudioPanel extends HTMLElement {
     const scrollTab = scroll?.dataset.tab || "scenes";
     const scrollTop = scroll?.scrollTop || 0;
     const replacement = renderLanding(this, { includeStage: false }).querySelector(".area-rail");
+    if (!changes.rebuild) {
+      // Keep the rail, its scroll container, and any focused control mounted.
+      this._roomPreviewSwitch = rail.querySelector(".area-rail-body[data-tab=\"scenes\"] ha-switch");
+      const selector = ".scene-card[data-scene-id], .scene-card[data-item-id], .var-chip[data-item-id]";
+      const existingCards = [...rail.querySelectorAll(selector)];
+      const updatedCards = [...replacement.querySelectorAll(selector)];
+      for (let index = 0; index < existingCards.length; index += 1) {
+        const oldCard = existingCards[index];
+        const newCard = updatedCards[index];
+        const sceneId = oldCard.dataset.sceneId;
+        if (sceneId && !changes.sharedChanged && !changes.sceneIds.has(sceneId)) continue;
+        if (!sceneId && !changes.sharedChanged) continue;
+        const oldHost = oldCard.closest(".scene-card-slot") || oldCard.closest(".var-row > div");
+        const newHost = newCard.closest(".scene-card-slot") || newCard.closest(".var-row > div");
+        if (!oldHost || !newHost) continue;
+        const focused = this.shadowRoot.activeElement;
+        const focusInCard = focused && oldHost.contains(focused);
+        const focusPath = [];
+        if (focusInCard) {
+          for (let node = focused; node !== oldHost; node = node.parentElement) {
+            focusPath.unshift([...node.parentElement.children].indexOf(node));
+          }
+        }
+        if (oldCard.classList.contains("selected")) newCard.classList.add("selected");
+        if (oldHost.classList.contains("glow-on")) newHost.classList.add("glow-on");
+        oldHost.replaceWith(newHost);
+        if (focusInCard) {
+          const target = focusPath.reduce((node, child) => node?.children[child], newHost);
+          (target?.focus ? target : newCard).focus({ preventScroll: true });
+        }
+      }
+      this._syncRailSelection();
+      return;
+    }
     rail.replaceWith(replacement);
     const nextScroll = replacement.querySelector(`.area-rail-body[data-tab="${scrollTab}"]`);
     if (nextScroll) {
@@ -7265,8 +7313,6 @@ class SceneStudioPanel extends HTMLElement {
       const before = this._sceneBase;
       const openId = this._view === "edit" ? this._editId : null;
       const saved = openId && (payload.scenes || []).find((item) => item.id === openId);
-      this._variables = payload.variables || [];
-      this._themes = payload.themes || [];
       this._applyAreaCatalog(payload);
       if (this._themeDraft?.id) {
         await this._applyRemoteLibrary(

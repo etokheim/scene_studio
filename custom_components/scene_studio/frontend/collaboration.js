@@ -19,6 +19,25 @@ function equal(left, right) {
 const copy = (value) => value === MISSING ? MISSING : structuredClone(value);
 const valueAt = (object, key) => Object.hasOwn(object, key) ? object[key] : MISSING;
 
+/** Decide which rail cards need fresh content without rebuilding the rail itself. */
+export function railCatalogChanges(before, after) {
+  const shape = (catalog) => JSON.stringify({
+    floors: catalog.floors || [],
+    scenes: (catalog.scenes || []).map(({ id, area, kind }) => [id, area, kind]),
+    themes: (catalog.themes || []).map(({ id }) => id),
+    variables: (catalog.variables || []).map(({ id, kind }) => [id, kind]),
+  });
+  const previousScenes = new Map((before.scenes || []).map((item) => [item.id, item]));
+  return {
+    rebuild: shape(before) !== shape(after),
+    sceneIds: new Set((after.scenes || [])
+      .filter((item) => JSON.stringify(previousScenes.get(item.id)) !== JSON.stringify(item))
+      .map((item) => item.id)),
+    sharedChanged: JSON.stringify(before.themes || []) !== JSON.stringify(after.themes || []) ||
+      JSON.stringify(before.variables || []) !== JSON.stringify(after.variables || []),
+  };
+}
+
 export function mergeFields(base, local, saved) {
   const conflicts = [];
   function merge(before, mine, theirs, path) {
