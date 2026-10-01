@@ -833,3 +833,12 @@ Durable product and architecture guidance for Scene Studio. Keep current constra
 - **Decision:** Hovering a disk dot opens that pin and leaves the selected pins open. Moving away closes only the hover pin. The hover does not change the selection. A plain press selects that light and closes the others. Cmd, Ctrl, and Shift each toggle that disk light. Shift range select stays on the tile list. A resting marker is the earlier round dot: 12px fill, 2px white ring, shadow, and nothing drawn inside it. Selecting, hovering, or grabbing it grows the teardrop pin around the same tip, and that change animates open and closed. Hovering a stack grows that one pin and shows how many lights it holds; leaving collapses it again. Dragging the stack selects those lights and keeps that pin open with the count. A pin close enough that a drop would join it grows the same way until the pointer moves off. A click on a stacked pin opens the group as pins that start on that pin and travel onto a center circle. Grabbing one of those pins closes the group, keeps that pin out of the stack until the pointer is released, and moves only that light. Mode changes, undo, redo, and other moves glide; a drag follows the pointer.
 - **Why:** Opening the hovered pin used to move the hit target off the cursor, so the pin keeps a tip hit under the pointer. The old drop animation snapped the scale to 0.7 before growing back, and a separate dot path jumped instead of springing. Shift range select on a disk did not match Cmd.
 - **Do not reverse without user ask.**
+
+### Selected-event color wheels
+
+A circadian scene's event sidebar resolves member-light drafts for the selected
+solar event instead of placing all five events on one disk: each event can use a
+different scene preset and therefore a different color space. The individual
+light sidebar follows the same rule. Circadian preset editing uses one event dot.
+Wheel edits save field-level light overrides; randomization changes the scene's
+selected-event seed, retaining explicit overrides and relative brightness.

@@ -79,3 +79,46 @@ test("event brightness drag uses a fixed gesture base and does not edit shared t
   assert.equal(panel._themeDraft.events.dawn.brightness, 20);
   assert.equal(panel._lightEventStoredState({ entity_id: "light.a" }, "dawn").brightness, 80);
 });
+
+test("event wheels contain only members resolved for the chosen event and refresh on preset replacement", () => {
+  const palette = id => ({ id, kind: "palette", slots: Array.from({ length: 5 }, () => ({ color: { color_mode: "rgb", rgb_color: id === "red" ? [255, 0, 0] : [0, 0, 255] }, brightness: 100 })) });
+  const panel = {
+    _sunPath: { lights: [{ entity_id: "light.a", name: "A" }, { entity_id: "light.removed", removed: true }, { entity_id: "light.suggested", suggested: true }, { entity_id: "theme:default", theme_ring: true }] },
+    _formData: { kind: "circadian", event_palettes: { dawn: { palette_id: "red" }, dusk: { palette_id: "blue" } } },
+    _themeDraft: { events: { dawn: { brightness: 20, color: {} }, dusk: { brightness: 30, color: {} } } },
+    _variables: [palette("red"), palette("blue")], _editorLightState: (_id, state) => state,
+    _lightEventStoredState: function(light, eventId) { return methods._lightEventStoredState.call(this, light, eventId); },
+  };
+  const dawn = methods._eventWheelRows.call(panel, "dawn");
+  assert.deepEqual(dawn.map(row => row.id), ["light.a"]);
+  assert.deepEqual(dawn[0].draft.rgb_color, [255, 0, 0]);
+  assert.deepEqual(methods._eventWheelRows.call(panel, "dusk")[0].draft.rgb_color, [0, 0, 255]);
+  panel._formData.event_palettes.dawn = { palette_id: "blue" };
+  const replaced = methods._eventWheelRows.call(panel, "dawn");
+  assert.deepEqual(replaced[0].draft.rgb_color, [0, 0, 255]);
+  replaced[0].draft.brightness = 12;
+  assert.equal(replaced[0].savedDraft.brightness, 100);
+  assert.equal(panel._formData.overrides, undefined);
+});
+
+test("event randomization persists one seed for every inherited light without touching overrides or other events", () => {
+  const adjustment = { scale: 0.7, ceiling: 178.5 };
+  const overrides = { "light.a": { dawn: { brightness: 31 } }, "light.b": { dawn: { color_mode: "rgb", rgb_color: [5, 6, 7] } } };
+  const calls = [];
+  const panel = {
+    _formData: { event_palettes: { dawn: { palette_id: "p", assignment_seed: 12, brightness_adjustment: adjustment }, dusk: { palette_id: "other", assignment_seed: 99 } }, overrides },
+    _themeDraft: { events: { dawn: { assignment_seed: 4 } } },
+    _variables: [{ id: "p", kind: "palette", slots: [{}] }],
+    _commitUndo: () => calls.push("undo"), _refreshInheritedLightDrafts: () => calls.push("refresh"),
+    _clearPreviewCache() {}, _patchDialFromSession() {}, _syncOpenSceneCardFace() {}, _schedulePreview() {}, _saveSoon: () => calls.push("save"),
+  };
+  const random = Math.random;
+  try { Math.random = () => 0.5; assert.equal(methods._randomizeSceneEvent.call(panel, "dawn"), true); }
+  finally { Math.random = random; }
+  assert.equal(panel._formData.event_palettes.dawn.assignment_seed, 2147483647);
+  assert.deepEqual(panel._formData.event_palettes.dawn.brightness_adjustment, adjustment);
+  assert.deepEqual(panel._formData.event_palettes.dusk, { palette_id: "other", assignment_seed: 99 });
+  assert.deepEqual(panel._formData.overrides, overrides);
+  assert.equal(panel._themeDraft.events.dawn.assignment_seed, 4);
+  assert.deepEqual(calls, ["undo", "refresh", "save"]);
+});

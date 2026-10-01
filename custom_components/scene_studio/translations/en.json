@@ -57,6 +57,7 @@
       "variable_edit_hint": "Color and brightness are shared by every circadian preset or light that still uses this color preset.",
       "palette_edit_hint": "A scene preset is five colors. Lights that use it pick a slot; changing the preset updates those lights the next time a scene runs.",
       "theme_hint": "Open a circadian preset to edit its color and brightness at each solar event. Changes apply to every circadian scene that still uses the preset; per-light overrides stay as they are.",
+      "scene_event_edit_hint": "Editing lights changes only this scene and solar event. Other events and shared presets stay as they are.",
       "theme_edit_hint": "Editing {name} changes every circadian scene that still uses this circadian preset. Per-light overrides on those scenes stay as they are.",
       "theme_event_subtitle": "{name} preset",
       "theme_missing": "Circadian preset not found",

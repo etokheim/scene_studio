@@ -10508,6 +10508,36 @@ class SceneStudioPanel extends HTMLElement {
     await this._openThemeEventSidebar(event);
   }
 
+  _eventWheelRows(eventId) {
+    return (this._sunPath?.lights || [])
+      .filter(light => !light.removed && !light.suggested && !light.theme_ring)
+      .map(light => {
+        const draft = this._lightEventStoredState(light, eventId);
+        return { id: light.entity_id, label: light.name, draft, savedDraft: structuredClone(draft) };
+      });
+  }
+
+  _randomizeSceneEvent(eventId) {
+    const assignment = this._formData?.event_palettes?.[eventId];
+    const fallback = this._themeDraft?.events?.[eventId];
+    const paletteId = assignment?.palette_id || fallback?.color?.variable_ref;
+    if (!paletteId || !variableIsPalette(this._variables.find(item => item.id === paletteId))) {
+      return false;
+    }
+    this._commitUndo({ type: "event-randomize", eventId });
+    this._formData.event_palettes = {
+      ...this._formData.event_palettes,
+      [eventId]: { ...assignment, palette_id: paletteId, assignment_seed: (Math.random() * 0xffffffff) >>> 0 },
+    };
+    this._refreshInheritedLightDrafts?.();
+    this._clearPreviewCache();
+    this._patchDialFromSession();
+    this._syncOpenSceneCardFace();
+    this._schedulePreview();
+    this._saveSoon();
+    return true;
+  }
+
   async _openThemeEventSidebar(event) {
     const events = this._sunPath?.events || [];
     const drafts = new Map();
@@ -10515,6 +10545,14 @@ class SceneStudioPanel extends HTMLElement {
       drafts.set(item.id, this._themeEventDraft(item.id));
     }
     let currentId = event.id;
+    const sceneEditor = this._view === "edit";
+    let lightRows = [];
+    let selectedIds = new Set();
+    const refreshLightRows = () => {
+      lightRows = sceneEditor ? this._eventWheelRows(currentId) : [];
+      selectedIds = new Set(lightRows.map(row => row.id));
+    };
+    refreshLightRows();
     let wheelCtl = null;
     let brightnessGraphCtl = null;
     const themeName =
@@ -10532,6 +10570,8 @@ class SceneStudioPanel extends HTMLElement {
         }
         brightnessGraphCtl?.disconnect();
         wheelCtl?.disconnect();
+        this._refreshInheritedLightDrafts = null;
+        this._syncOpenSceneWheel = null;
         this._setSidebarEvent(null);
         this._setSidebarLight(null);
         if (this._view === "edit") {
@@ -10564,7 +10604,10 @@ class SceneStudioPanel extends HTMLElement {
     const duskSlot = document.createElement("div");
     const hint = document.createElement("p");
     hint.className = "sidebar-note theme-edit-banner";
-    hint.textContent = this._t(
+    hint.textContent = sceneEditor ? this._t(
+      "frontend.library.scene_event_edit_hint",
+      "Editing lights changes only this scene and solar event. Other events and shared presets stay as they are."
+    ) : this._t(
       "frontend.library.theme_edit_hint",
       "Editing {name} changes every circadian scene that still uses this circadian preset. Per-light overrides on those scenes stay as they are.",
       { name: themeName }
@@ -10584,7 +10627,7 @@ class SceneStudioPanel extends HTMLElement {
       const spec = galleryTheme(this._themeDraft?.builtin_id)?.events?.[currentId];
       const draft = drafts.get(currentId);
       const diverged =
-        Boolean(spec) &&
+        !sceneEditor && Boolean(spec) &&
         themeDraftSignature(draft, this._variables) !== themeEventSignature(spec);
       restoreBtn.hidden = !diverged;
       const event = events.find((item) => item.id === currentId);
@@ -10664,6 +10707,7 @@ class SceneStudioPanel extends HTMLElement {
           titleEl.textContent = next.name;
         }
         this._syncDuskMinimumSlot(duskSlot, eventId);
+        refreshLightRows();
         wheelCtl?.sync();
         brightnessGraphCtl?.sync();
         syncRestore();
@@ -10713,18 +10757,34 @@ class SceneStudioPanel extends HTMLElement {
         wheelCtl?.sync();
       },
       onEditPalette: (id) => this._go(`palette/${id}`),
-      getState: () => ({
-        scenes: events.map((item, index) => ({
-          id: item.id,
-          index: index + 1,
-          draft: drafts.get(item.id),
-          event: item,
-          icon: item.icon,
-        })),
-        sequence: events.map((item) => item.id),
+      showPath: false,
+      groupNearby: sceneEditor,
+      getCapabilities: row => sceneEditor ? lightWheelCaps(this._hass.states[row.id]?.attributes || {}) : { hasColor: true, hasTemp: true },
+      getAssignmentEntityId: row => row.id,
+      getState: () => sceneEditor ? {
+        scenes: lightRows,
+        sequence: lightRows.map(row => row.id),
+        activeId: [...selectedIds][0] || null,
+        selectedIds: [...selectedIds],
+      } : {
+        scenes: [{ id: currentId, draft: drafts.get(currentId), event: events.find(item => item.id === currentId) }],
+        sequence: [currentId],
         activeId: currentId,
-      }),
-      onSelect: (eventId) => {
+      },
+      onSelectMany: ids => {
+        selectedIds = new Set(ids.filter(id => lightRows.some(row => row.id === id)));
+        wheelCtl?.sync();
+      },
+      onSelect: (eventId, mods) => {
+        if (sceneEditor) {
+          if (mods?.shiftKey || mods?.toggleKey) {
+            if (selectedIds.has(eventId)) selectedIds.delete(eventId);
+            else if (eventId) selectedIds.add(eventId);
+          } else selectedIds = new Set(eventId ? [eventId] : []);
+          wheelCtl?.sync();
+          return;
+        }
+        if (!events.some(item => item.id === eventId)) return;
         currentId = eventId;
         this._setSidebarEvent(eventId);
         brightnessGraphCtl?.sync();
@@ -10733,6 +10793,31 @@ class SceneStudioPanel extends HTMLElement {
         syncRestore();
       },
       onChange: ({ fromPalette } = {}) => {
+        if (sceneEditor) {
+          const dirty = lightRows.filter(row => JSON.stringify(row.draft) !== JSON.stringify(row.savedDraft));
+          if (!dirty.length) return;
+          if (!undoCommitted) {
+            this._commitUndo({ type: "event-lights", eventId: currentId });
+            undoCommitted = true;
+          }
+          for (const row of dirty) {
+            if (!fromPalette) {
+              delete row.draft.variable_ref;
+              delete row.draft.palette_t;
+              delete row.draft.palette_r;
+            }
+            this._writeLightEventOverride(row.id, currentId, eventOverrideAfterEdit(
+              this._formData.overrides?.[row.id]?.[currentId], row.savedDraft, row.draft
+            ));
+            row.savedDraft = structuredClone(row.draft);
+          }
+          this._clearPreviewCache();
+          this._patchDialFromSession();
+          this._schedulePreview();
+          this._saveSoon();
+          brightnessGraphCtl?.sync();
+          return;
+        }
         const draft = drafts.get(currentId);
         if (draft && !fromPalette) {
           delete draft.variable_ref;
@@ -10743,10 +10828,15 @@ class SceneStudioPanel extends HTMLElement {
         brightnessGraphCtl?.sync();
       },
       getAssignmentSeed: () =>
+        Number(this._formData?.event_palettes?.[currentId]?.assignment_seed) ||
         Number(drafts.get(currentId)?.assignment_seed) ||
         Number(this._themeDraft?.events?.[currentId]?.assignment_seed) ||
         0,
       onRandomizeSeed: () => {
+        if (sceneEditor) {
+          this._randomizeSceneEvent(currentId);
+          return;
+        }
         const ev = this._themeDraft?.events?.[currentId];
         if (!ev) {
           return;
@@ -10763,6 +10853,14 @@ class SceneStudioPanel extends HTMLElement {
       },
     });
     body.appendChild(wheelCtl.el);
+    if (sceneEditor) {
+      this._refreshInheritedLightDrafts = () => {
+        refreshLightRows();
+        wheelCtl.sync();
+        brightnessGraphCtl.sync();
+      };
+      this._syncOpenSceneWheel = () => wheelCtl.sync();
+    }
     body.append(duskSlot);
     this._syncDuskMinimumSlot(duskSlot, currentId);
     wheelCtl.sync();
@@ -16063,33 +16161,10 @@ class SceneStudioPanel extends HTMLElement {
             0
           );
         },
-        onRandomizeSeed: () => {
-          const draft = currentDraft();
-          if (!draft) {
-            return;
-          }
-          draft.assignment_seed = (Math.random() * 0xffffffff) >>> 0;
-          delete draft.palette_t;
-          delete draft.palette_r;
-          const linked = (this._variables || []).find(
-            (item) => item.id === draft.variable_ref
-          );
-          if (variableIsPalette(linked)) {
-            applyVariableToDraft(draft, linked, {
-              entityId: light.entity_id,
-              seed: draft.assignment_seed,
-              catalog: this._variables,
-            });
-          }
-          applyToSession();
-          wheelCtl?.sync();
-          brightnessGraphCtl?.sync();
-          colorBriGraphCtl?.sync();
-          whiteBriGraphCtl?.sync();
-        },
+        onRandomizeSeed: () => this._randomizeSceneEvent(currentEvent.id),
         getState: () => ({
           scenes: events
-            .filter((item) => drafts.get(item.id)?.member)
+            .filter((item) => item.id === currentEvent.id && drafts.get(item.id)?.member)
             .map((item) => {
               const entry = drafts.get(item.id);
               return {
@@ -16100,9 +16175,7 @@ class SceneStudioPanel extends HTMLElement {
                 icon: item.icon,
               };
             }),
-          sequence: events
-            .map((item) => item.id)
-            .filter((id) => drafts.get(id)?.member),
+          sequence: drafts.get(currentEvent.id)?.member ? [currentEvent.id] : [],
           activeId: currentEvent.id,
         }),
         onSelect: (eventId) => {
