@@ -32,6 +32,36 @@ from .continuous import snapshot_from_command, snapshot_from_state, states_match
 _LOGGER = logging.getLogger(__name__)
 
 
+def _light_service_payload(entity: dict[str, Any]) -> dict[str, Any]:
+    """A captured HA state has derived colors; send only its declared mode."""
+    colors = {
+        "hs": "hs_color",
+        "xy": "xy_color",
+        "rgb": "rgb_color",
+        "rgbw": "rgbw_color",
+        "rgbww": "rgbww_color",
+        "color_temp": "color_temp_kelvin",
+        "white": "white",
+    }
+    payload = dict(entity)
+    mode = payload.pop("color_mode", None)
+    present = {key for key in colors.values() if payload.get(key) is not None}
+    selected = colors.get(mode)
+    if selected is not None:
+        if selected not in present:
+            raise HomeAssistantError(
+                f"Light {entity['entity_id']!r} is missing its {selected} value"
+            )
+        for key in colors.values():
+            if key != selected:
+                payload.pop(key, None)
+    elif len(present) > 1:
+        raise HomeAssistantError(
+            f"Light {entity['entity_id']!r} has ambiguous color values without a declared mode"
+        )
+    return payload
+
+
 async def apply_entities_parallel(
     entities,
     hass: HomeAssistant,
@@ -47,6 +77,16 @@ async def apply_entities_parallel(
     """
     _LOGGER.debug("Starting parallel processing of %d entities", len(entities))
 
+    # Validate every light before scheduling any service: one malformed captured
+    # color must not partially apply the other lights.
+    entities = [
+        (
+            _light_service_payload(entity)
+            if str(entity.get(ATTR_ENTITY_ID, "")).startswith("light.")
+            else entity
+        )
+        for entity in entities
+    ]
     tasks = []
     for entity in entities:
         task = asyncio.create_task(
@@ -93,6 +133,8 @@ async def apply_single_entity(
 ):
     """Apply a single entity state."""
     domain = entity[ATTR_ENTITY_ID].split(".")[0]
+    if domain == LIGHT_DOMAIN:
+        entity = _light_service_payload(entity)
     if "state" not in entity:
         raise HomeAssistantError(
             f"Entity {entity.get(ATTR_ENTITY_ID)!r} is missing a state property"

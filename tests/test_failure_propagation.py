@@ -224,3 +224,56 @@ def test_ordinary_day_position_reads_the_clock_when_no_explicit_target():
     now = _local_target_datetime(None, "Europe/Oslo")
     expected = now.hour * 3600 + now.minute * 60 + now.second
     assert abs(actual - expected) < 2
+
+
+def test_captured_light_command_sends_only_its_declared_color_mode():
+    async def run():
+        hass = _Hass()
+        await apply_single_entity(
+            {
+                "entity_id": "light.desk",
+                "state": "on",
+                "brightness": 100,
+                "color_mode": "color_temp",
+                "color_temp_kelvin": 2700,
+                "hs_color": [30, 50],
+                "rgb_color": [255, 160, 70],
+            },
+            hass,
+            transition_time=2,
+        )
+        data = hass.services.async_call.await_args.kwargs["service_data"]
+        assert data == {
+            "entity_id": "light.desk",
+            "brightness": 100,
+            "color_temp_kelvin": 2700,
+            "transition": 2,
+        }
+
+    asyncio.run(run())
+
+
+def test_invalid_color_payload_fails_before_any_light_handler_runs():
+    async def run():
+        hass = _Hass()
+        with pytest.raises(HomeAssistantError, match="ambiguous color"):
+            await apply_entities_parallel(
+                [
+                    {"entity_id": "light.good", "state": "on", "brightness": 100},
+                    {
+                        "entity_id": "light.bad",
+                        "state": "on",
+                        "hs_color": [30, 50],
+                        "rgb_color": [255, 160, 70],
+                    },
+                ],
+                hass,
+            )
+        hass.services.async_call.assert_not_awaited()
+        with pytest.raises(HomeAssistantError, match="missing its rgb_color"):
+            await apply_single_entity(
+                {"entity_id": "light.bad", "state": "on", "color_mode": "rgb"}, hass
+            )
+        hass.services.async_call.assert_not_awaited()
+
+    asyncio.run(run())
