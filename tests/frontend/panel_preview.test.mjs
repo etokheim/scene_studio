@@ -145,3 +145,13 @@ test("editor capability adaptation removes unsupported chromatic preview values"
     assert.deepEqual(methods._editorLightState.call(panel, "light.temp", temperature), temperature);
   }
 });
+
+
+test("responsive toolbar replacement finds controls in a detached readout", () => {
+  const calls = [];
+  const old = { replaceWith: node => calls.push(["replace", node]), remove: () => calls.push("remove") };
+  const host = { querySelectorAll: () => [old], append: () => assert.fail("duplicate controls appended") };
+  const strip = {};
+  methods._replaceSceneUsed.call({ shadowRoot: { querySelectorAll: () => [] } }, host, strip);
+  assert.deepEqual(calls, [["replace", strip]]);
+});

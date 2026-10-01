@@ -129,6 +129,7 @@ const WHEEL_FACE_MIN_PX = 400;
 const DIAL_FACE_MIN_PX = WHEEL_FACE_MIN_PX;
 /** Color wheels (simple / variable) cap; the stage column stays full width. */
 const WHEEL_FACE_MAX_PX = 650;
+const DIAL_FACE_MAX_PX = 900;
 /* Rings host inset so CSS outer edge matches CLOCK_RINGS_OUTER in viewBox. */
 const CLOCK_RINGS_INSET_PCT = 50 - CLOCK_RINGS_OUTER / 2;
 /* Wedges/rays cover the square including corners; back layer is slightly
@@ -3421,6 +3422,9 @@ class SceneStudioPanel extends HTMLElement {
         }
         /* ha-selector's own top margin is the field label's slot. The title
            already sits above this row, so the flex gap is the only space. */
+        .solar-limit-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .solar-limit-title .name { flex: 1; min-width: 0; }
+        .solar-limit-title ha-switch { flex: 0 0 auto; }
         .dusk-minimum-row ha-selector {
           margin-top: 0;
         }
@@ -6535,7 +6539,10 @@ class SceneStudioPanel extends HTMLElement {
       const currentLights = lights || (hasLights ? shell.lights.firstChild : null);
       if (!dial && shell.preview.contains(visual)) {
         const freshClasses = new Set(toolbar.map(node => node.className));
-        toolbar.unshift(...[...shell.toolbar.children].filter(node => !freshClasses.has(node.className)));
+        // The dial toolbar belongs to its destination adapter; never carry it
+        // into a wheel editor during a responsive remount.
+        toolbar.unshift(...[...shell.toolbar.children].filter(node =>
+          !node.classList.contains("sun-toolbar") && !freshClasses.has(node.className)));
       }
       mountEditorRegions(shell, { mount, visual, toolbar, lights: currentLights, animateLights: true, reducedMotion: this._prefersReducedMotion() });
       shell.timeline.hidden = !dial;
@@ -6582,7 +6589,8 @@ class SceneStudioPanel extends HTMLElement {
     fitLightStripGutter(shell);
     shell.el.style.setProperty("--editor-preview-floor", `${geometry.floor}px`);
     shell.el.dataset.overlap = String(geometry.overlap);
-    const size = Math.min(WHEEL_FACE_MAX_PX, w, Math.max(geometry.floor, h));
+    const cap = shell.el.dataset.kind === "dial" ? DIAL_FACE_MAX_PX : WHEEL_FACE_MAX_PX;
+    const size = Math.min(cap, w, Math.max(geometry.floor, h - 48));
     const value = `${Math.floor(size)}px`;
     shell.el.style.setProperty("--dial-face-max", value);
     this._sunPathEl?.style.setProperty("--dial-face-max", value);
@@ -11209,7 +11217,9 @@ class SceneStudioPanel extends HTMLElement {
       `frontend.settings.${timeKey}_helper`,
       dawn ? "Advance dawn when sunrise comes late. Applies to every circadian scene and preset." : "To avoid lights dimming too much, too early. Applies to every circadian scene and theme."
     );
-    labelWrap.append(label, helper);
+    const titleRow = document.createElement("div");
+    titleRow.className = "solar-limit-title";
+    labelWrap.append(titleRow, helper);
     const picker = document.createElement("ha-selector");
     picker.classList.add(`${eventId}-minimum-picker`);
     picker.hass = this._hass;
@@ -11259,7 +11269,8 @@ class SceneStudioPanel extends HTMLElement {
         window.alert(err.message || String(err));
       }
     });
-    row.append(labelWrap, enabled, picker);
+    titleRow.append(label, enabled);
+    row.append(labelWrap, picker);
     parent.appendChild(row);
     return picker;
   }
@@ -18000,34 +18011,32 @@ class SceneStudioPanel extends HTMLElement {
     return readout;
   }
 
+  _replaceSceneUsed(host, strip) {
+    // Responsive layout briefly detaches the readout. A document query cannot
+    // see its existing controls then; reconcile its own children first.
+    const rows = [...(host?.querySelectorAll(":scope > .scene-used") || [])];
+    const previous = rows.shift();
+    rows.forEach(row => row.remove());
+    for (const row of this.shadowRoot?.querySelectorAll(".scene-used") || []) {
+      if (row !== previous && !row.closest(".editor-preview-exit")) row.remove();
+    }
+    if (!host || !strip) previous?.remove();
+    else if (previous) previous.replaceWith(strip);
+    else host.append(strip);
+  }
+
   _syncSceneUsed() {
     if (this._view === "theme") {
       const strip = renderThemePresetSource(this);
       const host = this._hoverReadout || this._toolbarChrome;
-      const previous = this.shadowRoot?.querySelector(".scene-used");
-      if (!host || !strip) {
-        previous?.remove();
-      } else if (previous && previous.parentNode === host) {
-        previous.replaceWith(strip);
-      } else {
-        previous?.remove();
-        host.append(strip);
-      }
+      this._replaceSceneUsed(host, strip);
       this._syncLibraryUsedBy();
       return;
     }
     if (this._view === "palette") {
       const strip = renderPaletteUsed(this);
       const host = this.shadowRoot?.querySelector(".simple-editor");
-      const previous = this.shadowRoot?.querySelector(".scene-used");
-      if (!host || !strip) {
-        previous?.remove();
-      } else if (previous && previous.parentNode === host) {
-        previous.replaceWith(strip);
-      } else {
-        previous?.remove();
-        host.append(strip);
-      }
+      this._replaceSceneUsed(host, strip);
       this._syncLibraryUsedBy();
       return;
     }
@@ -18040,15 +18049,7 @@ class SceneStudioPanel extends HTMLElement {
     const host =
       simple ||
       (this._view === "edit" && this._formData?.kind !== "simple" ? (this._hoverReadout || chrome) : null);
-    const previous = this.shadowRoot?.querySelector(".scene-used");
-    if (!host || !strip) {
-      previous?.remove();
-    } else if (previous && previous.parentNode === host) {
-      previous.replaceWith(strip);
-    } else {
-      previous?.remove();
-      host.append(strip);
-    }
+    this._replaceSceneUsed(host, strip);
     this._syncLibraryUsedBy();
   }
 

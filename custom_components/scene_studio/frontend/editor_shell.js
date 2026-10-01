@@ -122,6 +122,8 @@ export const EDITOR_SHELL_CSS = `
     justify-content: center;
     min-width: 0;
     min-height: 0;
+    box-sizing: border-box;
+    padding-block: 24px;
   }
   .editor-lights {
     position: relative;
@@ -385,14 +387,23 @@ export function editorGeometry(width, height, windowHeight) {
 }
 
 export const EDITOR_CONTAINER_CSS = `
-  .editor-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(var(--editor-preview-floor, 300px), 1fr) auto; }
+  .editor-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
   .editor-background { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
-  .editor-toolbar { grid-column: 1; grid-row: 1; }
+  .editor-toolbar { grid-column: 1; grid-row: 1; isolation: isolate; }
+  .editor-toolbar::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 -24px;
+    z-index: -1;
+    pointer-events: none;
+    opacity: .75;
+    background: linear-gradient(to bottom, var(--app-header-background-color, var(--sidebar-background-color)) 0%, var(--app-header-background-color, var(--sidebar-background-color)) calc(100% - 24px), transparent 100%);
+  }
   .editor-timeline { grid-column: 1; grid-row: 2; min-height: 50px; padding: 0 16px; z-index: 12; }
   .editor-timeline[hidden] { display: none; }
   .editor-preview { grid-column: 1; grid-row: 3; }
   .editor-lights { grid-column: 1; grid-row: 4; }
-  .editor-shell[data-timeline="vertical"] { grid-template-columns: minmax(0, 1fr) 64px; grid-template-rows: auto minmax(var(--editor-preview-floor, 300px), 1fr) auto; }
+  .editor-shell[data-timeline="vertical"] { grid-template-columns: minmax(0, 1fr) 64px; grid-template-rows: auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
   .editor-shell[data-timeline="vertical"] .editor-timeline { grid-column: 2; grid-row: 1 / 4; height: 100%; padding: 12px 12px 12px 0; box-sizing: border-box; }
   .editor-shell[data-timeline="vertical"] .sun-year-scrub { height: 100%; min-height: 0; margin: 0; }
   .editor-shell[data-timeline="vertical"] .editor-preview { grid-row: 2; }
@@ -400,7 +411,15 @@ export const EDITOR_CONTAINER_CSS = `
   .editor-shell[data-overlap="true"] .editor-preview { grid-row: 1 / 4; }
   .editor-shell[data-overlap="true"][data-timeline="vertical"] .editor-preview { grid-row: 1 / 3; }
   :host .editor-shell .sun-path.dial-view .sun-light-clock { padding: 0; }
-  :host .editor-shell .sun-light-clock-face { width: min(100cqi, 100cqb, var(--dial-face-max, 650px)); }
+  :host .editor-shell .sun-light-clock-face { width: min(100cqi, 100cqb, var(--dial-face-max, 900px)); }
+  :host .editor-shell .hue-wheel-face { align-items: center; justify-content: center; }
+  :host .editor-shell .simple-editor .hue-wheel-canvas {
+    width: min(100cqi, 100cqb, var(--dial-face-max, 650px));
+    max-width: min(100%, var(--dial-face-max, 650px));
+  }
+  :host .editor-shell .simple-editor:not(.chrome-aside) .hue-wheel-chrome {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  }
   .editor-toolbar .sun-toolbar-chrome { display: flex; flex-wrap: wrap; width: 100%; justify-content: space-between; }
   .editor-toolbar .sun-date-tools { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; width: auto; margin-left: auto; }
   .editor-toolbar .sun-chip-row { flex-wrap: nowrap; width: auto; }
