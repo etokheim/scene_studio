@@ -82,7 +82,7 @@
       "uses_presets_one": "Brukar 1 forval",
       "uses_scene_presets": "Brukar {count} sceneforval",
       "uses_scene_presets_one": "Brukar 1 sceneforval",
-      "scene_event_edit_hint": "Endringar i lys gjeld berre denne scena og solhendinga. Andre hendingar og delte førehandsinnstillingar vert behaldne."
+      "pick_scene_preset": "Vel sceneforval"
     },
     "kinds": {
       "circadian": "Circadian-scene",
@@ -373,7 +373,7 @@
       "graph_sub": "0–100 % per solhending",
       "onoff_events_hint": "Slå kvar solhending av eller på",
       "overrides": "Overstyringar",
-      "override_brightness": "Lysstyrke {percent} % · døgnrytmeforval {theme} %",
+      "override_brightness": "Lysstyrke",
       "override_color": "Farge",
       "solar_events": "Solhendingar",
       "select_all": "Vel alle",
@@ -401,7 +401,11 @@
       "add_light_title": "Legg til lys",
       "add_light_help": "Legg til eit lys frå eit anna område (eller eit lys som enno ikkje er i desse scenene). Dagens utsjånad blir kopiert inn i alle tildelte native scener.",
       "light": "Lys",
-      "none": "Ingen lys"
+      "none": "Ingen lys",
+      "select_event_first": "Vel eit soltidspunkt før du endrar lys",
+      "reset_overrides": "Tilbakestill overstyringar",
+      "override_state": "Straum",
+      "override_effect": "Effekt"
     },
     "defaults": {
       "circadian_scene": "Circadian"

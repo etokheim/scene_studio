@@ -82,7 +82,7 @@
       "uses_presets_one": "Verwendet 1 Vorlage",
       "uses_scene_presets": "Verwendet {count} Szenenvorlagen",
       "uses_scene_presets_one": "Verwendet 1 Szenenvorlage",
-      "scene_event_edit_hint": "Änderungen an den Lichtern gelten nur für diese Szene und dieses Sonnenereignis. Andere Ereignisse und gemeinsame Vorlagen bleiben erhalten."
+      "pick_scene_preset": "Szenenvorlage auswählen"
     },
     "kinds": {
       "circadian": "Circadian-Szene",
@@ -373,7 +373,7 @@
       "graph_sub": "0–100 % je Sonnenereignis",
       "onoff_events_hint": "Jedes Sonnenereignis ein- oder ausschalten",
       "overrides": "Überschreibungen",
-      "override_brightness": "Helligkeit {percent} % · Circadian-Vorlage {theme} %",
+      "override_brightness": "Helligkeit",
       "override_color": "Farbe",
       "solar_events": "Sonnenereignisse",
       "select_all": "Alle auswählen",
@@ -401,7 +401,11 @@
       "add_light_title": "Licht hinzufügen",
       "add_light_help": "Füge ein Licht aus einem anderen Bereich hinzu (oder ein Licht, das noch nicht in diesen Szenen ist). Das aktuelle Aussehen wird in jede zugewiesene native Szene kopiert.",
       "light": "Licht",
-      "none": "Keine Lichter"
+      "none": "Keine Lichter",
+      "select_event_first": "Wähle ein Sonnenereignis aus, bevor du die Lichter änderst",
+      "reset_overrides": "Überschreibungen zurücksetzen",
+      "override_state": "Ein/Aus",
+      "override_effect": "Effekt"
     },
     "defaults": {
       "circadian_scene": "Circadian"

@@ -82,7 +82,7 @@
       "uses_presets_one": "Usa 1 preajuste",
       "uses_scene_presets": "Usa {count} preajustes de escena",
       "uses_scene_presets_one": "Usa 1 preajuste de escena",
-      "scene_event_edit_hint": "Los cambios en las luces solo afectan a esta escena y evento solar. Los demás eventos y ajustes compartidos se mantienen."
+      "pick_scene_preset": "Elegir preajuste de escena"
     },
     "kinds": {
       "circadian": "Escena circadiana",
@@ -373,7 +373,7 @@
       "graph_sub": "0–100 % por evento solar",
       "onoff_events_hint": "Activa o desactiva cada evento solar",
       "overrides": "Anulaciones",
-      "override_brightness": "Brillo {percent} % · preajuste circadiano {theme} %",
+      "override_brightness": "Brillo",
       "override_color": "Color",
       "solar_events": "Eventos solares",
       "select_all": "Seleccionar todo",
@@ -401,7 +401,11 @@
       "add_light_title": "Añadir luz",
       "add_light_help": "Añade una luz de otra zona (o cualquier luz que aún no esté en estas escenas). Su aspecto actual se copia en cada escena nativa asignada.",
       "light": "Luz",
-      "none": "Sin luces"
+      "none": "Sin luces",
+      "select_event_first": "Selecciona un evento solar antes de cambiar las luces",
+      "reset_overrides": "Restablecer anulaciones",
+      "override_state": "Encendido/apagado",
+      "override_effect": "Efecto"
     },
     "defaults": {
       "circadian_scene": "Circadian"
