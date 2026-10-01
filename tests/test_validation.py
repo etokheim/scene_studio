@@ -101,3 +101,26 @@ def test_unknown_or_boolean_settings_do_not_persist():
         store.async_save.assert_not_awaited()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "adjustment",
+    [
+        {"scale": float("nan"), "ceiling": 255},
+        {"level": True},
+        {"scale": 1},
+        {"level": 256},
+        {"level": 10, "scale": 1},
+    ],
+)
+def test_malformed_event_adjustment_rejected(adjustment):
+    with pytest.raises(ValueError, match="brightness_adjustment"):
+        validate_scene_input(
+            {
+                "kind": "circadian",
+                "scene_name": "A",
+                "event_palettes": {
+                    "dawn": {"palette_id": "p", "brightness_adjustment": adjustment}
+                },
+            }
+        )

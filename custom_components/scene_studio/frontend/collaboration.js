@@ -1,7 +1,7 @@
 /** Field-wise editor reconciliation. Arrays and color/membership are atomic. */
 
 const MISSING = Symbol("missing");
-const ATOMIC = new Set(["color", "membership", "slots", "labels", "include", "exclude"]);
+const ATOMIC = new Set(["color", "membership", "slots", "labels", "include", "exclude", "brightness_adjustment"]);
 
 function equal(left, right) {
   if (left === right) return true;

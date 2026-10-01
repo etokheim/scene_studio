@@ -213,3 +213,28 @@ def test_theme_rebase_merges_independent_event_settings():
         assert updated["events"]["dawn"]["brightness"] == 100
 
     asyncio.run(run())
+
+
+def test_event_brightness_adjustment_is_one_conflict_field():
+    base = {
+        "event_palettes": {
+            "dawn": {"brightness_adjustment": {"scale": 1, "ceiling": 255}}
+        }
+    }
+    local = {
+        "event_palettes": {
+            "dawn": {"brightness_adjustment": {"scale": 0.5, "ceiling": 255}}
+        }
+    }
+    saved = {
+        "event_palettes": {
+            "dawn": {"brightness_adjustment": {"scale": 1, "ceiling": 128}}
+        }
+    }
+    _, conflicts = merge_fields(base, local, saved)
+    assert conflicts == ["event_palettes.dawn.brightness_adjustment"]
+    local = {**base, "overrides": {"light.a": {"dawn": {"brightness": 70}}}}
+    merged, conflicts = merge_fields(base, local, saved)
+    assert not conflicts
+    assert merged["overrides"]["light.a"]["dawn"]["brightness"] == 70
+    assert merged["event_palettes"]["dawn"]["brightness_adjustment"]["ceiling"] == 128

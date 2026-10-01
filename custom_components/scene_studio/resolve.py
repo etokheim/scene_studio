@@ -234,6 +234,18 @@ def build_circadian_event_snapshot(
             }
         else:
             state_dict = {"state": "on", **theme_state}
+        adjustment = event_palette.get("brightness_adjustment")
+        if adjustment:
+            brightness = (
+                adjustment["level"]
+                if "level" in adjustment
+                else min(
+                    adjustment["ceiling"],
+                    state_dict["brightness"] * adjustment["scale"],
+                )
+            )
+            # Match JavaScript's non-negative half-up rounding.
+            state_dict["brightness"] = int(brightness + 0.5)
         color_override = {
             key: value
             for key, value in event_override.items()

@@ -1,4 +1,4 @@
-import { resolveEventDraft, eventOverrideAfterEdit } from "./event_inheritance.js";
+import { resolveEventDraft, eventOverrideAfterEdit, eventBrightnessAdjustment } from "./event_inheritance.js";
 import { editorPath, editorRoute, libraryItemRoute } from "./editor_routes.js";
 import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
@@ -9866,6 +9866,15 @@ class SceneStudioPanel extends HTMLElement {
     return parts.join(", ");
   }
 
+  _inheritedEventBrightness(eventId) {
+    const lights = (this._sunPath?.lights || []).filter(light =>
+      !light.suggested && !light.removed && !light.theme_ring &&
+      !Object.hasOwn(this._formData?.overrides?.[light.entity_id]?.[eventId] || {}, "brightness")
+    );
+    const levels = lights.map(light => Number(this._lightEventStoredState(light, eventId).brightness)).filter(Number.isFinite);
+    return levels.length ? levels.reduce((sum, level) => sum + level, 0) / levels.length : 0;
+  }
+
   _dialEventBrightness(eventId, lightIdArg) {
     const lightId =
       lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
@@ -9898,6 +9907,9 @@ class SceneStudioPanel extends HTMLElement {
           return Number(row.state.brightness);
         }
       }
+    }
+    if (sceneEventPaletteId(this._formData, eventId) && this._themeDraft) {
+      return this._inheritedEventBrightness(eventId);
     }
     if (this._themeDraft) {
       return Number(this._themeEventDraft(eventId).brightness) || 0;
@@ -9969,6 +9981,25 @@ class SceneStudioPanel extends HTMLElement {
     }
     const lightId =
       lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
+    if (!lightId && sceneEventPaletteId(this._formData, eventId)) {
+      if (history) this._commitUndo();
+      const entry = this._formData.event_palettes[eventId];
+      const bases = this._eventBrightnessBases ||= new Map();
+      let base = bases.get(eventId);
+      if (!base || !this._eventBrightnessIsLive()) {
+        base = { adjustment: structuredClone(entry.brightness_adjustment), from: this._inheritedEventBrightness(eventId) };
+        bases.set(eventId, base);
+      }
+      entry.brightness_adjustment = eventBrightnessAdjustment(base.adjustment, base.from, value);
+      this._refreshInheritedLightDrafts?.();
+      if (this._eventBrightnessIsLive()) this._paintLiveEventBrightness();
+      else {
+        this._patchDialFromSession();
+        this._syncThemePreviewSurfaces();
+        this._saveSoon();
+      }
+      return;
+    }
     if (!lightId) {
       if (!this._themeDraft) {
         void this._ensureThemeDraft();
@@ -10092,6 +10123,7 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     this._brightnessScrubbing = true;
+    this._eventBrightnessBases = new Map();
     this._clockLegendEl?.classList.add("bright-scrubbing");
     this._cancelClockBrightMotion();
   }
@@ -10101,6 +10133,7 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     this._brightnessScrubbing = false;
+    this._eventBrightnessBases = null;
     this._clockLegendEl?.classList.remove("bright-scrubbing");
     this._patchDialFromSession({
       applyTheme: this._editingThemeLook() || this._view === "theme",
@@ -10611,7 +10644,7 @@ class SceneStudioPanel extends HTMLElement {
             name: item.name,
             icon: item.icon,
             member: true,
-            brightness: Number(draft?.brightness) || 0,
+            brightness: this._dialEventBrightness(item.id, null),
             rgb: draftRgb(draft),
             draft,
             active: item.id === currentId,
@@ -10641,6 +10674,12 @@ class SceneStudioPanel extends HTMLElement {
           return;
         }
         this._beginBrightnessScrub();
+        if (sceneEventPaletteId(this._formData, sceneId)) {
+          this._writeDialEventBrightness(sceneId, brightness, { lightId: null, history: !undoCommitted });
+          undoCommitted = true;
+          brightnessGraphCtl?.sync();
+          return;
+        }
         draft.brightness = brightness;
         if (brightness > 0) {
           draft.state = "on";

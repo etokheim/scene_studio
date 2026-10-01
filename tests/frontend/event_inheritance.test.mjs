@@ -28,3 +28,21 @@ test("a zero-brightness preset stays at zero instead of becoming 255", () => {
   dark.slots.forEach(slot => { slot.brightness = 0; });
   assert.equal(resolveEventDraft(scene, theme, "dawn", "light.a", [dark]).brightness, 0);
 });
+
+test("relative event brightness matches proportional gestures through saturation and zero", async () => {
+  const { adjustedEventBrightness: apply, eventBrightnessAdjustment: adjust } = await import("../../custom_components/scene_studio/frontend/event_inheritance.js");
+  const first = adjust(null, 150, 225);
+  assert.deepEqual([100, 200].map(value => apply(value, first)), [150, 255]);
+  const second = adjust(first, 202.5, 101.25);
+  assert.deepEqual([100, 200].map(value => apply(value, second)), [75, 128]);
+  assert.equal(apply(0, first), 0);
+  assert.equal(apply(0, adjust(null, 0, 120)), 120);
+  assert.throws(() => adjust(null, NaN, 120));
+});
+
+test("event adjustment scales color-only inheritance and leaves explicit brightness unchanged", () => {
+  const changed = { ...scene, event_palettes: { dawn: { palette_id: "p", brightness_adjustment: { scale: 0.5, ceiling: 255 } } }, overrides: { "light.a": { dawn: { brightness: 80 } }, "light.b": { dawn: { color_mode: "color_temp", color_temp_kelvin: 4000 } } } };
+  assert.equal(resolveEventDraft(changed, theme, "dawn", "light.a", [palette]).brightness, 80);
+  assert.equal(resolveEventDraft(changed, theme, "dawn", "light.b", [palette]).brightness, 50);
+  assert.equal(palette.slots[0].brightness, 100);
+});

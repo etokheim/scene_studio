@@ -76,3 +76,16 @@ test("remote values update mounted editor objects without replacing references",
   assert.equal(light.brightness, 120);
   assert.deepEqual(include, ["light.b"]);
 });
+
+test("event brightness transforms conflict atomically while separate light fields merge", () => {
+  const base = { event_palettes: { dawn: { brightness_adjustment: { scale: 1, ceiling: 255 } } } };
+  const mine = structuredClone(base), saved = structuredClone(base);
+  mine.event_palettes.dawn.brightness_adjustment.scale = 0.5;
+  saved.event_palettes.dawn.brightness_adjustment.ceiling = 128;
+  assert.deepEqual(mergeFields(base, mine, saved).conflicts, ["event_palettes.dawn.brightness_adjustment"]);
+  const separate = { ...base, overrides: { "light.a": { dawn: { brightness: 70 } } } };
+  const result = mergeFields(base, separate, saved);
+  assert.deepEqual(result.conflicts, []);
+  assert.equal(result.value.overrides["light.a"].dawn.brightness, 70);
+  assert.equal(result.value.event_palettes.dawn.brightness_adjustment.ceiling, 128);
+});

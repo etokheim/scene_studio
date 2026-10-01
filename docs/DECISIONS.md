@@ -2,6 +2,12 @@
 
 Durable product and architecture guidance for Scene Studio. Keep current constraints and their reasons; delete superseded decisions when changing course. Git preserves history. Do not reverse an intentional product decision without the user's request.
 
+## Event-local proportional brightness
+
+- **Date:** 2026-10-01
+- **Decision:** An event scene-preset assignment stores its own brightness adjustment; shared presets and explicit per-light brightness fields stay unchanged. A scale and ceiling preserve proportional changes through saturation and subsequent gestures. An all-zero baseline stores a constant level so lights can be turned up. Each gesture uses one fixed starting snapshot. Replacing the event preset drops its adjustment. Revision merging treats the adjustment as one field.
+- **Why:** A single multiplier cannot reproduce lowering lights after some reached 100%; it would restore their original ratio instead of scaling their current levels. Saving full light snapshots would turn inherited color and brightness into unintended overrides.
+
 ## Shared editor regions and retained preview pixels
 
 - **Date:** 2026-09-30

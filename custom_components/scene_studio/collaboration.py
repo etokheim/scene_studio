@@ -8,7 +8,15 @@ from copy import deepcopy
 from typing import Any
 
 _MISSING = object()
-_ATOMIC_FIELDS = {"color", "membership", "slots", "labels", "include", "exclude"}
+_ATOMIC_FIELDS = {
+    "color",
+    "membership",
+    "slots",
+    "labels",
+    "include",
+    "exclude",
+    "brightness_adjustment",
+}
 
 
 class RevisionConflict(Exception):

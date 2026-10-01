@@ -486,3 +486,58 @@ def test_partial_event_overrides_inherit_other_palette_fields(
     else:
         assert snapshot["rgb_color"] == [255, 0, 0]
     assert snapshot["state"] == override.get("state", "on")
+
+
+def test_event_adjustment_scales_only_inherited_brightness():
+    variables = {
+        "p": {
+            "kind": "palette",
+            "slots": [
+                {
+                    "color": {"color_mode": "rgb", "rgb_color": [255, 0, 0]},
+                    "brightness": 100,
+                }
+            ]
+            * 5,
+        }
+    }
+    themes = {
+        "t": {
+            "events": {
+                "dawn": {
+                    "brightness": 20,
+                    "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+                }
+            }
+        }
+    }
+    scene = {
+        "theme_id": "t",
+        "event_palettes": {
+            "dawn": {
+                "palette_id": "p",
+                "brightness_adjustment": {"scale": 0.5, "ceiling": 255},
+            }
+        },
+        "overrides": {
+            "light.a": {"dawn": {"brightness": 80}},
+            "light.b": {
+                "dawn": {"color_mode": "color_temp", "color_temp_kelvin": 4000}
+            },
+        },
+    }
+    result = build_circadian_event_snapshot(
+        scene, "dawn", variables, themes, ["light.a", "light.b", "light.c"]
+    )
+    assert [result[eid]["brightness"] for eid in ("light.a", "light.b", "light.c")] == [
+        80,
+        50,
+        50,
+    ]
+    scene["event_palettes"]["dawn"]["brightness_adjustment"] = {"level": 120}
+    result = build_circadian_event_snapshot(
+        scene, "dawn", variables, themes, ["light.a", "light.b"]
+    )
+    assert result["light.a"]["brightness"] == 80
+    assert result["light.b"]["brightness"] == 120
+    assert variables["p"]["slots"][0]["brightness"] == 100

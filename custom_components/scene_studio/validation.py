@@ -150,6 +150,23 @@ def validate_scene_input(raw: Any) -> None:
             _integer(
                 config["assignment_seed"], f"event_palettes.{event}.assignment_seed"
             )
+        if "brightness_adjustment" in config:
+            adjustment = config["brightness_adjustment"]
+            field = f"event_palettes.{event}.brightness_adjustment"
+            if not isinstance(adjustment, dict):
+                raise ValueError(f"{field} must be an object")
+            if set(adjustment) == {"level"}:
+                _number(adjustment["level"], f"{field}.level", 0, 255)
+            elif set(adjustment) == {"scale", "ceiling"}:
+                _number(
+                    adjustment["scale"],
+                    f"{field}.scale",
+                    0,
+                    float("1.7976931348623157e308"),
+                )
+                _number(adjustment["ceiling"], f"{field}.ceiling", 0, 255)
+            else:
+                raise ValueError(f"{field} requires level or scale and ceiling")
 
 
 def validate_variable_input(raw: Any) -> None:

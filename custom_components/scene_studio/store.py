@@ -214,7 +214,7 @@ def _optional_icon(raw: dict[str, Any]) -> str | None:
 
 
 def _normalize_event_palettes(raw: Any) -> dict[str, dict[str, Any]]:
-    """Keep a palette id and seed for each solar event that has one."""
+    """Keep event-local assignment and brightness without changing its preset."""
     if not isinstance(raw, dict):
         return {}
     result: dict[str, dict[str, Any]] = {}
@@ -229,6 +229,10 @@ def _normalize_event_palettes(raw: Any) -> dict[str, dict[str, Any]]:
             "palette_id": palette_id,
             "assignment_seed": int(entry.get("assignment_seed") or 0),
         }
+        if "brightness_adjustment" in entry:
+            result[event]["brightness_adjustment"] = dict(
+                entry["brightness_adjustment"]
+            )
     return result
 
 

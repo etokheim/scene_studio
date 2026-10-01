@@ -61,3 +61,21 @@ test("assigning an event preset preserves manual overrides even for selected lig
   assert.deepEqual(panel._formData.overrides, overrides);
   assert.deepEqual(panel._formData.event_palettes, { dawn: { palette_id: "new", assignment_seed: 7 }, noon: { palette_id: "other" } });
 });
+
+test("event brightness drag uses a fixed gesture base and does not edit shared theme", () => {
+  const palette = { id: "p", kind: "palette", slots: Array.from({ length: 5 }, () => ({ color: { color_mode: "rgb", rgb_color: [255, 0, 0] }, brightness: 100 })) };
+  const panel = {
+    _formData: { kind: "circadian", event_palettes: { dawn: { palette_id: "p" } } },
+    _themeDraft: { events: { dawn: { brightness: 20, color: { color_mode: "hs", hs_color: [0, 0] } } } },
+    _variables: [palette], _sunPath: { lights: [{ entity_id: "light.a" }] },
+    _dialBrightnessLightId: () => null, _eventBrightnessIsLive: () => true, _paintLiveEventBrightness() {},
+    _lightEventStoredState: function(light, eventId) { return methods._lightEventStoredState.call(this, light, eventId); },
+    _editorLightState: (_id, state) => state,
+    _inheritedEventBrightness: function(eventId) { return methods._inheritedEventBrightness.call(this, eventId); },
+  };
+  methods._writeDialEventBrightness.call(panel, "dawn", 50);
+  methods._writeDialEventBrightness.call(panel, "dawn", 80);
+  assert.deepEqual(panel._formData.event_palettes.dawn.brightness_adjustment, { scale: 0.8, ceiling: 204 });
+  assert.equal(panel._themeDraft.events.dawn.brightness, 20);
+  assert.equal(panel._lightEventStoredState({ entity_id: "light.a" }, "dawn").brightness, 80);
+});

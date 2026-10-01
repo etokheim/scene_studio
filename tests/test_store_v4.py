@@ -565,3 +565,21 @@ def test_failed_save_cannot_roll_back_a_later_scene_update():
         assert store.scenes["a"][SCENE_NAME] == "Latest"
 
     asyncio.run(run())
+
+
+def test_event_adjustment_survives_normalization_and_editor_round_trip():
+    assignment = {
+        "palette_id": "p",
+        "assignment_seed": 3,
+        "brightness_adjustment": {"scale": 0.75, "ceiling": 127.5},
+    }
+    item = normalize_circadian_scene(
+        {
+            SCENE_NAME: "A",
+            "event_palettes": {"dawn": assignment},
+            "overrides": {"light.a": {"dawn": {"brightness": 32}}},
+        }
+    )
+    assert item["event_palettes"]["dawn"] == assignment
+    assert to_form_data(item)["event_palettes"]["dawn"] == assignment
+    assert item["overrides"]["light.a"]["dawn"] == {"brightness": 32}

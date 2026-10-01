@@ -23,6 +23,7 @@ export function resolveEventDraft(scene, theme, eventId, entityId, variables) {
   const source = assignment?.palette_id ? { variable_ref: assignment.palette_id } : event.color || {};
   const inheritedColor = resolveColor(source, entityId, assignment?.assignment_seed ?? event.assignment_seed ?? 0, variables);
   const inherited = { state: "on", ...inheritedColor, brightness: inheritedColor.brightness ?? event.brightness };
+  inherited.brightness = adjustedEventBrightness(inherited.brightness, assignment?.brightness_adjustment);
   const override = scene?.overrides?.[entityId]?.[eventId] || {};
   const color = colorValue(override);
   if (Object.keys(color).length) {
@@ -49,4 +50,20 @@ export function eventOverrideAfterEdit(stored, before, after) {
     Object.assign(result, structuredClone(colorValue(after)));
   }
   return result;
+}
+
+/** A capped scale also preserves saturation across successive gestures. */
+export function adjustedEventBrightness(brightness, adjustment) {
+  if (!adjustment) return brightness;
+  if (adjustment.level != null) return Math.round(adjustment.level);
+  return Math.round(Math.min(adjustment.ceiling, brightness * adjustment.scale));
+}
+
+export function eventBrightnessAdjustment(previous, from, to) {
+  if (![from, to].every(Number.isFinite) || from < 0 || to < 0 || to > 255) throw new Error("Invalid event brightness gesture");
+  if (from === 0 || previous?.level != null) return { level: to };
+  const ratio = to / from;
+  const scale = (previous?.scale ?? 1) * ratio;
+  if (!Number.isFinite(scale)) throw new Error("Event brightness scale overflow");
+  return { scale, ceiling: Math.min(255, (previous?.ceiling ?? 255) * ratio) };
 }
