@@ -9,24 +9,17 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from astral import LocationInfo
-from homeassistant.components.scene import DOMAIN as SCENE_DOMAIN
 from homeassistant.components.scene import Scene
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_ENTITY_ID,
-    EVENT_CALL_SERVICE,
-    SERVICE_TURN_ON,
-    STATE_OFF,
-    STATE_UNAVAILABLE,
-    STATE_UNKNOWN,
 )
-from homeassistant.core import Context, Event, HomeAssistant, callback
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
-    async_track_state_change_event,
     async_track_time_interval,
 )
 from homeassistant.util import dt as dt_util
@@ -48,11 +41,6 @@ from .const import (
 )
 from .continuous import (
     automatically_update_lights_interval_seconds,
-    classify_light_report,
-    competing_scene_activated,
-    context_is_ours,
-    entity_ids_from_service_event,
-    last_activated_scene_id,
     should_arm_automatically_update_lights,
     snapshot_from_command,
     snapshot_from_state,
@@ -65,8 +53,8 @@ from .extrapolation_math import (
     scene_keys_from_day_percent,
     transition_progress_percent,
 )
-from .native_scene import scenes_in_area
 from .palette import scene_palette_image_attributes
+from .runtime import scene_runtime
 from .snapshots import (
     circadian_anchor,
     modes_map,
@@ -216,10 +204,7 @@ class CircadianScene(Scene):
         self._activating_automatically_update_lights = False
         self._only_entity_ids: set[str] | None = None
         self._automatically_update_lights_generation = 0
-        self._internal_scene_call = False
         self._unsub_automatically_update_lights = None
-        self._unsub_call_service = None
-        self._unsub_light_listener = None
         self._last_attr_state_key = None
 
         # Used for calculating solar events when activating the scene
@@ -248,18 +233,13 @@ class CircadianScene(Scene):
         self._unsub_interval = async_track_time_interval(
             self.hass, self._async_refresh_transition_percent, timedelta(minutes=1)
         )
-        self._unsub_call_service = self.hass.bus.async_listen(
-            EVENT_CALL_SERVICE, self._on_call_service
-        )
 
     async def async_will_remove_from_hass(self) -> None:
         """Stop timers and listeners when the entity is removed."""
         if self._unsub_interval:
             self._unsub_interval()
             self._unsub_interval = None
-        if self._unsub_call_service:
-            self._unsub_call_service()
-            self._unsub_call_service = None
+        scene_runtime(self.hass).release(self)
         self._stop_automatically_update_lights(write_state=False)
         await super().async_will_remove_from_hass()
 
@@ -277,6 +257,7 @@ class CircadianScene(Scene):
             self._brightness_modifier,
             self._automatically_update_lights_enabled(),
             self._automatically_update_lights_armed,
+            scene_runtime(self.hass).active(self),
             tuple(sorted(self._overridden)),
             tuple(sorted(self._interrupted)),
             self._attr_icon,
@@ -293,6 +274,10 @@ class CircadianScene(Scene):
 
     async def async_update_config(self, scene_config: dict) -> None:
         """Apply an updated store item."""
+        if self._area_id != scene_config.get(AREA) or not scene_area_exists(
+            self.hass, scene_config
+        ):
+            scene_runtime(self.hass).release(self)
         self._scene_config = scene_config
         self._attr_name = scene_config.get(SCENE_NAME) or self._attr_name
         self._area_id = scene_config.get(AREA)
@@ -350,6 +335,7 @@ class CircadianScene(Scene):
             "transition_percent": round(self._current_day_transition_percent(), 1),
             "transition_percent_manual": self._transition_percent_manual,
             "integration": self._attr_integration,
+            "active": scene_runtime(self.hass).active(self),
             "automatically_update_lights": self._automatically_update_lights_enabled(),
             "automatically_update_lights_active": self._automatically_update_lights_armed,
             "overridden_lights": sorted(self._overridden),
@@ -372,24 +358,24 @@ class CircadianScene(Scene):
             self._unsub_automatically_update_lights()
             self._unsub_automatically_update_lights = None
 
-    def _unsub_light_tracking(self) -> None:
-        if self._unsub_light_listener:
-            self._unsub_light_listener()
-            self._unsub_light_listener = None
-
     def _stop_automatically_update_lights(self, *, write_state: bool = True) -> None:
-        """Stop automatic light update ticks and forget override/command snapshots."""
+        """Pause timers without dropping ownership or retained manual changes."""
         self._cancel_automatically_update_lights()
-        self._unsub_light_tracking()
         self._automatically_update_lights_armed = False
-        self._overridden.clear()
-        self._interrupted.clear()
-        self._commanded = {}
-        self._pre_apply = {}
-        self._apply_context = None
-        self._only_entity_ids = None
         if write_state and self.hass and self.entity_id:
             self._write_ha_state_if_attrs_changed()
+
+    def async_runtime_changed(self, owner, respected) -> None:
+        """Mirror shared runtime attributes, including for paused scenes."""
+        self._overridden = set(respected)
+        self._interrupted = owner.interrupted
+        self._commanded = owner.commands
+        self._pre_apply = owner.before
+        self._apply_context = owner.context
+        self._apply_until = owner.until
+        if not scene_runtime(self.hass).active(self):
+            self._stop_automatically_update_lights(write_state=False)
+        self._write_ha_state_if_attrs_changed()
 
     def async_on_automatically_update_lights_settings_changed(self) -> None:
         """Re-arm or stop automatic light update when the global interval setting changes."""
@@ -423,12 +409,12 @@ class CircadianScene(Scene):
         self._unsub_automatically_update_lights = async_call_later(
             self.hass, interval, _fire
         )
-        self._sync_light_listener()
         self._write_ha_state_if_attrs_changed()
 
     async def _async_automatically_update_lights(self) -> None:
-        """Re-apply the scene if it is still the last one activated in the area."""
+        """Re-apply only the lights still owned by this Scene Studio scene."""
         if not scene_area_exists(self.hass, self._scene_config):
+            scene_runtime(self.hass).release(self)
             self._stop_automatically_update_lights()
             return
         interval = automatically_update_lights_interval_seconds(self.hass)
@@ -440,9 +426,9 @@ class CircadianScene(Scene):
         ):
             self._stop_automatically_update_lights()
             return
-        if not self._is_last_activated_in_area():
+        if not self._has_active_ownership():
             _LOGGER.debug(
-                "%s is no longer the last activated scene in its area; stopping continuous",
+                "%s no longer owns any lights; stopping automatic updates",
                 self.entity_id,
             )
             self._stop_automatically_update_lights()
@@ -451,163 +437,52 @@ class CircadianScene(Scene):
         self._activating_automatically_update_lights = True
         await self.async_activate(transition=interval)
 
-    def _is_last_activated_in_area(self) -> bool:
-        """True when no other scene in this area has a newer last-activated time."""
-        area_id = self._area_id
-        if not area_id:
-            return True
-        scene_ids = scenes_in_area(self.hass, area_id)
-        states = {
-            entity_id: (
-                state.state if (state := self.hass.states.get(entity_id)) else None
-            )
-            for entity_id in scene_ids
-        }
-        if self.entity_id not in states:
-            own = self.hass.states.get(self.entity_id)
-            states[self.entity_id] = own.state if own else None
-        latest = last_activated_scene_id(states)
-        return latest is None or latest == self.entity_id
+    def _has_active_ownership(self) -> bool:
+        """Only Scene Studio activations transfer ownership."""
+        return scene_runtime(self.hass).active(self)
 
     def _collect_new_overrides(self) -> None:
-        """Mark lights that jumped off the commanded path after the transition."""
-        mid = time.time() < self._apply_until
-        for entity_id, commanded in self._commanded.items():
-            if entity_id in self._overridden:
-                continue
-            actual = snapshot_from_state(self.hass.states.get(entity_id))
-            kind = classify_light_report(
-                actual=actual,
-                commanded=commanded,
-                pre=self._pre_apply.get(entity_id),
-                user_id=None,
-                from_our_context=False,
-                mid_transition=mid,
-                previous_was_down=False,
-                was_interrupted=entity_id in self._interrupted,
-            )
-            if kind == "interrupt":
-                self._interrupted.add(entity_id)
-            elif kind == "override":
-                _LOGGER.debug(
-                    "%s: %s looks manually overridden; skipping on automatic light update",
-                    self.entity_id,
-                    entity_id,
-                )
-                self._interrupted.discard(entity_id)
-                self._overridden.add(entity_id)
-            elif kind in ("sync", "drift", "recover"):
-                self._interrupted.discard(entity_id)
+        scene_runtime(self.hass).collect(self)
 
-    def _sync_light_listener(self) -> None:
-        self._unsub_light_tracking()
-        watch = set(self._commanded) | self._interrupted
-        if not self._automatically_update_lights_armed or not watch:
-            return
-        self._unsub_light_listener = async_track_state_change_event(
-            self.hass, list(watch), self._on_light_state_changed
-        )
-
-    @callback
-    def _on_light_state_changed(self, event: Event) -> None:
-        """Track overrides, power interrupts, and restore reclaim."""
+    async def async_recover_owned_light(self, entity_id: str) -> None:
+        """Recover only a currently owned light while automatic updates run."""
         if not self._automatically_update_lights_armed:
             return
-        entity_id = event.data.get("entity_id")
-        if not entity_id or entity_id in self._overridden:
-            return
-        commanded = self._commanded.get(entity_id)
-        if commanded is None:
-            return
-        old_state = event.data.get("old_state")
-        new_state = event.data.get("new_state")
-        actual = snapshot_from_state(new_state)
-        previous_was_down = old_state is None or old_state.state in (
-            STATE_UNAVAILABLE,
-            STATE_UNKNOWN,
-            STATE_OFF,
-        )
-        ctx = event.context
-        kind = classify_light_report(
-            actual=actual,
-            commanded=commanded,
-            pre=self._pre_apply.get(entity_id),
-            user_id=getattr(ctx, "user_id", None),
-            from_our_context=context_is_ours(ctx, self._apply_context),
-            mid_transition=time.time() < self._apply_until,
-            previous_was_down=previous_was_down,
-            was_interrupted=entity_id in self._interrupted,
-        )
-        if kind == "interrupt":
-            if entity_id not in self._interrupted:
-                _LOGGER.debug(
-                    "%s: %s interrupted (power loss / off); will reclaim on restore",
-                    self.entity_id,
-                    entity_id,
-                )
-                self._interrupted.add(entity_id)
-                self._write_ha_state_if_attrs_changed()
-            return
-        if kind == "recover":
-            _LOGGER.debug(
-                "%s: %s restored after interrupt; re-applying circadian target",
-                self.entity_id,
-                entity_id,
-            )
-            self._interrupted.discard(entity_id)
-            self._write_ha_state_if_attrs_changed()
-            self.hass.async_create_task(self._async_reapply_one_light(entity_id))
-            return
-        if kind != "override":
-            return
-        _LOGGER.debug(
-            "%s: %s marked as manually overridden",
-            self.entity_id,
-            entity_id,
-        )
-        self._interrupted.discard(entity_id)
-        self._overridden.add(entity_id)
-        self._write_ha_state_if_attrs_changed()
-
-    async def _async_reapply_one_light(self, entity_id: str) -> None:
-        """Re-apply the current circadian target to one restored light."""
-        if not self._automatically_update_lights_armed or entity_id in self._overridden:
-            return
-        if not self._is_last_activated_in_area():
+        if entity_id not in scene_runtime(self.hass).eligible_lights(self):
             return
         self._only_entity_ids = {entity_id}
         self._activating_automatically_update_lights = True
         try:
-            # Short transition — reclaim without a full-interval fade.
             await self.async_activate(transition=1)
         finally:
             self._only_entity_ids = None
 
-    @callback
-    def _on_call_service(self, event: Event) -> None:
-        """Stop automatic light update as soon as another scene in the area is turned on."""
-        if not self._automatically_update_lights_armed or self._internal_scene_call:
-            return
-        data = event.data or {}
-        domain = data.get("domain")
-        if data.get("service") != SERVICE_TURN_ON:
-            return
-        if domain not in (SCENE_DOMAIN, DOMAIN):
-            return
-        activated = entity_ids_from_service_event(data)
-        area_ids = (
-            set(scenes_in_area(self.hass, self._area_id)) if self._area_id else None
-        )
-        if not competing_scene_activated(activated, self.entity_id, area_ids):
-            return
-        _LOGGER.debug(
-            "%s: another scene in the area was activated (%s); stopping continuous",
-            self.entity_id,
-            activated,
-        )
-        self._stop_automatically_update_lights()
+    async def async_activate(self, **kwargs):
+        """Keep automatic and explicit commands ordered through handler completion."""
+        if not scene_area_exists(self.hass, self._scene_config):
+            raise HomeAssistantError("Scene Studio area has been deleted")
+        automatic = self._activating_automatically_update_lights
+        self._activating_automatically_update_lights = False
+        only_ids = self._only_entity_ids
+        generation = self._automatically_update_lights_generation
+        runtime = scene_runtime(self.hass)
+        async with runtime.command_lock:
+            if automatic and (
+                generation != self._automatically_update_lights_generation
+                or not runtime.active(self)
+            ):
+                return
+            try:
+                await self._async_apply_scene(
+                    _automatic=automatic, _only_ids=only_ids, **kwargs
+                )
+            finally:
+                runtime.pending_context = None
+                owner = runtime.owners.get(self.unique_id)
+                if owner is not None:
+                    self.async_runtime_changed(owner, runtime.respected(owner))
 
-    async def async_activate(
+    async def _async_apply_scene(
         self,
         transition=0,
         brightness_modifier=0,
@@ -615,6 +490,8 @@ class CircadianScene(Scene):
         target_date_time=None,
         location=None,
         context: Context | None = None,
+        _automatic: bool = False,
+        _only_ids: set[str] | None = None,
     ):
         """Activate the scene.
 
@@ -629,20 +506,11 @@ class CircadianScene(Scene):
         """
         if not scene_area_exists(self.hass, self._scene_config):
             raise HomeAssistantError("Scene Studio area has been deleted")
-        is_auto_update_tick = self._activating_automatically_update_lights
-        self._activating_automatically_update_lights = False
-        only_ids = self._only_entity_ids
+        is_auto_update_tick = _automatic
+        only_ids = _only_ids
         if not is_auto_update_tick:
-            self._overridden.clear()
-            self._interrupted.clear()
             self._cancel_automatically_update_lights()
-            self._unsub_light_tracking()
             self._automatically_update_lights_armed = False
-            # scene.turn_on already records via Scene._async_activate; this
-            # covers scene_studio.turn_on. Auto-update ticks must not
-            # record or we would steal "last activated" from another scene.
-            if hasattr(self, "_async_record_activation"):
-                self._async_record_activation()
         generation = self._automatically_update_lights_generation
 
         # Store the brightness modifier and optional manual day percent
@@ -880,8 +748,15 @@ class CircadianScene(Scene):
             scene_transition_progress_percent,
             self.hass,
             brightness_modifier,
-            skip_entity_ids=self._overridden | self._interrupted,
+            skip_entity_ids=(
+                (self._overridden | self._interrupted) if is_auto_update_tick else set()
+            ),
         )
+        if is_auto_update_tick:
+            eligible = scene_runtime(self.hass).eligible_lights(self)
+            entity_changes = [
+                item for item in entity_changes if item.get(ATTR_ENTITY_ID) in eligible
+            ]
         if only_ids is not None:
             entity_changes = [
                 item for item in entity_changes if item.get(ATTR_ENTITY_ID) in only_ids
@@ -892,6 +767,9 @@ class CircadianScene(Scene):
             if str(item.get(ATTR_ENTITY_ID, "")).startswith("light.")
         ]
         if is_auto_update_tick:
+            # Stage new snapshots locally; a failed handler must retain the previous runtime targets.
+            self._pre_apply = dict(self._pre_apply)
+            self._commanded = dict(self._commanded)
             # Keep snapshots for interrupted/overridden lamps we are not touching.
             for item in light_changes:
                 eid = item[ATTR_ENTITY_ID]
@@ -910,11 +788,12 @@ class CircadianScene(Scene):
             }
         if is_auto_update_tick and (
             generation != self._automatically_update_lights_generation
-            or not self._is_last_activated_in_area()
+            or not self._has_active_ownership()
         ):
             return
         self._apply_context = context or self._context or Context()
         self._apply_until = time.time() + float(apply_transition or 0)
+        scene_runtime(self.hass).pending_context = self._apply_context
         if entity_changes:
             await apply_entities_parallel(
                 entity_changes,
@@ -922,9 +801,37 @@ class CircadianScene(Scene):
                 apply_transition,
                 context=self._apply_context,
                 skip_noop=is_auto_update_tick,
+                can_apply=(
+                    (
+                        lambda eid: generation
+                        == self._automatically_update_lights_generation
+                        and eid in scene_runtime(self.hass).eligible_lights(self)
+                    )
+                    if is_auto_update_tick
+                    else None
+                ),
             )
-        if will_follow:
-            self._sync_light_listener()
+        if generation != self._automatically_update_lights_generation:
+            return
+        runtime = scene_runtime(self.hass)
+        if is_auto_update_tick:
+            runtime.record_commands(
+                self,
+                light_changes,
+                self._pre_apply,
+                self._apply_context,
+                apply_transition,
+            )
+        else:
+            runtime.claim(
+                self,
+                light_changes,
+                self._pre_apply,
+                self._apply_context,
+                apply_transition,
+            )
+            if hasattr(self, "_async_record_activation"):
+                self._async_record_activation()
 
         if generation != self._automatically_update_lights_generation:
             return
@@ -1075,7 +982,11 @@ class SimpleScene(Scene):
     @property
     def extra_state_attributes(self):
         """Return state attributes."""
-        attrs = {"kind": KIND_SIMPLE, "integration": self._attr_integration}
+        attrs = {
+            "kind": KIND_SIMPLE,
+            "integration": self._attr_integration,
+            "active": scene_runtime(self.hass).active(self),
+        }
         attrs.update(_palette_image_attributes(self.hass, self._scene_config))
         return attrs
 
@@ -1086,6 +997,10 @@ class SimpleScene(Scene):
 
     async def async_update_config(self, scene_config: dict) -> None:
         """Apply an updated store item."""
+        if self._area_id != scene_config.get(AREA) or not scene_area_exists(
+            self.hass, scene_config
+        ):
+            scene_runtime(self.hass).release(self)
         self._scene_config = scene_config
         self._attr_name = scene_config.get(SCENE_NAME) or self._attr_name
         self._area_id = scene_config.get(AREA)
@@ -1112,7 +1027,27 @@ class SimpleScene(Scene):
         updates["categories"] = categories
         entity_reg.async_update_entity(self.entity_id, **updates)
 
-    async def async_activate(
+    def async_runtime_changed(self, _owner, _respected) -> None:
+        """Ordinary scenes also expose current ownership while no timer runs."""
+        self.async_write_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Release ordinary-scene ownership on unload/removal."""
+        scene_runtime(self.hass).release(self)
+        await super().async_will_remove_from_hass()
+
+    async def async_activate(self, **kwargs):
+        """Serialize explicit activation with circadian update handlers."""
+        if not scene_area_exists(self.hass, self._scene_config):
+            raise HomeAssistantError("Scene Studio area has been deleted")
+        runtime = scene_runtime(self.hass)
+        async with runtime.command_lock:
+            try:
+                await self._async_apply_scene(**kwargs)
+            finally:
+                runtime.pending_context = None
+
+    async def _async_apply_scene(
         self, transition=0, context: Context | None = None, **kwargs
     ):
         """Apply the resolved fixed snapshot."""
@@ -1124,12 +1059,19 @@ class SimpleScene(Scene):
         for entity_id, state in (anchor.get("entities") or {}).items():
             item = {ATTR_ENTITY_ID: entity_id, **state}
             entity_changes.append(item)
+        apply_context = context or self._context or Context()
+        runtime = scene_runtime(self.hass)
+        runtime.pending_context = apply_context
+        before = {
+            item[ATTR_ENTITY_ID]: snapshot_from_state(
+                self.hass.states.get(item[ATTR_ENTITY_ID])
+            )
+            for item in entity_changes
+        }
         if entity_changes:
             await apply_entities_parallel(
-                entity_changes,
-                self.hass,
-                transition,
-                context=context or self._context,
+                entity_changes, self.hass, transition, context=apply_context
             )
+        runtime.claim(self, entity_changes, before, apply_context, transition)
         if hasattr(self, "_async_record_activation"):
             self._async_record_activation()

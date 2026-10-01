@@ -852,3 +852,19 @@ Each switch disables its limit without erasing that time. Activation, state
 attributes, backend previews, and client date scrubbing apply the same wall-clock
 limits. Real solar positions remain available for sky marks. Next-day dusk keeps
 its existing midnight-wrap semantics and solar event order is unchanged.
+
+### Scene Studio runtime ownership
+
+Ordinary and circadian scenes share an instance-local owner registry independent
+of automatic-update timers. A successful activation replaces owners in its area
+and transfers overlapping lights from other areas; foreign Home Assistant scene
+activations do not transfer Scene Studio ownership. Respected manual changes can
+make a scene inactive while its retained records remain available for policy
+reevaluation. Unavailability is an interruption, not an override.
+
+Scene command handlers run under one runtime lock through HA service-handler
+completion, preserving the caller's transition duration. Queued automatic updates
+recheck generation and ownership after acquiring the lock. A failed activation
+never commits new ownership. Ownership is intentionally not restored after HA
+restart; activation is required before automatic commands resume. Removing an
+area or unloading the integration releases owners and the shared light listener.

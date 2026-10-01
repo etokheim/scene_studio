@@ -307,6 +307,9 @@ def classify_light_report(
             return "interrupt"
         return "ignore"
 
+    if from_our_context:
+        return "sync" if states_match(actual, commanded) else "drift"
+
     if user_id:
         if states_match(actual, commanded):
             return "sync"

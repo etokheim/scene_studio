@@ -69,6 +69,7 @@ async def apply_entities_parallel(
     context=None,
     *,
     skip_noop: bool = False,
+    can_apply=None,
 ):
     """Apply multiple entity states in parallel for better performance.
 
@@ -96,6 +97,7 @@ async def apply_entities_parallel(
                 transition_time,
                 context=context,
                 skip_noop=skip_noop,
+                can_apply=can_apply,
             )
         )
         tasks.append(task)
@@ -130,6 +132,7 @@ async def apply_single_entity(
     context=None,
     *,
     skip_noop: bool = False,
+    can_apply=None,
 ):
     """Apply a single entity state."""
     domain = entity[ATTR_ENTITY_ID].split(".")[0]
@@ -204,6 +207,8 @@ async def apply_single_entity(
     # entities. Keep debug logs useful without copying that payload.
     _LOGGER.debug("Applying %s.%s to %s", domain, service_type, entity[ATTR_ENTITY_ID])
 
+    if can_apply is not None and not can_apply(entity[ATTR_ENTITY_ID]):
+        return False
     try:
         await hass.services.async_call(
             domain=domain,

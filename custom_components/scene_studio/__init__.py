@@ -28,6 +28,7 @@ from .const import (
 )
 from .migrate_native import async_freeze_migrate, needs_native_freeze
 from .panel import async_setup_panel, async_unload_panel
+from .runtime import DATA_RUNTIME, unload_runtime
 from .store import SceneStudioStore
 from .websocket_api import async_setup_websocket
 
@@ -220,6 +221,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         async def _remember_areas(_event: Event | None = None) -> None:
             names = {area.id: area.name for area in ar.async_get(hass).areas.values()}
             await store.async_remember_area_names(names)
+            if runtime := domain_data.get(DATA_RUNTIME):
+                runtime.areas_changed(set(names))
 
         await _remember_areas()
         if domain_data["area_unsub"] is None:
@@ -320,6 +323,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         for task in domain_data["area_tasks"]:
             task.cancel()
         unload_activation_cache(hass)
+        unload_runtime(hass)
         hass.data.pop(DOMAIN, None)
         raise
 
@@ -357,5 +361,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for task in domain_data["area_tasks"]:
             task.cancel()
         unload_activation_cache(hass)
+        unload_runtime(hass)
         hass.data.pop(DOMAIN, None)
     return unload_ok
