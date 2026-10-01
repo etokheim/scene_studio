@@ -62,3 +62,17 @@ turn_on:
           required: false
           selector:
             location:
+
+set_automatic_updates:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          domain: scene
+          integration: scene_studio
+          multiple: true
+    enabled:
+      required: true
+      selector:
+        boolean:

@@ -7,7 +7,7 @@
 
 Daylight that follows the sun between your chosen looks. The integration builds a Home Assistant scene that blends your day and evening looks from the sun’s cycle — cool by day, warm toward dusk — so activating it lights the room the way you want for *now*.
 
-**Built-in automatic light updates** (on by default) re-apply each circadian scene on an interval with a matching transition, so the room fades through the day without a separate automation. Pause per room from the sidebar list, or set the global interval to 0 to turn updates off.
+**Built-in automatic light updates** (on by default) re-apply each circadian scene on an interval with a matching transition, so the room fades through the day without a separate automation. Pause all updates with the **Scene Studio automatic updates** switch or the matching setting. Pause individual circadian scenes with `scene_studio.set_automatic_updates`; activating a paused scene applies its look once. The interval remains separate from these preferences.
 
 **Support the project:** [buymeacoffee.com/etokheim](https://buymeacoffee.com/etokheim)
 

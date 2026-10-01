@@ -223,8 +223,12 @@ class CircadianScene(Scene):
         return value
 
     def _automatically_update_lights_enabled(self) -> bool:
-        """Always on per scene — master switch is the global interval (0 = off)."""
-        return True
+        """Persistent scene preference combined with the global HA switch."""
+        settings = self.hass.data[DOMAIN][DATA_STORE].settings
+        return bool(
+            self._cfg("automatically_update_lights", True)
+            and settings.get("automatic_updates_enabled", True)
+        )
 
     async def async_added_to_hass(self) -> None:
         """Assign the configured area once the entity is registered."""
@@ -256,6 +260,7 @@ class CircadianScene(Scene):
             self._transition_percent_manual,
             self._brightness_modifier,
             self._automatically_update_lights_enabled(),
+            self._cfg("automatically_update_lights", True),
             self._automatically_update_lights_armed,
             scene_runtime(self.hass).active(self),
             tuple(sorted(self._overridden)),
@@ -272,8 +277,11 @@ class CircadianScene(Scene):
         self._last_attr_state_key = key
         self.async_write_ha_state()
 
-    async def async_update_config(self, scene_config: dict) -> None:
+    async def async_update_config(
+        self, scene_config: dict, *, _resume: bool = True
+    ) -> None:
         """Apply an updated store item."""
+        previous_preference = self._cfg("automatically_update_lights", True)
         if self._area_id != scene_config.get(AREA) or not scene_area_exists(
             self.hass, scene_config
         ):
@@ -283,7 +291,12 @@ class CircadianScene(Scene):
         self._area_id = scene_config.get(AREA)
         self._attr_icon = _configured_icon(scene_config, "mdi:auto-fix")
         await self._async_sync_registry()
-        # Global interval 0 (or disabled) stops a running loop.
+        if _resume and previous_preference != self._cfg(
+            "automatically_update_lights", True
+        ):
+            await self.async_preferences_changed()
+            return
+        # Disabled preferences stop a running loop without releasing ownership.
         if (
             not self._automatically_update_lights_enabled()
             and self._automatically_update_lights_armed
@@ -336,7 +349,12 @@ class CircadianScene(Scene):
             "transition_percent_manual": self._transition_percent_manual,
             "integration": self._attr_integration,
             "active": scene_runtime(self.hass).active(self),
-            "automatically_update_lights": self._automatically_update_lights_enabled(),
+            "automatically_update_lights": self._cfg(
+                "automatically_update_lights", True
+            ),
+            "automatic_updates_paused": not self._cfg(
+                "automatically_update_lights", True
+            ),
             "automatically_update_lights_active": self._automatically_update_lights_armed,
             "overridden_lights": sorted(self._overridden),
             "interrupted_lights": sorted(self._interrupted),
@@ -377,20 +395,29 @@ class CircadianScene(Scene):
             self._stop_automatically_update_lights(write_state=False)
         self._write_ha_state_if_attrs_changed()
 
-    def async_on_automatically_update_lights_settings_changed(self) -> None:
-        """Re-arm or stop automatic light update when the global interval setting changes."""
-        if not self._automatically_update_lights_armed:
-            return
+    async def async_preferences_changed(self, context: Context | None = None) -> None:
+        """Pause immediately or resume a current owner toward its current target."""
+        self._stop_automatically_update_lights(write_state=False)
         interval = automatically_update_lights_interval_seconds(self.hass)
-        if not should_arm_automatically_update_lights(
+        eligible = should_arm_automatically_update_lights(
             interval,
             enabled=self._automatically_update_lights_enabled(),
             brightness_modifier=self._brightness_modifier,
             transition_percent_manual=self._transition_percent_manual,
-        ):
-            self._stop_automatically_update_lights()
+        ) and scene_runtime(self.hass).active(self)
+        self._write_ha_state_if_attrs_changed()
+        if not eligible:
             return
-        self._schedule_automatically_update_lights(interval)
+        self._activating_automatically_update_lights = True
+        try:
+            await self.async_activate(transition=interval, context=context)
+        finally:
+            # The preference remains durable if a bridge fails. Preserve the
+            # next tick while the initiating action still receives the error.
+            if self._automatically_update_lights_enabled() and scene_runtime(
+                self.hass
+            ).active(self):
+                self._schedule_automatically_update_lights(interval)
 
     def _schedule_automatically_update_lights(self, interval: int) -> None:
         """Arm a automatic light update tick `interval` seconds from now."""
@@ -435,7 +462,18 @@ class CircadianScene(Scene):
             return
         self._collect_new_overrides()
         self._activating_automatically_update_lights = True
-        await self.async_activate(transition=interval)
+        generation = self._automatically_update_lights_generation
+        try:
+            await self.async_activate(transition=interval)
+        finally:
+            # Propagate handler failures while retaining the next eligible tick.
+            if (
+                generation == self._automatically_update_lights_generation
+                and self._unsub_automatically_update_lights is None
+                and self._automatically_update_lights_enabled()
+                and self._has_active_ownership()
+            ):
+                self._schedule_automatically_update_lights(interval)
 
     def _has_active_ownership(self) -> bool:
         """Only Scene Studio activations transfer ownership."""

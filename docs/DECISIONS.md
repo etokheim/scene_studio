@@ -515,7 +515,7 @@ Durable product and architecture guidance for Scene Studio. Keep current constra
 ## Continuous follow-up is built into the integration
 
 - **Date:** 2026-09-01
-- **Decision:** Circadian scenes reapply at the global `automatically_update_lights_interval` (default 300s; 0 disables updates). Ticks use that interval as transition and target now + transition; first activation keeps the caller's transition and waits one interval. Stop when another area scene is last activated or modifiers are set. Skip manual overrides; treat drift/unresponsive lights within tolerance or still moving toward the command as retryable. Non-user off/unavailable interrupts leave the light dark; on return, reapply its target once. Available off-path jumps and HA UI user changes remain overrides. Do not stop just because all lights are off, and do not implement this as a blueprint. Public keys are `automatically_update_lights` with `_active`/`_interval`, not continuous/follow_up. Per-scene play/stop and enable flags are obsolete; the global preference controls updates.
+- **Decision:** Circadian scenes reapply at the positive global `automatically_update_lights_interval` (default 300s), controlled by a separate global switch and persistent per-scene pause preferences. Legacy interval 0 migrates to global updates disabled with the default positive interval. Ticks use that interval as transition and target now + transition; first activation keeps the caller's transition and waits one interval. Scene Studio runtime ownership replaces timestamp comparisons against native scenes. Respected manual changes skip that light; unavailable/unknown reports wait for recovery. An available off state is a manual switch-off. The global Respect manual changes policy and mutually exclusive Always follow / Always respect light exceptions reevaluate retained records immediately. Paused scenes retain ownership; restart retains preferences but requires activation. Do not implement this as a blueprint.
 - **Why:** The user’s continuously-activate blueprint was a roundabout loop and blocked override/drift features. Built-in automatic updates match the product and keep override state on the scene entity. Power-cut restore must reclaim the lamp; a reading-light dim must not. “Update lights” names what changes; “update scene” would sound like editing the scene definition.
 - **Do not reverse without user ask.**
 
@@ -868,3 +868,14 @@ recheck generation and ownership after acquiring the lock. A failed activation
 never commits new ownership. Ownership is intentionally not restored after HA
 restart; activation is required before automatic commands resume. Removing an
 area or unloading the integration releases owners and the shared light listener.
+
+### Durable automatic-update controls
+
+The global HA switch and admin settings share one durable preference, with the
+interval stored separately. Per-scene pause actions validate control permission
+for every circadian Scene Studio target before writing one batch. Entity-sync
+failures compensate the store before broadcasting; failed immediate light
+handlers report their error while the saved preference and next retry remain.
+Resume uses the configured interval transition and targets only current owned
+lights, preserving respected overrides. Caller context accompanies resumed light
+commands. Exception lists accept missing hardware but reject overlapping lists.

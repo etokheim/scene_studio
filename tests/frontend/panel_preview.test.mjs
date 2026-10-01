@@ -122,3 +122,15 @@ test("event randomization persists one seed for every inherited light without to
   assert.equal(panel._themeDraft.events.dawn.assignment_seed, 4);
   assert.deepEqual(calls, ["undo", "refresh", "save"]);
 });
+
+test("durable settings refresh mounted controls without replacing the sidebar", () => {
+  let syncs = 0;
+  const live = { control: { isConnected: true }, sync: () => syncs++ };
+  const panel = { _settingsBindings: [live, { control: { isConnected: false }, sync: () => assert.fail("detached control updated") }] };
+  methods._adoptSettings.call(panel, { automatic_updates_enabled: false, always_follow_scene: ["light.missing"] });
+  assert.equal(panel._settings.automatic_updates_enabled, false);
+  assert.equal(panel._settings.respect_manual_changes, true);
+  assert.deepEqual(panel._settings.always_follow_scene, ["light.missing"]);
+  assert.deepEqual(panel._settingsBindings, [live]);
+  assert.equal(syncs, 1);
+});

@@ -66,8 +66,12 @@ DEFAULT_DUSK_MINIMUM_SECONDS = 22 * 3600
 DEFAULT_DAWN_MAXIMUM_SECONDS = 6 * 3600
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    # Seconds; 0 disables. Same value is the light transition on auto-update ticks.
+    # Positive seconds; also the light transition on automatic-update ticks.
     "automatically_update_lights_interval": 300,
+    "automatic_updates_enabled": True,
+    "respect_manual_changes": True,
+    "always_follow_scene": [],
+    "always_respect_manual_changes": [],
     # Seconds since midnight; delays dusk until this clock time when solar dusk is earlier.
     SETTINGS_DUSK_MINIMUM_TIME_OF_DAY: DEFAULT_DUSK_MINIMUM_SECONDS,
     "dusk_minimum_enabled": True,
@@ -365,17 +369,19 @@ def _migrate_preference_keys(item: dict[str, Any]) -> None:
 
 
 def _migrate_interval_settings(settings: dict[str, Any]) -> None:
-    """Map legacy interval keys onto automatically_update_lights_interval."""
-    if "automatically_update_lights_interval" in settings:
+    """Keep the legacy off preference while restoring a usable positive interval."""
+    if "automatically_update_lights_interval" not in settings:
         for alias in _INTERVAL_ALIASES:
-            settings.pop(alias, None)
-        return
+            if alias in settings:
+                settings["automatically_update_lights_interval"] = settings[alias]
+                break
     for alias in _INTERVAL_ALIASES:
-        if alias in settings:
-            settings["automatically_update_lights_interval"] = settings.pop(alias)
-            for leftover in _INTERVAL_ALIASES:
-                settings.pop(leftover, None)
-            return
+        settings.pop(alias, None)
+    if settings.get("automatically_update_lights_interval") == 0:
+        settings["automatic_updates_enabled"] = False
+        settings["automatically_update_lights_interval"] = DEFAULT_SETTINGS[
+            "automatically_update_lights_interval"
+        ]
 
 
 def _migrate_v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
@@ -434,7 +440,7 @@ def _migrate_store(old_version: int, data: dict[str, Any]) -> dict[str, Any]:
             "variables": seed_variables(),
             "themes": {},
             "scenes": [],
-            "settings": dict(DEFAULT_SETTINGS),
+            "settings": deepcopy(DEFAULT_SETTINGS),
         }
     # v1/v2/v3 → v4: structural migration.
     if old_version < 4:
@@ -652,7 +658,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
         self.themes: dict[str, dict[str, Any]] = {}
         self.scenes: dict[str, dict[str, Any]] = {}
         self.area_names: dict[str, str] = {}
-        self.settings: dict[str, Any] = dict(DEFAULT_SETTINGS)
+        self.settings: dict[str, Any] = deepcopy(DEFAULT_SETTINGS)
         # Legacy — only populated during v3→v4 migration.
         self.managed_native_scene_ids: list[str] = []
         self.pending_hide_sync = False
@@ -716,6 +722,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
 
         # --- Settings ---
         raw_settings = dict(raw.get("settings") or {})
+        _migrate_interval_settings(raw_settings)
         lifted = strip_scene_dusk_minimum(self.scenes)
         if SETTINGS_DUSK_MINIMUM_TIME_OF_DAY not in raw_settings and lifted is not None:
             raw_settings[SETTINGS_DUSK_MINIMUM_TIME_OF_DAY] = lifted
@@ -1176,6 +1183,29 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
 
         return await self._async_mutate(change)
 
+    async def async_set_scene_updates(
+        self, scene_ids: list[str], enabled: bool
+    ) -> list[dict]:
+        """Validate every target and durably change the complete preference batch."""
+        if not isinstance(enabled, bool):
+            raise HomeAssistantError("enabled must be a boolean")
+
+        def change():
+            items = [deepcopy(self.scenes.get(scene_id)) for scene_id in scene_ids]
+            if any(
+                item is None or item.get("kind", "circadian") != "circadian"
+                for item in items
+            ):
+                raise HomeAssistantError(
+                    "Automatic updates require circadian Scene Studio scenes"
+                )
+            for item in items:
+                item[AUTOMATICALLY_UPDATE_LIGHTS] = enabled
+                self.scenes[item["id"]] = item
+            return items
+
+        return await self._async_mutate(change)
+
     async def async_reset_to_fresh(self) -> None:
         """Replace scenes, library, and settings with a fresh install.
 
@@ -1188,7 +1218,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
             self.area_names = {}
             self.variables = seed_variables()
             self.themes = {}
-            self.settings = dict(DEFAULT_SETTINGS)
+            self.settings = deepcopy(DEFAULT_SETTINGS)
             # Keep cleanup metadata until managed YAML deletion succeeds.
             self.pending_hide_sync = False
 
@@ -1213,11 +1243,16 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                     raise HomeAssistantError(
                         "automatically_update_lights_interval must be an integer"
                     )
-                if value < 0 or value > 30 * 60:
+                if value <= 0 or value > 30 * 60:
                     raise HomeAssistantError(
-                        "automatically_update_lights_interval must be 0–1800 seconds"
+                        "automatically_update_lights_interval must be 1–1800 seconds"
                     )
-            if key in ("dusk_minimum_enabled", "dawn_maximum_enabled"):
+            if key in (
+                "dusk_minimum_enabled",
+                "dawn_maximum_enabled",
+                "automatic_updates_enabled",
+                "respect_manual_changes",
+            ):
                 if not isinstance(value, bool):
                     raise HomeAssistantError(f"{key} must be a boolean")
             if key in (SETTINGS_DUSK_MINIMUM_TIME_OF_DAY, "dawn_maximum_time_of_day"):
@@ -1231,9 +1266,29 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                     ) from err
                 if value < 0 or value > 24 * 3600:
                     raise HomeAssistantError(f"{key} must be 0–86400 seconds")
+            if key in ("always_follow_scene", "always_respect_manual_changes"):
+                if not isinstance(value, list) or any(
+                    not isinstance(eid, str)
+                    or not eid.startswith("light.")
+                    or len(eid) <= 6
+                    for eid in value
+                ):
+                    raise HomeAssistantError(
+                        f"{key} must be a list of light entity IDs"
+                    )
+                if len(set(value)) != len(value):
+                    raise HomeAssistantError(f"{key} contains duplicate lights")
+                value = list(value)
             validated[key] = value
 
         def change() -> dict[str, Any]:
+            settings = {**self.settings, **validated}
+            if set(settings.get("always_follow_scene", [])) & set(
+                settings.get("always_respect_manual_changes", [])
+            ):
+                raise HomeAssistantError(
+                    "A light cannot always follow and always respect manual changes"
+                )
             self.settings.update(validated)
             return dict(self.settings)
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from functools import wraps
 from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
@@ -28,6 +27,10 @@ from .const import (
     DATA_STORE,
     DOMAIN,
 )
+from .editor_events import EDITOR_CHANGED_SIGNAL as _CHANGED_SIGNAL
+from .editor_events import SETTINGS_CHANGED_SIGNAL
+from .editor_events import publish_change as _publish_change
+from .editor_events import scene_operation_lock as _scene_operation_lock
 from .migrate_native import async_delete_managed_yaml
 from .native_scene import lights_in_area
 from .preview import build_preview
@@ -35,10 +38,13 @@ from .scene import async_create_or_update_entity, async_remove_entity
 from .snapshots import card_colors
 from .solar import build_sun_path
 from .store import SceneStudioStore, to_form_data
+from .update_controls import (
+    async_set_scene_updates_locked,
+    async_update_settings_locked,
+)
 from .validation import validate_scene_input
 
 _LOGGER = logging.getLogger(__name__)
-_CHANGED_SIGNAL = f"{DOMAIN}_editor_changed"
 
 
 def async_setup_websocket(hass: HomeAssistant) -> None:
@@ -72,23 +78,6 @@ def _store(hass: HomeAssistant) -> SceneStudioStore:
     if not domain_data or domain_data.get(DATA_CONFIG_ENTRY) is None:
         raise HomeAssistantError("Scene Studio is not loaded")
     return domain_data[DATA_STORE]
-
-
-def _publish_change(
-    hass: HomeAssistant, connection, kind: str, item_id: str | None, action: str
-) -> None:
-    """Notify connected editors after the whole saved operation succeeds."""
-    async_dispatcher_send(
-        hass,
-        _CHANGED_SIGNAL,
-        connection,
-        {"kind": kind, "id": item_id, "action": action},
-    )
-
-
-def _scene_operation_lock(hass: HomeAssistant) -> asyncio.Lock:
-    """Keep store writes and HA entity compensation in one scene operation."""
-    return hass.data[DOMAIN].setdefault("scene_operation_lock", asyncio.Lock())
 
 
 def _serialized_write(handler):
@@ -492,6 +481,7 @@ async def _ws_reset_locked(hass, connection, msg) -> None:
             return
     invalidate_activation_cache(hass)
     connection.send_result(msg["id"], {"ok": True})
+    async_dispatcher_send(hass, SETTINGS_CHANGED_SIGNAL)
     _publish_change(hass, connection, "catalog", None, "reset")
 
 
@@ -585,16 +575,13 @@ async def ws_update_settings(
     msg: dict[str, Any],
 ) -> None:
     """Update integration-wide settings."""
-    store = _store(hass)
-    before_interval = int(
-        store.settings.get("automatically_update_lights_interval") or 0
+    _store(hass)
+    settings = await async_update_settings_locked(
+        hass,
+        dict(msg.get("settings") or {}),
+        connection,
+        context=Context(user_id=connection.user.id),
     )
-    settings = await store.async_update_settings(dict(msg.get("settings") or {}))
-    after_interval = int(settings.get("automatically_update_lights_interval") or 0)
-    if before_interval != after_interval:
-        for entity in hass.data[DOMAIN][DATA_ENTITIES].values():
-            if hasattr(entity, "async_on_automatically_update_lights_settings_changed"):
-                entity.async_on_automatically_update_lights_settings_changed()
     connection.send_result(msg["id"], {"settings": settings})
 
 
@@ -619,17 +606,19 @@ async def ws_set_automatically_update_lights(
 
 async def _ws_set_automatically_update_lights_locked(hass, connection, msg) -> None:
     """Keep the saved preference and entity config in one scene operation."""
-    item = await _store(hass).async_set_automatically_update_lights(
-        msg["scene_id"], bool(msg["automatically_update_lights"])
-    )
-    if item is None:
+    store = _store(hass)
+    if store.get(msg["scene_id"]) is None:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Scene not found")
         return
-    entity = hass.data[DOMAIN][DATA_ENTITIES].get(msg["scene_id"])
-    if entity is not None and hasattr(entity, "async_update_config"):
-        await entity.async_update_config(item)
+    items = await async_set_scene_updates_locked(
+        hass,
+        [msg["scene_id"]],
+        msg["automatically_update_lights"],
+        connection,
+        context=Context(user_id=connection.user.id),
+    )
+    item = items[0]
     connection.send_result(msg["id"], _scene_payload(hass, item))
-    _publish_change(hass, connection, "scene", item["id"], "save")
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list_variables"})

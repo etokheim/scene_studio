@@ -4819,6 +4819,10 @@ class SceneStudioPanel extends HTMLElement {
           flex-shrink: 0;
           margin-top: 2px;
         }
+        .list-settings-dialog .update-preference-row:has(ha-selector) {
+          flex-direction: column;
+          align-items: stretch;
+        }
         .list-settings-dialog .automatically-update-lights-interval-row {
           flex-direction: column;
           align-items: stretch;
@@ -7514,6 +7518,7 @@ class SceneStudioPanel extends HTMLElement {
       const openId = this._view === "edit" ? this._editId : null;
       const saved = openId && (payload.scenes || []).find((item) => item.id === openId);
       this._applyAreaCatalog(payload);
+      if (event.kind === "settings") this._refreshDuskVisuals();
       if (this._themeDraft?.id) {
         await this._applyRemoteLibrary(
           "theme", this._themeDraft.id,
@@ -10903,9 +10908,69 @@ class SceneStudioPanel extends HTMLElement {
   _adoptSettings(settings) {
     this._settings = {
       automatically_update_lights_interval: 300,
+      automatic_updates_enabled: true,
+      respect_manual_changes: true,
+      always_follow_scene: [],
+      always_respect_manual_changes: [],
       dusk_minimum_time_of_day: 22 * 3600,
+      dusk_minimum_enabled: true,
+      dawn_maximum_time_of_day: 6 * 3600,
+      dawn_maximum_enabled: true,
       ...(settings || {}),
     };
+    this._settingsBindings = (this._settingsBindings || []).filter(binding => binding.control.isConnected);
+    for (const binding of this._settingsBindings) binding.sync();
+  }
+
+  _appendUpdateSettings(parent) {
+    const specs = [
+      ["automatic_updates_enabled", "Automatic updates", "Keep activated circadian scenes moving with the sun. Paused scenes still apply once when activated.", false],
+      ["respect_manual_changes", "Respect manual changes", "Stop updating lights changed manually. Temporary unavailability waits for recovery.", false],
+      ["always_follow_scene", "Always follow scene", "Bring these lights back to the scene even after manual changes or switching them off.", true],
+      ["always_respect_manual_changes", "Always respect manual changes", "Stop updating these lights after manual changes, even when Respect manual changes is off.", true],
+    ];
+    for (const [key, fallback, helperText, multiple] of specs) {
+      const row = document.createElement("div");
+      row.className = "setup-link-row update-preference-row";
+      const copy = document.createElement("div");
+      const label = document.createElement("div");
+      label.className = "name";
+      label.textContent = this._t(`frontend.settings.${key}`, fallback);
+      const helper = document.createElement("div");
+      helper.className = "sidebar-note";
+      helper.textContent = this._t(`frontend.settings.${key}_helper`, helperText);
+      copy.append(label, helper);
+      const control = document.createElement(multiple ? "ha-selector" : "ha-switch");
+      control.dataset.setting = key;
+      control.setAttribute("aria-label", label.textContent);
+      if (multiple) {
+        control.hass = this._hass;
+        control.selector = { entity: { domain: "light", multiple: true } };
+      }
+      const sync = () => {
+        if (multiple) control.value = [...(this._settings[key] || [])];
+        else control.checked = this._settings[key] !== false;
+      };
+      sync();
+      control.addEventListener(multiple ? "value-changed" : "change", async ev => {
+        ev.stopPropagation();
+        const value = multiple ? (ev.detail?.value || []) : control.checked;
+        if (JSON.stringify(value) === JSON.stringify(this._settings[key])) return;
+        try {
+          const result = await this._hass.callWS({ type: `${DOMAIN}/update_settings`, settings: { [key]: value } });
+          this._adoptSettings(result.settings);
+        } catch (err) {
+          // A failed resume can follow a successful preference save; read the
+          // durable value instead of guessing that the save was rolled back.
+          this._adoptSettings(await this._hass.callWS({ type: `${DOMAIN}/get_settings` }));
+          window.alert(err.message || String(err));
+        }
+      });
+      this._settingsBindings ||= [];
+      this._settingsBindings.push({ control, sync });
+      row.append(copy, control);
+      parent.appendChild(row);
+    }
   }
 
   _listSettingsButton() {
@@ -10941,6 +11006,7 @@ class SceneStudioPanel extends HTMLElement {
       "These settings apply to every room. Changes take effect immediately."
     );
     body.appendChild(note);
+    this._appendUpdateSettings(body);
 
     const intervalRow = document.createElement("div");
     intervalRow.className = "setup-link-row automatically-update-lights-interval-row";
@@ -10956,7 +11022,7 @@ class SceneStudioPanel extends HTMLElement {
     intervalHelper.style.margin = "4px 0 0";
     intervalHelper.textContent = this._t(
       "frontend.settings.automatically_update_lights_interval_helper",
-      "After a scene is activated, keep updating the lights this often with the same transition length (target = how the room should look at the end of the transition). 0 turns automatic updates off for every room — same as the control at the top of the list."
+      "After a scene is activated, keep updating the lights this often with the same transition length (target = how the room should look at the end of the transition). Use Automatic updates to pause updates without changing this interval."
     );
     intervalLabelWrap.append(intervalLabel, intervalHelper);
     const intervalField = document.createElement("ha-selector");
@@ -10968,15 +11034,14 @@ class SceneStudioPanel extends HTMLElement {
     const currentSeconds = Number(this._settings?.automatically_update_lights_interval ?? 300);
     intervalField.value = Math.round(currentSeconds / 60);
     intervalField.selector = {
-      number: { min: 0, max: 30, step: 1, mode: "box", unit_of_measurement: "min" },
+      number: { min: 1, max: 30, step: 1, mode: "box", unit_of_measurement: "min" },
     };
     let intervalSaveTimer;
     const saveInterval = async () => {
       const minutes = Number(intervalField.value);
-      const seconds = Number.isFinite(minutes)
-        ? Math.max(0, Math.min(30, Math.round(minutes))) * 60
-        : 300;
       try {
+        if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 30) throw new Error(this._t("frontend.settings.invalid_interval", "Enter an interval from 1 to 30 minutes."));
+        const seconds = Math.round(minutes * 60);
         const result = await this._hass.callWS({
           type: `${DOMAIN}/update_settings`,
           settings: { automatically_update_lights_interval: seconds },

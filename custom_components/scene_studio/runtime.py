@@ -118,6 +118,11 @@ class SceneRuntime:
             self._changed(owner)
             self._listen()
 
+    def refresh_attributes(self, entity):
+        """Reevaluate retained manual records after a policy change."""
+        if owner := self.owners.get(entity.unique_id):
+            self._changed(owner)
+
     def areas_changed(self, area_ids: set[str]):
         """A removed area immediately relinquishes lights and stops its timers."""
         for owner in list(self.owners.values()):
@@ -185,6 +190,10 @@ class SceneRuntime:
             and snapshot_from_state(old_state) is None,
             was_interrupted=eid in owner.interrupted,
         )
+        # A known off state is an explicit switch-off; power loss reports as
+        # unavailable/unknown and waits for recovery instead.
+        if kind == "interrupt" and new_state is not None and new_state.state == "off":
+            kind = "override"
         if kind == "interrupt":
             owner.interrupted.add(eid)
         elif kind == "override":

@@ -115,7 +115,7 @@
       "automatically_update_lights_on_helper": "After you activate a scene, lights keep adjusting on the interval from Settings so the room follows the sun. Tap to turn this off for every room.",
       "automatically_update_lights_off_helper": "Automatic updates are off. Activating a scene applies lights once. Tap to turn updates back on for every room.",
       "automatically_update_lights_interval": "Automatically update lights interval",
-      "automatically_update_lights_interval_helper": "After a scene is activated, keep updating the lights this often with the same transition length (target = how the room should look at the end of the transition). 0 turns automatic updates off for every room — same as the control at the top of the list.",
+      "automatically_update_lights_interval_helper": "After a scene is activated, keep updating the lights this often with the same transition length (target = how the room should look at the end of the transition). Use Automatic updates to pause updates without changing this interval.",
       "automatically_update_lights_interval_minutes": "Minutes",
       "scene_settings": "Scene settings",
       "hidden_in_ha": "Hidden in Home Assistant",
@@ -126,7 +126,16 @@
       "dusk_minimum_time_of_day_helper": "To avoid lights dimming too much, too early. Applies to every circadian scene and circadian preset.",
       "reset": "Delete and reset everything",
       "reset_title": "Delete and reset everything?",
-      "reset_confirm": "This deletes every Scene Studio scene and its Home Assistant scene. Scene presets and circadian presets are removed. Color presets are replaced with the five default colors, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone."
+      "reset_confirm": "This deletes every Scene Studio scene and its Home Assistant scene. Scene presets and circadian presets are removed. Color presets are replaced with the five default colors, and settings return to their defaults. Lights, areas, and other integrations stay. This cannot be undone.",
+      "automatic_updates_enabled": "Automatic updates",
+      "automatic_updates_enabled_helper": "Keep activated circadian scenes moving with the sun. Paused scenes still apply once when activated.",
+      "respect_manual_changes": "Respect manual changes",
+      "respect_manual_changes_helper": "Stop updating lights changed manually. Temporary unavailability waits for recovery.",
+      "always_follow_scene": "Always follow scene",
+      "always_follow_scene_helper": "Bring these lights back to the scene even after manual changes or switching them off.",
+      "always_respect_manual_changes": "Always respect manual changes",
+      "always_respect_manual_changes_helper": "Stop updating these lights after manual changes, even when Respect manual changes is off.",
+      "invalid_interval": "Enter an interval from 1 to 30 minutes."
     },
     "common": {
       "untitled": "Untitled",
@@ -420,6 +429,29 @@
     },
     "defaults": {
       "circadian_scene": "Circadian"
+    }
+  },
+  "entity": {
+    "switch": {
+      "automatic_updates": {
+        "name": "Scene Studio automatic updates"
+      }
+    }
+  },
+  "services": {
+    "set_automatic_updates": {
+      "name": "Set automatic updates",
+      "description": "Pause or resume automatic updates for selected circadian Scene Studio scenes. Activation while paused applies the look once.",
+      "fields": {
+        "entity_id": {
+          "name": "Scenes",
+          "description": "Circadian Scene Studio scenes to pause or resume."
+        },
+        "enabled": {
+          "name": "Enabled",
+          "description": "Enable automatic updates for these scenes."
+        }
+      }
     }
   }
 }

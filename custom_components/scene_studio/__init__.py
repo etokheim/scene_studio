@@ -26,15 +26,17 @@ from .const import (
     LEGACY_DOMAINS,
     SCENE_NAME,
 )
+from .editor_events import scene_operation_lock
 from .migrate_native import async_freeze_migrate, needs_native_freeze
 from .panel import async_setup_panel, async_unload_panel
 from .runtime import DATA_RUNTIME, unload_runtime
 from .store import SceneStudioStore
+from .update_controls import async_set_scene_updates_locked
 from .websocket_api import async_setup_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SCENE]
+PLATFORMS: list[Platform] = [Platform.SCENE, Platform.SWITCH]
 
 SERVICE_TURN_ON = "turn_on"
 ATTR_BRIGHTNESS_MODIFIER = "brightness_modifier"
@@ -108,6 +110,56 @@ async def async_setup(hass, config):
                 location=location,
                 context=call.context,
             )
+
+    async def handle_set_automatic_updates(call):
+        """Require control of every owned circadian target before a durable batch."""
+        ids = call.data["entity_id"]
+        if not ids:
+            raise ServiceValidationError(
+                "Select at least one circadian Scene Studio scene"
+            )
+        owned = hass.data.get(DOMAIN, {}).get(DATA_ENTITIES, {})
+        by_entity = {entity.entity_id: entity for entity in owned.values()}
+        for entity_id in ids:
+            entity = by_entity.get(entity_id)
+            if (
+                entity is None
+                or not hass.states.get(entity_id)
+                or not hasattr(entity, "async_preferences_changed")
+            ):
+                raise ServiceValidationError(
+                    "Automatic updates require circadian Scene Studio scenes"
+                )
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None:
+                raise UnknownUser(context=call.context)
+            for entity_id in ids:
+                if not user.permissions.check_entity(entity_id, POLICY_CONTROL):
+                    raise Unauthorized(context=call.context, entity_id=entity_id)
+        async with scene_operation_lock(hass):
+            await async_set_scene_updates_locked(
+                hass,
+                [by_entity[eid].unique_id for eid in ids],
+                call.data["enabled"],
+                context=call.context,
+            )
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_automatic_updates",
+        handle_set_automatic_updates,
+        schema=vol.Schema(
+            {
+                vol.Required("entity_id"): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="scene", integration=DOMAIN, multiple=True
+                    )
+                ),
+                vol.Required("enabled"): bool,
+            }
+        ),
+    )
 
     hass.services.async_register(
         DOMAIN,
