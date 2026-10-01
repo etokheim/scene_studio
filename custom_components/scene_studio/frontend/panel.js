@@ -1,3 +1,4 @@
+import { EventGuidance, EVENT_EDITOR_CSS, eventSourceChanged, lightOverrideRows } from "./event_editor.js";
 import { resolveEventDraft, eventOverrideAfterEdit, eventBrightnessAdjustment } from "./event_inheritance.js";
 import { editorPath, editorRoute, libraryItemRoute } from "./editor_routes.js";
 import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, fitLightStripGutter, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
@@ -91,7 +92,7 @@ import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
 import { snapshotWheelEditor, applyWheelMorph } from "./wheel_morph.js";
-import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
+import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, tileSelectionAfterClick, proportionalFillPercent, selectAllDisplayedFill, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
 const DOMAIN = "scene_studio";
 const PANEL_URL_PATH = "scene_studio";
@@ -535,6 +536,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._eventGuidance?.cancel();
     this._sharedEditorShell?.previewGate.next();
     this._sharedEditorShell?.lightGate.next();
     this._outgoingStageLayer?.remove();
@@ -5197,6 +5199,7 @@ class SceneStudioPanel extends HTMLElement {
         ${EDITOR_SHELL_MOTION_CSS}
         ${EDITOR_LIBRARY_PREVIEW_CSS}
         ${EDITOR_CONTAINER_CSS}
+        ${EVENT_EDITOR_CSS}
       </style>
       <ha-top-app-bar-fixed>
         <div slot="title"></div>
@@ -5385,6 +5388,13 @@ class SceneStudioPanel extends HTMLElement {
     }
     this._noteRailTabForHash(hash);
     const current = this._currentHash();
+    if (hash !== current) {
+      this._eventGuidance?.cancel();
+      this._sidebarEventId = null;
+      this._legendSelectedIds = new Set();
+      this._circadianAnchor = null;
+      this._circadianTouchSelect = false;
+    }
     if (
       hash !== current &&
       (this._lightEditIsDirty() || this._needsLeaveConfirm())
@@ -7543,6 +7553,7 @@ class SceneStudioPanel extends HTMLElement {
       if (event.kind === "theme" || event.kind === "variable") {
         this._clearPreviewCache();
         this._patchDialFromSession({ applyTheme: true });
+        this._refreshInheritedLightDrafts?.();
       }
       if (!openId) return;
       if (!saved) {
@@ -7573,6 +7584,7 @@ class SceneStudioPanel extends HTMLElement {
       this._sceneRevision = saved.revision;
       this._syncAppBarTitle();
       this._patchDialFromSession();
+      this._refreshInheritedLightDrafts?.();
       this._syncSceneUsed();
       if (JSON.stringify(next.value) !== JSON.stringify(saved.form)) this._saveSoon();
       else this._sessionBaseline = this._snapshotSession();
@@ -9897,7 +9909,10 @@ class SceneStudioPanel extends HTMLElement {
       lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
     if (lightId) {
       if (this._formData?.kind === "circadian" && this._themeDraft) {
-        return Number(this._lightEventStoredState({ entity_id: lightId }, eventId).brightness) || 0;
+        const draft = this._lightEventStoredState({ entity_id: lightId }, eventId);
+        if (draft.state === "off") return 0;
+        if (this._lightModeFlags(lightId).onOff) return 255;
+        return Number(draft.brightness) || 0;
       }
       const overridden = this._formData?.overrides?.[lightId]?.[eventId];
       if (overridden && overridden.brightness != null) {
@@ -9999,9 +10014,9 @@ class SceneStudioPanel extends HTMLElement {
     const lightId =
       lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
     if (!lightId && this._view === "edit" && this._formData?.kind === "circadian") {
+      if (history) this._commitUndo({ type: "event-lights", eventId });
       this._formData.event_palettes ||= {};
       this._formData.event_palettes[eventId] ||= {};
-      if (history) this._commitUndo();
       const entry = this._formData.event_palettes[eventId];
       const bases = this._eventBrightnessBases ||= new Map();
       let base = bases.get(eventId);
@@ -10063,6 +10078,8 @@ class SceneStudioPanel extends HTMLElement {
       this._writeLightEventOverride(lightId, eventId, {
         ...(this._formData.overrides?.[lightId]?.[eventId] || {}), brightness: value,
       });
+      this._refreshInheritedLightDrafts?.();
+      this._syncClockLegendBrightEdit();
       const hook = this._dialBrightnessHook;
       if (hook?.kind === "light" && hook.lightId === lightId) {
         const entry = hook.drafts.get(eventId);
@@ -10152,6 +10169,8 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     this._brightnessScrubbing = false;
+    this._refreshInheritedLightDrafts?.();
+    this._syncClockLegendBrightEdit();
     this._eventBrightnessBases = null;
     this._clockLegendEl?.classList.remove("bright-scrubbing");
     this._patchDialFromSession({
@@ -10565,6 +10584,8 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   async _openThemeEventSidebar(event) {
+    const generation = this._eventSidebarGeneration = (this._eventSidebarGeneration || 0) + 1;
+    const route = this._currentHash();
     const events = this._sunPath?.events || [];
     const drafts = new Map();
     for (const item of events) {
@@ -10573,10 +10594,10 @@ class SceneStudioPanel extends HTMLElement {
     let currentId = event.id;
     const sceneEditor = this._view === "edit";
     let lightRows = [];
-    let selectedIds = new Set();
     const refreshLightRows = () => {
       lightRows = sceneEditor ? this._eventWheelRows(currentId) : [];
-      selectedIds = new Set(lightRows.map(row => row.id));
+      const members = new Set(lightRows.map(row => row.id));
+      this._legendSelectedIds = new Set([...(this._legendSelectedIds || [])].filter(id => members.has(id)));
     };
     refreshLightRows();
     let wheelCtl = null;
@@ -10591,27 +10612,35 @@ class SceneStudioPanel extends HTMLElement {
       }),
       className: "light-dialog theme-event-dialog",
       onDismiss: () => {
-        if (this._dialBrightnessHook?.kind === "theme") {
+        if (this._eventSidebarOwner === generation && this._dialBrightnessHook?.kind === "theme") {
           this._dialBrightnessHook = null;
         }
         brightnessGraphCtl?.disconnect();
         wheelCtl?.disconnect();
-        this._refreshInheritedLightDrafts = null;
-        this._syncOpenSceneWheel = null;
-        this._setSidebarEvent(null);
-        this._setSidebarLight(null);
-        if (this._view === "edit") {
-          this._sunPathKey = undefined;
-          void this._ensureSunPath();
+        if (this._eventSidebarOwner === generation) {
+          this._refreshInheritedLightDrafts = null;
+          this._syncOpenSceneWheel = null;
+          this._syncEventOverrideControls = null;
+          this._detachEventLight = null;
         }
-        void this._saveNow();
+        if (!sceneEditor && this._eventSidebarOwner === generation) {
+          this._setSidebarEvent(null);
+          this._setSidebarLight(null);
+        }
+        if (this._eventSidebarOwner === generation && this._currentHash() === route) {
+          if (this._view === "edit") {
+            this._sunPathKey = undefined;
+            void this._ensureSunPath();
+          }
+          void this._saveNow();
+        }
       },
     });
-    if (!opened) {
-      return;
-    }
+    if (!opened || generation !== this._eventSidebarGeneration || route !== this._currentHash()) return;
+    this._eventSidebarOwner = generation;
     this._setSidebarEvent(event.id);
-    this._setSidebarLight(`theme:${this._themeLookId()}`);
+    if (sceneEditor) this._sidebarLightId = `theme:${this._themeLookId()}`;
+    else this._setSidebarLight(`theme:${this._themeLookId()}`);
     this._dialBrightnessHook = {
       kind: "theme",
       drafts,
@@ -10630,15 +10659,21 @@ class SceneStudioPanel extends HTMLElement {
     const duskSlot = document.createElement("div");
     const hint = document.createElement("p");
     hint.className = "sidebar-note theme-edit-banner";
-    hint.textContent = sceneEditor ? this._t(
-      "frontend.library.scene_event_edit_hint",
-      "Editing lights changes only this scene and solar event. Other events and shared presets stay as they are."
-    ) : this._t(
+    hint.textContent = this._t(
       "frontend.library.theme_edit_hint",
       "Editing {name} changes every circadian scene that still uses this circadian preset. Per-light overrides on those scenes stay as they are.",
       { name: themeName }
     );
-    body.appendChild(hint);
+    if (!sceneEditor) body.appendChild(hint);
+    const source = document.createElement("div");
+    source.className = "event-source";
+    const overrides = document.createElement("div");
+    overrides.className = "event-overrides";
+    if (sceneEditor) {
+      body.append(source);
+      this._syncEventOverrideControls = () => this._renderEventOverrideControls(source, overrides, currentId);
+      this._syncEventOverrideControls();
+    }
 
     const restoreBtn = document.createElement("button");
     restoreBtn.type = "button";
@@ -10705,7 +10740,7 @@ class SceneStudioPanel extends HTMLElement {
       subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
       getPoints: () =>
         events.map((item) => {
-          const draft = drafts.get(item.id);
+          const draft = sceneEditor ? resolveEventDraft(this._formData, this._themeDraft, item.id, "", this._variables) : drafts.get(item.id);
           return {
             eventId: item.id,
             sceneId: item.id,
@@ -10734,6 +10769,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         this._syncDuskMinimumSlot(duskSlot, eventId);
         refreshLightRows();
+        this._syncEventOverrideControls?.();
         wheelCtl?.sync();
         brightnessGraphCtl?.sync();
         syncRestore();
@@ -10758,6 +10794,7 @@ class SceneStudioPanel extends HTMLElement {
         brightnessGraphCtl?.sync();
       },
       onDragEnd: () => {
+        undoCommitted = false;
         this._endBrightnessScrub();
         wheelCtl?.sync();
       },
@@ -10790,23 +10827,28 @@ class SceneStudioPanel extends HTMLElement {
       getState: () => sceneEditor ? {
         scenes: lightRows,
         sequence: lightRows.map(row => row.id),
-        activeId: [...selectedIds][0] || null,
-        selectedIds: [...selectedIds],
+        activeId: [...(this._legendSelectedIds || [])][0] || null,
+        selectedIds: [...(this._legendSelectedIds || [])],
       } : {
         scenes: [{ id: currentId, draft: drafts.get(currentId), event: events.find(item => item.id === currentId) }],
         sequence: [currentId],
         activeId: currentId,
       },
       onSelectMany: ids => {
-        selectedIds = new Set(ids.filter(id => lightRows.some(row => row.id === id)));
+        this._legendSelectedIds = new Set(ids.filter(id => lightRows.some(row => row.id === id)));
+        this._syncClockLightSelection();
         wheelCtl?.sync();
       },
       onSelect: (eventId, mods) => {
         if (sceneEditor) {
-          if (mods?.shiftKey || mods?.toggleKey) {
-            if (selectedIds.has(eventId)) selectedIds.delete(eventId);
-            else if (eventId) selectedIds.add(eventId);
-          } else selectedIds = new Set(eventId ? [eventId] : []);
+          if (!eventId) {
+            this._legendSelectedIds = new Set();
+            this._circadianTouchSelect = false;
+            this._syncClockLightSelection();
+            wheelCtl?.sync();
+            return;
+          }
+          this._selectCircadianLight(eventId, { ...mods, ctrlKey: mods?.toggleKey }, { open: false });
           wheelCtl?.sync();
           return;
         }
@@ -10818,16 +10860,17 @@ class SceneStudioPanel extends HTMLElement {
         this._syncDuskMinimumSlot(duskSlot, eventId);
         syncRestore();
       },
-      onChange: ({ fromPalette } = {}) => {
+      onChange: ({ fromPalette, dragging } = {}) => {
         if (sceneEditor) {
           const dirty = lightRows.filter(row => JSON.stringify(row.draft) !== JSON.stringify(row.savedDraft));
-          if (!dirty.length) return;
+          if (!dirty.length) { if (!dragging) undoCommitted = false; return; }
           if (!undoCommitted) {
             this._commitUndo({ type: "event-lights", eventId: currentId });
             undoCommitted = true;
           }
           for (const row of dirty) {
-            if (!fromPalette) {
+            const changedColor = ["color_mode", "color_temp_kelvin", "hs_color", "rgb_color", "xy_color", "white"].some(key => JSON.stringify(row.savedDraft[key]) !== JSON.stringify(row.draft[key]));
+            if (!fromPalette && changedColor) {
               delete row.draft.variable_ref;
               delete row.draft.palette_t;
               delete row.draft.palette_r;
@@ -10841,7 +10884,10 @@ class SceneStudioPanel extends HTMLElement {
           this._patchDialFromSession();
           this._schedulePreview();
           this._saveSoon();
+          this._syncEventOverrideControls?.();
+          this._syncClockLegendBrightEdit();
           brightnessGraphCtl?.sync();
+          if (!dragging) undoCommitted = false;
           return;
         }
         const draft = drafts.get(currentId);
@@ -10882,12 +10928,16 @@ class SceneStudioPanel extends HTMLElement {
     if (sceneEditor) {
       this._refreshInheritedLightDrafts = () => {
         refreshLightRows();
+        this._syncClockLegendBrightEdit();
         wheelCtl.sync();
         brightnessGraphCtl.sync();
+        this._syncEventOverrideControls?.();
       };
       this._syncOpenSceneWheel = () => wheelCtl.sync();
+      this._detachEventLight = id => id ? wheelCtl.detach(id) : wheelCtl.clearDetached();
     }
     body.append(duskSlot);
+    if (sceneEditor) body.append(overrides);
     this._syncDuskMinimumSlot(duskSlot, currentId);
     wheelCtl.sync();
     brightnessGraphCtl.sync();
@@ -12177,11 +12227,12 @@ class SceneStudioPanel extends HTMLElement {
         (row) => row.entity_id === focus.lightId
       );
       if (light && event) {
-        this._openLightEditDialog(light, event);
+        this._setSidebarEvent(event.id);
+        this._selectCircadianLight(light.entity_id);
       }
       return;
     }
-    if (focus?.type === "theme-event" && event) {
+    if (["theme-event", "event-lights", "event-randomize"].includes(focus?.type) && event) {
       void this._openThemeEventSidebar(event);
     }
   }
@@ -12190,6 +12241,11 @@ class SceneStudioPanel extends HTMLElement {
     if (!target || this._sameHistoryTarget(target)) {
       return;
     }
+    this._eventGuidance?.cancel();
+    this._sidebarEventId = null;
+    this._legendSelectedIds = new Set();
+    this._circadianAnchor = null;
+    this._circadianTouchSelect = false;
     this._leaveConfirmDone = true;
     if (target.view === "theme" && target.themeId) {
       this._view = "theme";
@@ -12684,6 +12740,7 @@ class SceneStudioPanel extends HTMLElement {
       };
     }
     this._clearPreviewCache();
+    this._refreshInheritedLightDrafts?.();
     this._drawSunPath();
     this._playLightRowFlip(before);
     this._ensureSunPath();
@@ -14005,9 +14062,259 @@ class SceneStudioPanel extends HTMLElement {
     return { body, footer };
   }
 
+  _createCircadianSelectAll() {
+    const { selector, tile, hit } = createLightTile({
+      entityId: "__select_all__",
+      name: this._t("frontend.lights.select_all", "Select all"),
+      makeIcon: () => { const icon = document.createElement("ha-icon"); icon.setAttribute("icon", "mdi:select-all"); return icon; },
+    });
+    selector.classList.add("select-all-tile");
+    const targets = () => {
+      const members = this._circadianMemberIds();
+      const selected = members.filter(id => this._legendSelectedIds?.has(id));
+      return selected.length ? selected : members;
+    };
+    const binary = id => this._lightModeFlags(id).onOff;
+    const displayed = () => {
+      const values = targets().filter(id => !binary(id)).map(id => this._dialEventBrightness(this._sidebarEventId, id) * 100 / 255);
+      return selectAllDisplayedFill(values) ?? (targets().some(id => this._dialEventBrightness(this._sidebarEventId, id) > 0) ? 100 : 0);
+    };
+    const pickAll = ev => {
+      ev.stopPropagation();
+      if (tile._lightTileSuppressTap || !this._requireCircadianEvent()) return;
+      this._legendSelectedIds = new Set(this._legendSelectedIds?.size > 1 ? [] : this._circadianMemberIds());
+      this._circadianTouchSelect = false;
+      this._syncClockLightSelection();
+      this._syncOpenSceneWheel?.();
+      this._syncCircadianSelectAll?.();
+      if (this._legendSelectedIds.size) this._reopenCircadianEvent();
+    };
+    tile.addEventListener("click", pickAll);
+    tile.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pickAll(ev); } });
+    let base = null;
+    bindLightTileBrightness(tile, hit, {
+      isEditable: () => Boolean(this._sidebarEventId),
+      onBlocked: () => this._requireCircadianEvent(),
+      isBinary: () => targets().every(binary),
+      getBrightness: () => displayed() * 255 / 100,
+      setBrightness: (value, { history } = {}) => {
+        if (!this._requireCircadianEvent()) return;
+        if (history || !base) {
+          this._commitUndo({ type: "event-lights", eventId: this._sidebarEventId });
+          base = { eventId: this._sidebarEventId, shown: displayed(), values: targets().map(id => ({ id, brightness: this._dialEventBrightness(this._sidebarEventId, id) })) };
+        }
+        if (base.eventId !== this._sidebarEventId) return;
+        for (const entry of base.values) {
+          const percent = binary(entry.id) ? (value >= 127.5 ? 100 : 0) : proportionalFillPercent(entry.brightness * 100 / 255, base.shown, value * 100 / 255);
+          this._writeLightEventOverride(entry.id, base.eventId, { ...(this._formData.overrides?.[entry.id]?.[base.eventId] || {}), brightness: Math.round(percent * 255 / 100) });
+        }
+        this._refreshCircadianEvent();
+      },
+      onDragEnd: () => { base = null; },
+    });
+    this._syncCircadianSelectAll = () => {
+      if (!tile.isConnected || !this._sidebarEventId) return;
+      const fillPct = displayed();
+      paintLightTile(selector, { rgb: [255, 255, 255], fillPct, selected: this._legendSelectedIds?.size > 1, brightnessLabel: targets().every(binary) ? this._lightTileValueLabel(targets()[0], fillPct) : undefined });
+    };
+    return selector;
+  }
+
+  _circadianMemberIds() {
+    return (this._sunPath?.lights || []).filter(row => !row.removed && !row.suggested && !row.theme_ring).map(row => row.entity_id);
+  }
+
+  _requireCircadianEvent() {
+    if (this._sidebarEventId && this._sunPath?.events?.some(event => event.id === this._sidebarEventId)) return true;
+    this._eventGuidance ||= new EventGuidance({
+      reducedMotion: () => this._prefersReducedMotion(),
+      show: () => {
+        const legend = this._clockLegendEl;
+        if (!legend) return;
+        legend.classList.add("event-required");
+        const message = document.createElement("div");
+        message.className = "event-required-message";
+        message.setAttribute("role", "status");
+        const text = document.createElement("span");
+        text.textContent = this._t("frontend.lights.select_event_first", "Select a solar event before changing lights");
+        const copies = document.createElement("div");
+        copies.className = "event-copies";
+        copies.setAttribute("aria-hidden", "true");
+        for (const event of this._sunPath?.events || []) {
+          const copy = document.createElement("span");
+          copy.className = "event-copy";
+          const icon = document.createElement("ha-icon");
+          icon.setAttribute("icon", event.icon);
+          copy.append(icon);
+          copies.append(copy);
+        }
+        message.append(text, copies);
+        legend.append(message);
+        this._eventGuidanceMessage = message;
+        requestAnimationFrame(() => { if (message.isConnected) message.classList.add("visible"); });
+      },
+      hide: immediate => {
+        const message = this._eventGuidanceMessage;
+        message?.classList.remove("visible");
+        message?.parentElement?.classList.remove("event-required");
+        if (immediate) {
+          message?.remove();
+          this._eventGuidanceMessage = null;
+          for (const animation of this._eventGuidanceAnimations || []) animation.cancel();
+          this._eventGuidanceAnimations = [];
+        }
+      },
+      pulse: () => {
+        this._eventGuidanceAnimations = [...this.shadowRoot.querySelectorAll(".clock-event[data-event-id]")].map(button =>
+          button.animate([{ transform: "scale(1)" }, { transform: "scale(1.12)", offset: .5 }, { transform: "scale(1)" }], { duration: 500, easing: "cubic-bezier(.2,0,0,1)" }));
+      },
+    });
+    this._eventGuidance.show();
+    return false;
+  }
+
+  _selectCircadianLight(id, ev = {}, { open = true } = {}) {
+    if (!this._requireCircadianEvent()) return;
+    const ids = this._circadianMemberIds();
+    if (!ids.includes(id)) return;
+    const inSelectMode = this._circadianTouchSelect || this._legendSelectedIds?.size > 1;
+    const result = tileSelectionAfterClick({ ids, selected: [...(this._legendSelectedIds || [])], anchorId: this._circadianAnchor,
+      entityId: id, shiftKey: Boolean(ev.shiftKey) && !inSelectMode,
+      toggleKey: Boolean(ev.metaKey || ev.ctrlKey || ev.toggleKey) || (inSelectMode && !ev.shiftKey) });
+    this._legendSelectedIds = new Set(result.selected);
+    this._circadianAnchor = result.anchorId;
+    if (!result.selected.length) this._circadianTouchSelect = false;
+    this._detachEventLight?.(result.selected.length === 1 ? result.selected[0] : null);
+    this._syncClockLightSelection();
+    this._syncOpenSceneWheel?.();
+    this._syncCircadianSelectAll?.();
+    revealLightActionsNow(this.shadowRoot);
+    if (open) this._reopenCircadianEvent();
+  }
+
+  _reopenCircadianEvent() {
+    const host = this.shadowRoot.querySelector(".theme-event-dialog");
+    if (host && !host._closing) return;
+    const event = this._sunPath?.events.find(row => row.id === this._sidebarEventId);
+    if (event) void this._openThemeEventSidebar(event);
+  }
+
+  _resetCircadianLight(id) {
+    if (!this._requireCircadianEvent()) return;
+    this._commitUndo({ type: "event-lights", eventId: this._sidebarEventId });
+    this._deleteLightEventOverride(id, this._sidebarEventId);
+    this._refreshCircadianEvent();
+  }
+
+  _refreshCircadianEvent() {
+    this._clearPreviewCache();
+    this._refreshInheritedLightDrafts?.();
+    this._patchDialFromSession();
+    this._syncOpenSceneCardFace();
+    this._syncEventOverrideControls?.();
+    this._syncClockLegendBrightEdit();
+    this._schedulePreview();
+    this._saveSoon();
+  }
+
+  _renderEventOverrideControls(source, summary, eventId) {
+    const scene = this._formData;
+    const theme = this._themeDraft;
+    const assignment = scene.event_palettes?.[eventId];
+    const inheritedId = theme.events?.[eventId]?.color?.variable_ref;
+    const palette = (this._variables || []).find(item => item.id === (assignment?.palette_id || inheritedId) && variableIsPalette(item));
+    const split = document.createElement("div");
+    split.className = "scene-palette-split";
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "scene-used-chip";
+    const swatch = document.createElement("span");
+    swatch.className = "scene-used-swatch";
+    const inherited = resolveEventDraft(scene, theme, eventId, "", this._variables);
+    swatch.style.background = palette ? paletteSwatchCss(palette, this._variables, draftRgb) : variableSwatchCss({ color: inherited, brightness: inherited.brightness }, this._variables);
+    const name = document.createElement("span");
+    const event = this._sunPath.events.find(row => row.id === eventId);
+    name.textContent = palette?.name || `${scene.scene_name} → ${event?.name || eventId}`;
+    main.append(swatch, name);
+    main.addEventListener("click", () => palette ? this._go(`palette/${palette.id}`) : this._pickSceneBasePalette());
+    const choose = document.createElement("button");
+    choose.type = "button";
+    choose.className = "scene-used-chip";
+    choose.setAttribute("aria-label", this._t("frontend.library.pick_scene_preset", "Choose scene preset"));
+    const chevron = document.createElement("ha-icon");
+    chevron.setAttribute("icon", "mdi:chevron-down");
+    choose.append(chevron);
+    choose.addEventListener("click", () => this._pickSceneBasePalette());
+    split.append(main, choose);
+    if (palette) {
+      const shuffle = document.createElement("ha-icon-button");
+      shuffle.className = "scene-palette-edit event-randomize";
+      shuffle.label = this._t("frontend.dialogs.scene_palette_randomize", "Randomize");
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", PALETTE_RANDOMIZE_ICON);
+      shuffle.append(icon);
+      shuffle.addEventListener("click", () => this._randomizeSceneEvent(eventId));
+      split.append(shuffle);
+    }
+    const resetLabel = this._t("frontend.lights.reset_overrides", "Reset overrides");
+    const resetButton = callback => {
+      const button = document.createElement("ha-button");
+      button.appearance = "plain";
+      button.textContent = resetLabel;
+      button.addEventListener("click", callback);
+      return button;
+    };
+    if (eventSourceChanged(scene, theme, eventId)) split.append(resetButton(() => {
+      this._commitUndo({ type: "event-lights", eventId });
+      delete this._formData.event_palettes[eventId];
+      this._refreshCircadianEvent();
+    }));
+    const sourceKey = JSON.stringify([eventId, palette?.id, name.textContent, swatch.style.background, eventSourceChanged(scene, theme, eventId)]);
+    if (source.dataset.renderKey !== sourceKey) {
+      source.replaceChildren(split);
+      source.dataset.renderKey = sourceKey;
+    }
+    const rows = lightOverrideRows(scene, theme, eventId, this._variables, (id, state) => this._editorLightState(id, state));
+    const summaryKey = JSON.stringify([eventId, rows, rows.map(row => this._lightDisplayName(row.id))]);
+    if (summary.dataset.renderKey === summaryKey) return;
+    const focusedLight = summary.contains(this.shadowRoot.activeElement) ? this.shadowRoot.activeElement?.dataset.lightId : null;
+    summary.replaceChildren();
+    summary.dataset.renderKey = summaryKey;
+    const valueText = (state, field) => {
+      if (field === "color") {
+        if (state.color_temp_kelvin != null) return `${state.color_temp_kelvin} K`;
+        if (!state.color_mode) return "—";
+        return `#${draftRgb(state).map(value => Math.round(value).toString(16).padStart(2, "0")).join("")}`;
+      }
+      if (field === "brightness") return state.brightness == null ? "—" : `${Math.round(state.brightness * 100 / 255)}%`;
+      if (field === "state") return state.state === "off" ? this._t("frontend.lights.off", "Off") : this._t("frontend.lights.power", "On");
+      return String(state[field] ?? "—");
+    };
+    for (const row of rows) {
+      const container = document.createElement("div");
+      container.className = "event-override-row";
+      const description = document.createElement("div");
+      description.className = "event-override-description";
+      const title = document.createElement("strong");
+      title.textContent = this._lightDisplayName(row.id, { fallback: row.id });
+      description.append(title);
+      for (const field of row.fields) {
+        const line = document.createElement("p");
+        line.textContent = `${this._t(`frontend.lights.override_${field}`, field)}: ${valueText(row.before, field)} → ${valueText(row.after, field)}`;
+        description.append(line);
+      }
+      const reset = resetButton(() => this._resetCircadianLight(row.id));
+      reset.dataset.lightId = row.id;
+      container.append(description, reset);
+      summary.append(container);
+      if (focusedLight === row.id) reset.focus({ preventScroll: true });
+    }
+  }
+
   _setSidebarEvent(eventId) {
     this._sidebarEventId = eventId || null;
     if (eventId) {
+      this._eventGuidance?.cancel();
       if (this._scenePlayActive()) {
         this._stopScenePlay({ restore: !this._roomPreview });
       }
@@ -14067,7 +14374,7 @@ class SceneStudioPanel extends HTMLElement {
     }
     const selected = this._sidebarLightId;
     for (const ring of root.querySelectorAll(".clock-ring[data-entity-id]")) {
-      const on = ring.dataset.entityId === selected;
+      const on = this._view === "edit" ? Boolean(this._legendSelectedIds?.has(ring.dataset.entityId)) : ring.dataset.entityId === selected;
       ring.classList.toggle("selected", on);
       if (on) {
         ring.setAttribute("aria-current", "true");
@@ -14118,6 +14425,16 @@ class SceneStudioPanel extends HTMLElement {
   _syncClockLegendBrightEdit() {
     const editing = Boolean(this._sidebarEventId) && this._view === "edit";
     this._clockLegendEl?.classList.toggle("event-bright-edit", editing);
+    this._syncCircadianSelectAll?.();
+    for (const row of this._clockLegendEl?.querySelectorAll(".simple-light-selector[data-entity-id]") || []) {
+      const button = row.querySelector(".light-remove");
+      if (!button) continue;
+      const reset = Boolean(this._formData?.overrides?.[row.dataset.entityId]?.[this._sidebarEventId]);
+      button.querySelector("ha-icon")?.setAttribute("icon", reset ? "mdi:restore" : "mdi:close");
+      const label = reset ? this._t("frontend.lights.reset_overrides", "Reset overrides") : this._t("frontend.lights.remove_named_from_scene", "Remove {name} from the scene", { name: this._lightDisplayName(row.dataset.entityId) });
+      button.title = label;
+      button.setAttribute("aria-label", label);
+    }
     const copy = this._clockLegendEl?.querySelector(".light-tiles-hint span");
     if (copy) {
       copy.textContent = editing
@@ -14187,7 +14504,7 @@ class SceneStudioPanel extends HTMLElement {
     // Opening a replacement sidebar passes clearSelection:false — otherwise the
     // pre-await ring highlight (_setSidebarLight before _openSceneSidebar) is
     // wiped and the band looks deselected until a second click.
-    if (clearSelection) {
+    if (clearSelection && this._view !== "edit") {
       this._setSidebarEvent(null);
       this._setSidebarLight(null);
       this._clearClockRingHover();
@@ -14214,8 +14531,7 @@ class SceneStudioPanel extends HTMLElement {
     if (el._closing) {
       return;
     }
-    this._setSidebarEvent(null);
-    this._setSidebarLight(null);
+    if (this._view !== "edit") { this._setSidebarEvent(null); this._setSidebarLight(null); }
     this._clearClockRingHover();
     el._closing = true;
     el.classList.remove("open");
@@ -14248,10 +14564,10 @@ class SceneStudioPanel extends HTMLElement {
     if (target) {
       target._isDirty = () => false;
     }
-    this._setSidebarEvent(null);
+    if (this._view !== "edit") this._setSidebarEvent(null);
     if (target?.localName === "ha-bottom-sheet") {
       target.open = false;
-      this._setSidebarLight(null);
+      if (this._view !== "edit") this._setSidebarLight(null);
       this._clearClockRingHover();
       return;
     }
@@ -14341,7 +14657,7 @@ class SceneStudioPanel extends HTMLElement {
       this._setSidebarDocked(false);
       // Only clear if this host still owns the highlight. A delayed desktop
       // close must not wipe the event selected by a newly opened sidebar.
-      if (this._sidebarEventId && this._sidebarEventId === host._eventId) {
+      if (this._view !== "edit" && this._sidebarEventId && this._sidebarEventId === host._eventId) {
         this._setSidebarEvent(null);
       }
       // Mobile bottom-sheet swipe/backdrop dismiss fires closed without always
@@ -15438,975 +15754,6 @@ class SceneStudioPanel extends HTMLElement {
     }
     return best;
   }
-  async _openLightEditDialog(light, event) {
-    if (!this._eventSceneId(event.id)) {
-      return;
-    }
-    const existing = this.shadowRoot?.querySelector(".scene-sidebar.light-dialog");
-    if (
-      existing &&
-      !existing._closing &&
-      existing._lightEntityId === light.entity_id &&
-      existing._switchLightEvent
-    ) {
-      existing._switchLightEvent(event);
-      return;
-    }
-
-    // Highlight before any await (sidebar swap is ~160ms). Otherwise clearing
-    // ring hover (touch pointerup / leave) re-lights the previous .selected
-    // band for a frame and reads as a flash.
-    const previousLightId = this._sidebarLightId;
-    this._setSidebarLight(light.entity_id);
-    this._clearClockRingHover();
-
-    const snapshot = this._snapshotLight(light.entity_id);
-    const attrs = this._hass.states[light.entity_id]?.attributes || {};
-    const supported = attrs.supported_color_modes || [];
-    const onOffOnly = supported.length > 0 && supported.every((mode) => mode === "onoff");
-    const hasColor = supported.some((mode) =>
-      ["hs", "rgb", "rgbw", "rgbww", "xy"].includes(mode)
-    );
-    // rgbww exposes white channels, not always `color_temp` in supported_color_modes.
-    const hasTemp =
-      supported.includes("color_temp") ||
-      supported.includes("rgbww") ||
-      attrs.min_color_temp_kelvin != null;
-    const events = this._sunPath?.events || [];
-    const drafts = new Map();
-    const member = !light.suggested && !light.removed;
-    for (const [index, item] of events.entries()) {
-      const stored = this._lightEventStoredState(light, item.id);
-      drafts.set(item.id, {
-        draft: member ? { ...stored } : null,
-        saved: member ? lightDraftFingerprint(stored) : "absent",
-        savedDraft: structuredClone(stored),
-        member,
-        event: item,
-        index: index + 1,
-      });
-    }
-    let currentEvent = event;
-    let liveApplied = false;
-    let wheelCtl = null;
-    let brightnessGraphCtl = null;
-    let colorBriGraphCtl = null;
-    let whiteBriGraphCtl = null;
-    const whiteKind = supported.includes("rgbww")
-      ? "rgbww"
-      : supported.includes("rgbw")
-        ? "rgbw"
-        : null;
-
-    const currentEntry = () => drafts.get(currentEvent.id);
-    const currentDraft = () => currentEntry()?.draft;
-    const dirtyEntries = () =>
-      [...drafts.entries()].filter(([, entry]) => {
-        if (!entry.member || !entry.draft) {
-          return false;
-        }
-        if (entry.saved === "absent") {
-          return true;
-        }
-        return lightDraftFingerprint(entry.draft) !== entry.saved;
-      });
-    // One undo point for the first edit in this sidebar open; later ticks
-    // (drag, wheel) update the same session drafts until close.
-    let undoCommitted = false;
-    const applyToSession = ({ eventId: editedEventId = currentEvent.id } = {}) => {
-      const dirty = dirtyEntries();
-      if (!dirty.length) {
-        return;
-      }
-      if (!undoCommitted) {
-        this._commitUndo({
-          type: "light",
-          lightId: light.entity_id,
-          eventId: editedEventId,
-        });
-        undoCommitted = true;
-      }
-      for (const [eventId, entry] of dirty) {
-        // Drop undefined keys so kelvin converts do not reintroduce rgb/hs
-        // as nullish fields in the session draft / WS payload.
-        const cleaned = {};
-        for (const [key, value] of Object.entries(entry.draft)) {
-          if (value !== undefined) {
-            cleaned[key] = value;
-          }
-        }
-        this._writeLightEventOverride(light.entity_id, eventId, eventOverrideAfterEdit(
-          this._formData.overrides?.[light.entity_id]?.[eventId], entry.savedDraft, cleaned
-        ));
-        entry.savedDraft = structuredClone(cleaned);
-        entry.saved = lightDraftFingerprint(entry.draft);
-      }
-      if (this._eventBrightnessIsLive()) {
-        this._paintLiveEventBrightness();
-        return;
-      }
-      this._syncPreviewOverlay();
-      this._patchDialFromSession();
-      this._syncThemePreviewSurfaces();
-      this._saveSoon();
-      paintOverrides();
-    };
-    // One queue so a restore cannot be overwritten by an apply that was
-    // already in flight when the sidebar closed.
-    let liveQueue = Promise.resolve();
-    let sidebarLiveClosed = false;
-    const enqueueLive = (task) => {
-      const run = liveQueue.then(task, task);
-      liveQueue = run.then(
-        () => {},
-        () => {}
-      );
-      return run;
-    };
-    const LIVE_PREVIEW_MS = 500;
-    let liveLastSent = 0;
-    let liveTimer = null;
-    let livePending = false;
-    const applySnapshot = () =>
-      enqueueLive(async () => {
-        if (!liveApplied) {
-          return;
-        }
-        liveApplied = false;
-        if (this._roomPreview || this._readRoomPreviewPref()) {
-          return;
-        }
-        await this._applyLightState(light.entity_id, snapshot);
-      });
-    const restoreLive = () => {
-      sidebarLiveClosed = true;
-      if (liveTimer) {
-        clearTimeout(liveTimer);
-        liveTimer = null;
-      }
-      livePending = false;
-      return applySnapshot();
-    };
-    const flushLive = ({ transitionSec = 0 } = {}) =>
-      enqueueLive(async () => {
-        if (sidebarLiveClosed || !this._perLightLiveEditOn()) {
-          return;
-        }
-        livePending = false;
-        liveLastSent = performance.now();
-        liveApplied = true;
-        await this._applyLightState(light.entity_id, currentDraft(), {
-          transition: transitionSec,
-        });
-      });
-    const scheduleLive = async ({ dragging = false } = {}) => {
-      if (!this._perLightLiveEditOn()) {
-        return;
-      }
-      if (!dragging) {
-        if (liveTimer) {
-          clearTimeout(liveTimer);
-          liveTimer = null;
-        }
-        await flushLive({ transitionSec: 0 });
-        return;
-      }
-      const now = performance.now();
-      const elapsed = now - liveLastSent;
-      if (elapsed >= LIVE_PREVIEW_MS) {
-        await flushLive({ transitionSec: LIVE_PREVIEW_MS / 1000 });
-        return;
-      }
-      livePending = true;
-      if (!liveTimer) {
-        liveTimer = setTimeout(() => {
-          liveTimer = null;
-          if (livePending) {
-            void flushLive({ transitionSec: LIVE_PREVIEW_MS / 1000 });
-          }
-        }, LIVE_PREVIEW_MS - elapsed);
-      }
-    };
-    const applyLive = async () => scheduleLive({ dragging: false });
-
-    const activateBtn = document.createElement("ha-button");
-    activateBtn.className = "activate-scene-btn";
-    activateBtn.appearance = "filled";
-    activateBtn.textContent = this._t(
-      "frontend.actions.activate_scene",
-      "Activate scene"
-    );
-    activateBtn.addEventListener("click", async () => {
-      activateBtn.disabled = true;
-      try {
-        await this._activateNativeSceneWithDrafts(this._entityId);
-      } finally {
-        activateBtn.disabled = false;
-      }
-    });
-    this._activateSceneBtn = activateBtn;
-    this._syncActivateSceneButton();
-
-    const liveToggle = document.createElement("label");
-    liveToggle.className = "live-edit-toggle";
-    const liveLabel = document.createElement("span");
-    liveLabel.textContent = this._t(
-      "frontend.actions.live_preview",
-      "Live edit light"
-    );
-    const liveSwitch = document.createElement("ha-switch");
-    liveSwitch.checked = Boolean(this._liveEdit);
-    liveSwitch.addEventListener("change", () => {
-      void this._setLiveEdit(Boolean(liveSwitch.checked));
-    });
-    liveToggle.append(liveLabel, liveSwitch);
-    this._liveEditSwitch = liveSwitch;
-    this._sidebarLiveEditToggle = liveToggle;
-    this._syncSidebarLiveEditToggle();
-
-    const infoBtn = document.createElement("ha-icon-button");
-    infoBtn.label = this._loc(
-      "ui.panel.config.automation.picker.show_settings",
-      "Settings"
-    );
-    const infoIcon = document.createElement("ha-icon");
-    infoIcon.setAttribute("icon", "mdi:information-outline");
-    infoBtn.appendChild(infoIcon);
-    infoBtn.addEventListener("click", () =>
-      this._showEntityMoreInfo(light.entity_id, "settings")
-    );
-
-    const onLiveEditChange = async (on) => {
-      if (on) {
-        await applyLive();
-      } else if (liveApplied) {
-        await applySnapshot();
-      }
-    };
-
-    this._syncRoomPreviewControl();
-
-    const opened = await this._openSceneSidebar({
-      title: this._lightDisplayName(light.entity_id, { fallback: light.name }),
-      subtitle: this._lightSupportsSubtitle(light.entity_id),
-      className: "light-dialog",
-      actionItems: [infoBtn],
-      onDismiss: () => {
-        if (this._liveEditSidebarHandler === onLiveEditChange) {
-          this._liveEditSidebarHandler = null;
-        }
-        if (this._liveEditSwitch === liveSwitch) {
-          this._liveEditSwitch = null;
-        }
-        if (this._sidebarLiveEditToggle === liveToggle) {
-          this._sidebarLiveEditToggle = null;
-        }
-        if (this._activateSceneBtn === activateBtn) {
-          this._activateSceneBtn = null;
-        }
-        this._sidebarUndoBtn = null;
-        this._sidebarRedoBtn = null;
-        this._assignOpenLightToPalette = null;
-        this._refreshInheritedLightDrafts = null;
-        this._syncOpenSceneWheel = null;
-        this._syncPreviewOverlay();
-        this._sunPathKey = undefined;
-        this._ensureSunPath().then(async () => {
-          if (this._readRoomPreviewPref()) {
-            await this._setRoomPreview(true);
-          }
-          this._syncRoomPreviewControl();
-        });
-        if (liveTimer) {
-          clearTimeout(liveTimer);
-          liveTimer = null;
-        }
-        restoreLive();
-        brightnessGraphCtl?.disconnect();
-        colorBriGraphCtl?.disconnect();
-        whiteBriGraphCtl?.disconnect();
-        wheelCtl?.disconnect();
-        if (this._dialBrightnessHook?.kind === "light") {
-          this._dialBrightnessHook = null;
-        }
-      },
-    });
-    if (!opened) {
-      this._setSidebarLight(previousLightId);
-      if (this._readRoomPreviewPref()) {
-        await this._setRoomPreview(true);
-      }
-      return;
-    }
-    this._liveEditSidebarHandler = onLiveEditChange;
-    // Re-assert: _openSceneSidebar may close a prior host whose `closed`
-    // handler clears a matching _sidebarLightId.
-    this._setSidebarLight(light.entity_id);
-    this._setSidebarEvent(event.id);
-    let paintOverrides = () => {};
-    this._dialBrightnessHook = {
-      kind: "light",
-      lightId: light.entity_id,
-      drafts,
-      sync: () => {
-        brightnessGraphCtl?.sync();
-        colorBriGraphCtl?.sync();
-        whiteBriGraphCtl?.sync();
-        wheelCtl?.sync();
-        paintOverrides();
-      },
-    };
-    const { host, header, body, footer } = opened;
-    host._lightEntityId = light.entity_id;
-    host._sceneId = this._editId;
-    host._restoreLive = restoreLive;
-    const subtitleEl = header.querySelector("[slot='subtitle']");
-    const duskSlot = document.createElement("div");
-    const chipsHost = document.createElement("div");
-    const brightnessGraphMount = document.createElement("div");
-    const overridesMount = document.createElement("div");
-    overridesMount.className = "light-overrides";
-    const colorBriMount = document.createElement("div");
-    const whiteBriMount = document.createElement("div");
-    const wheelMount = document.createElement("div");
-    const effectMount = document.createElement("div");
-    effectMount.className = "light-effect-row";
-    body.append(
-      chipsHost,
-      brightnessGraphMount,
-      overridesMount,
-      colorBriMount,
-      whiteBriMount,
-      wheelMount,
-      effectMount,
-      duskSlot
-    );
-
-    let effectMenu = null;
-    const effectList = Array.isArray(attrs.effect_list) ? attrs.effect_list : [];
-    const formatEffect = (effect) => {
-      try {
-        if (typeof this._hass?.formatEntityAttributeValue === "function") {
-          return this._hass.formatEntityAttributeValue(
-            this._hass.states[light.entity_id],
-            "effect",
-            effect
-          );
-        }
-      } catch (_err) {
-        /* fall through */
-      }
-      return effect;
-    };
-    const applyEffect = (next) => {
-      const draft = currentDraft();
-      if (!draft || next == null || next === "") {
-        return;
-      }
-      if (draft.effect === next) {
-        return;
-      }
-      draft.effect = next;
-      draft.state = "on";
-      applyToSession();
-      syncEffectControl();
-      void applyLive();
-    };
-    const bindEffectMenuSelect = (el) => {
-      const dropdown = el.shadowRoot?.querySelector("ha-dropdown");
-      if (!dropdown || dropdown._effectBound) {
-        return Boolean(dropdown);
-      }
-      dropdown._effectBound = true;
-      // ha-control-select-menu no longer fires `select`; the inner
-      // ha-dropdown emits wa-select and that event is not composed.
-      dropdown.addEventListener("wa-select", (ev) => {
-        applyEffect(ev.detail?.item?.value);
-      });
-      return true;
-    };
-    const syncEffectControl = () => {
-      if (!effectMenu) {
-        return;
-      }
-      const draft = currentDraft();
-      const value =
-        draft?.effect && draft.effect !== "none" ? draft.effect : undefined;
-      effectMenu.value = value;
-      effectMenu.disabled = !draft || draft.state === "off";
-      if (effectMenu.localName === "ha-control-select-menu") {
-        bindEffectMenuSelect(effectMenu);
-      }
-    };
-    if (effectList.length && customElements.get("ha-control-select-menu")) {
-      const menu = document.createElement("ha-control-select-menu");
-      menu.label = this._loc("ui.card.light.effect", "Effect");
-      menu.options = effectList.map((effect) => ({
-        value: effect,
-        label: formatEffect(effect),
-        icon: "mdi:creation",
-      }));
-      const icon = document.createElement("ha-icon");
-      icon.slot = "icon";
-      icon.setAttribute("icon", "mdi:creation");
-      menu.appendChild(icon);
-      menu.addEventListener("wa-select", (ev) => {
-        applyEffect(ev.detail?.item?.value);
-      });
-      menu.addEventListener("value-changed", (ev) => {
-        ev.stopPropagation();
-        applyEffect(ev.detail?.value);
-      });
-      effectMenu = menu;
-      if (customElements.get("ha-more-info-control-select-container")) {
-        const wrap = document.createElement("ha-more-info-control-select-container");
-        wrap.appendChild(menu);
-        effectMount.appendChild(wrap);
-      } else {
-        effectMount.appendChild(menu);
-      }
-      syncEffectControl();
-      window.requestAnimationFrame(() => bindEffectMenuSelect(menu));
-    } else if (effectList.length) {
-      // Fallback when more-info controls are not registered yet.
-      const sel = document.createElement("ha-selector");
-      sel.hass = this._hass;
-      sel.label = this._loc("ui.card.light.effect", "Effect");
-      sel.selector = {
-        select: {
-          mode: "dropdown",
-          options: effectList.map((effect) => ({
-            value: effect,
-            label: formatEffect(effect),
-          })),
-        },
-      };
-      sel.addEventListener("value-changed", (ev) => {
-        ev.stopPropagation();
-        applyEffect(ev.detail?.value);
-      });
-      effectMenu = sel;
-      effectMount.appendChild(sel);
-      syncEffectControl();
-    } else {
-      effectMount.hidden = true;
-    }
-
-    const selectScene = async (next, { fromWheel = false } = {}) => {
-      currentEvent = next;
-      this._setSidebarEvent(next.id);
-      if (subtitleEl) {
-        subtitleEl.textContent = this._lightSupportsSubtitle(light.entity_id);
-      }
-      this._syncDuskMinimumSlot(duskSlot, next.id);
-      const entry = drafts.get(next.id);
-      paintChips();
-      paintOverrides();
-      brightnessGraphCtl?.sync();
-      colorBriGraphCtl?.sync();
-      whiteBriGraphCtl?.sync();
-      if (!entry?.member || !entry.draft) {
-        return;
-      }
-      if (!fromWheel) {
-        const mode = draftWheelMode(currentDraft(), hasColor, hasTemp);
-        wheelCtl?.setMode(mode, { convertDraft: false });
-      }
-      wheelCtl?.sync();
-      syncEffectControl();
-      if (this._perLightLiveEditOn()) {
-        await applyLive();
-      }
-    };
-
-    paintOverrides = () => {
-      const stored = this._formData.overrides?.[light.entity_id] || {};
-      const rows = events.filter((item) => {
-        const payload = stored[item.id];
-        if (!payload) {
-          return false;
-        }
-        const theme = this._themeEventDraft(item.id);
-        const bri = Number(payload.brightness);
-        const themeBri = this._themeEventBrightness(item.id);
-        const briOver = !onOffOnly &&
-          Number.isFinite(bri) &&
-          Math.abs(bri - themeBri) > THEME_BRIGHTNESS_SNAP;
-        const colorOver = !onOffOnly &&
-          this._lightDraftLookFingerprint(payload) !==
-          this._lightDraftLookFingerprint(theme);
-        const powerOver = onOffOnly && (payload.state === "off") !== (theme.state === "off");
-        return briOver || colorOver || powerOver;
-      });
-      overridesMount.replaceChildren();
-      if (!rows.length) {
-        overridesMount.hidden = true;
-        return;
-      }
-      overridesMount.hidden = false;
-      const heading = document.createElement("div");
-      heading.className = "light-overrides-title";
-      heading.textContent = this._t("frontend.lights.overrides", "Overrides");
-      overridesMount.appendChild(heading);
-      for (const item of rows) {
-        const payload = stored[item.id];
-        const theme = this._themeEventDraft(item.id);
-        const bri = Number(payload?.brightness);
-        const themeBri = this._themeEventBrightness(item.id);
-        const briOver = !onOffOnly &&
-          Number.isFinite(bri) &&
-          Math.abs(bri - themeBri) > THEME_BRIGHTNESS_SNAP;
-        const colorOver = !onOffOnly &&
-          this._lightDraftLookFingerprint(payload) !==
-          this._lightDraftLookFingerprint(theme);
-        const powerOver = onOffOnly && (payload.state === "off") !== (theme.state === "off");
-        if (!briOver && !colorOver && !powerOver) {
-          continue;
-        }
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "light-override-row";
-        const name = document.createElement("span");
-        name.className = "light-override-name";
-        name.textContent = item.name;
-        const meta = document.createElement("span");
-        meta.className = "light-override-meta";
-        const bits = [];
-        if (briOver) {
-          bits.push(
-            this._t(
-              "frontend.lights.override_brightness",
-              "Brightness {percent}% · theme {theme}%",
-              {
-                percent: String(Math.round((bri / 255) * 100)),
-                theme: String(Math.round((themeBri / 255) * 100)),
-              }
-            )
-          );
-        }
-        if (colorOver) {
-          bits.push(this._t("frontend.lights.override_color", "Color"));
-        }
-        if (powerOver) {
-          bits.push(payload.state === "off"
-            ? this._t("frontend.lights.off", "Off")
-            : this._t("frontend.lights.power", "On"));
-        }
-        meta.textContent = bits.join(" · ");
-        btn.append(name, meta);
-        btn.addEventListener("click", () => {
-          void selectScene(item);
-        });
-        overridesMount.appendChild(btn);
-      }
-    };
-
-    const paintChips = () => {
-      chipsHost.replaceChildren();
-      if (!events.length) {
-        return;
-      }
-      const list = document.createElement("div");
-      list.className = "light-scene-list";
-      list.setAttribute("role", "listbox");
-      list.setAttribute(
-        "aria-label",
-        this._t("frontend.lights.solar_events", "Solar events")
-      );
-      let selectedBtn = null;
-      for (const item of events) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "sun-event clickable";
-        btn.setAttribute("role", "option");
-        if (item.id === currentEvent.id) {
-          btn.setAttribute("aria-current", "true");
-          selectedBtn = btn;
-        }
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("icon", item.icon || "mdi:weather-sunset");
-        const name = document.createElement("span");
-        name.className = "name";
-        name.textContent = item.name;
-        btn.append(icon, name);
-        btn.addEventListener("click", () => {
-          if (item.id !== currentEvent.id) {
-            host._switchLightEvent(item);
-          }
-        });
-        list.appendChild(btn);
-      }
-      chipsHost.appendChild(list);
-      if (selectedBtn) {
-        requestAnimationFrame(() => {
-          const left = Math.max(
-            0,
-            selectedBtn.offsetLeft -
-              (list.clientWidth - selectedBtn.offsetWidth) / 2
-          );
-          // scrollIntoView also pans HA's outer panel scrollport, making the
-          // entire page rebound while this drawer opens. Scroll only this row.
-          list.scrollTo({
-            left,
-            behavior: "smooth",
-          });
-        });
-      }
-    };
-
-    const onWheelChange = async (meta = {}) => {
-      if (!meta.fromPalette) {
-        const entry = currentEntry();
-        if (entry?.draft) {
-          delete entry.draft.variable_ref;
-          delete entry.draft.palette_t;
-          delete entry.draft.palette_r;
-        }
-      }
-      applyToSession();
-      wheelCtl?.syncPresets();
-      brightnessGraphCtl?.sync();
-      colorBriGraphCtl?.sync();
-      whiteBriGraphCtl?.sync();
-      syncEffectControl();
-      this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
-      await scheduleLive({ dragging: Boolean(meta.dragging) });
-    };
-
-    if (onOffOnly) {
-      brightnessGraphCtl = createOnOffEventGraph({
-        title: this._t("frontend.lights.group_onoff", "On/off"),
-        subtitle: this._t("frontend.lights.onoff_events_hint", "Switch each solar event on or off"),
-        onLabel: this._t("frontend.lights.power", "On"),
-        offLabel: this._t("frontend.lights.off", "Off"),
-        getEvents: () => events.map((item) => {
-          const entry = drafts.get(item.id);
-          return {
-            id: item.id,
-            name: item.name,
-            member: Boolean(entry?.member && entry.draft),
-            on: Boolean(entry?.member && entry.draft && entry.draft.state !== "off"),
-            active: item.id === currentEvent.id,
-          };
-        }),
-        onToggle: async (eventId) => {
-          const entry = drafts.get(eventId);
-          if (!entry?.member || !entry.draft) return;
-          toggleOnOffDraft(entry.draft);
-          applyToSession({ eventId });
-          brightnessGraphCtl.sync();
-          paintOverrides();
-          if (eventId === currentEvent.id) await applyLive();
-        },
-      });
-    } else {
-      brightnessGraphCtl = createLightBrightnessGraph({
-        title: this._t("frontend.lights.brightness", "Brightness"),
-        subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
-        getPoints: () => {
-          return events.map((item) => {
-            const entry = drafts.get(item.id);
-            const member = Boolean(entry?.member && entry.draft);
-            const draft = entry?.draft;
-            const brightness = member
-              ? draft.state === "off"
-                ? 0
-                : Number(draft.brightness) || 0
-              : 0;
-            return {
-              eventId: item.id,
-              sceneId: item.id,
-              seconds: item.seconds,
-              name: item.name,
-              icon: item.icon,
-              member,
-              brightness,
-              themeBrightness: this._themeEventBrightness(item.id),
-              rgb: member ? draftRgb(draft) : [128, 128, 128],
-              draft: member ? draft : null,
-              active: member && item.id === currentEvent.id,
-            };
-          });
-        },
-        onSelect: (eventId) => {
-          const next = events.find((item) => item.id === eventId);
-          if (next) {
-            selectScene(next);
-          }
-        },
-        onBrightness: async (sceneId, brightness) => {
-          const entry = drafts.get(sceneId);
-          if (!entry?.member || !entry.draft) {
-            return;
-          }
-          this._beginBrightnessScrub();
-          entry.draft.brightness = brightness;
-          applyToSession();
-          if (this._eventBrightnessIsLive()) {
-            this._paintLiveEventBrightness();
-          }
-          brightnessGraphCtl?.sync();
-          colorBriGraphCtl?.sync();
-          whiteBriGraphCtl?.sync();
-          paintOverrides();
-          await applyLive();
-        },
-        onDragEnd: () => {
-          this._endBrightnessScrub();
-          wheelCtl?.sync();
-        },
-      });
-    }
-    brightnessGraphMount.appendChild(brightnessGraphCtl.el);
-
-    if (whiteKind) {
-      const extraPoints = (valueOf) => () => {
-        return events.map((item) => {
-          const entry = drafts.get(item.id);
-          const member = Boolean(entry?.member && entry.draft);
-          const draft = entry?.draft;
-          return {
-            eventId: item.id,
-            sceneId: item.id,
-            seconds: item.seconds,
-            name: item.name,
-            icon: item.icon,
-            member,
-            brightness: member ? valueOf(draft) : 0,
-            rgb: member ? draftRgb(draft) : [128, 128, 128],
-            draft: member ? draft : null,
-            active: member && item.id === currentEvent.id,
-          };
-        });
-      };
-      colorBriGraphCtl = createLightBrightnessGraph({
-        title: this._t("frontend.lights.color_brightness", "Color brightness"),
-        subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
-        getPoints: extraPoints(colorBrightnessFromDraft),
-        onSelect: (eventId) => {
-          const next = events.find((item) => item.id === eventId);
-          if (next) {
-            selectScene(next);
-          }
-        },
-        onBrightness: async (sceneId, brightness) => {
-          const entry = drafts.get(sceneId);
-          if (!entry?.member || !entry.draft) {
-            return;
-          }
-          this._beginBrightnessScrub();
-          setColorBrightnessOnDraft(entry.draft, brightness, whiteKind);
-          applyToSession();
-          brightnessGraphCtl?.sync();
-          colorBriGraphCtl?.sync();
-          whiteBriGraphCtl?.sync();
-          wheelCtl?.sync();
-          await applyLive();
-        },
-        onDragEnd: () => {
-          this._endBrightnessScrub();
-          wheelCtl?.sync();
-        },
-      });
-      whiteBriGraphCtl = createLightBrightnessGraph({
-        title: this._t("frontend.lights.white_brightness", "White brightness"),
-        subtitle: this._t("frontend.lights.graph_sub", "0–100% by solar event"),
-        getPoints: extraPoints(whiteBrightnessFromDraft),
-        onSelect: (eventId) => {
-          const next = events.find((item) => item.id === eventId);
-          if (next) {
-            selectScene(next);
-          }
-        },
-        onBrightness: async (sceneId, brightness) => {
-          const entry = drafts.get(sceneId);
-          if (!entry?.member || !entry.draft) {
-            return;
-          }
-          this._beginBrightnessScrub();
-          setWhiteBrightnessOnDraft(entry.draft, brightness, whiteKind);
-          applyToSession();
-          brightnessGraphCtl?.sync();
-          colorBriGraphCtl?.sync();
-          whiteBriGraphCtl?.sync();
-          wheelCtl?.sync();
-          await applyLive();
-        },
-        onDragEnd: () => {
-          this._endBrightnessScrub();
-          wheelCtl?.sync();
-        },
-      });
-      colorBriMount.appendChild(colorBriGraphCtl.el);
-      whiteBriMount.appendChild(whiteBriGraphCtl.el);
-    }
-
-    if (hasColor || hasTemp) {
-      wheelCtl = createSceneColorWheel({
-        t: (key, fallback, vars) => this._t(key, fallback, vars),
-        pinFlip: this._wheelPinFlip || null,
-        hasColor,
-        hasTemp,
-        tempMin: attrs.min_color_temp_kelvin || 2000,
-        tempMax: attrs.max_color_temp_kelvin || 6500,
-        ...this._wheelPalette(),
-        getBasePalette: () => {
-          const base = this._sceneBasePalette?.();
-          if (!base?.palette_id) {
-            return null;
-          }
-          return (this._variables || []).find((item) => item.id === base.palette_id) || null;
-        },
-        onPickPalette: async () => {
-          await this._pickSceneBasePalette();
-          wheelCtl?.sync();
-        },
-        getAssignmentEntityId: () => light.entity_id,
-        getAssignmentSeed: () => {
-          const draft = currentDraft();
-          const themeEv = this._themeDraft?.events?.[currentEvent.id];
-          return (
-            Number(draft?.assignment_seed) ||
-            Number(themeEv?.assignment_seed) ||
-            0
-          );
-        },
-        onRandomizeSeed: () => this._randomizeSceneEvent(currentEvent.id),
-        getState: () => ({
-          scenes: events
-            .filter((item) => item.id === currentEvent.id && drafts.get(item.id)?.member)
-            .map((item) => {
-              const entry = drafts.get(item.id);
-              return {
-                id: item.id,
-                index: entry.index,
-                draft: entry.draft,
-                event: item,
-                icon: item.icon,
-              };
-            }),
-          sequence: drafts.get(currentEvent.id)?.member ? [currentEvent.id] : [],
-          activeId: currentEvent.id,
-        }),
-        onSelect: (eventId) => {
-          const entry = drafts.get(eventId);
-          if (entry) {
-            selectScene(entry.event, { fromWheel: true });
-          }
-        },
-        onChange: onWheelChange,
-      });
-      wheelMount.appendChild(wheelCtl.el);
-      this._refreshInheritedLightDrafts = () => {
-        for (const item of events) {
-          const entry = drafts.get(item.id);
-          if (!entry?.member) continue;
-          entry.draft = this._lightEventStoredState(light, item.id);
-          entry.savedDraft = structuredClone(entry.draft);
-          entry.saved = lightDraftFingerprint(entry.draft);
-        }
-        wheelCtl?.sync();
-        brightnessGraphCtl?.sync();
-      };
-      this._syncOpenSceneWheel = () => {
-        if (wheelCtl?.el?.isConnected) {
-          wheelCtl.sync();
-        }
-      };
-      this._assignOpenLightToPalette = (paletteId, seed) => {
-        const draft = currentDraft();
-        const palette = (this._variables || []).find((item) => item.id === paletteId);
-        if (!draft || !palette) {
-          return;
-        }
-        applyVariableToDraft(draft, palette, {
-          entityId: light.entity_id,
-          seed: seed || 0,
-          catalog: this._variables,
-        });
-        wheelCtl?.sync();
-      };
-      wheelCtl.setMode(draftWheelMode(currentDraft(), hasColor, hasTemp), {
-        convertDraft: false,
-      });
-    }
-
-    const bar = document.createElement("div");
-    bar.className = "sidebar-actions-bar";
-    const removeFromSceneBtn = document.createElement("ha-button");
-    removeFromSceneBtn.className = "remove-light-from-scene-btn";
-    removeFromSceneBtn.appearance = "plain";
-    removeFromSceneBtn.textContent = this._t(
-      "frontend.lights.remove_from_scene",
-      "Remove light from scene"
-    );
-    removeFromSceneBtn.hidden = Boolean(this._editingThemeLook());
-    removeFromSceneBtn.addEventListener("click", () => {
-      this._removeLightFromAssignedScenes(light.entity_id);
-    });
-    const removeRow = document.createElement("div");
-    removeRow.className = "sidebar-remove-light";
-    removeRow.appendChild(removeFromSceneBtn);
-    body.appendChild(removeRow);
-    if (this._narrow) {
-      const undo = this._undoRedoButton("undo");
-      const redo = this._undoRedoButton("redo");
-      undo.id = "sidebar-button-undo";
-      redo.id = "sidebar-button-redo";
-      bar.append(undo, redo, liveToggle, activateBtn);
-      this._sidebarUndoBtn = undo;
-      this._sidebarRedoBtn = redo;
-    } else {
-      bar.append(liveToggle, activateBtn);
-      this._sidebarUndoBtn = null;
-      this._sidebarRedoBtn = null;
-    }
-    footer.append(bar);
-    host._reloadDrafts = () => {
-      const fresh =
-        (this._sunPath?.lights || []).find(
-          (row) => row.entity_id === light.entity_id
-        ) || light;
-      const member = !fresh.suggested && !fresh.removed;
-      for (const [index, item] of events.entries()) {
-        const stored = this._lightEventStoredState(fresh, item.id);
-        drafts.set(item.id, {
-          draft: member ? { ...stored } : null,
-          saved: member ? lightDraftFingerprint(stored) : "absent",
-          member,
-          event: item,
-          index: index + 1,
-        });
-      }
-      undoCommitted = false;
-      paintChips();
-      paintOverrides();
-      brightnessGraphCtl?.sync();
-      colorBriGraphCtl?.sync();
-      whiteBriGraphCtl?.sync();
-      wheelCtl?.sync();
-      syncEffectControl();
-      if (this._perLightLiveEditOn()) {
-        void applyLive();
-      }
-    };
-    this._syncDuskMinimumSlot(duskSlot, currentEvent.id);
-    this._syncUndoButtons();
-
-    host._switchLightEvent = async (next) => {
-      await selectScene(next);
-    };
-
-    paintChips();
-    paintOverrides();
-    brightnessGraphCtl?.sync();
-    wheelCtl?.sync();
-    this._syncRoomPreviewControl();
-    if (this._perLightLiveEditOn()) {
-      await applyLive();
-    }
-  }
-
   async _appendSceneRenameFields(dialog, data, { focus } = {}) {
     const chipsAvailable = Boolean(customElements.get("ha-assist-chip"));
     const visible = new Set();
@@ -17778,10 +17125,12 @@ class SceneStudioPanel extends HTMLElement {
       if (this._yearScrubbing) return;
       const vertical = shell.el.clientWidth >= shell.el.clientHeight;
       shell.el.dataset.timeline = vertical ? "vertical" : "horizontal";
-      shell.timeline.hidden = false;
+      const timelineHidden = this._sceneSidebarIsOpen();
+      shell.timeline.hidden = timelineHidden;
+      shell.el.dataset.timelineHidden = String(timelineHidden);
       if (this._yearScrub.parentNode !== shell.timeline) shell.timeline.replaceChildren(this._yearScrub);
       this._yearScrub.classList.toggle("vertical", vertical);
-      this._yearScrub.setAttribute("aria-hidden", "false");
+      this._yearScrub.setAttribute("aria-hidden", String(timelineHidden));
       this._clockScrubRail.hidden = true;
       this._sunPathStage?.classList.remove("landscape-clock-scrub", "scrub-collapsed");
       const chrome = this._ensureToolbarChrome();
@@ -20306,7 +19655,7 @@ class SceneStudioPanel extends HTMLElement {
     const legendLights = this._legendLights(payload.lights || []);
     const legendRows = [
       ...(this._clockLegendEl?.querySelectorAll(
-        ".simple-light-selector:not(.add-light-tile)"
+        ".simple-light-selector:not(.add-light-tile):not(.select-all-tile)"
       ) || []),
     ];
     if (legendRows.length !== legendLights.length) {
@@ -20578,7 +19927,7 @@ class SceneStudioPanel extends HTMLElement {
       ring.dataset.entityId = light.entity_id;
       ring.style.setProperty("--ring-inner", `${inner}%`);
       ring.style.setProperty("--ring-outer", `${outer}%`);
-      if (light.entity_id === this._sidebarLightId) {
+      if (this._legendSelectedIds?.has(light.entity_id)) {
         ring.classList.add("selected");
         ring.setAttribute("aria-current", "true");
       }
@@ -20704,9 +20053,8 @@ class SceneStudioPanel extends HTMLElement {
       if (!light) {
         return;
       }
-      // Clicking the already-selected ring deselects and closes the sidebar.
-      if (light.entity_id === this._sidebarLightId) {
-        this._requestCloseSceneSidebar();
+      if (this._view === "edit") {
+        this._selectCircadianLight(light.entity_id, ev);
         return;
       }
       const seconds =
@@ -20720,14 +20068,7 @@ class SceneStudioPanel extends HTMLElement {
         }
         return;
       }
-      const assigned = events.filter((item) => this._eventSceneId(item.id));
-      if (!assigned.length) {
-        return;
-      }
-      const closest = this._closestEvent(assigned, seconds);
-      if (closest) {
-        this._openLightEditDialog(light, closest);
-      }
+
     };
     ringsHost.addEventListener("click", (ev) => {
       // Always stop: planet clicks must not hit the outside-deselect listener.
@@ -21173,6 +20514,7 @@ class SceneStudioPanel extends HTMLElement {
         })
       );
     }
+    if (this._view === "edit" && legendLights.filter(light => !light.removed && !light.suggested).length > 1) tiles.prepend(this._createCircadianSelectAll());
     this._placeLegendModeGroups(tiles);
     if (tiles.childElementCount) {
       scroller.appendChild(tiles);
@@ -21325,7 +20667,9 @@ class SceneStudioPanel extends HTMLElement {
         return name(a).localeCompare(name(b));
       });
     const groupOrder = lightTileGroupOrder(paletteKeys);
+    const selectAll = tilesEl.querySelector(".select-all-tile");
     tilesEl.replaceChildren();
+    if (selectAll) tilesEl.append(selectAll);
     for (const key of groupOrder) {
       const rows = grouped.get(key) || [];
       if (!rows.length) {
@@ -21341,13 +20685,17 @@ class SceneStudioPanel extends HTMLElement {
         selectAllLabel,
         groupKey: key,
         onSelectAll: (ev) => {
+          if (this._view === "edit" && !this._requireCircadianEvent()) return;
           const result = groupSelectionAfterClick({
             ids,
             selected: [...(this._legendSelectedIds || [])],
             toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey || ev?.shiftKey),
           });
           this._legendSelectedIds = new Set(result.selected);
+          this._syncOpenSceneWheel?.();
           this._syncClockLightSelection();
+          this._syncCircadianSelectAll?.();
+          this._reopenCircadianEvent();
           revealLightActionsNow(this.shadowRoot);
         },
       });
@@ -21389,17 +20737,8 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _toggleLegendLightPower(entityId) {
-    const events = this._sunPath?.events || [];
-    const assigned = events.filter((item) => this._eventSceneId(item.id));
-    const pinned = assigned.find((item) => item.id === this._sidebarEventId);
-    const now =
-      this._clockSunDisplayedSeconds ??
-      this._clockStickySeconds ??
-      this._clockSunIdleSeconds();
-    const event = pinned || this._closestEvent(assigned, now);
-    if (!event) {
-      return;
-    }
+    if (!this._requireCircadianEvent()) return;
+    const event = this._sunPath.events.find(item => item.id === this._sidebarEventId);
     const current = this._dialEventBrightness(event.id, entityId);
     const key = `${entityId}:${event.id}`;
     if (!this._legendPowerLevel) {
@@ -21410,10 +20749,13 @@ class SceneStudioPanel extends HTMLElement {
     if (current > 0) {
       this._legendPowerLevel.set(key, current);
     }
-    this._writeDialEventBrightness(event.id, next, {
-      history: true,
-      lightId: entityId,
+    this._commitUndo({ type: "light", lightId: entityId, eventId: event.id });
+    this._writeLightEventOverride(entityId, event.id, {
+      ...(this._formData.overrides?.[entityId]?.[event.id] || {}),
+      state: next > 0 ? "on" : "off",
+      brightness: next,
     });
+    this._refreshCircadianEvent();
   }
 
   _clockLegendRow(light, events) {
@@ -21506,18 +20848,26 @@ class SceneStudioPanel extends HTMLElement {
             return;
           }
           ev.stopPropagation();
-          const pinned = assigned.find(
-            (item) => item.id === this._sidebarEventId
-          );
-          const now =
-            this._clockSunDisplayedSeconds ??
-            this._clockStickySeconds ??
-            this._clockSunIdleSeconds();
-          const closest = pinned || this._closestEvent(assigned, now);
-          if (closest) {
-            this._openLightEditDialog(light, closest);
-          }
+          this._selectCircadianLight(light.entity_id, ev);
         };
+        let hold;
+        let origin;
+        tile.addEventListener("pointerdown", ev => {
+          if (ev.pointerType !== "touch") return;
+          origin = { x: ev.clientX, y: ev.clientY };
+          hold = setTimeout(() => {
+            if (!tile.isConnected || !this._requireCircadianEvent()) return;
+            this._circadianTouchSelect = true;
+            this._selectCircadianLight(light.entity_id, { toggleKey: true });
+            tile._lightTileSuppressTap = true;
+          }, 480);
+        });
+        tile.addEventListener("pointermove", ev => {
+          if (origin && Math.hypot(ev.clientX - origin.x, ev.clientY - origin.y) >= 8) clearTimeout(hold);
+        });
+        const endHold = () => { clearTimeout(hold); origin = null; setTimeout(() => { tile._lightTileSuppressTap = false; }, 400); };
+        tile.addEventListener("pointerup", endHold);
+        tile.addEventListener("pointercancel", endHold);
         tile.addEventListener("click", openClosest);
         tile.addEventListener("keydown", (ev) => {
           if (ev.key !== "Enter" && ev.key !== " ") {
@@ -21527,6 +20877,7 @@ class SceneStudioPanel extends HTMLElement {
           openClosest(ev);
         });
         bindLightTileBrightness(tile, hit, {
+          onBlocked: () => this._requireCircadianEvent(),
           isEditable: () =>
             Boolean(this._sidebarEventId) &&
             assigned.some((item) => item.id === this._sidebarEventId),
@@ -21555,7 +20906,10 @@ class SceneStudioPanel extends HTMLElement {
             "Remove {name} from the scene",
             { name: lightName }
           ),
-          onRemove: () => this._removeLightFromAssignedScenes(light.entity_id),
+          onRemove: () => {
+            if (this._formData.overrides?.[light.entity_id]?.[this._sidebarEventId]) this._resetCircadianLight(light.entity_id);
+            else this._removeLightFromAssignedScenes(light.entity_id);
+          },
           settingsLabel: this._t(
             "frontend.lights.settings_named",
             "Settings for {name}",

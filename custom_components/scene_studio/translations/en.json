@@ -57,7 +57,6 @@
       "variable_edit_hint": "Color and brightness are shared by every circadian preset or light that still uses this color preset.",
       "palette_edit_hint": "A scene preset is five colors. Lights that use it pick a slot; changing the preset updates those lights the next time a scene runs.",
       "theme_hint": "Open a circadian preset to edit its color and brightness at each solar event. Changes apply to every circadian scene that still uses the preset; per-light overrides stay as they are.",
-      "scene_event_edit_hint": "Editing lights changes only this scene and solar event. Other events and shared presets stay as they are.",
       "theme_edit_hint": "Editing {name} changes every circadian scene that still uses this circadian preset. Per-light overrides on those scenes stay as they are.",
       "theme_event_subtitle": "{name} preset",
       "theme_missing": "Circadian preset not found",
@@ -92,7 +91,8 @@
       "slot_custom": "Custom color",
       "randomize": "Randomize",
       "variable_missing": "Color preset not found",
-      "palette_missing": "Scene preset not found"
+      "palette_missing": "Scene preset not found",
+      "pick_scene_preset": "Choose scene preset"
     },
     "kinds": {
       "circadian": "Circadian scene",
@@ -397,7 +397,7 @@
       "graph_sub": "0–100% by solar event",
       "onoff_events_hint": "Switch each solar event on or off",
       "overrides": "Overrides",
-      "override_brightness": "Brightness {percent}% · preset {theme}%",
+      "override_brightness": "Brightness",
       "override_color": "Color",
       "solar_events": "Solar events",
       "select_all": "Select all",
@@ -425,7 +425,11 @@
       "remove_named_from_scene": "Remove {name} from the scene",
       "add_light_title": "Add light",
       "add_light_help": "Add a light from another area (or any light not yet in these scenes). Its current look is copied into every assigned native scene.",
-      "light": "Light"
+      "light": "Light",
+      "select_event_first": "Select a solar event before changing lights",
+      "reset_overrides": "Reset overrides",
+      "override_state": "Power",
+      "override_effect": "Effect"
     },
     "defaults": {
       "circadian_scene": "Circadian"

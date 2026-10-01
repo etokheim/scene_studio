@@ -1516,6 +1516,7 @@ export function bindLightTileBrightness(tile, hit, {
   setBrightness,
   onDragEnd,
   isBinary,
+  onBlocked,
 }) {
   let drag = null;
   let wheelAxis = null;
@@ -1598,6 +1599,7 @@ export function bindLightTileBrightness(tile, hit, {
       }
       drag.axis = "y";
       drag.suppressTap = true;
+      if (!isEditable()) { drag.axis = "blocked"; onBlocked?.(); endDrag(ev); return; }
       historyPending = true;
       tile.classList.add("dragging");
       try {
@@ -1607,7 +1609,7 @@ export function bindLightTileBrightness(tile, hit, {
       }
       return;
     }
-    if (drag.axis !== "y") {
+    if (drag.axis !== "y" || !isEditable()) {
       return;
     }
     ev.preventDefault();
@@ -1633,7 +1635,7 @@ export function bindLightTileBrightness(tile, hit, {
   };
 
   hit.addEventListener("pointerdown", (ev) => {
-    if (!isEditable() || (ev.button && ev.button !== 0)) {
+    if ((ev.button && ev.button !== 0) || (!isEditable() && !onBlocked)) {
       return;
     }
     historyPending = true;
@@ -1642,7 +1644,7 @@ export function bindLightTileBrightness(tile, hit, {
       pointerId: ev.pointerId,
       startX: ev.clientX,
       startY: ev.clientY,
-      startFill: currentFill(),
+      startFill: isEditable() ? currentFill() : 0,
       axis: null,
       suppressTap: false,
     };
@@ -1654,9 +1656,6 @@ export function bindLightTileBrightness(tile, hit, {
   tile.addEventListener(
     "wheel",
     (ev) => {
-      if (!isEditable()) {
-        return;
-      }
       const absX = Math.abs(ev.deltaX);
       const absY = Math.abs(ev.deltaY);
       const wantsHorizontal = ev.shiftKey || (absX > 0 && absX >= absY);
@@ -1668,9 +1667,8 @@ export function bindLightTileBrightness(tile, hit, {
         }, 180);
         return;
       }
-      if (absY === 0) {
-        return;
-      }
+      if (absY === 0) { return; }
+      if (!isEditable()) { onBlocked?.(); return; }
       if (wheelAxis !== "y") {
         historyPending = true;
       }
@@ -1678,6 +1676,7 @@ export function bindLightTileBrightness(tile, hit, {
       window.clearTimeout(wheelAxisTimer);
       wheelAxisTimer = window.setTimeout(() => {
         wheelAxis = null;
+        onDragEnd?.();
       }, 180);
       ev.preventDefault();
       tile.classList.add("wheel-adjusting");

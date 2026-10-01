@@ -167,3 +167,115 @@ test("event brightness without a scene preset never writes the shared circadian 
   assert.deepEqual(panel._formData.event_palettes.dawn, { brightness_adjustment: { scale: 0.5, ceiling: 127.5 } });
   assert.equal(theme.events.dawn.brightness, 100);
 });
+
+test("circadian tile edits are blocked until an event is selected", () => {
+  let hints = 0;
+  const scene = { kind: "circadian", overrides: {} };
+  const panel = { _formData: scene, _sidebarEventId: null, _eventGuidance: { show() { hints++; } }, _sunPath: { events: [{ id: "dawn" }] } };
+  panel._requireCircadianEvent = () => methods._requireCircadianEvent.call(panel);
+  methods._selectCircadianLight.call(panel, "light.a");
+  methods._resetCircadianLight.call(panel, "light.a");
+  methods._toggleLegendLightPower.call(panel, "light.a");
+  assert.equal(hints, 3);
+  assert.deepEqual(scene.overrides, {});
+  assert.equal(panel._legendSelectedIds, undefined);
+});
+
+test("circadian selection shares normal click, range, toggle, and touch multiselect semantics", () => {
+  const panel = { _requireCircadianEvent: () => true, _circadianMemberIds: () => ["light.a", "light.b", "light.c"], _syncClockLightSelection() {}, shadowRoot: { querySelector: () => null } };
+  const pick = (id, ev = {}) => methods._selectCircadianLight.call(panel, id, ev, { open: false });
+  pick("light.a"); assert.deepEqual([...panel._legendSelectedIds], ["light.a"]);
+  pick("light.c", { shiftKey: true }); assert.deepEqual([...panel._legendSelectedIds], ["light.a", "light.b", "light.c"]);
+  pick("light.b", { ctrlKey: true }); assert.deepEqual([...panel._legendSelectedIds], ["light.a", "light.c"]);
+  pick("light.c"); assert.deepEqual([...panel._legendSelectedIds], ["light.a"]);
+  pick("light.a"); assert.deepEqual([...panel._legendSelectedIds], []);
+  panel._circadianTouchSelect = true;
+  pick("light.a"); pick("light.b"); assert.deepEqual([...panel._legendSelectedIds], ["light.a", "light.b"]);
+});
+
+test("light reset removes only the selected event and retains shared presets and other lights", () => {
+  const theme = { events: { dawn: { brightness: 100 } } };
+  const scene = { overrides: { "light.a": { dawn: { brightness: 40, effect: "rainbow" }, noon: { brightness: 80 } }, "light.b": { dawn: { brightness: 30 } } }, event_palettes: { dawn: { palette_id: "p" } } };
+  let refreshed = false;
+  const panel = { _formData: scene, _themeDraft: theme, _sidebarEventId: "dawn", _requireCircadianEvent: () => true, _commitUndo() {}, _refreshCircadianEvent: () => { refreshed = true; } };
+  panel._deleteLightEventOverride = (...args) => methods._deleteLightEventOverride.call(panel, ...args);
+  methods._resetCircadianLight.call(panel, "light.a");
+  assert.deepEqual(scene.overrides, { "light.a": { noon: { brightness: 80 } }, "light.b": { dawn: { brightness: 30 } } });
+  assert.deepEqual(scene.event_palettes, { dawn: { palette_id: "p" } });
+  assert.deepEqual(theme.events.dawn, { brightness: 100 });
+  assert.equal(refreshed, true);
+});
+
+test("binary event tiles display On and Off without depending on a percentage", () => {
+  const panel = { _formData: { kind: "circadian" }, _themeDraft: {}, _lightModeFlags: () => ({ onOff: true }), _lightEventStoredState: () => ({ state: "on" }) };
+  assert.equal(methods._dialEventBrightness.call(panel, "dawn", "light.a"), 255);
+  panel._lightEventStoredState = () => ({ state: "off" });
+  assert.equal(methods._dialEventBrightness.call(panel, "dawn", "light.a"), 0);
+});
+
+test("event power can resume an explicit Off override without removing other fields", () => {
+  const scene = { overrides: { "light.a": { dawn: { state: "off", brightness: 80, effect: "rainbow" } } } };
+  const panel = { _formData: scene, _sidebarEventId: "dawn", _sunPath: { events: [{ id: "dawn" }] }, _requireCircadianEvent: () => true, _dialEventBrightness: () => 0, _commitUndo() { assert.equal(scene.overrides['light.a'].dawn.state, "off"); }, _refreshCircadianEvent() {} };
+  panel._writeLightEventOverride = (...args) => methods._writeLightEventOverride.call(panel, ...args);
+  methods._toggleLegendLightPower.call(panel, "light.a");
+  assert.deepEqual(scene.overrides['light.a'].dawn, { state: "on", brightness: 255, effect: "rainbow" });
+});
+
+test("interrupted event openings do not remount obsolete sidebar content", async () => {
+  const waits = [];
+  const panel = {
+    _view: "edit", _sunPath: { events: [{ id: "dawn" }, { id: "noon" }] },
+    _themeDraft: { name: "Default" }, _currentHash: () => "edit/s", _t: (_key, fallback) => fallback,
+    _themeEventDraft: () => ({ brightness: 100 }),
+    _eventWheelRows: () => [{ id: "light.a" }],
+    _legendSelectedIds: new Set(["light.a", "light.removed"]),
+    _openSceneSidebar: () => new Promise(resolve => waits.push(resolve)),
+    _setSidebarEvent: () => assert.fail("stale event mounted"),
+  };
+  const first = methods._openThemeEventSidebar.call(panel, { id: "dawn" });
+  const second = methods._openThemeEventSidebar.call(panel, { id: "noon" });
+  waits[0]({}); await first;
+  waits[1](null); await second;
+  assert.deepEqual([...panel._legendSelectedIds], ["light.a"]);
+  assert.equal(panel._eventSidebarOwner, undefined);
+});
+
+test("closing a circadian sidebar retains event and light selection", () => {
+  const host = new EventTarget(); host.remove = () => {};
+  const panel = { _view: "edit", _formData: { kind: "circadian" }, _sidebarEventId: "dawn", _legendSelectedIds: new Set(["light.a"]), shadowRoot: { querySelector: () => host }, _setSidebarEvent: () => assert.fail("event cleared"), _setSidebarLight: () => assert.fail("lights cleared"), _setSidebarDocked() {} };
+  methods._closeSceneSidebar.call(panel);
+  assert.equal(panel._sidebarEventId, "dawn");
+  assert.deepEqual([...panel._legendSelectedIds], ["light.a"]);
+});
+
+test("the first inherited-event brightness undo snapshot contains no incomplete assignment", () => {
+  let before;
+  const panel = {
+    _view: "edit", _formData: { kind: "circadian" }, _eventBrightnessIsLive: () => false,
+    _inheritedEventBrightness: () => 100, _commitUndo() { before = structuredClone(this._formData); },
+    _patchDialFromSession() {}, _syncThemePreviewSurfaces() {}, _saveSoon() {},
+  };
+  methods._writeDialEventBrightness.call(panel, "dawn", 50, { lightId: null, history: true });
+  assert.equal(before.event_palettes, undefined);
+  assert.deepEqual(panel._formData.event_palettes.dawn.brightness_adjustment, { scale: .5, ceiling: 127.5 });
+});
+
+test("collaborative scene saves refresh the open event editor without resetting its selection", async () => {
+  const base = { kind: "circadian", overrides: {} };
+  const saved = { kind: "circadian", overrides: { "light.a": { dawn: { brightness: 80 } } } };
+  let refreshes = 0;
+  const panel = {
+    isConnected: true, _collabRefreshGeneration: 0, _view: "edit", _editId: "s",
+    _sceneBase: base, _formData: structuredClone(base), _sceneRevision: "old",
+    _sidebarEventId: "dawn", _legendSelectedIds: new Set(["light.a"]),
+    _hass: { callWS: async () => ({ scenes: [{ id: "s", revision: "new", form: saved }] }) },
+    _applyAreaCatalog() {}, _rebaseSceneHistory() {}, _syncAppBarTitle() {},
+    _patchDialFromSession() {}, _syncSceneUsed() {}, _snapshotSession: () => ({}),
+    _refreshInheritedLightDrafts() { refreshes++; assert.equal(this._formData.overrides['light.a'].dawn.brightness, 80); },
+  };
+  await methods._receiveSavedChange.call(panel, { kind: "scene" });
+  assert.equal(panel._error, undefined);
+  assert.equal(refreshes, 1);
+  assert.equal(panel._sidebarEventId, "dawn");
+  assert.deepEqual([...panel._legendSelectedIds], ["light.a"]);
+});

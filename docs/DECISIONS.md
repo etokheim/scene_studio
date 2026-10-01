@@ -883,3 +883,18 @@ commands. Exception lists accept missing hardware but reject overlapping lists.
 ### Scene-local event brightness without a scene preset
 
 Circadian scene event graphs store an event-local brightness adjustment even when the color comes directly from the circadian preset. An event assignment may therefore contain a brightness adjustment without a palette ID. This preserves inheritance without writing the shared preset or manufacturing brightness overrides for every light. Explicit per-light brightness remains authoritative.
+
+### One event editor for circadian scene lights
+
+Circadian scene tiles, dial bands, and event wheels share a scene-local selection.
+Closing the sidebar retains the selected event and lights; leaving the scene
+clears them. Light actions require an explicit event so a nearest-time guess
+cannot edit an unintended event. Membership and HA settings remain independent.
+The Library editor continues to edit shared circadian presets.
+
+Event-source reset removes only that scene/event assignment (including its seed
+and brightness adjustment). Light reset removes only that light/event override.
+Override summaries compare the current capability-adapted inherited event target.
+Effects remain stored and are listed, but there is no effect-editing control.
+Guidance owns one cancellable timer lifecycle; navigation and event selection
+cancel both pending notifications and dial-button animations.

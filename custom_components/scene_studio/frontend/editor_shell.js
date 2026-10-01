@@ -404,10 +404,11 @@ export const EDITOR_CONTAINER_CSS = `
   .editor-preview { grid-column: 1; grid-row: 3; }
   .editor-lights { grid-column: 1; grid-row: 4; }
   .editor-shell[data-timeline="vertical"] { grid-template-columns: minmax(0, 1fr) 64px; grid-template-rows: auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
-  .editor-shell[data-timeline="vertical"] .editor-timeline { grid-column: 2; grid-row: 1 / 4; height: 100%; padding: 12px 12px 12px 0; box-sizing: border-box; }
+  .editor-shell[data-timeline="vertical"] .editor-timeline { grid-column: 2; grid-row: 2; height: 100%; padding: 12px 12px 12px 0; box-sizing: border-box; }
   .editor-shell[data-timeline="vertical"] .sun-year-scrub { height: 100%; min-height: 0; margin: 0; }
   .editor-shell[data-timeline="vertical"] .editor-preview { grid-row: 2; }
   .editor-shell[data-timeline="vertical"] .editor-lights { grid-row: 3; }
+  .editor-shell[data-timeline-hidden="true"] { grid-template-columns: minmax(0, 1fr); }
   .editor-shell[data-overlap="true"] .editor-preview { grid-row: 1 / 4; }
   .editor-shell[data-overlap="true"][data-timeline="vertical"] .editor-preview { grid-row: 1 / 3; }
   :host .editor-shell .sun-path.dial-view .sun-light-clock { padding: 0; }
