@@ -1,3 +1,4 @@
+import { editorPath, editorRoute, libraryItemRoute } from "./editor_routes.js";
 import { capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
   buildClientSunDay,
@@ -84,7 +85,7 @@ import {
 } from "./landing.js";
 import { lightDisplayName } from "./display_names.js";
 import { createOnOffEventGraph, toggleOnOffDraft } from "./onoff_graph.js";
-import { defaultOnPreference, libraryColorTarget, sceneRailCatalogKey } from "./panel_state.js";
+import { defaultOnPreference, sceneRailCatalogKey } from "./panel_state.js";
 import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
@@ -5293,8 +5294,15 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _hashHref(hash) {
-    const suffix = hash ? `#${hash}` : "";
-    return `${window.location.pathname}${window.location.search}${suffix}`;
+    return `${editorPath(hash)}${window.location.search}`;
+  }
+
+  _locationRoute() {
+    return editorRoute(window.location);
+  }
+
+  _railTabStorageKey(route = this._currentHash()) {
+    return `${DOMAIN}.railTab.${this._hass?.user?.id || "anon"}.${route}`;
   }
 
   async _go(hash) {
@@ -5308,17 +5316,20 @@ class SceneStudioPanel extends HTMLElement {
     if (!gate.current(token)) return;
     this._abortPreview();
     this._forceCloseSceneSidebar();
-    const previous = (window.location.hash || "#").replace(/^#/, "");
-    window.location.hash = hash;
-    const next = (window.location.hash || "#").replace(/^#/, "");
-    // Setting the same hash (including "" → "") does not fire hashchange.
-    if (previous === next) {
-      void this._syncHash();
+    if (/^(edit|theme|palette|variable)\//.test(hash)) this._editorReturnTab = this._railTab;
+    const href = this._hashHref(hash);
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== href) {
+      history.pushState(null, "", href);
     }
+    window.dispatchEvent(new Event("location-changed"));
+    void this._syncHash();
   }
 
   async _syncHash() {
-    const hash = (window.location.hash || "#").replace(/^#/, "");
+    const hash = this._locationRoute();
+    if (hash === null) return;
+    const canonical = this._hashHref(hash);
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== canonical) history.replaceState(null, "", canonical);
     // hashchange and HA's location-changed both fire for one hash write,
     // about 30ms apart. The first pass has already returned by then, and a
     // second pass rebuilt the editor while the first animation was running.
@@ -5342,7 +5353,7 @@ class SceneStudioPanel extends HTMLElement {
       await this._syncHashOnce();
       while (this._hashSyncQueued) {
         this._hashSyncQueued = false;
-        this._hashSyncHash = (window.location.hash || "#").replace(/^#/, "");
+        this._hashSyncHash = this._locationRoute();
         this._hashSyncAt = performance.now();
         await this._syncHashOnce();
       }
@@ -5352,7 +5363,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   async _syncHashOnce() {
-    const hash = (window.location.hash || "#").replace(/^#/, "");
+    const hash = this._locationRoute();
     if (
       this._pendingRailSceneId &&
       hash !== `edit/${this._pendingRailSceneId}`
@@ -5372,7 +5383,7 @@ class SceneStudioPanel extends HTMLElement {
       }
       this._abortPreview();
       this._forceCloseSceneSidebar();
-      if ((window.location.hash || "#").replace(/^#/, "") !== hash) {
+      if (this._locationRoute() !== hash) {
         history.replaceState(null, "", this._hashHref(hash));
       }
     }
@@ -6739,6 +6750,16 @@ class SceneStudioPanel extends HTMLElement {
       }
     }
     this._captureAreaRailScroll();
+    try {
+      window.localStorage.setItem(this._railTabStorageKey(), tab);
+    } catch (error) {
+      // Storage can be disabled; navigation still works for this visit.
+      if (!["SecurityError", "QuotaExceededError"].includes(error.name)) throw error;
+    }
+    if (this._view === "list" || this._view === "variables") {
+      void this._go(tab === "library" ? "variables" : "");
+      return;
+    }
     this._railTab = tab;
     const rail = this._contentEl?.querySelector(".area-rail");
     if (!rail) {
@@ -6758,7 +6779,8 @@ class SceneStudioPanel extends HTMLElement {
 
   _noteRailTabForHash(hash) {
     const library = /^(variable|palette|theme|variables)(\/|$)/.test(hash || "");
-    const nextTab = library ? "library" : "scenes";
+    const remembered = this._readLocalStorage(this._railTabStorageKey(hash));
+    const nextTab = remembered === "library" || remembered === "scenes" ? remembered : library ? "library" : "scenes";
     // edit → edit stays on the scenes rail. Rebuilding it jumps scroll and
     // flashes the selection. Load, and arrival from the list or library, still
     // reveal when the card is outside the scrollport.
@@ -9084,9 +9106,7 @@ class SceneStudioPanel extends HTMLElement {
   _openVariableEditor(variable) {
     if (variable?.id) {
       this._go(
-        variableIsPalette(variable)
-          ? `palette/${variable.id}`
-          : libraryColorTarget(this._view === "variable" ? this._variableId : null, variable.id)
+        libraryItemRoute(variableIsPalette(variable) ? "palette" : "variable", this._view, this._variableId, variable.id)
       );
       return;
     }
@@ -9095,7 +9115,7 @@ class SceneStudioPanel extends HTMLElement {
 
   _openPaletteEditor(palette) {
     if (palette?.id) {
-      this._go(`palette/${palette.id}`);
+      this._go(libraryItemRoute("palette", this._view, this._variableId, palette.id));
       return;
     }
     void this._createLibraryItem("palette");
@@ -9577,7 +9597,7 @@ class SceneStudioPanel extends HTMLElement {
 
   _openThemeEditor(theme) {
     if (theme?.id) {
-      this._go(`theme/${theme.id}`);
+      this._go(libraryItemRoute("theme", this._view, this._themeId, theme.id));
     }
   }
 
@@ -14319,7 +14339,7 @@ class SceneStudioPanel extends HTMLElement {
       const button = document.createElement("ha-icon-button-arrow-prev");
       button.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        this._go("");
+        this._go((this._editorReturnTab || this._railTab) === "library" ? "variables" : "");
       });
       return button;
     }
@@ -14329,13 +14349,13 @@ class SceneStudioPanel extends HTMLElement {
       const icon = document.createElement("ha-icon");
       icon.setAttribute("icon", "mdi:arrow-left");
       button.appendChild(icon);
-      button.addEventListener("click", () => this._go(""));
+      button.addEventListener("click", () => this._go((this._editorReturnTab || this._railTab) === "library" ? "variables" : ""));
       return button;
     }
     const button = document.createElement("button");
     button.className = "fallback ghost";
     button.textContent = "Back";
-    button.addEventListener("click", () => this._go(""));
+    button.addEventListener("click", () => this._go((this._editorReturnTab || this._railTab) === "library" ? "variables" : ""));
     return button;
   }
 
