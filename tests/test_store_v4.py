@@ -583,3 +583,11 @@ def test_event_adjustment_survives_normalization_and_editor_round_trip():
     assert item["event_palettes"]["dawn"] == assignment
     assert to_form_data(item)["event_palettes"]["dawn"] == assignment
     assert item["overrides"]["light.a"]["dawn"] == {"brightness": 32}
+
+
+def test_inherited_event_brightness_survives_editor_round_trip():
+    assignment = {"brightness_adjustment": {"scale": 0.5, "ceiling": 127.5}}
+    item = normalize_circadian_scene(
+        {SCENE_NAME: "A", "event_palettes": {"dawn": assignment}}
+    )
+    assert to_form_data(item)["event_palettes"]["dawn"] == assignment

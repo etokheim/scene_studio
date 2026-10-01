@@ -567,3 +567,29 @@ def test_temp_only_adaptation_preserves_snapshot_state_when_palette_is_chromatic
             {"light.a": {"color_temp"}},
         )
         assert snapshot["light.a"] == {"state": state, "brightness": 72}
+
+
+def test_inherited_event_adjustment_preserves_explicit_light_brightness():
+    themes = {
+        "t": {
+            "events": {
+                "dawn": {
+                    "brightness": 100,
+                    "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+                }
+            }
+        }
+    }
+    scene = {
+        "theme_id": "t",
+        "event_palettes": {
+            "dawn": {"brightness_adjustment": {"scale": 0.5, "ceiling": 127.5}}
+        },
+        "overrides": {"light.a": {"dawn": {"brightness": 80}}},
+    }
+    result = build_circadian_event_snapshot(
+        scene, "dawn", {}, themes, ["light.a", "light.b"]
+    )
+    assert result["light.a"]["brightness"] == 80
+    assert result["light.b"]["brightness"] == 50
+    assert themes["t"]["events"]["dawn"]["brightness"] == 100

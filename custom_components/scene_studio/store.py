@@ -246,12 +246,14 @@ def _normalize_event_palettes(raw: Any) -> dict[str, dict[str, Any]]:
         if not isinstance(entry, dict):
             continue
         palette_id = entry.get("palette_id") or None
-        if not palette_id:
+        if not palette_id and "brightness_adjustment" not in entry:
             continue
-        result[event] = {
-            "palette_id": palette_id,
-            "assignment_seed": int(entry.get("assignment_seed") or 0),
-        }
+        result[event] = {}
+        if palette_id:
+            result[event].update(
+                palette_id=palette_id,
+                assignment_seed=int(entry.get("assignment_seed") or 0),
+            )
         if "brightness_adjustment" in entry:
             result[event]["brightness_adjustment"] = dict(
                 entry["brightness_adjustment"]

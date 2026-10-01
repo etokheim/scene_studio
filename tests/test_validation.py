@@ -124,3 +124,15 @@ def test_malformed_event_adjustment_rejected(adjustment):
                 },
             }
         )
+
+
+def test_event_brightness_without_palette_is_valid():
+    validate_scene_input(
+        {
+            "kind": "circadian",
+            "scene_name": "A",
+            "event_palettes": {
+                "dawn": {"brightness_adjustment": {"scale": 0.5, "ceiling": 127.5}}
+            },
+        }
+    )

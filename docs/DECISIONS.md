@@ -879,3 +879,7 @@ handlers report their error while the saved preference and next retry remain.
 Resume uses the configured interval transition and targets only current owned
 lights, preserving respected overrides. Caller context accompanies resumed light
 commands. Exception lists accept missing hardware but reject overlapping lists.
+
+### Scene-local event brightness without a scene preset
+
+Circadian scene event graphs store an event-local brightness adjustment even when the color comes directly from the circadian preset. An event assignment may therefore contain a brightness adjustment without a palette ID. This preserves inheritance without writing the shared preset or manufacturing brightness overrides for every light. Explicit per-light brightness remains authoritative.

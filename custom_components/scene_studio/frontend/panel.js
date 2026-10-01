@@ -9925,7 +9925,7 @@ class SceneStudioPanel extends HTMLElement {
         }
       }
     }
-    if (sceneEventPaletteId(this._formData, eventId) && this._themeDraft) {
+    if (this._formData?.kind === "circadian" && this._themeDraft) {
       return this._inheritedEventBrightness(eventId);
     }
     if (this._themeDraft) {
@@ -9998,7 +9998,9 @@ class SceneStudioPanel extends HTMLElement {
     }
     const lightId =
       lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
-    if (!lightId && sceneEventPaletteId(this._formData, eventId)) {
+    if (!lightId && this._view === "edit" && this._formData?.kind === "circadian") {
+      this._formData.event_palettes ||= {};
+      this._formData.event_palettes[eventId] ||= {};
       if (history) this._commitUndo();
       const entry = this._formData.event_palettes[eventId];
       const bases = this._eventBrightnessBases ||= new Map();
@@ -10742,7 +10744,7 @@ class SceneStudioPanel extends HTMLElement {
           return;
         }
         this._beginBrightnessScrub();
-        if (sceneEventPaletteId(this._formData, sceneId)) {
+        if (sceneEditor) {
           this._writeDialEventBrightness(sceneId, brightness, { lightId: null, history: !undoCommitted });
           undoCommitted = true;
           brightnessGraphCtl?.sync();

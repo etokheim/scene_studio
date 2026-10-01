@@ -145,7 +145,8 @@ def validate_scene_input(raw: Any) -> None:
     for event, config in palettes.items():
         if event not in SOLAR_EVENTS or not isinstance(config, dict):
             raise ValueError(f"Invalid event palette {event!r}")
-        _string(config.get("palette_id"), f"event_palettes.{event}.palette_id")
+        if "palette_id" in config or "brightness_adjustment" not in config:
+            _string(config.get("palette_id"), f"event_palettes.{event}.palette_id")
         if "assignment_seed" in config:
             _integer(
                 config["assignment_seed"], f"event_palettes.{event}.assignment_seed"

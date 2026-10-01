@@ -65,7 +65,7 @@ test("assigning an event preset preserves manual overrides even for selected lig
 test("event brightness drag uses a fixed gesture base and does not edit shared theme", () => {
   const palette = { id: "p", kind: "palette", slots: Array.from({ length: 5 }, () => ({ color: { color_mode: "rgb", rgb_color: [255, 0, 0] }, brightness: 100 })) };
   const panel = {
-    _formData: { kind: "circadian", event_palettes: { dawn: { palette_id: "p" } } },
+    _view: "edit", _formData: { kind: "circadian", event_palettes: { dawn: { palette_id: "p" } } },
     _themeDraft: { events: { dawn: { brightness: 20, color: { color_mode: "hs", hs_color: [0, 0] } } } },
     _variables: [palette], _sunPath: { lights: [{ entity_id: "light.a" }] },
     _dialBrightnessLightId: () => null, _eventBrightnessIsLive: () => true, _paintLiveEventBrightness() {},
@@ -154,4 +154,16 @@ test("responsive toolbar replacement finds controls in a detached readout", () =
   const strip = {};
   methods._replaceSceneUsed.call({ shadowRoot: { querySelectorAll: () => [] } }, host, strip);
   assert.deepEqual(calls, [["replace", strip]]);
+});
+
+
+test("event brightness without a scene preset never writes the shared circadian preset", () => {
+  const theme = { events: { dawn: { brightness: 100, color: { color_mode: "color_temp", color_temp_kelvin: 2700 } } } };
+  const panel = { _view: "edit", _formData: { kind: "circadian" }, _themeDraft: theme,
+    _dialBrightnessLightId: () => null, _inheritedEventBrightness: () => 100,
+    _eventBrightnessIsLive: () => false, _patchDialFromSession() {}, _syncThemePreviewSurfaces() {}, _saveSoon() {},
+    _writeThemeEventFromDraft: () => assert.fail("shared preset changed") };
+  methods._writeDialEventBrightness.call(panel, "dawn", 50);
+  assert.deepEqual(panel._formData.event_palettes.dawn, { brightness_adjustment: { scale: 0.5, ceiling: 127.5 } });
+  assert.equal(theme.events.dawn.brightness, 100);
 });
