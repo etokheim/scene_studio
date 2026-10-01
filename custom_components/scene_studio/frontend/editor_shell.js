@@ -83,6 +83,16 @@ export function mountEditorRegions(shell, { mount, visual, toolbar, lights, anim
   if (shell.preview.firstChild !== visual) shell.preview.replaceChildren(visual);
 }
 
+/** Keep the action-plate gutter inside the existing hint/footer space. */
+export function fitLightStripGutter(shell) {
+  const tiles = shell.lights.querySelector(".light-tiles");
+  if (shell.lights.hidden || !tiles) return;
+  const remaining = shell.lights.getBoundingClientRect().bottom - tiles.getBoundingClientRect().bottom;
+  // The top gutter still overlaps the preview. Only the bottom gutter is
+  // bounded by the light region; padding and its negative margin cancel out.
+  shell.lights.style.setProperty("--light-strip-bottom-padding", `${Math.min(64, Math.max(0, remaining))}px`);
+}
+
 export const EDITOR_SHELL_CSS = `
   .editor-shell {
     position: relative;
@@ -218,7 +228,11 @@ export const EDITOR_SHELL_LAYOUT_CSS = `
   }
   .editor-lights .light-tiles-hint { margin: 4px 0 0; }
   :host([narrow]) .editor-lights .light-tiles-hint { min-height: 48px; }
-  .editor-lights .light-tiles-scroller { padding-inline: 0; }
+  .editor-lights .light-tiles-scroller {
+    padding-inline: 0;
+    padding-bottom: var(--light-strip-bottom-padding, 64px);
+    margin-bottom: calc(-1 * var(--light-strip-bottom-padding, 64px));
+  }
 `;
 
 /** Capture live pixels before editor teardown, without cloning canvas content. */
@@ -374,7 +388,7 @@ export const EDITOR_CONTAINER_CSS = `
   .editor-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(var(--editor-preview-floor, 300px), 1fr) auto; }
   .editor-background { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
   .editor-toolbar { grid-column: 1; grid-row: 1; }
-  .editor-timeline { grid-column: 1; grid-row: 2; min-height: 0; padding: 0 16px; z-index: 12; }
+  .editor-timeline { grid-column: 1; grid-row: 2; min-height: 50px; padding: 0 16px; z-index: 12; }
   .editor-timeline[hidden] { display: none; }
   .editor-preview { grid-column: 1; grid-row: 3; }
   .editor-lights { grid-column: 1; grid-row: 4; }

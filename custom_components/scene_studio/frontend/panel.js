@@ -1,6 +1,6 @@
 import { resolveEventDraft, eventOverrideAfterEdit, eventBrightnessAdjustment } from "./event_inheritance.js";
 import { editorPath, editorRoute, libraryItemRoute } from "./editor_routes.js";
-import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
+import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, fitLightStripGutter, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
   buildClientSunDay,
   resampleLightsForEvents,
@@ -6579,6 +6579,7 @@ class SceneStudioPanel extends HTMLElement {
     if (!h || !w) return;
     const usableHeight = this.shadowRoot.querySelector(".page-shell")?.clientHeight || window.innerHeight;
     const geometry = editorGeometry(shell.el.clientWidth, shell.el.clientHeight, usableHeight);
+    fitLightStripGutter(shell);
     shell.el.style.setProperty("--editor-preview-floor", `${geometry.floor}px`);
     shell.el.dataset.overlap = String(geometry.overlap);
     const size = Math.min(WHEEL_FACE_MAX_PX, w, Math.max(geometry.floor, h));

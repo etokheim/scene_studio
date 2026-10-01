@@ -135,3 +135,21 @@ test("preview floors and timeline orientation use editor dimensions", async () =
   assert.equal(editorGeometry(240, 500, 500).floor, 240);
   assert.equal(editorGeometry(500, 240, 240).floor, 240);
 });
+
+test("light-strip gutters fit desktop footer space and retain the existing mobile gutter", async () => {
+  const { fitLightStripGutter } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  const values = [];
+  const tiles = { getBoundingClientRect: () => ({ bottom: 856 }) };
+  const lights = { hidden: false, querySelector: () => tiles, getBoundingClientRect: () => ({ bottom: 900 }), style: { setProperty: (key, value) => values.push([key, value]) } };
+  fitLightStripGutter({ lights });
+  assert.deepEqual(values.pop(), ["--light-strip-bottom-padding", "44px"]);
+  // A wrapped/mobile hint has room for the complete original gutter.
+  lights.getBoundingClientRect = () => ({ bottom: 940 });
+  fitLightStripGutter({ lights });
+  assert.deepEqual(values.pop(), ["--light-strip-bottom-padding", "64px"]);
+  // Translating the light region with its tiles does not change the gutter.
+  lights.getBoundingClientRect = () => ({ bottom: 936 });
+  tiles.getBoundingClientRect = () => ({ bottom: 892 });
+  fitLightStripGutter({ lights });
+  assert.deepEqual(values.pop(), ["--light-strip-bottom-padding", "44px"]);
+});
