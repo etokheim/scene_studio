@@ -437,3 +437,52 @@ class TestBuildSimpleSnapshot:
         }
         snap = build_simple_snapshot(scene, variables, ["light.a"])
         assert snap["light.a"]["hs_color"] == [120, 50]
+
+
+@pytest.mark.parametrize(
+    ("override", "brightness", "kelvin"),
+    [
+        ({"brightness": 40}, 40, None),
+        ({"color_mode": "color_temp", "color_temp_kelvin": 4000}, 100, 4000),
+        ({"state": "off"}, 100, None),
+    ],
+)
+def test_partial_event_overrides_inherit_other_palette_fields(
+    override, brightness, kelvin
+):
+    palette = {
+        "id": "p",
+        "kind": "palette",
+        "slots": [
+            {
+                "color": {"color_mode": "rgb", "rgb_color": [255, 0, 0]},
+                "brightness": 100,
+            }
+            for _ in range(5)
+        ],
+    }
+    scene = {
+        "theme_id": "t",
+        "event_palettes": {"dawn": {"palette_id": "p", "assignment_seed": 2}},
+        "overrides": {"light.a": {"dawn": override}},
+    }
+    themes = {
+        "t": {
+            "events": {
+                "dawn": {
+                    "brightness": 20,
+                    "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+                }
+            }
+        }
+    }
+    snapshot = build_circadian_event_snapshot(
+        scene, "dawn", {"p": palette}, themes, ["light.a"]
+    )["light.a"]
+    assert snapshot["brightness"] == brightness
+    if kelvin:
+        assert snapshot["color_temp_kelvin"] == kelvin
+        assert "rgb_color" not in snapshot
+    else:
+        assert snapshot["rgb_color"] == [255, 0, 0]
+    assert snapshot["state"] == override.get("state", "on")

@@ -1,3 +1,4 @@
+import { resolveEventDraft, eventOverrideAfterEdit } from "./event_inheritance.js";
 import { editorPath, editorRoute, libraryItemRoute } from "./editor_routes.js";
 import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
@@ -7858,28 +7859,10 @@ class SceneStudioPanel extends HTMLElement {
       this._legendSelectedIds = new Set(picked);
       this._syncClockLightSelection?.();
     }
-    if (next && picked.size) {
-      const overrides = { ...(scene.overrides || {}) };
-      const palette = (this._variables || []).find((item) => item.id === next);
-      for (const eid of picked) {
-        if (!canColor(eid)) {
-          continue;
-        }
-        const per = { ...(overrides[eid] || {}) };
-        const draft = { state: "on", variable_ref: next };
-        if (palette) {
-          applyVariableToDraft(draft, palette, {
-            entityId: eid,
-            seed,
-            catalog: this._variables,
-          });
-        }
-        per[eventId] = draft;
-        overrides[eid] = per;
-      }
-      scene.overrides = overrides;
-      this._assignOpenLightToPalette?.(next, seed);
-    }
+    this._refreshInheritedLightDrafts?.();
+    this._clearPreviewCache();
+    this._patchDialFromSession();
+    this._schedulePreview();
     this._stampListPreset();
     this._saveSoon();
     this._syncOpenSceneWheel?.();
@@ -9887,6 +9870,9 @@ class SceneStudioPanel extends HTMLElement {
     const lightId =
       lightIdArg !== undefined ? lightIdArg : this._dialBrightnessLightId();
     if (lightId) {
+      if (this._formData?.kind === "circadian" && this._themeDraft) {
+        return Number(this._lightEventStoredState({ entity_id: lightId }, eventId).brightness) || 0;
+      }
       const overridden = this._formData?.overrides?.[lightId]?.[eventId];
       if (overridden && overridden.brightness != null) {
         return Number(overridden.brightness);
@@ -10022,6 +10008,24 @@ class SceneStudioPanel extends HTMLElement {
     }
     if (history) {
       this._commitUndo({ type: "light", lightId, eventId });
+    }
+    if (this._formData.kind === "circadian") {
+      this._writeLightEventOverride(lightId, eventId, {
+        ...(this._formData.overrides?.[lightId]?.[eventId] || {}), brightness: value,
+      });
+      const hook = this._dialBrightnessHook;
+      if (hook?.kind === "light" && hook.lightId === lightId) {
+        const entry = hook.drafts.get(eventId);
+        if (entry?.draft) entry.draft.brightness = value;
+        hook.sync?.();
+      }
+      if (this._eventBrightnessIsLive()) this._paintLiveEventBrightness();
+      else {
+        this._patchDialFromSession();
+        this._syncThemePreviewSurfaces();
+        this._saveSoon();
+      }
+      return;
     }
     const theme = this._themeEventDraft(eventId);
     const snapped = this._snapLightEventBrightness(eventId, value);
@@ -10226,6 +10230,9 @@ class SceneStudioPanel extends HTMLElement {
 
   _lightEventStoredState(light, eventId) {
     const adapt = (state) => this._editorLightState(light.entity_id, state);
+    if (this._formData?.kind === "circadian" && this._themeDraft) {
+      return adapt(resolveEventDraft(this._formData, this._themeDraft, eventId, light.entity_id, this._variables));
+    }
     const ov = this._formData?.overrides?.[light.entity_id]?.[eventId];
     if (ov) {
       return adapt({ state: ov.state || "on", ...ov });
@@ -10367,6 +10374,9 @@ class SceneStudioPanel extends HTMLElement {
         return light;
       }
       const event_states = (light.event_states || []).map((row) => {
+        if (this._formData?.kind === "circadian" && this._themeDraft && row.event) {
+          return { ...row, present: true, state: this._lightEventStoredState(light, row.event) };
+        }
         const sceneId = row.scene_entity_id;
         const overridden =
           this._formData?.overrides?.[light.entity_id]?.[row.event];
@@ -15223,6 +15233,7 @@ class SceneStudioPanel extends HTMLElement {
       drafts.set(item.id, {
         draft: member ? { ...stored } : null,
         saved: member ? lightDraftFingerprint(stored) : "absent",
+        savedDraft: structuredClone(stored),
         member,
         event: item,
         index: index + 1,
@@ -15277,7 +15288,10 @@ class SceneStudioPanel extends HTMLElement {
             cleaned[key] = value;
           }
         }
-        this._writeLightEventOverride(light.entity_id, eventId, cleaned);
+        this._writeLightEventOverride(light.entity_id, eventId, eventOverrideAfterEdit(
+          this._formData.overrides?.[light.entity_id]?.[eventId], entry.savedDraft, cleaned
+        ));
+        entry.savedDraft = structuredClone(cleaned);
         entry.saved = lightDraftFingerprint(entry.draft);
       }
       if (this._eventBrightnessIsLive()) {
@@ -15446,6 +15460,8 @@ class SceneStudioPanel extends HTMLElement {
         this._sidebarUndoBtn = null;
         this._sidebarRedoBtn = null;
         this._assignOpenLightToPalette = null;
+        this._refreshInheritedLightDrafts = null;
+        this._syncOpenSceneWheel = null;
         this._syncPreviewOverlay();
         this._sunPathKey = undefined;
         this._ensureSunPath().then(async () => {
@@ -15877,24 +15893,7 @@ class SceneStudioPanel extends HTMLElement {
             return;
           }
           this._beginBrightnessScrub();
-          const theme = this._themeEventDraft(sceneId);
-          const snapped = this._snapLightEventBrightness(sceneId, brightness);
-          entry.draft.brightness = snapped;
-          if (snapped > 0) {
-            entry.draft.state = "on";
-          }
-          delete entry.draft.variable_ref;
-          const lookMatchesTheme =
-            this._lightDraftLookFingerprint(entry.draft) ===
-            this._lightDraftLookFingerprint(theme);
-          if (
-            snapped === this._themeEventBrightness(sceneId) &&
-            lookMatchesTheme
-          ) {
-            entry.draft = { ...theme };
-            this._deleteLightEventOverride(light.entity_id, sceneId);
-            entry.saved = lightDraftFingerprint(entry.draft);
-          }
+          entry.draft.brightness = brightness;
           applyToSession();
           if (this._eventBrightnessIsLive()) {
             this._paintLiveEventBrightness();
@@ -16076,6 +16075,17 @@ class SceneStudioPanel extends HTMLElement {
         onChange: onWheelChange,
       });
       wheelMount.appendChild(wheelCtl.el);
+      this._refreshInheritedLightDrafts = () => {
+        for (const item of events) {
+          const entry = drafts.get(item.id);
+          if (!entry?.member) continue;
+          entry.draft = this._lightEventStoredState(light, item.id);
+          entry.savedDraft = structuredClone(entry.draft);
+          entry.saved = lightDraftFingerprint(entry.draft);
+        }
+        wheelCtl?.sync();
+        brightnessGraphCtl?.sync();
+      };
       this._syncOpenSceneWheel = () => {
         if (wheelCtl?.el?.isConnected) {
           wheelCtl.sync();

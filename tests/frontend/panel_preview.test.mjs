@@ -48,3 +48,16 @@ test("a delayed solar response cannot remount a departed circadian preset", asyn
   assert.equal(panel._sunPathEl.hidden, true);
   assert.equal(panel._themeSolar, undefined);
 });
+
+test("assigning an event preset preserves manual overrides even for selected lights", () => {
+  const overrides = { "light.a": { dawn: { brightness: 35 } } };
+  const panel = {
+    _formData: { kind: "circadian", overrides, event_palettes: { noon: { palette_id: "other" } } },
+    _editedSolarEventId: () => "dawn", _commitUndo() {}, _stampListPreset() {},
+    _saveSoon() {}, _syncSceneUsed() {}, _syncOpenSceneCardFace() {},
+    _clearPreviewCache() {}, _patchDialFromSession() {}, _schedulePreview() {},
+  };
+  methods._applySceneBasePalette.call(panel, { palette: { id: "new" }, seed: 7 }, new Set(["light.a", "light.b"]));
+  assert.deepEqual(panel._formData.overrides, overrides);
+  assert.deepEqual(panel._formData.event_palettes, { dawn: { palette_id: "new", assignment_seed: 7 }, noon: { palette_id: "other" } });
+});

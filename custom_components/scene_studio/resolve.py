@@ -179,8 +179,9 @@ def build_circadian_event_snapshot(
 
     Resolution order per light:
     1. Per-light / per-event override in scene["overrides"]
-    2. Theme event color (may itself be a variable ref)
-    3. Convert for the lamp's supported_color_modes
+    2. Scene event palette
+    3. Theme event color (may itself be a variable ref)
+    4. Convert for the lamp's supported_color_modes
     """
     theme_id = scene.get("theme_id")
     theme = themes.get(theme_id) if theme_id else None
@@ -212,64 +213,50 @@ def build_circadian_event_snapshot(
 
     for eid in member_ids:
         light_overrides = overrides.get(eid, {})
-        event_override = light_overrides.get(event)
-        if event_override is not None:
-            # Override may itself contain a variable ref for color.
+        event_override = light_overrides.get(event) or {}
+        # Resolve the inherited look first. An override changes only fields
+        # it actually stores; brightness-only edits must retain palette color.
+        if scene_is_palette or theme_is_palette:
             color_part = resolve_variable(
-                {
-                    k: v
-                    for k, v in event_override.items()
-                    if k not in ("brightness", "state")
-                },
-                variables,
-                entity_id=eid,
-                seed=seed,
-            )
-            var_brightness = color_part.pop("brightness", None)
-            fallback_bri = (
-                theme_state["brightness"]
-                if theme_state
-                else var_brightness if var_brightness is not None else 255
-            )
-            state_dict = {
-                "state": event_override.get("state", "on"),
-                "brightness": event_override.get(
-                    "brightness",
-                    var_brightness if var_brightness is not None else fallback_bri,
+                (
+                    {VARIABLE_REF: scene_palette_id}
+                    if scene_is_palette
+                    else ev.get("color") or {}
                 ),
-                **color_part,
-            }
-        elif scene_is_palette:
-            color_part = resolve_variable(
-                {VARIABLE_REF: scene_palette_id},
                 variables,
                 entity_id=eid,
-                seed=scene_seed,
+                seed=scene_seed if scene_is_palette else seed,
             )
-            var_brightness = color_part.pop("brightness", ev.get("brightness", 255))
             state_dict = {
                 "state": "on",
-                "brightness": var_brightness,
-                **color_part,
-            }
-        elif theme_is_palette:
-            color_part = resolve_variable(
-                ev.get("color") or {},
-                variables,
-                entity_id=eid,
-                seed=seed,
-            )
-            var_brightness = color_part.pop("brightness", ev.get("brightness", 255))
-            state_dict = {
-                "state": "on",
-                "brightness": var_brightness,
+                "brightness": color_part.pop("brightness", ev.get("brightness", 255)),
                 **color_part,
             }
         else:
+            state_dict = {"state": "on", **theme_state}
+        color_override = {
+            key: value
+            for key, value in event_override.items()
+            if key not in ("brightness", "state", "effect")
+        }
+        if color_override:
+            color_part = resolve_variable(
+                color_override,
+                variables,
+                entity_id=eid,
+                seed=seed,
+            )
+            # A color reference does not implicitly override brightness.
+            color_part.pop("brightness", None)
             state_dict = {
-                "state": "on",
-                **theme_state,
+                key: value
+                for key, value in state_dict.items()
+                if key in ("brightness", "state", "effect")
             }
+            state_dict.update(color_part)
+        for key in ("brightness", "state", "effect"):
+            if key in event_override:
+                state_dict[key] = event_override[key]
         entities[eid] = _adapt_color_for_modes(state_dict, modes.get(eid))
     return entities
 

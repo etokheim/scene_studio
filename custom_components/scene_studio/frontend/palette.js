@@ -152,7 +152,7 @@ export function samplePaletteWheel(palette, t, r, variables, draftRgb) {
   const rim = [0, 1, 2].map((c) => lerp(rgbA[c], rgbB[c], frac));
   const mixed = rim.map((c) => lerp(255, c, sat)).map(clampByte);
   const bri = Math.round(
-    lerp(Number(a.brightness) || 255, Number(b.brightness) || 255, frac)
+    lerp(Number(a.brightness ?? 255), Number(b.brightness ?? 255), frac)
   );
   return { rgb: mixed, brightness: Math.max(0, Math.min(255, bri)) };
 }
