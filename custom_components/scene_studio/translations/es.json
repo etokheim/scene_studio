@@ -81,7 +81,8 @@
       "uses_presets": "Usa {count} preajustes",
       "uses_presets_one": "Usa 1 preajuste",
       "uses_scene_presets": "Usa {count} preajustes de escena",
-      "uses_scene_presets_one": "Usa 1 preajuste de escena"
+      "uses_scene_presets_one": "Usa 1 preajuste de escena",
+      "scene_event_edit_hint": "Los cambios en las luces solo afectan a esta escena y evento solar. Los demás eventos y ajustes compartidos se mantienen."
     },
     "kinds": {
       "circadian": "Escena circadiana",
@@ -104,7 +105,7 @@
       "automatically_update_lights_on_helper": "Tras activar una escena, las luces siguen ajustándose con el intervalo de Ajustes para que la habitación siga el sol. Toca para desactivarlo en todas las habitaciones.",
       "automatically_update_lights_off_helper": "Las actualizaciones automáticas están desactivadas. Activar una escena aplica las luces una vez. Toca para volver a activar las actualizaciones en todas las habitaciones.",
       "automatically_update_lights_interval": "Intervalo de actualización automática de luces",
-      "automatically_update_lights_interval_helper": "Tras activar una escena, sigue actualizando las luces con esa frecuencia y la misma duración de transición (objetivo = cómo debe verse la habitación al final de la transición). 0 desactiva las actualizaciones automáticas en todas las habitaciones — igual que el control de la parte superior de la lista.",
+      "automatically_update_lights_interval_helper": "Después de activar una escena, las luces se actualizan con este intervalo y la misma duración de transición (el objetivo es cómo debe verse la habitación al finalizar la transición). Usa Actualizaciones automáticas para pausar sin cambiar el intervalo.",
       "automatically_update_lights_interval_minutes": "Minutos",
       "scene_settings": "Ajustes de escena",
       "hidden_in_ha": "Oculta en Home Assistant",
@@ -112,7 +113,19 @@
       "dusk_minimum_time_of_day_helper": "Para evitar que las luces se atenúen demasiado y demasiado pronto. Se aplica a todas las escenas y preajustes circadianos.",
       "reset": "Eliminar y restablecer todo",
       "reset_confirm": "Esto elimina todas las escenas de Scene Studio y sus escenas de Home Assistant. Se eliminan los preajustes de escena y circadianos. Los preajustes de color se sustituyen por los cinco colores predeterminados y se restablecen los ajustes. Las luces, áreas y otras integraciones permanecen. Esta acción no se puede deshacer.",
-      "reset_title": "¿Eliminar y restablecer todo?"
+      "reset_title": "¿Eliminar y restablecer todo?",
+      "invalid_limit_time": "Introduce una hora válida.",
+      "dawn_maximum_time_of_day": "Amanecer más tardío",
+      "dawn_maximum_time_of_day_helper": "Adelanta el amanecer cuando el sol sale tarde. Se aplica a todas las escenas circadianas y ajustes predefinidos.",
+      "automatic_updates_enabled": "Actualizaciones automáticas",
+      "automatic_updates_enabled_helper": "Las escenas circadianas activadas siguen al sol. Las escenas pausadas siguen aplicándose una vez al activarlas.",
+      "respect_manual_changes": "Respetar cambios manuales",
+      "respect_manual_changes_helper": "Deja de actualizar las luces modificadas manualmente. Las luces temporalmente no disponibles esperan hasta volver a estar disponibles.",
+      "always_follow_scene": "Seguir siempre la escena",
+      "always_follow_scene_helper": "Devuelve estas luces a la escena incluso después de cambios manuales o de apagarlas.",
+      "always_respect_manual_changes": "Respetar siempre los cambios manuales",
+      "always_respect_manual_changes_helper": "Deja de actualizar estas luces tras cambios manuales, incluso cuando Respetar cambios manuales está desactivado.",
+      "invalid_interval": "Introduce un intervalo de 1 a 30 minutos."
     },
     "common": {
       "untitled": "Sin título",
@@ -400,7 +413,8 @@
       "move": "Mover",
       "move_title": "Mover escenas",
       "target": "Área de destino",
-      "unknown": "Área eliminada"
+      "unknown": "Área eliminada",
+      "unassigned": "Sin asignar"
     },
     "cards": {
       "disabled": "Desactivada",
@@ -415,6 +429,29 @@
       "title": "Otra persona ha cambiado este elemento",
       "use_mine": "Usar mi valor",
       "use_saved": "Usar el valor recién guardado"
+    }
+  },
+  "entity": {
+    "switch": {
+      "automatic_updates": {
+        "name": "Actualizaciones automáticas de Scene Studio"
+      }
+    }
+  },
+  "services": {
+    "set_automatic_updates": {
+      "name": "Configurar actualizaciones automáticas",
+      "description": "Pausa o reanuda las actualizaciones automáticas de las escenas circadianas seleccionadas de Scene Studio. Activarlas mientras están pausadas aplica la iluminación una vez.",
+      "fields": {
+        "entity_id": {
+          "name": "Escenas",
+          "description": "Escenas circadianas de Scene Studio que se van a pausar o reanudar."
+        },
+        "enabled": {
+          "name": "Activado",
+          "description": "Activa las actualizaciones automáticas para estas escenas."
+        }
+      }
     }
   }
 }

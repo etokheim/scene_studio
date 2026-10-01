@@ -81,7 +81,8 @@
       "uses_presets": "Verwendet {count} Vorlagen",
       "uses_presets_one": "Verwendet 1 Vorlage",
       "uses_scene_presets": "Verwendet {count} Szenenvorlagen",
-      "uses_scene_presets_one": "Verwendet 1 Szenenvorlage"
+      "uses_scene_presets_one": "Verwendet 1 Szenenvorlage",
+      "scene_event_edit_hint": "Änderungen an den Lichtern gelten nur für diese Szene und dieses Sonnenereignis. Andere Ereignisse und gemeinsame Vorlagen bleiben erhalten."
     },
     "kinds": {
       "circadian": "Circadian-Szene",
@@ -104,7 +105,7 @@
       "automatically_update_lights_on_helper": "Nach dem Aktivieren einer Szene passen sich die Lichter im Intervall aus den Einstellungen weiter an, damit der Raum der Sonne folgt. Tippen, um das für alle Räume auszuschalten.",
       "automatically_update_lights_off_helper": "Automatische Updates sind aus. Das Aktivieren einer Szene setzt die Lichter einmal. Tippen, um Updates für alle Räume wieder einzuschalten.",
       "automatically_update_lights_interval": "Intervall für automatische Licht-Updates",
-      "automatically_update_lights_interval_helper": "Nach dem Aktivieren einer Szene die Lichter so oft weiter aktualisieren, mit gleicher Übergangsdauer (Ziel = wie der Raum am Ende des Übergangs aussehen soll). 0 schaltet automatische Updates für alle Räume aus — wie die Steuerung oben in der Liste.",
+      "automatically_update_lights_interval_helper": "Nach Aktivierung werden die Lichter in diesem Intervall mit derselben Übergangsdauer aktualisiert (Ziel ist das Lichtbild am Ende des Übergangs). Mit Automatische Aktualisierungen kannst du die Aktualisierungen pausieren, ohne das Intervall zu ändern.",
       "automatically_update_lights_interval_minutes": "Minuten",
       "scene_settings": "Szeneneinstellungen",
       "hidden_in_ha": "In Home Assistant ausgeblendet",
@@ -112,7 +113,19 @@
       "dusk_minimum_time_of_day_helper": "Damit die Lichter nicht zu früh zu dunkel werden. Gilt für alle Circadian-Szenen und Circadian-Vorlagen.",
       "reset": "Alles löschen und zurücksetzen",
       "reset_confirm": "Dies löscht alle Scene-Studio-Szenen und ihre Home-Assistant-Szenen. Szenenvorlagen und Circadian-Vorlagen werden entfernt. Farbvorlagen werden durch die fünf Standardfarben ersetzt und die Einstellungen zurückgesetzt. Lichter, Bereiche und andere Integrationen bleiben erhalten. Dies kann nicht rückgängig gemacht werden.",
-      "reset_title": "Alles löschen und zurücksetzen?"
+      "reset_title": "Alles löschen und zurücksetzen?",
+      "invalid_limit_time": "Gib eine gültige Uhrzeit ein.",
+      "dawn_maximum_time_of_day": "Späteste Morgendämmerung",
+      "dawn_maximum_time_of_day_helper": "Ziehe die Morgendämmerung bei spätem Sonnenaufgang vor. Gilt für alle Tagesrhythmus-Szenen und Vorlagen.",
+      "automatic_updates_enabled": "Automatische Aktualisierungen",
+      "automatic_updates_enabled_helper": "Aktivierte Tagesrhythmus-Szenen folgen dem Sonnenstand. Pausierte Szenen werden bei Aktivierung weiterhin einmal angewendet.",
+      "respect_manual_changes": "Manuelle Änderungen beachten",
+      "respect_manual_changes_helper": "Manuell geänderte Lichter nicht weiter aktualisieren. Vorübergehend nicht verfügbare Lichter warten auf ihre Rückkehr.",
+      "always_follow_scene": "Immer der Szene folgen",
+      "always_follow_scene_helper": "Diese Lichter nach manuellen Änderungen oder dem Ausschalten wieder an die Szene anpassen.",
+      "always_respect_manual_changes": "Manuelle Änderungen immer beachten",
+      "always_respect_manual_changes_helper": "Diese Lichter nach manuellen Änderungen nicht weiter aktualisieren, auch wenn Manuelle Änderungen beachten ausgeschaltet ist.",
+      "invalid_interval": "Gib ein Intervall von 1 bis 30 Minuten ein."
     },
     "common": {
       "untitled": "Ohne Titel",
@@ -400,7 +413,8 @@
       "move": "Verschieben",
       "move_title": "Szenen verschieben",
       "target": "Zielbereich",
-      "unknown": "Gelöschter Bereich"
+      "unknown": "Gelöschter Bereich",
+      "unassigned": "Nicht zugewiesen"
     },
     "cards": {
       "disabled": "Deaktiviert",
@@ -415,6 +429,29 @@
       "title": "Ein anderer Bearbeiter hat dieses Element geändert",
       "use_mine": "Meinen Wert verwenden",
       "use_saved": "Neu gespeicherten Wert verwenden"
+    }
+  },
+  "entity": {
+    "switch": {
+      "automatic_updates": {
+        "name": "Scene Studio automatische Aktualisierungen"
+      }
+    }
+  },
+  "services": {
+    "set_automatic_updates": {
+      "name": "Automatische Aktualisierungen einstellen",
+      "description": "Automatische Aktualisierungen für ausgewählte Tagesrhythmus-Szenen in Scene Studio pausieren oder fortsetzen. Bei Aktivierung einer pausierten Szene wird das Lichtbild einmal angewendet.",
+      "fields": {
+        "entity_id": {
+          "name": "Szenen",
+          "description": "Tagesrhythmus-Szenen in Scene Studio, die pausiert oder fortgesetzt werden sollen."
+        },
+        "enabled": {
+          "name": "Aktiviert",
+          "description": "Automatische Aktualisierungen für diese Szenen aktivieren."
+        }
+      }
     }
   }
 }

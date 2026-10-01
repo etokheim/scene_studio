@@ -81,7 +81,8 @@
       "uses_presets": "Brukar {count} forval",
       "uses_presets_one": "Brukar 1 forval",
       "uses_scene_presets": "Brukar {count} sceneforval",
-      "uses_scene_presets_one": "Brukar 1 sceneforval"
+      "uses_scene_presets_one": "Brukar 1 sceneforval",
+      "scene_event_edit_hint": "Endringar i lys gjeld berre denne scena og solhendinga. Andre hendingar og delte førehandsinnstillingar vert behaldne."
     },
     "kinds": {
       "circadian": "Circadian-scene",
@@ -104,7 +105,7 @@
       "automatically_update_lights_on_helper": "Når du aktiverer ei scene, held lysa fram med å justerast med intervallet frå Innstillingar, slik at rommet følgjer sola. Trykk for å slå dette av for alle rom.",
       "automatically_update_lights_off_helper": "Automatiske oppdateringar er av. Aktivering av ei scene set lysa éin gong. Trykk for å slå oppdateringar på att for alle rom.",
       "automatically_update_lights_interval": "Intervall for automatisk lysoppdatering",
-      "automatically_update_lights_interval_helper": "Når ei scene er aktivert, hald fram med å oppdatere lysa så ofte, med same overgangslengd (målet = korleis rommet skal sjå ut ved slutten av overgangen). 0 slår automatiske oppdateringar av for alle rom — same som kontrollen øvst i lista.",
+      "automatically_update_lights_interval_helper": "Etter aktivering vert lysa oppdaterte med dette intervallet og same overgangslengd (målet er korleis rommet skal sjå ut ved slutten av overgangen). Bruk Automatiske oppdateringar til å setje oppdateringane på pause utan å endre intervallet.",
       "automatically_update_lights_interval_minutes": "Minutt",
       "scene_settings": "Sceneinnstillingar",
       "hidden_in_ha": "Gøymd i Home Assistant",
@@ -112,7 +113,19 @@
       "dusk_minimum_time_of_day_helper": "For å unngå at lysa blir dempa for mykje og for tidleg. Gjeld alle circadian-scener og døgnrytmeforval.",
       "reset": "Slett og tilbakestill alt",
       "reset_confirm": "Dette slettar alle Scene Studio-scener og Home Assistant-scenene deira. Sceneforval og døgnrytmeforval blir fjerna. Fargeforval blir erstatta med dei fem standardfargane, og innstillingane blir tilbakestilte. Lys, soner og andre integrasjonar blir verande. Dette kan ikkje angrast.",
-      "reset_title": "Slette og tilbakestille alt?"
+      "reset_title": "Slette og tilbakestille alt?",
+      "invalid_limit_time": "Oppgi eit gyldig klokkeslett.",
+      "dawn_maximum_time_of_day": "Seinaste daggry",
+      "dawn_maximum_time_of_day_helper": "Framskund daggry når sola står opp seint. Gjeld alle døgnrytmescener og førehandsinnstillingar.",
+      "automatic_updates_enabled": "Automatiske oppdateringar",
+      "automatic_updates_enabled_helper": "La aktiverte døgnrytmescener følgje sola. Scener på pause vert framleis brukte éin gong ved aktivering.",
+      "respect_manual_changes": "Respekter manuelle endringar",
+      "respect_manual_changes_helper": "Slutt å oppdatere lys som vert endra manuelt. Mellombels utilgjengelege lys ventar til dei er tilgjengelege att.",
+      "always_follow_scene": "Følg alltid scena",
+      "always_follow_scene_helper": "Før desse lysa tilbake til scena, òg etter manuelle endringar eller når dei vert slått av.",
+      "always_respect_manual_changes": "Respekter alltid manuelle endringar",
+      "always_respect_manual_changes_helper": "Slutt å oppdatere desse lysa etter manuelle endringar, òg når Respekter manuelle endringar er av.",
+      "invalid_interval": "Oppgi eit intervall frå 1 til 30 minutt."
     },
     "common": {
       "untitled": "Utan namn",
@@ -400,7 +413,8 @@
       "move": "Flytt",
       "move_title": "Flytt scener",
       "target": "Målsone",
-      "unknown": "Sletta sone"
+      "unknown": "Sletta sone",
+      "unassigned": "Ikkje tilordna"
     },
     "cards": {
       "disabled": "Deaktivert",
@@ -415,6 +429,29 @@
       "title": "Ein annan redigerar endra dette elementet",
       "use_mine": "Bruk min verdi",
       "use_saved": "Bruk nyleg lagra verdi"
+    }
+  },
+  "entity": {
+    "switch": {
+      "automatic_updates": {
+        "name": "Scene Studio automatiske oppdateringar"
+      }
+    }
+  },
+  "services": {
+    "set_automatic_updates": {
+      "name": "Angi automatiske oppdateringar",
+      "description": "Set automatiske oppdateringar på pause eller hald fram for valde døgnrytmescener i Scene Studio. Aktivering under pause brukar lysinnstillinga éin gong.",
+      "fields": {
+        "entity_id": {
+          "name": "Scener",
+          "description": "Døgnrytmescener i Scene Studio som skal setjast på pause eller halde fram."
+        },
+        "enabled": {
+          "name": "Aktivert",
+          "description": "Aktiver automatiske oppdateringar for desse scenene."
+        }
+      }
     }
   }
 }
