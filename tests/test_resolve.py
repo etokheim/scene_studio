@@ -541,3 +541,23 @@ def test_event_adjustment_scales_only_inherited_brightness():
     assert result["light.a"]["brightness"] == 80
     assert result["light.b"]["brightness"] == 120
     assert variables["p"]["slots"][0]["brightness"] == 100
+
+
+def test_temp_only_adaptation_preserves_snapshot_state_when_palette_is_chromatic():
+    for state in ("on", "off"):
+        snapshot = build_simple_snapshot(
+            {
+                "lights": {
+                    "light.a": {
+                        "state": state,
+                        "brightness": 72,
+                        "color_mode": "hs",
+                        "hs_color": [80, 90],
+                    }
+                }
+            },
+            {},
+            ["light.a"],
+            {"light.a": {"color_temp"}},
+        )
+        assert snapshot["light.a"] == {"state": state, "brightness": 72}

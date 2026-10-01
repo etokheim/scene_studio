@@ -163,7 +163,9 @@ def _adapt_color_for_modes(
     if mode in ("hs", "rgb", "rgbw", "rgbww") and not has_chromatic and has_temp:
         # Cannot represent chromatic on a temp-only light; drop the color,
         # keep brightness. The lamp will use its last-known temp.
-        return {k: v for k, v in color.items() if k in ("brightness",)}
+        return {
+            k: v for k, v in color.items() if k in ("state", "brightness", "effect")
+        }
     return dict(color)
 
 
