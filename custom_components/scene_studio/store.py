@@ -63,12 +63,16 @@ _Result = TypeVar("_Result")
 STORAGE_VERSION = 4
 
 DEFAULT_DUSK_MINIMUM_SECONDS = 22 * 3600
+DEFAULT_DAWN_MAXIMUM_SECONDS = 6 * 3600
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     # Seconds; 0 disables. Same value is the light transition on auto-update ticks.
     "automatically_update_lights_interval": 300,
     # Seconds since midnight; delays dusk until this clock time when solar dusk is earlier.
     SETTINGS_DUSK_MINIMUM_TIME_OF_DAY: DEFAULT_DUSK_MINIMUM_SECONDS,
+    "dusk_minimum_enabled": True,
+    "dawn_maximum_time_of_day": DEFAULT_DAWN_MAXIMUM_SECONDS,
+    "dawn_maximum_enabled": True,
 }
 
 # ---------------------------------------------------------------------------
@@ -184,7 +188,9 @@ def strip_scene_dusk_minimum(scenes: dict[str, dict[str, Any]]) -> int | None:
     return found
 
 
-def dusk_minimum_seconds(hass: HomeAssistant, override: int | None = None) -> int:
+def dusk_minimum_seconds(
+    hass: HomeAssistant, override: int | None = None
+) -> int | None:
     """House-wide earliest dusk in seconds since midnight."""
     if override is not None:
         return int(override)
@@ -192,10 +198,23 @@ def dusk_minimum_seconds(hass: HomeAssistant, override: int | None = None) -> in
     store = domain_data.get(DATA_STORE)
     if store is None:
         return DEFAULT_DUSK_MINIMUM_SECONDS
+    if not store.settings.get("dusk_minimum_enabled", True):
+        return None
     return time_to_seconds(
         store.settings.get(
             SETTINGS_DUSK_MINIMUM_TIME_OF_DAY, DEFAULT_DUSK_MINIMUM_SECONDS
         )
+    )
+
+
+def dawn_maximum_seconds(hass: HomeAssistant) -> int | None:
+    """House-wide latest dawn, preserving the saved time while disabled."""
+    store = (hass.data.get(DOMAIN) or {}).get(DATA_STORE)
+    settings = store.settings if store is not None else DEFAULT_SETTINGS
+    if not settings.get("dawn_maximum_enabled", True):
+        return None
+    return time_to_seconds(
+        settings.get("dawn_maximum_time_of_day", DEFAULT_DAWN_MAXIMUM_SECONDS)
     )
 
 
@@ -1198,21 +1217,20 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                     raise HomeAssistantError(
                         "automatically_update_lights_interval must be 0–1800 seconds"
                     )
-            if key == SETTINGS_DUSK_MINIMUM_TIME_OF_DAY:
+            if key in ("dusk_minimum_enabled", "dawn_maximum_enabled"):
+                if not isinstance(value, bool):
+                    raise HomeAssistantError(f"{key} must be a boolean")
+            if key in (SETTINGS_DUSK_MINIMUM_TIME_OF_DAY, "dawn_maximum_time_of_day"):
                 if isinstance(value, bool) or (not isinstance(value, (str, int))):
-                    raise HomeAssistantError(
-                        "dusk_minimum_time_of_day must be a time or whole seconds"
-                    )
+                    raise HomeAssistantError(f"{key} must be a time or whole seconds")
                 try:
                     value = time_to_seconds(value)
                 except (TypeError, ValueError) as err:
                     raise HomeAssistantError(
-                        "dusk_minimum_time_of_day must be a time or seconds since midnight"
+                        f"{key} must be a time or seconds since midnight"
                     ) from err
                 if value < 0 or value > 24 * 3600:
-                    raise HomeAssistantError(
-                        "dusk_minimum_time_of_day must be 0–86400 seconds"
-                    )
+                    raise HomeAssistantError(f"{key} must be 0–86400 seconds")
             validated[key] = value
 
         def change() -> dict[str, Any]:

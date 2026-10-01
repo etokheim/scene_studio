@@ -12,7 +12,7 @@ from astral.sun import elevation as sun_elevation
 from astral.sun import sun
 from homeassistant.core import HomeAssistant
 
-from .store import dusk_minimum_seconds
+from .store import dawn_maximum_seconds, dusk_minimum_seconds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,6 +89,16 @@ def dusk_start_seconds(
     solar_seconds = max(0, solar_seconds)
     if dusk_minimum is not None and int(dusk_minimum) > solar_seconds:
         return int(dusk_minimum), True, solar_seconds
+    return solar_seconds, False, None
+
+
+def dawn_start_seconds(
+    dawn_time: datetime, maximum: int | None
+) -> tuple[int, bool, int | None]:
+    """Advance a late solar/fallback dawn, keeping its real position for the UI."""
+    solar_seconds = _seconds_since_midnight(dawn_time)
+    if maximum is not None and solar_seconds > maximum:
+        return maximum, True, solar_seconds
     return solar_seconds, False, None
 
 
@@ -243,7 +253,15 @@ def build_sun_path(
         overridden = False
         solar_time = None
         solar_seconds = None
-        if event_id == "dusk":
+        if event_id == "dawn":
+            seconds, overridden, solar_raw = dawn_start_seconds(
+                event_time, dawn_maximum_seconds(hass)
+            )
+            if overridden and solar_raw is not None:
+                solar_time = _format_time(solar_raw)
+                solar_seconds = solar_raw
+            event_time = start + timedelta(seconds=seconds)
+        elif event_id == "dusk":
             seconds, overridden, solar_raw = dusk_start_seconds(
                 event_time, start, dusk_minimum
             )

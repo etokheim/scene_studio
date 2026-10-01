@@ -498,7 +498,7 @@ async def _ws_reset_locked(hass, connection, msg) -> None:
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/sun_path",
-        vol.Optional("dusk_minimum"): int,
+        vol.Optional("dusk_minimum"): vol.Any(None, int),
         vol.Optional("date"): str,
     }
 )
@@ -520,7 +520,7 @@ async def ws_sun_path(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/preview",
-        vol.Optional("dusk_minimum"): int,
+        vol.Optional("dusk_minimum"): vol.Any(None, int),
         vol.Optional("date"): str,
         vol.Optional("scene_id"): str,
         vol.Optional("scene"): dict,

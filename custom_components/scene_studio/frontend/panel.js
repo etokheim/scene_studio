@@ -294,6 +294,9 @@ class SceneStudioPanel extends HTMLElement {
     this._settings = {
       automatically_update_lights_interval: 300,
       dusk_minimum_time_of_day: 22 * 3600,
+      dusk_minimum_enabled: true,
+      dawn_maximum_time_of_day: 6 * 3600,
+      dawn_maximum_enabled: true,
     };
     this._listTab = "extrapolation";
     this._translationsReady = false;
@@ -10337,7 +10340,7 @@ class SceneStudioPanel extends HTMLElement {
       this._parkSunPath();
       return;
     }
-    const solarKey = `theme-sun:${this._previewDate}:${this._duskMinimumSeconds()}`;
+    const solarKey = `theme-sun:${this._previewDate}:${this._duskMinimumSeconds()}:${this._dawnMaximumSeconds()}`;
     const generation = this._previewGeneration;
     if (!this._themeSolar || this._themeSolarKey !== solarKey) {
       const msg = {
@@ -11003,6 +11006,7 @@ class SceneStudioPanel extends HTMLElement {
     body.appendChild(intervalRow);
 
     this._appendDuskMinimumPicker(body);
+    this._appendDuskMinimumPicker(body, "dawn");
 
     const reset = document.createElement("ha-button");
     reset.className = "settings-reset";
@@ -11110,50 +11114,55 @@ class SceneStudioPanel extends HTMLElement {
     await this._loadList();
   }
 
-  _appendDuskMinimumPicker(parent) {
+  _appendDuskMinimumPicker(parent, eventId = "dusk") {
+    const dawn = eventId === "dawn";
+    const timeKey = dawn ? "dawn_maximum_time_of_day" : "dusk_minimum_time_of_day";
+    const enabledKey = dawn ? "dawn_maximum_enabled" : "dusk_minimum_enabled";
+    const defaultSeconds = dawn ? 6 * 3600 : 22 * 3600;
+    const storedSeconds = () => timeToSeconds(this._settings?.[timeKey] ?? defaultSeconds);
     const row = document.createElement("div");
     row.className = "setup-link-row dusk-minimum-row";
     const labelWrap = document.createElement("div");
     const label = document.createElement("div");
     label.className = "name";
     label.textContent = this._t(
-      "frontend.settings.dusk_minimum_time_of_day",
-      "Earliest time for dusk"
+      `frontend.settings.${timeKey}`,
+      dawn ? "Latest dawn" : "Earliest time for dusk"
     );
     const helper = document.createElement("div");
     helper.className = "sidebar-note";
     helper.style.margin = "4px 0 0";
     helper.textContent = this._t(
-      "frontend.settings.dusk_minimum_time_of_day_helper",
-      "To avoid lights dimming too much, too early. Applies to every circadian scene and theme."
+      `frontend.settings.${timeKey}_helper`,
+      dawn ? "Advance dawn when sunrise comes late. Applies to every circadian scene and preset." : "To avoid lights dimming too much, too early. Applies to every circadian scene and theme."
     );
     labelWrap.append(label, helper);
     const picker = document.createElement("ha-selector");
-    picker.classList.add("dusk-minimum-picker");
+    picker.classList.add(`${eventId}-minimum-picker`);
     picker.hass = this._hass;
-    picker.value = secondsToTime(this._duskMinimumSeconds());
+    picker.value = secondsToTime(storedSeconds());
     picker.selector = { time: {} };
     let saveTimer;
     const save = async () => {
-      const next = timeToSeconds(picker.value);
-      const seconds = Number.isFinite(next) ? next : 22 * 3600;
       try {
+        const seconds = timeToSeconds(picker.value);
+        if (!Number.isFinite(seconds)) throw new Error(this._t("frontend.settings.invalid_limit_time", "Enter a valid time."));
         const result = await this._hass.callWS({
           type: `${DOMAIN}/update_settings`,
-          settings: { dusk_minimum_time_of_day: seconds },
+          settings: { [timeKey]: seconds },
         });
         this._adoptSettings(result?.settings);
-        picker.value = secondsToTime(this._duskMinimumSeconds());
+        picker.value = secondsToTime(storedSeconds());
         this._refreshDuskVisuals();
         for (const el of this.shadowRoot?.querySelectorAll(
-          "ha-selector.dusk-minimum-picker"
+          `ha-selector.${eventId}-minimum-picker`
         ) || []) {
           if (el !== picker) {
             el.value = picker.value;
           }
         }
       } catch (err) {
-        picker.value = secondsToTime(this._duskMinimumSeconds());
+        picker.value = secondsToTime(storedSeconds());
         window.alert(err.message || String(err));
       }
     };
@@ -11162,7 +11171,22 @@ class SceneStudioPanel extends HTMLElement {
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(save, 400);
     });
-    row.append(labelWrap, picker);
+    const enabled = document.createElement("ha-switch");
+    enabled.checked = this._settings?.[enabledKey] !== false;
+    enabled.setAttribute("aria-label", label.textContent);
+    picker.disabled = !enabled.checked;
+    enabled.addEventListener("change", async () => {
+      try {
+        const result = await this._hass.callWS({ type: `${DOMAIN}/update_settings`, settings: { [enabledKey]: enabled.checked } });
+        this._adoptSettings(result?.settings);
+        picker.disabled = !enabled.checked;
+        this._refreshDuskVisuals();
+      } catch (err) {
+        enabled.checked = this._settings?.[enabledKey] !== false;
+        window.alert(err.message || String(err));
+      }
+    });
+    row.append(labelWrap, enabled, picker);
     parent.appendChild(row);
     return picker;
   }
@@ -11172,8 +11196,8 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     slot.replaceChildren();
-    if (eventId === "dusk") {
-      this._appendDuskMinimumPicker(slot);
+    if (eventId === "dusk" || eventId === "dawn") {
+      this._appendDuskMinimumPicker(slot, eventId);
     }
   }
 
@@ -16589,7 +16613,12 @@ class SceneStudioPanel extends HTMLElement {
     this.shadowRoot.appendChild(dialog);
   }
 
+  _dawnMaximumSeconds() {
+    return this._settings?.dawn_maximum_enabled === false ? null : timeToSeconds(this._settings?.dawn_maximum_time_of_day ?? 6 * 3600);
+  }
+
   _duskMinimumSeconds() {
+    if (this._settings?.dusk_minimum_enabled === false) return null;
     const raw = this._settings?.dusk_minimum_time_of_day;
     if (raw == null || raw === "") {
       return 22 * 3600;
@@ -16626,14 +16655,15 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _chartKey() {
-    if (this._view === "theme") return `theme-sun:${this._previewDate}:${this._duskMinimumSeconds()}`;
+    if (this._view === "theme") return `theme-sun:${this._previewDate}:${this._duskMinimumSeconds()}:${this._dawnMaximumSeconds()}`;
     if (this._view !== "edit") {
       // List chart is solar-only and always “today” — not the editor date scrub.
-      return `list-sun:${todayIso()}:${this._duskMinimumSeconds()}`;
+      return `list-sun:${todayIso()}:${this._duskMinimumSeconds()}:${this._dawnMaximumSeconds()}`;
     }
     return JSON.stringify({
       date: this._previewDate,
       dusk: this._duskMinimumSeconds(),
+      dawn: this._dawnMaximumSeconds(),
       scenes: this._sceneIdsFromForm(),
       overlay: this._previewOverlay,
       location: this._previewLocation,
@@ -16977,6 +17007,7 @@ class SceneStudioPanel extends HTMLElement {
       longitude: loc.longitude,
       timeZone,
       duskMinimum: this._duskMinimumSeconds() ?? null,
+      dawnMaximum: this._dawnMaximumSeconds(),
       // Coarse elevation curve while dragging; release uses Astral.
       curveStepMinutes: 30,
     });

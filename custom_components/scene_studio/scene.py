@@ -74,8 +74,8 @@ from .snapshots import (
     scene_members,
     simple_anchor,
 )
-from .solar import EVENT_ORDER, dusk_start_seconds
-from .store import dusk_minimum_seconds
+from .solar import EVENT_ORDER, dawn_start_seconds, dusk_start_seconds
+from .store import dawn_maximum_seconds, dusk_minimum_seconds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -735,9 +735,9 @@ class CircadianScene(Scene):
                 name="Dawn",
                 key="dawn",
                 scene=anchors["dawn"],
-                start_time=self.datetime_to_seconds_since_midnight(
-                    solar_events["dawn"]
-                ),
+                start_time=dawn_start_seconds(
+                    solar_events["dawn"], dawn_maximum_seconds(self.hass)
+                )[0],
             ),
             "sunrise": SunEvent(
                 name="Sunrise",
@@ -1024,6 +1024,9 @@ class CircadianScene(Scene):
             for key in EVENT_ORDER
             if key != "dusk"
         }
+        starts["dawn"], _overridden, _solar = dawn_start_seconds(
+            solar_events["dawn"], dawn_maximum_seconds(self.hass)
+        )
         starts["dusk"], _overridden, _solar = dusk_start_seconds(
             solar_events["dusk"],
             day_start,

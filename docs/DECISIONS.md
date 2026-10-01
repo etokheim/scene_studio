@@ -842,3 +842,13 @@ different scene preset and therefore a different color space. The individual
 light sidebar follows the same rule. Circadian preset editing uses one event dot.
 Wheel edits save field-level light overrides; randomization changes the scene's
 selected-event seed, retaining explicit overrides and relative brightness.
+
+### Enabled dawn and dusk limits
+
+Latest dawn defaults to 06:00 and is enabled for both new and existing stores;
+it advances a later solar or polar-fallback dawn without delaying an earlier
+one. Earliest dusk preserves the previously saved time and remains enabled.
+Each switch disables its limit without erasing that time. Activation, state
+attributes, backend previews, and client date scrubbing apply the same wall-clock
+limits. Real solar positions remain available for sky marks. Next-day dusk keeps
+its existing midnight-wrap semantics and solar event order is unchanged.
