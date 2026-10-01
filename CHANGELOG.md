@@ -9,14 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Summary:
 
-Scene Studio is easier to start with and safer to share. Pick a look from the library, keep your place while editing, and recover scenes if their Home Assistant area disappears.
+Scene Studio is easier to start with and safer to share. Give each solar event its own look, choose when lights should follow the sun, and keep your place while editing together.
 
 ### Added
 
 - ⭐ Edit with another admin in real time. Their saved changes appear in your open editor; if you both change the same field, choose which value to keep before saving.
+- Automatic updates have a Home Assistant switch and a separate interval. Pause individual circadian scenes through an action; activating a paused scene still applies its look once.
+- Scene entities expose whether they are active, paused, or currently updating. A new scene takes ownership in its area, while scenes in other areas retain their non-overlapping lights.
+- Respect manual changes by default, or choose exceptions that always follow the scene or always respect your changes. Temporarily unavailable lights wait for recovery.
+- Latest dawn defaults to 06:00, alongside the existing Earliest dusk setting. Both limits have switches so you can return to solar timing.
 - Areas deleted in Home Assistant stay visible with their last known name. Move all their scenes to another area, or delete them together after a confirmation.
 - Library guidance, starter choices, and usage counts make color, scene, and circadian presets easier to find and reuse.
-- Picture covers and color dots on scene and preset cards show the look before you open it.
+- Picture covers and color dots on scene and preset cards show the look before you open it. Circadian scene thumbnails blend the whole day, including the scene’s own event presets.
 - On/off lights get simple solar-event buttons instead of a brightness graph. Hovering a dial ring shows the light's capabilities, and a touch hold opens a scene card's menu.
 - The phone's empty Scenes tab includes Auto configure and an outlined Manual configuration action beside it for the current visit. After choosing configuration, its area list includes an Auto configure card explaining what it creates; desktop and Library keep Live edit.
 
@@ -26,7 +30,10 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - The selected scene rail stays in place while you switch scenes or presets. The phone dial and light tiles fit together without horizontal scrolling.
 - Scene-card palettes sit just below their titles, and preset usage shares a row with the preset controls.
 - Scenes and presets share a toolbar, centered preview, and bottom light or slot section on desktop and phone. Changing editor type crossfades the preview while keeping the toolbar and light section in place; same-type dial and disk morphs remain.
-- Color presets use consistent cards with two name lines and full-name tooltips. Select the open color preset again to return to the Library overview. Scene cards grow on selection rather than hover, and empty areas omit their scene counter.
+- Color presets sit in four responsive columns with two name lines and full-name tooltips. Selection moves neighboring dots aside without wrapping the fourth dot. Select any open preset again to return to the Library overview. Scene cards grow on selection rather than hover, and empty areas omit their scene counter.
+- The timeline follows the editor’s shape: full-height at the side in landscape, below the toolbar in portrait. Dial and disk previews keep a usable minimum size, with scrolling when the window is short. Wide editors let the preview extend behind the toolbar.
+- Editor links remember Scenes or Library through refresh and Back. Used in menus include each scene’s area.
+- Solar events inherit their assigned scene preset per field. Brightness adjustments and randomization belong to that event; explicit light overrides and shared presets stay intact. Event disks show only the selected event’s light assignments.
 - Both new-scene preset pickers have more room to scroll. Start from scratch stays the same action, becoming secondary when you select a preset.
 - Live edit defaults to on; Reset restores that default in the browser performing the reset.
 - Searching for another preview location now explains that Search sends the query and browser IP to Photon (Komoot); the map and optional search remain.
@@ -40,6 +47,8 @@ Scene Studio is easier to start with and safer to share. Pick a look from the li
 - Ordinary day-position attributes follow local time; explicit preview times land on the right local date through midnight and daylight-saving changes.
 - A collaborator's delayed save or deletion no longer overwrites a newer draft or silently brings a deleted item back.
 - Loading or refreshing the panel no longer claims that Home Assistant has no areas before the area catalog is available, or leaves the desktop area list empty after those areas arrive.
+- Scene-preset → circadian-preset navigation removes the old color wheel after the transition, including interrupted navigation.
+- Activation sends one declared color value to Home Assistant and preserves on/off state when adapting color palettes to temperature lights.
 - The preview-date reset icon reserves its own space beside the date suggestions. Interrupted editor navigation keeps the latest destination without removing outgoing preview pixels early or leaving stale light actions behind.
 
 ## [6.0.0] - 2026-09-26
