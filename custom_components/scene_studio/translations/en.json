@@ -210,7 +210,8 @@
       "move_title": "Move scenes",
       "target": "Target area",
       "delete_title": "Delete scenes?",
-      "delete_confirm": "Delete all {count} scenes in {name}?"
+      "delete_confirm": "Delete all {count} scenes in {name}?",
+      "unassigned": "Unassigned"
     },
     "gallery": {
       "reset_slot": "Reset {name} to the original color",

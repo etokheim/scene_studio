@@ -55,8 +55,13 @@ export function createEditorShell() {
   const lights = document.createElement("div");
   lights.className = "editor-lights";
   lights.hidden = true;
-  el.append(toolbar, preview, lights);
-  return { el, toolbar, preview, lights, lightGate: createTransitionGate(), previewGate: createTransitionGate() };
+  const timeline = document.createElement("div");
+  timeline.className = "editor-timeline";
+  timeline.hidden = true;
+  const background = document.createElement("div");
+  background.className = "editor-background";
+  el.append(background, toolbar, timeline, preview, lights);
+  return { el, toolbar, timeline, preview, lights, background, lightGate: createTransitionGate(), previewGate: createTransitionGate() };
 }
 
 export function mountEditorRegions(shell, { mount, visual, toolbar, lights, animateLights = false, reducedMotion = false }) {
@@ -358,4 +363,34 @@ export const EDITOR_LIBRARY_PREVIEW_CSS = `
   .editor-preview .library-editor .hue-wheel-face { justify-content: center; }
   .editor-preview .library-editor .hue-wheel-canvas { width: 100%; max-width: none; flex: 0 0 auto; }
   .editor-toolbar > .hue-wheel-chrome { position: static; width: 100%; }
+`;
+
+/** Layout uses the editor container, independent of the device orientation. */
+export function editorGeometry(width, height, windowHeight) {
+  return { floor: Math.min(300, width, windowHeight), portrait: height > width, overlap: width >= 1100 };
+}
+
+export const EDITOR_CONTAINER_CSS = `
+  .editor-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(var(--editor-preview-floor, 300px), 1fr) auto; }
+  .editor-background { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
+  .editor-toolbar { grid-column: 1; grid-row: 1; }
+  .editor-timeline { grid-column: 1; grid-row: 2; min-height: 0; padding: 0 16px; z-index: 12; }
+  .editor-timeline[hidden] { display: none; }
+  .editor-preview { grid-column: 1; grid-row: 3; }
+  .editor-lights { grid-column: 1; grid-row: 4; }
+  .editor-shell[data-timeline="vertical"] { grid-template-columns: minmax(0, 1fr) 64px; grid-template-rows: auto minmax(var(--editor-preview-floor, 300px), 1fr) auto; }
+  .editor-shell[data-timeline="vertical"] .editor-timeline { grid-column: 2; grid-row: 1 / 4; height: 100%; padding: 12px 12px 12px 0; box-sizing: border-box; }
+  .editor-shell[data-timeline="vertical"] .sun-year-scrub { height: 100%; min-height: 0; margin: 0; }
+  .editor-shell[data-timeline="vertical"] .editor-preview { grid-row: 2; }
+  .editor-shell[data-timeline="vertical"] .editor-lights { grid-row: 3; }
+  .editor-shell[data-overlap="true"] .editor-preview { grid-row: 1 / 4; }
+  .editor-shell[data-overlap="true"][data-timeline="vertical"] .editor-preview { grid-row: 1 / 3; }
+  :host .editor-shell .sun-path.dial-view .sun-light-clock { padding: 0; }
+  :host .editor-shell .sun-light-clock-face { width: min(100cqi, 100cqb, var(--dial-face-max, 650px)); }
+  .editor-toolbar .sun-toolbar-chrome { display: flex; flex-wrap: wrap; width: 100%; justify-content: space-between; }
+  .editor-toolbar .sun-date-tools { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; width: auto; margin-left: auto; }
+  .editor-toolbar .sun-chip-row { flex-wrap: nowrap; width: auto; }
+  .editor-toolbar .sun-scrub-date { flex: 0 0 auto; width: max-content; }
+  :host([narrow]) .editor-toolbar .sun-hover-play-split { display: none; }
+  :host([narrow]) .content:has(> .editor-shell) { overflow-y: auto; }
 `;

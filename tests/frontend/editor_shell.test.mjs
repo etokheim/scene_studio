@@ -127,3 +127,11 @@ test("repeated shell reconciliation does not restart a pending light exit", asyn
   assert.equal(lights.hidden, true);
   assert.equal(lights.firstChild, null);
 });
+
+test("preview floors and timeline orientation use editor dimensions", async () => {
+  const { editorGeometry } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  assert.deepEqual(editorGeometry(1200, 900, 900), { floor: 300, portrait: false, overlap: true });
+  assert.deepEqual(editorGeometry(700, 900, 900), { floor: 300, portrait: true, overlap: false });
+  assert.equal(editorGeometry(240, 500, 500).floor, 240);
+  assert.equal(editorGeometry(500, 240, 240).floor, 240);
+});

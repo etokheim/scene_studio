@@ -1,3 +1,4 @@
+import { circadianPreviewTheme } from "./card_preview.js";
 import { createStageColumn } from "./editor_shell.js";
 /** Area rail, scene cards, and variable/theme library for the list view. */
 
@@ -870,9 +871,13 @@ export const LANDING_CSS = `
     height: 28px;
     border-radius: 8px;
     object-fit: cover;
+    overflow: hidden;
     filter: none;
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.15);
   }
+  .scene-card .card-icon-photo.theme-dial { border-radius: 50%; }
+  .used-in-label { display: flex; flex-direction: column; line-height: 20px; }
+  .used-in-area { color: var(--secondary-text-color); font-size: 12px; }
   .scene-card .card-body {
     position: relative;
     z-index: 1;
@@ -1040,10 +1045,11 @@ export const LANDING_CSS = `
     display: flex;
     max-width: 100%;
   }
-  .var-row > .library-chip {
-    width: 96px;
-    flex: 0 0 96px;
-  }
+  .var-row { display: flex; flex-direction: column; flex-wrap: nowrap; width: 100%; box-sizing: border-box; }
+  .var-line { display: flex; gap: 8px; width: 100%; }
+  .var-line > .library-chip { flex: 0 0 calc((100% - 64px) / 4); min-width: 0; transition: flex-basis 180ms cubic-bezier(0.2, 0, 0, 1); }
+  .var-line > .library-chip:has(.var-chip.selected) { flex-basis: calc((100% - 64px) / 4 + 40px); }
+  @media (prefers-reduced-motion: reduce) { .var-line > .library-chip { transition: none; } }
   .var-row .var-chip {
     width: 100%;
     min-width: 0;
@@ -1927,6 +1933,23 @@ function sceneCardIcon(scene) {
   return scene.kind === "simple" ? "mdi:palette" : "mdi:auto-fix";
 }
 
+function sceneCornerPreview(panel, scene) {
+  if (scene.kind === "circadian") {
+    const preview = document.createElement("div");
+    preview.className = "card-icon card-icon-photo theme-dial";
+    preview.setAttribute("aria-hidden", "true");
+    const theme = (panel._themes || []).find(item => item.id === (scene.theme_id || "default"));
+    paintThemeDial(preview, circadianPreviewTheme(scene, theme), panel._variables || []);
+    return preview;
+  }
+  const cover = sceneCardCoverUrl(panel, scene);
+  const icon = document.createElement(cover ? "img" : "ha-icon");
+  icon.className = cover ? "card-icon card-icon-photo" : "card-icon";
+  if (cover) { icon.alt = ""; icon.src = cover; }
+  else icon.setAttribute("icon", sceneCardIcon(scene));
+  return icon;
+}
+
 /** Swap the corner photo and palette dots on a rail card that is already on screen. */
 export function syncSceneCardFace(panel, scene) {
   if (!scene?.id || !panel?.shadowRoot) {
@@ -1938,26 +1961,8 @@ export function syncSceneCardFace(panel, scene) {
   if (!card) {
     return;
   }
-  const cover = sceneCardCoverUrl(panel, scene);
   const icon = card.querySelector(":scope > .card-icon");
-  if (cover) {
-    if (icon?.tagName === "IMG") {
-      if (icon.getAttribute("src") !== cover) {
-        icon.src = cover;
-      }
-    } else {
-      const img = document.createElement("img");
-      img.className = "card-icon card-icon-photo";
-      img.alt = "";
-      img.src = cover;
-      icon?.replaceWith(img);
-    }
-  } else if (icon?.classList.contains("card-icon-photo")) {
-    const next = document.createElement("ha-icon");
-    next.className = "card-icon";
-    next.setAttribute("icon", sceneCardIcon(scene));
-    icon.replaceWith(next);
-  }
+  icon?.replaceWith(sceneCornerPreview(panel, scene));
   const body = card.querySelector(".card-body");
   if (!body) {
     return;
@@ -2076,18 +2081,7 @@ function renderSceneCard(panel, scene) {
       : panel._t("frontend.cards.hidden", "Hidden");
     body.appendChild(flag);
   }
-  const cover = sceneCardCoverUrl(panel, scene);
-  let icon;
-  if (cover) {
-    icon = document.createElement("img");
-    icon.className = "card-icon card-icon-photo";
-    icon.alt = "";
-    icon.src = cover;
-  } else {
-    icon = document.createElement("ha-icon");
-    icon.className = "card-icon";
-    icon.setAttribute("icon", sceneCardIcon(scene));
-  }
+  const icon = sceneCornerPreview(panel, scene);
   const overflowSlot = document.createElement("div");
   overflowSlot.className = "card-overflow-slot";
   if (panel._nameIsPlaceholder?.(scene.scene_name)) {
@@ -2664,6 +2658,14 @@ function renderLibrary(panel, { compact } = {}) {
   });
   palHead.append(stickyBg("area"), palLabel, addPal);
 
+  const colorChips = [...varRow.children];
+  varRow.replaceChildren();
+  for (let i = 0; i < colorChips.length; i += 4) {
+    const line = document.createElement("div");
+    line.className = "var-line";
+    line.append(...colorChips.slice(i, i + 4));
+    varRow.appendChild(line);
+  }
   const palCards = document.createElement("div");
   palCards.className = "scene-cards";
   for (const palette of palettes) {
@@ -3061,7 +3063,15 @@ export function renderLibraryUsedBy(panel, { kind, id }) {
     const item = document.createElement("ha-dropdown-item");
     item.value = scene.id;
     appendSceneMenuFace(item, scene, panel);
-    item.append(document.createTextNode(scene.scene_name || scene.name || scene.id));
+    const label = document.createElement("span");
+    label.className = "used-in-label";
+    const name = document.createElement("span");
+    name.textContent = scene.scene_name || scene.name || scene.id;
+    const area = document.createElement("span");
+    area.className = "used-in-area";
+    area.textContent = panel._areaDisplayName(scene.area) || panel._t("frontend.areas.unassigned", "Unassigned");
+    label.append(name, area);
+    item.append(label);
     menu.appendChild(item);
   }
   menu.addEventListener("wa-select", (ev) => {

@@ -1,5 +1,5 @@
 import { editorPath, editorRoute, libraryItemRoute } from "./editor_routes.js";
-import { capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
+import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
   buildClientSunDay,
   resampleLightsForEvents,
@@ -5184,6 +5184,7 @@ class SceneStudioPanel extends HTMLElement {
         ${EDITOR_SHELL_LAYOUT_CSS}
         ${EDITOR_SHELL_MOTION_CSS}
         ${EDITOR_LIBRARY_PREVIEW_CSS}
+        ${EDITOR_CONTAINER_CSS}
       </style>
       <ha-top-app-bar-fixed>
         <div slot="title"></div>
@@ -6529,6 +6530,8 @@ class SceneStudioPanel extends HTMLElement {
         toolbar.unshift(...[...shell.toolbar.children].filter(node => !freshClasses.has(node.className)));
       }
       mountEditorRegions(shell, { mount, visual, toolbar, lights: currentLights, animateLights: true, reducedMotion: this._prefersReducedMotion() });
+      shell.timeline.hidden = !dial;
+      if (!dial) delete shell.el.dataset.timeline;
       shell.el.dataset.kind = dial ? "dial" : simple ? "wheel" : this._view === "variable" ? "library" : "empty";
       const bottom = stage ? mount.getBoundingClientRect().bottom :
         this.shadowRoot.querySelector(".page-shell").getBoundingClientRect().bottom;
@@ -6566,11 +6569,15 @@ class SceneStudioPanel extends HTMLElement {
     const h = shell.preview.clientHeight;
     const w = shell.preview.clientWidth;
     if (!h || !w) return;
-    const min = this._narrow ? 1 : WHEEL_FACE_MIN_PX;
-    const size = Math.min(WHEEL_FACE_MAX_PX, w, Math.max(min, h - 56));
+    const usableHeight = this.shadowRoot.querySelector(".page-shell")?.clientHeight || window.innerHeight;
+    const geometry = editorGeometry(shell.el.clientWidth, shell.el.clientHeight, usableHeight);
+    shell.el.style.setProperty("--editor-preview-floor", `${geometry.floor}px`);
+    shell.el.dataset.overlap = String(geometry.overlap);
+    const size = Math.min(WHEEL_FACE_MAX_PX, w, Math.max(geometry.floor, h));
     const value = `${Math.floor(size)}px`;
     shell.el.style.setProperty("--dial-face-max", value);
     this._sunPathEl?.style.setProperty("--dial-face-max", value);
+    this._syncYearScrubLayout();
     this._layoutDialChromeFn?.();
   }
 
@@ -10291,13 +10298,16 @@ class SceneStudioPanel extends HTMLElement {
       return;
     }
     const solarKey = `theme-sun:${this._previewDate}:${this._duskMinimumSeconds()}`;
+    const generation = this._previewGeneration;
     if (!this._themeSolar || this._themeSolarKey !== solarKey) {
       const msg = {
         type: `${DOMAIN}/sun_path`,
         date: this._previewDate,
         dusk_minimum: this._duskMinimumSeconds(),
       };
-      this._themeSolar = await this._hass.callWS(msg);
+      const solar = await this._hass.callWS(msg);
+      if (generation !== this._previewGeneration || this._view !== "theme" || solarKey !== this._chartKey()) return;
+      this._themeSolar = solar;
       this._themeSolarKey = solarKey;
     }
     const solar = this._themeSolar;
@@ -10308,8 +10318,10 @@ class SceneStudioPanel extends HTMLElement {
       { intermediatesPerSegment: 5 }
     );
     this._sunPath = { ...solar, lights };
+    this._sunPathKey = solarKey;
     this._sunPathEl.hidden = false;
     this._drawSunPath();
+    this._syncSharedEditorShell();
   }
 
   _themeLookId() {
@@ -16492,6 +16504,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _chartKey() {
+    if (this._view === "theme") return `theme-sun:${this._previewDate}:${this._duskMinimumSeconds()}`;
     if (this._view !== "edit") {
       // List chart is solar-only and always “today” — not the editor date scrub.
       return `list-sun:${todayIso()}:${this._duskMinimumSeconds()}`;
@@ -17521,6 +17534,27 @@ class SceneStudioPanel extends HTMLElement {
     if (!this._yearScrub || !this._dateToolbar || !this._scrubBlock) {
       return;
     }
+    const shell = this._sharedEditorShell;
+    if (shell?.el.isConnected && this._isDialView()) {
+      if (this._yearScrubbing) return;
+      const vertical = shell.el.clientWidth >= shell.el.clientHeight;
+      shell.el.dataset.timeline = vertical ? "vertical" : "horizontal";
+      shell.timeline.hidden = false;
+      if (this._yearScrub.parentNode !== shell.timeline) shell.timeline.replaceChildren(this._yearScrub);
+      this._yearScrub.classList.toggle("vertical", vertical);
+      this._yearScrub.setAttribute("aria-hidden", "false");
+      this._clockScrubRail.hidden = true;
+      this._sunPathStage?.classList.remove("landscape-clock-scrub", "scrub-collapsed");
+      const chrome = this._ensureToolbarChrome();
+      this._chipRow.hidden = false;
+      this._scrubDateBtn.hidden = false;
+      this._dateTools.replaceChildren(this._chipRow, this._scrubDateBtn);
+      chrome.replaceChildren(...[this._hoverReadout, this._dateTools].filter(Boolean));
+      this._dateToolbar.replaceChildren(chrome);
+      this._syncYearScrub();
+      this._syncSceneUsed();
+      return;
+    }
     // Keep the scrub node where it is while dragging so pointer capture and
     // axis stay stable across preview redraws.
     if (this._yearScrubbing) {
@@ -17690,6 +17724,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _alignYearScrubRail() {
+    if (this._sharedEditorShell?.el.isConnected) return;
     if (
       !this._clockScrubRail ||
       this._clockScrubRail.hidden ||
@@ -18455,18 +18490,14 @@ class SceneStudioPanel extends HTMLElement {
     }
     const stage = this._contentEl?.querySelector(".stage-col");
     const bg = this._stageBgEl(stage);
-    // Wide: the sky sits on .stage-bg so it can span the rail while the stage
-    // scrolls. Narrow: keep it in the face. Page-relative coordinates put the
-    // wash at the bottom of the screen instead of on the dial.
-    if (bg) {
-      if (back.parentNode !== bg) {
-        bg.appendChild(back);
-      }
-    } else if (face && back.parentNode !== face) {
-      face.appendChild(back);
+    // Keep the sky aligned to the face, but outside the preview's scroll
+    // geometry. The shell clips decorative overflow on narrow screens.
+    const background = bg || this._sharedEditorShell?.background || face;
+    if (back.parentNode !== background) {
+      background.appendChild(back);
     }
     const host = this.getBoundingClientRect();
-    const originRect = (bg || face).getBoundingClientRect();
+    const originRect = background.getBoundingClientRect();
     const clip = this._contentEl?.querySelector(".workspace")?.getBoundingClientRect() || host;
     const fr = face.getBoundingClientRect();
     if (fr.width < 8 || host.width < 8) {

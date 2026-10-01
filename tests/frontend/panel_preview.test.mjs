@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+const registry = new Map();
+globalThis.HTMLElement = class {};
+globalThis.customElements = { get: name => registry.get(name), define: (name, ctor) => registry.set(name, ctor) };
+await import("../../custom_components/scene_studio/frontend/panel.js");
+const methods = registry.get("scene-studio-panel").prototype;
+
+test("circadian-preset readiness uses its own solar key so outgoing wheels finish", () => {
+  const panel = { _view: "theme", _previewDate: "2026-02-16", _duskMinimumSeconds: () => 79200, _sunPath: { curve: [1] } };
+  panel._chartKey = () => methods._chartKey.call(panel);
+  panel._sunPathKey = "theme-sun:2026-02-16:79200";
+  assert.equal(methods._sunPathMatchesChart.call(panel), true);
+  panel._sunPathKey = "list-sun:2026-02-16:79200";
+  assert.equal(methods._sunPathMatchesChart.call(panel), false);
+});
+
+test("a cached circadian preview reconciles the shell after becoming ready", async () => {
+  const calls = [];
+  const panel = {
+    _hass: {}, _view: "theme", _previewDate: "2026-02-16", _previewGeneration: 1,
+    _themeDraft: {}, _sunPathEl: { hidden: true },
+    _duskMinimumSeconds: () => 79200,
+    _themeSolarKey: "theme-sun:2026-02-16:79200", _themeSolar: { events: [] },
+    _themeRingLight: () => ({ event_states: [] }),
+    _drawSunPath: () => calls.push("draw"),
+    _syncSharedEditorShell: () => calls.push("shell"),
+  };
+  await methods._ensureThemeSunPath.call(panel);
+  assert.deepEqual(calls, ["draw", "shell"]);
+  assert.equal(panel._sunPathKey, panel._themeSolarKey);
+});
+
+test("a delayed solar response cannot remount a departed circadian preset", async () => {
+  let finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  const panel = {
+    _hass: { callWS: () => response }, _view: "theme", _previewDate: "2026-02-16", _previewGeneration: 1,
+    _themeDraft: {}, _sunPathEl: { hidden: true }, _duskMinimumSeconds: () => 79200,
+    _chartKey: () => "theme-sun:2026-02-16:79200",
+    _drawSunPath: () => assert.fail("stale preview was drawn"),
+  };
+  const waiting = methods._ensureThemeSunPath.call(panel);
+  panel._view = "palette";
+  panel._previewGeneration++;
+  finish({ events: [] });
+  await waiting;
+  assert.equal(panel._sunPathEl.hidden, true);
+  assert.equal(panel._themeSolar, undefined);
+});

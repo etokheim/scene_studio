@@ -5,7 +5,7 @@ Durable product and architecture guidance for Scene Studio. Keep current constra
 ## Shared editor regions and retained preview pixels
 
 - **Date:** 2026-09-30
-- **Decision:** Scenes and library editors use one shell with toolbar, flexible preview, and bottom light or palette-slot region. Existing editors own their data and interactions. Incompatible previews retain live outgoing DOM, canvas pixels, backgrounds, and measured geometry until the incoming content is ready and the crossfade finishes. Toolbar and light hosts survive; destination controls and callbacks replace their contents. Revision gates prevent interrupted transitions and delayed navigation from cleaning up or reopening an older destination. Same-type morphs remain.
+- **Decision:** Scenes and library editors use one CSS Grid shell with toolbar, flexible preview, bottom light or palette-slot region, and a timeline. The editor container dimensions select a vertical full-height timeline or a horizontal timeline below the toolbar. At editor widths of at least 1100px, the preview extends behind the clickable toolbar. Existing editors own their data and interactions. Incompatible previews retain live outgoing DOM, canvas pixels, backgrounds, and measured geometry until the incoming content is ready and the crossfade finishes. Toolbar and light hosts survive; destination controls and callbacks replace their contents. Revision gates prevent interrupted transitions and delayed navigation from cleaning up or reopening an older destination. Same-type morphs remain.
 - **Why:** Separate editor layouts reserved different space below their disks, and teardown before the exit animation finished caused visible jumps. Cloning a canvas would lose its pixels; retaining old light callbacks would act on the previous scene.
 
 ## Library onboarding and shared selection opacity
@@ -42,17 +42,17 @@ Durable product and architecture guidance for Scene Studio. Keep current constra
 - **Why:** Id-only morph faded every pin when the area changed. The preview sample grid stayed a warm wash until a solar event forced the event resample. Adopting a starter twice was easy because it stayed in the gallery. Closing the solar-event sidebar saved the previous scene after the next card was already open, so the rail kept the old selection.
 - **Do not reverse without user ask.**
 
-## A phone dial shrinks; presets are the user-facing names
+## Preview floors and user-facing preset names
 
 - **Date:** 2026-09-28
-- **Decision:** On a phone the circadian face is centered in the space above the light tiles and may shrink below the color-wheel floor so the page does not scroll. A wide dial keeps that floor. The face is vertically centered between the shared toolbar and light section; the play row and date chips stay in layout flow. Light tiles are grouped again whenever a selector sits on the strip outside a group. The narrow overflow menu holds Live edit; undo and redo stay as header buttons. Library copy says scene presets, color presets, and circadian presets. Stored kinds stay `palette`, `variable`, and `theme`.
-- **Why:** A matching group signature left a rebuilt tile list flat. The floor plus a scrollbar hid the tiles on a short phone. Palette, variable, and theme did not say how the three lists relate.
+- **Decision:** Dial and disk previews have a 300px floor, capped by available editor width and usable window height on smaller windows. The stage may scroll when the toolbar, minimum preview, and light section cannot fit. Decorative sky overflow is clipped independently so it does not create scrolling. The face is vertically centered between the shared toolbar and light section; the play row and date chips stay in layout flow. Light tiles are grouped again whenever a selector sits on the strip outside a group. The narrow overflow menu holds Live edit; undo and redo stay as header buttons. Library copy says scene presets, color presets, and circadian presets. Stored kinds stay `palette`, `variable`, and `theme`.
+- **Why:** A matching group signature left a rebuilt tile list flat. The approved preview floor keeps short-screen controls usable, with scrolling only when needed to reach them. Palette, variable, and theme did not say how the three lists relate.
 - **Do not reverse without user ask.**
 
 ## Scene changes keep the dial and one rail paint
 
 - **Date:** 2026-09-28
-- **Decision:** Circadian scene to circadian scene leaves the dial mounted and lerps the new path. The preview key includes the scene and its theme, so two scenes in one area do not keep each other's ring colors. The list rail is not rebuilt for that switch. A hash write is handled once: Home Assistant fires both `hashchange` and `location-changed`. The exit layer strips leftover enter classes before it scales away. A scene card can be opened again after it is deselected, because that card stays in the rail.
+- **Decision:** Circadian scene to circadian scene leaves the dial mounted and lerps the new path. The preview key includes the scene and its theme, so two scenes in one area do not keep each other's ring colors. The list rail is not rebuilt for that switch. Canonical scene and library paths are handled through Home Assistant navigation events; old hash links are normalized once. Explicit overview routes preserve the originating tab on Back and refresh. The exit layer strips leftover enter classes before it scales away. A scene card can be opened again after it is deselected, because that card stays in the rail.
 - **Why:** Forgetting the dial popped the rings and tiles. A second hash pass rebuilt the editor while the first animation was still running, and a leftover enter class restarted scale(0.92) inside the exit.
 - **Do not reverse without user ask.**
 
