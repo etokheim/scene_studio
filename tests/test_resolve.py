@@ -181,8 +181,14 @@ class TestAdaptColorForModes:
         assert "color_temp_kelvin" not in result
         assert result.get("brightness") == 200
 
-    def test_chromatic_on_temp_only(self):
-        color = {"color_mode": "hs", "hs_color": [30, 80], "brightness": 128}
+    @pytest.mark.parametrize("mode", ["hs", "xy", "rgb", "rgbw", "rgbww"])
+    def test_chromatic_on_temp_only(self, mode):
+        color = {
+            "state": "on",
+            "color_mode": mode,
+            "hs_color": [30, 80],
+            "brightness": 128,
+        }
         result = _adapt_color_for_modes(color, {"color_temp"})
         assert "hs_color" not in result
         assert result.get("brightness") == 128

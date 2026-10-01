@@ -10246,6 +10246,7 @@ class SceneStudioPanel extends HTMLElement {
       known: modes.length > 0,
       onOff,
       brightnessOnly: modes.length > 0 && !onOff && !hasColor,
+      temperatureOnly: modes.includes("color_temp") && !modes.some(mode => ["hs", "xy", "rgb", "rgbw", "rgbww"].includes(mode)),
     };
   }
 
@@ -10266,6 +10267,12 @@ class SceneStudioPanel extends HTMLElement {
         next.brightness = source.brightness;
       }
       return next;
+    }
+    if (flags.temperatureOnly && ["hs", "xy", "rgb", "rgbw", "rgbww"].includes(source.color_mode)) {
+      // Match activation: unsupported chromatic values do not become a
+      // temperature command. Keep the level; the lamp retains its temperature.
+      return Object.fromEntries(Object.entries(source).filter(([key]) =>
+        ["state", "brightness", "effect"].includes(key)));
     }
     return source;
   }

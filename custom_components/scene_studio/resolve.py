@@ -160,7 +160,7 @@ def _adapt_color_for_modes(
         out["color_mode"] = "hs"
         out["hs_color"] = list(hs)
         return out
-    if mode in ("hs", "rgb", "rgbw", "rgbww") and not has_chromatic and has_temp:
+    if mode in ("hs", "xy", "rgb", "rgbw", "rgbww") and not has_chromatic and has_temp:
         # Cannot represent chromatic on a temp-only light; drop the color,
         # keep brightness. The lamp will use its last-known temp.
         return {

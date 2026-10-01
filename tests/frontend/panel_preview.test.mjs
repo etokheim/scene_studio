@@ -134,3 +134,14 @@ test("durable settings refresh mounted controls without replacing the sidebar", 
   assert.deepEqual(panel._settingsBindings, [live]);
   assert.equal(syncs, 1);
 });
+
+
+test("editor capability adaptation removes unsupported chromatic preview values", () => {
+  for (const mode of ["hs", "xy", "rgb", "rgbw", "rgbww"]) {
+    const panel = { _hass: { states: { "light.temp": { attributes: { supported_color_modes: ["color_temp"] } } } } };
+    panel._lightModeFlags = id => methods._lightModeFlags.call(panel, id);
+    assert.deepEqual(methods._editorLightState.call(panel, "light.temp", { state: "on", brightness: 45, effect: "none", color_mode: mode, rgb_color: [255, 0, 0], hs_color: [0, 100] }), { state: "on", brightness: 45, effect: "none" });
+    const temperature = { state: "on", brightness: 45, color_mode: "color_temp", color_temp_kelvin: 2700 };
+    assert.deepEqual(methods._editorLightState.call(panel, "light.temp", temperature), temperature);
+  }
+});
