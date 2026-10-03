@@ -19,6 +19,7 @@ import {
   binaryDragPreview,
   binaryWheelPreview,
   captureLightStripLayout,
+  hasUngroupedLightTiles,
   createAddLightTile,
   createLightModeGroup,
   createLightTile,
@@ -603,15 +604,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     `${members
       .map((id) => `${id}:${lightIsUnavailable(id) ? "unavailable" : groupOf(id)}`)
       .join("|")}|${removedMembers.join(",")}`;
-  // Select-all stays on the strip. A member tile there is ungrouped, except
-  // while a flight has lifted it (position absolute) and will put it back.
-  const stripHasUngroupedTiles = () =>
-    [...tiles.children].some(
-      (el) =>
-        el.classList.contains("simple-light-selector") &&
-        !el.classList.contains("select-all-tile") &&
-        el.style.position !== "absolute"
-    );
+  const stripHasUngroupedTiles = () => hasUngroupedLightTiles(tiles);
 
   const cardDots = () =>
     members.map((eid) => {

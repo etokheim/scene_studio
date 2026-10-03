@@ -959,6 +959,16 @@ export function reconcileStripChildren(parent, nodes) {
   });
 }
 
+/** Controls and in-flight members intentionally live outside mode groups. */
+export function hasUngroupedLightTiles(root) {
+  return [...root.children].some(el =>
+    el.classList.contains("simple-light-selector") &&
+    !el.classList.contains("select-all-tile") &&
+    !el.classList.contains("add-light-tile") &&
+    el.style.position !== "absolute"
+  );
+}
+
 export function captureLightStripLayout(root) {
   const rects = new Map();
   if (!root?.isConnected) {
