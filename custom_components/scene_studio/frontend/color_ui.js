@@ -4,12 +4,14 @@
 import {
   PALETTE_SLOT_COUNT,
   assignmentTR,
+  colorPresetShownForCaps,
   paletteIsMixed,
   paletteIsTemperatureOnly,
   paletteSwatchCss,
   resolveSlot,
   samplePaletteWheel,
   variableIsPalette,
+  variableIsTemperaturePreset,
 } from "./palette.js";
 import { MODE_COLOR_ICON, MODE_TEMP_ICON } from "./hue_mode_icons.js";
 
@@ -593,8 +595,38 @@ function draftUsesPalette(draft, getPalette) {
   return variableIsPalette(variable);
 }
 
-function applyVariableToDraft(draft, variable, { entityId, seed, catalog } = {}) {
+function applyVariableToDraft(
+  draft,
+  variable,
+  { entityId, seed, catalog, levelOnly = false } = {}
+) {
   if (!draft || !variable) {
+    return;
+  }
+  if (levelOnly) {
+    draft.color_temp_kelvin = undefined;
+    draft.rgb_color = undefined;
+    draft.hs_color = undefined;
+    draft.rgbw_color = undefined;
+    draft.rgbww_color = undefined;
+    draft.color_mode = undefined;
+    draft.variable_ref = variable.id;
+    if (variableIsPalette(variable)) {
+      const { t, r } = assignmentTR(entityId || "", seed || 0);
+      const sampled = samplePaletteWheel(
+        variable,
+        t,
+        r,
+        catalog || [],
+        draftRgb
+      );
+      draft.brightness = sampled.brightness;
+    } else {
+      const brightness = Number(variable.brightness);
+      if (Number.isFinite(brightness)) {
+        draft.brightness = brightness;
+      }
+    }
     return;
   }
   draft.color_temp_kelvin = undefined;
@@ -2412,9 +2444,11 @@ function captureWheelPinPositions(root) {
     if (!id || g.style.display === "none") {
       continue;
     }
-    const match = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(
-      g.style.transform || ""
-    );
+    const match =
+      /translate\(([-\d.]+)(?:px)?[,\s]+([-\d.]+)(?:px)?\)/.exec(
+        g.getAttribute("transform") || ""
+      ) ||
+      /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(g.style.transform || "");
     if (!match) {
       continue;
     }
@@ -2433,19 +2467,22 @@ function captureWheelPinList(root) {
     return list;
   }
   for (const g of root.querySelectorAll(".hue-wheel-svg .gm")) {
-    if (g.style.display === "none") {
-      continue;
-    }
-    const match = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(
-      g.style.transform || ""
-    );
+    // Grouped members are display:none but still sit on the cluster. Skipping
+    // them made those dots pop to their next color instead of flying.
+    const hidden = g.style.display === "none";
+    const match =
+      /translate\(([-\d.]+)(?:px)?[,\s]+([-\d.]+)(?:px)?\)/.exec(
+        g.getAttribute("transform") || ""
+      ) ||
+      /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(g.style.transform || "");
     if (!match) {
       continue;
     }
     list.push({
+      id: g.dataset.sceneId || "",
       x: Number(match[1]) + PIN_TIP_X,
       y: Number(match[2]) + PIN_TIP_Y,
-      clone: g.cloneNode(true),
+      clone: hidden ? null : g.cloneNode(true),
     });
   }
   return list;
@@ -2462,7 +2499,7 @@ function createSceneColorWheel({
   onChange,
   getPalette,
   onAddPalette,
-  addVariableLabel = "Add variable",
+  addVariableLabel = "Add color preset",
   getCapabilities,
   getAssignmentSeed,
   getAssignmentEntityId,
@@ -2470,6 +2507,7 @@ function createSceneColorWheel({
   onRandomizeSeed,
   onPickPalette,
   onEditPalette,
+  onEditVariable,
   showPath = true,
   groupNearby = false,
   getPinIcon,
@@ -2700,11 +2738,11 @@ function createSceneColorWheel({
     paletteCatalog().find((item) => item.id === draft?.variable_ref);
 
   const wheelPalette = () => {
-    const fromDraft = (getState().scenes || [])
-      .map((row) => paletteForDraft(row?.draft))
-      .find((item) => variableIsPalette(item));
-    if (fromDraft) {
-      return fromDraft;
+    const state = getState();
+    const active = (state.scenes || []).find((row) => row.id === state.activeId);
+    const fromActive = paletteForDraft(active?.draft);
+    if (variableIsPalette(fromActive)) {
+      return fromActive;
     }
     if (typeof getBasePalette !== "function") {
       return null;
@@ -2952,6 +2990,16 @@ function createSceneColorWheel({
 
   const pinAt = (px, py) =>
     `translate(${px - PIN_TIP_X}px, ${py - PIN_TIP_Y}px)`;
+  // SVG transform attribute, not CSS. Safari paints foreignObject icons at
+  // the SVG origin when the pin position is only a CSS transform.
+  const pinAtAttr = (px, py) =>
+    `translate(${px - PIN_TIP_X} ${py - PIN_TIP_Y})`;
+  const setPinTransform = (g, px, py) => {
+    g.setAttribute("transform", pinAtAttr(px, py));
+    // An inline transform of "none" overrides the attribute and leaves the
+    // dot at the SVG origin (top-left of the wheel).
+    g.style.transform = "";
+  };
 
   // A group split animates with the Web Animations API. placeMarker must not
   // move those pins to their colors while that flight still owns the transform.
@@ -3005,7 +3053,7 @@ function createSceneColorWheel({
         marker.flying = false;
         marker.g.getAnimations().forEach((anim) => anim.cancel());
         marker.g.style.transition = "";
-        marker.g.style.transform = pinAt(home.x, home.y);
+        setPinTransform(marker.g, home.x, home.y);
       }
       sync();
     };
@@ -3127,6 +3175,49 @@ function createSceneColorWheel({
     if (marker.flipPending) {
       return;
     }
+    const pinMoves = () =>
+      marker.g.getAnimations({ subtree: false }).filter(
+        (anim) => anim.playState === "running" && anim.id === "pin-move"
+      );
+    // A second placement used to cancel the flight and restart at the previous
+    // target, so the dot jumped backward and then forward.
+    const visualTip = () => {
+      const tr = getComputedStyle(marker.g).transform;
+      if (!tr || tr === "none") {
+        return null;
+      }
+      const m = new DOMMatrixReadOnly(tr);
+      if (!Number.isFinite(m.e) || !Number.isFinite(m.f)) {
+        return null;
+      }
+      return { x: m.e + PIN_TIP_X, y: m.f + PIN_TIP_Y };
+    };
+    const flyPin = (fromX, fromY) => {
+      const gen = (marker.pinGen || 0) + 1;
+      marker.pinGen = gen;
+      pinMoves().forEach((anim) => anim.cancel());
+      marker.g.style.transition = "none";
+      const anim = marker.g.animate(
+        [
+          { transform: at(fromX, fromY) },
+          { transform: at(marker.x, marker.y) },
+        ],
+        {
+          duration: 480,
+          easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
+          fill: "both",
+          id: "pin-move",
+        }
+      );
+      anim.onfinish = () => {
+        if (marker.pinGen !== gen) {
+          return;
+        }
+        marker.g.style.transition = "";
+        setPinTransform(marker.g, marker.x, marker.y);
+        anim.cancel();
+      };
+    };
     if (
       from &&
       Number.isFinite(from.x) &&
@@ -3134,22 +3225,7 @@ function createSceneColorWheel({
       (Math.abs(from.x - x) > 0.5 || Math.abs(from.y - y) > 0.5)
     ) {
       marker.posed = true;
-      marker.flipPending = true;
-      marker.g.style.transition = "none";
-      marker.g.style.transform = at(from.x, from.y);
-      requestAnimationFrame(() => {
-        if (!marker.flipPending) {
-          return;
-        }
-        marker.g.style.transition = "";
-        requestAnimationFrame(() => {
-          if (!marker.flipPending) {
-            return;
-          }
-          marker.flipPending = false;
-          marker.g.style.transform = at(marker.x, marker.y);
-        });
-      });
+      flyPin(from.x, from.y);
       return;
     }
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -3158,31 +3234,18 @@ function createSceneColorWheel({
       Number.isFinite(prevX) &&
       Number.isFinite(prevY) &&
       (Math.abs(prevX - x) > 0.5 || Math.abs(prevY - y) > 0.5);
-    const pinMoves = () =>
-      marker.g.getAnimations({ subtree: false }).filter((anim) => anim.playState === "running");
+    // Opacity fades also run on the group. They must not block the first
+    // placement — that left the dot at the SVG origin once the fade ended.
     if (!moved && pinMoves().length) {
       return;
     }
     if (moved && !instant && !drag && !reduce) {
-      pinMoves().forEach((anim) => anim.cancel());
-      marker.g.style.transition = "none";
-      const anim = marker.g.animate(
-        [{ transform: at(prevX, prevY) }, { transform: at(x, y) }],
-        {
-          duration: 480,
-          easing: "cubic-bezier(0.22, 1.15, 0.36, 1)",
-          fill: "both",
-        }
-      );
-      anim.onfinish = () => {
-        marker.g.style.transition = "";
-        marker.g.style.transform = at(marker.x, marker.y);
-        anim.cancel();
-      };
+      const visual = visualTip();
+      flyPin(visual?.x ?? prevX, visual?.y ?? prevY);
       return;
     }
     pinMoves().forEach((anim) => anim.cancel());
-    marker.g.style.transform = at(x, y);
+    setPinTransform(marker.g, x, y);
     if (!marker.posed) {
       marker.posed = true;
       marker.g.style.transition = "none";
@@ -3463,10 +3526,10 @@ function createSceneColorWheel({
         mode === "temp"
           ? t("frontend.lights.group_temp", "Temperature")
           : mode === "palette"
-            ? t("frontend.naming.palette", "Palette")
+            ? t("frontend.naming.palette", "Scene preset")
             : t("frontend.lights.group_color", "Color");
       if (offerPalette && !palVar) {
-        name.textContent = t("frontend.dialogs.scene_palette_select", "Select a palette");
+        name.textContent = t("frontend.dialogs.scene_palette_select", "Select a scene preset");
       } else {
         name.textContent = label;
       }
@@ -3480,10 +3543,15 @@ function createSceneColorWheel({
         face.style.backgroundImage = "none";
         face.style.background = paletteSwatchCss(palVar, paletteCatalog(), draftRgb);
       } else if (offerPalette) {
-        face.textContent = "+";
         face.classList.add("palette-add-mark");
+        const plus = document.createElement("ha-icon");
+        plus.setAttribute("icon", "mdi:plus");
+        face.appendChild(plus);
       }
       wrap.append(name, face);
+      if (offerPalette && !palVar) {
+        wrap.setAttribute("aria-label", name.textContent);
+      }
       if (!entry.supported && !offerPalette) {
         const tip = document.createElement("ha-tooltip");
         tip.placement = "right";
@@ -3738,7 +3806,7 @@ function createSceneColorWheel({
     paletteColors.hidden = false;
     const title = document.createElement("div");
     title.className = "hue-palette-colors-title";
-    title.textContent = palette.name || t("frontend.naming.palette", "Palette");
+    title.textContent = palette.name || t("frontend.naming.palette", "Scene preset");
     paletteColors.appendChild(title);
     const catalog = paletteCatalog();
     const slots = palette.slots || [];
@@ -3770,15 +3838,23 @@ function createSceneColorWheel({
     wantPresets = selectedIdsOf(state).length > 0;
     presetTrack.setAttribute(
       "aria-label",
-      t("frontend.library.variables", "Variables")
+      t("frontend.library.variables", "Color presets")
     );
     if (!wantPresets) {
       return;
     }
     syncPaletteColors();
     presetTrack.replaceChildren();
+    const pickedRows = selectedIdsOf(state)
+      .map((id) => scenes.find((row) => row.id === id))
+      .filter(Boolean);
+    const anyColor = pickedRows.some((row) => capsOf(row).hasColor);
+    const anyTemp = pickedRows.some((row) => capsOf(row).hasTemp);
     for (const variable of palette) {
       if (variableIsPalette(variable)) {
+        continue;
+      }
+      if (!colorPresetShownForCaps(variable, { anyColor, anyTemp })) {
         continue;
       }
       const btn = document.createElement("button");
@@ -3795,6 +3871,26 @@ function createSceneColorWheel({
       btn.append(swatch, name);
       if (active?.draft?.variable_ref === variable.id) {
         btn.classList.add("active");
+        const edit = document.createElement("span");
+        edit.className = "hue-preset-edit";
+        edit.setAttribute("role", "button");
+        edit.tabIndex = 0;
+        edit.title = t("frontend.common.edit", "Edit");
+        const editIcon = document.createElement("ha-icon");
+        editIcon.setAttribute("icon", "mdi:pencil");
+        edit.appendChild(editIcon);
+        const openEditor = (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+          (onEditVariable || onEditPalette)?.(variable.id);
+        };
+        edit.addEventListener("click", openEditor);
+        edit.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            openEditor(ev);
+          }
+        });
+        btn.appendChild(edit);
       }
       btn.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -3803,10 +3899,14 @@ function createSceneColorWheel({
           .map((id) => stateNow.scenes.find((row) => row.id === id))
           .filter((row) => row?.draft);
         const targets = picked.length ? picked : active?.draft ? [active] : [];
-        if (!targets.length) {
+        const compatible = targets.filter((row) => {
+          const caps = capsOf(row);
+          return variableIsTemperaturePreset(variable) ? caps.hasTemp : caps.hasColor;
+        });
+        if (!compatible.length) {
           return;
         }
-        for (const row of targets) {
+        for (const row of compatible) {
           applyVariableToDraft(row.draft, variable, {
             entityId: entityIdOf(row),
             seed: seedNow(),
@@ -4186,11 +4286,14 @@ function createSceneColorWheel({
             ? ""
             : String(scene.index);
       marker.hit.style.display = "";
-      marker.g.style.display = "";
       marker.g.classList.remove("grouped");
       if (!radius) {
+        // The wheel is not laid out yet. Showing the pin now paints it at
+        // the SVG origin (top-left of the disk).
+        marker.g.style.display = "none";
         continue;
       }
+      marker.g.style.display = "";
       const pos = positionForDraft(
         scene.draft,
         markerMode,
@@ -4198,6 +4301,18 @@ function createSceneColorWheel({
         radius,
         entityIdOf(scene)
       );
+      if (drag?.moved && (drag.ids || []).includes(scene.id)) {
+        marker.g.classList.add("drag");
+        marker.g.style.display = "";
+        placed.push({
+          id: scene.id,
+          x: marker.x,
+          y: marker.y,
+          mode: markerMode,
+          off: isOffDraft(scene.draft),
+        });
+        continue;
+      }
       marker.g.style.color = rgbCss(pos.rgb);
       marker.icon.style.fill = pinForeground(pos.rgb);
       if (marker.haIcon) {
@@ -4401,7 +4516,7 @@ function createSceneColorWheel({
             marker.x = toX;
             marker.y = toY;
             marker.g.style.transition = "none";
-            marker.g.style.transform = pinAt(toX, toY);
+            setPinTransform(marker.g, toX, toY);
             const anim = marker.g.animate(
               [{ transform: pinAt(fromX, fromY) }, { transform: pinAt(toX, toY) }],
               {
@@ -4416,7 +4531,7 @@ function createSceneColorWheel({
               }
               marker.flying = false;
               marker.g.style.transition = "";
-              marker.g.style.transform = pinAt(marker.x, marker.y);
+              setPinTransform(marker.g, marker.x, marker.y);
               anim.cancel();
             };
           }
@@ -5151,6 +5266,17 @@ function createSceneColorWheel({
   chrome.addEventListener("scroll", updatePresetOverflow, { passive: true });
   ro?.observe(chrome);
   paintWheels();
+  // sync() above often runs before the wheel is in the document, so
+  // clientWidth is 0 and pins are skipped. Place them on the next frame,
+  // after the caller has mounted the wheel.
+  requestAnimationFrame(() => {
+    if (!canvasWrap.isConnected) {
+      return;
+    }
+    sync();
+    updatePresetOverflow();
+    layoutGlow();
+  });
 
   const disconnect = () => {
     ro?.disconnect();

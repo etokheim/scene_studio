@@ -181,8 +181,14 @@ class TestAdaptColorForModes:
         assert "color_temp_kelvin" not in result
         assert result.get("brightness") == 200
 
-    def test_chromatic_on_temp_only(self):
-        color = {"color_mode": "hs", "hs_color": [30, 80], "brightness": 128}
+    @pytest.mark.parametrize("mode", ["hs", "xy", "rgb", "rgbw", "rgbww"])
+    def test_chromatic_on_temp_only(self, mode):
+        color = {
+            "state": "on",
+            "color_mode": mode,
+            "hs_color": [30, 80],
+            "brightness": 128,
+        }
         result = _adapt_color_for_modes(color, {"color_temp"})
         assert "hs_color" not in result
         assert result.get("brightness") == 128
@@ -190,6 +196,31 @@ class TestAdaptColorForModes:
     def test_native_mode_passthrough(self):
         color = {"color_mode": "color_temp", "color_temp_kelvin": 3000}
         assert _adapt_color_for_modes(color, {"color_temp", "hs"}) == color
+
+    def test_onoff_drops_color_and_brightness(self):
+        color = {
+            "state": "on",
+            "color_mode": "hs",
+            "hs_color": [30, 80],
+            "brightness": 180,
+        }
+        assert _adapt_color_for_modes(color, {"onoff"}) == {"state": "on"}
+
+    def test_onoff_zero_brightness_is_off(self):
+        color = {"state": "on", "brightness": 0, "color_mode": "hs", "hs_color": [0, 0]}
+        assert _adapt_color_for_modes(color, {"onoff"}) == {"state": "off"}
+
+    def test_brightness_only_keeps_level(self):
+        color = {
+            "state": "on",
+            "color_mode": "hs",
+            "hs_color": [30, 80],
+            "brightness": 180,
+        }
+        assert _adapt_color_for_modes(color, {"brightness"}) == {
+            "state": "on",
+            "brightness": 180,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -412,3 +443,153 @@ class TestBuildSimpleSnapshot:
         }
         snap = build_simple_snapshot(scene, variables, ["light.a"])
         assert snap["light.a"]["hs_color"] == [120, 50]
+
+
+@pytest.mark.parametrize(
+    ("override", "brightness", "kelvin"),
+    [
+        ({"brightness": 40}, 40, None),
+        ({"color_mode": "color_temp", "color_temp_kelvin": 4000}, 100, 4000),
+        ({"state": "off"}, 100, None),
+    ],
+)
+def test_partial_event_overrides_inherit_other_palette_fields(
+    override, brightness, kelvin
+):
+    palette = {
+        "id": "p",
+        "kind": "palette",
+        "slots": [
+            {
+                "color": {"color_mode": "rgb", "rgb_color": [255, 0, 0]},
+                "brightness": 100,
+            }
+            for _ in range(5)
+        ],
+    }
+    scene = {
+        "theme_id": "t",
+        "event_palettes": {"dawn": {"palette_id": "p", "assignment_seed": 2}},
+        "overrides": {"light.a": {"dawn": override}},
+    }
+    themes = {
+        "t": {
+            "events": {
+                "dawn": {
+                    "brightness": 20,
+                    "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+                }
+            }
+        }
+    }
+    snapshot = build_circadian_event_snapshot(
+        scene, "dawn", {"p": palette}, themes, ["light.a"]
+    )["light.a"]
+    assert snapshot["brightness"] == brightness
+    if kelvin:
+        assert snapshot["color_temp_kelvin"] == kelvin
+        assert "rgb_color" not in snapshot
+    else:
+        assert snapshot["rgb_color"] == [255, 0, 0]
+    assert snapshot["state"] == override.get("state", "on")
+
+
+def test_event_adjustment_scales_only_inherited_brightness():
+    variables = {
+        "p": {
+            "kind": "palette",
+            "slots": [
+                {
+                    "color": {"color_mode": "rgb", "rgb_color": [255, 0, 0]},
+                    "brightness": 100,
+                }
+            ]
+            * 5,
+        }
+    }
+    themes = {
+        "t": {
+            "events": {
+                "dawn": {
+                    "brightness": 20,
+                    "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+                }
+            }
+        }
+    }
+    scene = {
+        "theme_id": "t",
+        "event_palettes": {
+            "dawn": {
+                "palette_id": "p",
+                "brightness_adjustment": {"scale": 0.5, "ceiling": 255},
+            }
+        },
+        "overrides": {
+            "light.a": {"dawn": {"brightness": 80}},
+            "light.b": {
+                "dawn": {"color_mode": "color_temp", "color_temp_kelvin": 4000}
+            },
+        },
+    }
+    result = build_circadian_event_snapshot(
+        scene, "dawn", variables, themes, ["light.a", "light.b", "light.c"]
+    )
+    assert [result[eid]["brightness"] for eid in ("light.a", "light.b", "light.c")] == [
+        80,
+        50,
+        50,
+    ]
+    scene["event_palettes"]["dawn"]["brightness_adjustment"] = {"level": 120}
+    result = build_circadian_event_snapshot(
+        scene, "dawn", variables, themes, ["light.a", "light.b"]
+    )
+    assert result["light.a"]["brightness"] == 80
+    assert result["light.b"]["brightness"] == 120
+    assert variables["p"]["slots"][0]["brightness"] == 100
+
+
+def test_temp_only_adaptation_preserves_snapshot_state_when_palette_is_chromatic():
+    for state in ("on", "off"):
+        snapshot = build_simple_snapshot(
+            {
+                "lights": {
+                    "light.a": {
+                        "state": state,
+                        "brightness": 72,
+                        "color_mode": "hs",
+                        "hs_color": [80, 90],
+                    }
+                }
+            },
+            {},
+            ["light.a"],
+            {"light.a": {"color_temp"}},
+        )
+        assert snapshot["light.a"] == {"state": state, "brightness": 72}
+
+
+def test_inherited_event_adjustment_preserves_explicit_light_brightness():
+    themes = {
+        "t": {
+            "events": {
+                "dawn": {
+                    "brightness": 100,
+                    "color": {"color_mode": "color_temp", "color_temp_kelvin": 2700},
+                }
+            }
+        }
+    }
+    scene = {
+        "theme_id": "t",
+        "event_palettes": {
+            "dawn": {"brightness_adjustment": {"scale": 0.5, "ceiling": 127.5}}
+        },
+        "overrides": {"light.a": {"dawn": {"brightness": 80}}},
+    }
+    result = build_circadian_event_snapshot(
+        scene, "dawn", {}, themes, ["light.a", "light.b"]
+    )
+    assert result["light.a"]["brightness"] == 80
+    assert result["light.b"]["brightness"] == 50
+    assert themes["t"]["events"]["dawn"]["brightness"] == 100

@@ -68,7 +68,7 @@ Automation/script `variables:` — store numbers with `| float(0)` at assignment
 ## Debugging here
 
 - Developer Tools → Template in the **sandbox** UI (`http://localhost:8123`) when available.
-- REST `POST /api/template` via [`.cursor/skills/home-assistant-api/SKILL.md`](../home-assistant-api/SKILL.md).
+- REST `POST /api/template` via [`.agents/skills/home-assistant-api/SKILL.md`](../home-assistant-api/SKILL.md).
 - Automation traces: `dev/config/.storage/trace.saved_traces` → `changed_variables` on steps (do not dump auth blobs; see secrets-handling).
 - `| typeof` is for debugging types, not production logic.
 

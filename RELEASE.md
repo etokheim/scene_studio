@@ -7,7 +7,7 @@ Do not bump the version or rewrite Unreleased in the PR. The merge workflow does
 ## Ship a version
 
 1. Finish work on `dev` (feature branches merge to `dev` first).
-2. An agent (or you) follows [`.cursor/skills/prepare-release-pr/SKILL.md`](.cursor/skills/prepare-release-pr/SKILL.md):
+2. An agent (or you) follows [`.agents/skills/prepare-release-pr/SKILL.md`](.agents/skills/prepare-release-pr/SKILL.md):
    - One pass for **nb / nn / de / es** (English is already kept current).
    - Rewrite `CHANGELOG.md` **Unreleased** from the diff since the last version.
    - Open a PR **`dev` → `master`** with a `release:patch` / `release:minor` / `release:major` label.
@@ -33,7 +33,7 @@ The sidebar/store move (single config entry, panel editor) is a **minor**. Users
 
 ## Changelog
 
-`CHANGELOG.md` Unreleased is filled in the release PR, not during everyday `dev` work. Keep a Changelog format: Added / Changed / Fixed. Voice and emoji use: [`.cursor/skills/prepare-release-pr/SKILL.md`](.cursor/skills/prepare-release-pr/SKILL.md) (match 2.0.0 / 2.1.0).
+`CHANGELOG.md` Unreleased is filled in the release PR, not during everyday `dev` work. Keep a Changelog format: Added / Changed / Fixed. Voice and emoji use: [`.agents/skills/prepare-release-pr/SKILL.md`](.agents/skills/prepare-release-pr/SKILL.md) (match 2.0.0 / 2.1.0).
 
 ## HACS
 

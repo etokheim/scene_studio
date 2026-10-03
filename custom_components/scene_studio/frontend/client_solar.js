@@ -461,6 +461,7 @@ export function buildClientSunDay({
   longitude,
   timeZone = "UTC",
   duskMinimum = null,
+  dawnMaximum = null,
   // Mid-scrub can use a coarser elevation curve; release uses Astral preview.
   curveStepMinutes = CURVE_STEP_MINUTES,
 }) {
@@ -514,7 +515,12 @@ export function buildClientSunDay({
     let overridden = false;
     let solarTime = null;
     let solarSeconds = null;
-    if (id === "dusk") {
+    if (id === "dawn" && dawnMaximum != null && seconds > dawnMaximum) {
+      solarSeconds = seconds;
+      solarTime = formatTime(seconds);
+      seconds = dawnMaximum;
+      overridden = true;
+    } else if (id === "dusk") {
       const dusk = duskStartSeconds(seconds, duskMinimum);
       seconds = dusk.seconds;
       overridden = dusk.overridden;

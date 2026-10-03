@@ -16,7 +16,7 @@ Before your final reply, if this turn touched files:
 1. `git status` — if the tree is dirty with your work, you are not done.
 2. `git diff` + `git log -5 --oneline` (match message style).
 3. Stage relevant files only (never secrets).
-4. Commit with HEREDOC; re-run `git status` (clean for that work).
+4. Commit with a safely quoted message or message file; keep configured signing enabled. Re-run `git status` (clean for that work).
 5. Prefer small focused commits. No amend / force-push / `--no-verify` unless the user asks.
 
 If a sandbox restart is part of verifying the change set, still commit the source (never `.storage` or `dev/config/secrets.yaml`) before finishing the turn.

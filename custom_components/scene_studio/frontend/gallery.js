@@ -694,8 +694,22 @@ const kelvinEvent = (kelvin, brightness) => ({
 
 const paletteEvent = (palette, brightness) => ({ palette, brightness });
 
-/** Shipped circadian themes. A palette event is copied with the theme. */
+/** Shipped circadian themes. A palette event is copied with the theme.
+    `seed` links the five default color presets instead of copying kelvin. */
 export const THEME_PRESETS = [
+  {
+    id: "default",
+    nameKey: "frontend.gallery.theme_default",
+    name: "Default",
+    seed: true,
+    events: {
+      dawn: kelvinEvent(2700, 102),
+      sunrise: kelvinEvent(3500, 191),
+      noon: kelvinEvent(4500, 255),
+      sunset: kelvinEvent(3000, 179),
+      dusk: kelvinEvent(2200, 64),
+    },
+  },
   {
     id: "daylight",
     nameKey: "frontend.gallery.theme_daylight",
@@ -803,6 +817,60 @@ export function themeDraftSignature(draft, variables) {
     );
   }
   return `color:${themeColorSignature(draft, draft.brightness)}`;
+}
+
+const GALLERY_EVENT_IDS = ["dawn", "sunrise", "noon", "sunset", "dusk"];
+
+/** Stored events for the Default starter: one ref per seed color preset. */
+export function seedThemeEvents(preset) {
+  const events = {};
+  for (const eventId of GALLERY_EVENT_IDS) {
+    events[eventId] = {
+      color: { variable_ref: `default_${eventId}` },
+      brightness: preset?.events?.[eventId]?.brightness,
+    };
+  }
+  return events;
+}
+
+/** True when a theme draft still matches the gallery preset it was copied from. */
+export function themeMatchesGallery(draft, variables) {
+  const preset = galleryTheme(draft?.builtin_id);
+  if (!preset) {
+    return true;
+  }
+  if (preset.seed) {
+    return GALLERY_EVENT_IDS.every((id) => {
+      const event = draft?.events?.[id];
+      const spec = preset.events?.[id];
+      return (
+        event?.color?.variable_ref === `default_${id}` &&
+        Math.round(Number(event?.brightness)) === Math.round(Number(spec?.brightness))
+      );
+    });
+  }
+  return GALLERY_EVENT_IDS.every(
+    (id) =>
+      themeEventSignature(draft?.events?.[id], variables) ===
+      themeEventSignature(preset.events?.[id], variables)
+  );
+}
+
+/** True when palette slots still match the gallery preset they were copied from. */
+export function paletteMatchesGallery(draft) {
+  const preset = galleryPalette(draft?.builtin_id);
+  if (!preset) {
+    return true;
+  }
+  const slots = draft?.slots || [];
+  const source = preset.slots || [];
+  if (slots.length !== source.length) {
+    return false;
+  }
+  return slots.every(
+    (slot, index) =>
+      paletteSlotSignature(slot) === paletteSlotSignature(source[index])
+  );
 }
 
 export function paletteSlotSignature(slot) {

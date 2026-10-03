@@ -106,6 +106,9 @@ export function snapshotWheelEditor(root) {
   return {
     tileRects: tiles.map((el) => el.getBoundingClientRect()),
     tileClones: tiles.map((el) => el.cloneNode(true)),
+    tileByKey: new Map(
+      tiles.map((el) => [el.dataset.stripKey || "", el.getBoundingClientRect()])
+    ),
     groups,
     pins: captureWheelPinList(root),
     modeRects: modes.map((el) => el.getBoundingClientRect()),
@@ -120,19 +123,71 @@ export function snapshotWheelEditor(root) {
 }
 
 export function applyWheelMorph(snap, root) {
+  const host = root?.host;
+  const consumedPins = host?._wheelMorphConsumedPins || null;
+  if (host) {
+    host._wheelMorphConsumedPins = null;
+  }
   if (!snap || !root || reduced()) {
     return;
   }
   const tiles = lightTiles(root);
   const strip = root.querySelector(".light-tiles");
   playLightStripLayout(strip, snap.groups, { matchedOnly: true });
-  morphIndexed(tiles, snap.tileRects, snap.tileClones, strip);
+  // Match tiles by light id first. Index order changes between scenes, so a
+  // shared tile was flying into a neighbor's slot and then snapping back.
+  // Leftover tiles (another area) pair in list order: the first one takes
+  // the new title and color; only a true extra fades.
+  if (snap.tileByKey) {
+    const matchedKeys = new Set();
+    const unmatchedNew = [];
+    for (const el of tiles) {
+      const key = el.dataset.stripKey || "";
+      const prev = key ? snap.tileByKey.get(key) : null;
+      if (prev && prev.width >= 1) {
+        matchedKeys.add(key);
+        flipFrom(el, prev);
+      } else {
+        unmatchedNew.push(el);
+      }
+    }
+    const leftoverOld = [];
+    snap.tileClones.forEach((clone, index) => {
+      const key = clone.dataset?.stripKey || "";
+      if (key && matchedKeys.has(key)) {
+        return;
+      }
+      leftoverOld.push({ clone, rect: snap.tileRects[index] });
+    });
+    const shared = Math.min(unmatchedNew.length, leftoverOld.length);
+    for (let i = 0; i < shared; i += 1) {
+      flipFrom(unmatchedNew[i], leftoverOld[i].rect);
+    }
+    for (let i = shared; i < unmatchedNew.length; i += 1) {
+      unmatchedNew[i].animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: FADE_MS,
+        easing: "ease-out",
+      });
+    }
+    fadeSurplus(
+      strip,
+      leftoverOld.slice(shared).map((item) => item.clone),
+      leftoverOld.slice(shared).map((item) => item.rect)
+    );
+  } else {
+    morphIndexed(tiles, snap.tileRects, snap.tileClones, strip);
+  }
   const svg = root.querySelector(".hue-wheel-svg");
-  const nextPins = [...root.querySelectorAll(".hue-wheel-svg .gm")].filter(
-    (node) => node.style.display !== "none"
-  ).length;
-  for (const pin of snap.pins.slice(nextPins)) {
-    if (!svg || !pin.clone) {
+  const nextPinIds = new Set(
+    [...root.querySelectorAll(".hue-wheel-svg .gm")]
+      .filter((node) => node.style.display !== "none")
+      .map((node) => node.dataset.sceneId || "")
+  );
+  for (const pin of snap.pins) {
+    if (!svg || !pin.clone || (pin.id && nextPinIds.has(pin.id))) {
+      continue;
+    }
+    if (consumedPins?.has(pin)) {
       continue;
     }
     pin.clone.style.pointerEvents = "none";

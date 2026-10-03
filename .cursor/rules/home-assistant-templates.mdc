@@ -8,5 +8,5 @@ alwaysApply: false
 
 When editing Jinja / `value_template` / template entities in this repo:
 
-1. Read and follow [`.cursor/skills/home-assistant-templates/SKILL.md`](../skills/home-assistant-templates/SKILL.md).
+1. Read and follow [shared HA templates skill](../../.agents/skills/home-assistant-templates/SKILL.md).
 2. If you hit a new template quirk, **update that skill in the same change set** (see its “Maintain this skill” section).

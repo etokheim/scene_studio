@@ -18,8 +18,10 @@ from custom_components.scene_studio.const import (
     VARIABLE_REF,
 )
 from custom_components.scene_studio.store import (
+    DEFAULT_SETTINGS,
     SceneStudioStore,
     _migrate_v3_to_v4,
+    auto_configure_scene_name,
     normalize_circadian_scene,
     normalize_scene,
     normalize_simple_scene,
@@ -250,6 +252,7 @@ class TestMigrateV3ToV4:
         assert scene["scene_dawn"] == "scene.dawn"
         # v3-only setting dropped.
         assert "hide_managed_native_scenes" not in result["settings"]
+        assert result["managed_native_scene_ids"] == ["x"]
 
     def test_empty_store(self):
         result = _migrate_v3_to_v4({})
@@ -263,7 +266,11 @@ def _bare_store() -> SceneStudioStore:
     store.variables = {}
     store.themes = {}
     store.scenes = {}
+    store.area_names = {}
     store.settings = {}
+    store.managed_native_scene_ids = []
+    store.pending_hide_sync = False
+    store._mutation_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     return store
 
@@ -347,7 +354,7 @@ def test_theme_event_shape_is_validated():
             for event in SOLAR_EVENTS
         }
         bad_events["dusk"] = {"color": {"hs_color": [0, 0]}, "brightness": "dim"}
-        with pytest.raises(ValueError, match="brightness must be a number"):
+        with pytest.raises(ValueError, match="brightness must be a finite number"):
             await store.async_upsert_theme({"name": "Bad", "events": bad_events})
 
     asyncio.run(run())
@@ -360,6 +367,38 @@ def test_scene_memory_rolls_back_when_save_fails():
         with pytest.raises(OSError, match="disk full"):
             await store.async_upsert({SCENE_NAME: "New"})
         assert store.scenes == {}
+
+    asyncio.run(run())
+
+
+def test_last_known_area_name_is_kept_after_registry_removal():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"scene": {"id": "scene", "area": "old-area"}}
+        await store.async_remember_area_names({"old-area": "Living room"})
+        await store.async_remember_area_names({})
+        assert store.area_names == {"old-area": "Living room"}
+        store.async_save.assert_awaited_once()
+
+    asyncio.run(run())
+
+
+def test_auto_configure_is_one_write_and_compensates_entity_failure():
+    async def run():
+        store = _bare_store()
+        items, variables, theme = await store.async_auto_configure(
+            [("kitchen", "Kitchen"), ("bed", "Bedroom")]
+        )
+        assert len(items) == 2
+        assert store.async_save.await_count == 1
+        assert store.area_names == {"kitchen": "Kitchen", "bed": "Bedroom"}
+        await store.async_compensate_auto_configure(
+            [item["id"] for item in items], variables, theme
+        )
+        assert store.scenes == {}
+        assert store.themes == {}
+        assert store.variables == {}
+        assert store.area_names == {}
 
     asyncio.run(run())
 
@@ -388,3 +427,167 @@ class TestStripSceneDuskMinimum:
 
         scenes = {"a": {"kind": KIND_CIRCADIAN}}
         assert strip_scene_dusk_minimum(scenes) is None
+
+
+@pytest.mark.parametrize("data", [None, {"variables": seed_variables(), "themes": {}}])
+def test_load_keeps_the_circadian_preset_library_empty(data):
+    async def run():
+        store = _bare_store()
+        store._store = AsyncMock()
+        store._store.async_load.return_value = data
+        store._legacy_stores = []
+        await store.async_load()
+        assert store.themes == {}
+        assert set(store.variables) == {f"default_{event}" for event in SOLAR_EVENTS}
+        store.async_save.assert_not_awaited()
+        theme = await store.async_ensure_default_theme()
+        assert theme["id"] == "default"
+        assert store.themes["default"] == theme
+
+    asyncio.run(run())
+
+
+def test_ensure_default_theme_adds_the_starter_once():
+    async def run():
+        store = _bare_store()
+        store.variables = {"custom": {"id": "custom", "name": "Custom"}}
+        theme = await store.async_ensure_default_theme()
+        assert theme["id"] == "default"
+        assert theme["name"] == "Default"
+        assert theme["builtin_id"] == "default"
+        assert set(store.variables) == {
+            "custom",
+            *(f"default_{event}" for event in SOLAR_EVENTS),
+        }
+        for event in SOLAR_EVENTS:
+            assert theme["events"][event]["color"][VARIABLE_REF] == f"default_{event}"
+        store.themes["default"]["name"] = "Renamed"
+        again = await store.async_ensure_default_theme()
+        assert again["name"] == "Renamed"
+        assert store.async_save.await_count == 1
+
+    asyncio.run(run())
+
+
+def test_auto_configure_scene_name_uses_the_default_theme():
+    themes = seed_default_theme(seed_variables())
+    assert auto_configure_scene_name(themes) == "Default"
+    assert auto_configure_scene_name({}) == "Circadian"
+    assert auto_configure_scene_name(None) == "Circadian"
+
+
+def test_reset_restores_the_fresh_install_store():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"room": {SCENE_NAME: "Kitchen Circadian", "id": "room"}}
+        store.variables = {"custom": {"id": "custom", "name": "Custom"}}
+        store.themes = {"custom": {"id": "custom", "name": "Custom"}}
+        store.settings = {"automatically_update_lights_interval": 60}
+        store.managed_native_scene_ids = ["old_yaml"]
+        store.pending_hide_sync = True
+        await store.async_reset_to_fresh()
+        assert store.scenes == {}
+        assert set(store.variables) == {f"default_{event}" for event in SOLAR_EVENTS}
+        assert store.themes == {}
+        assert store.settings == DEFAULT_SETTINGS
+        assert store.managed_native_scene_ids == ["old_yaml"]
+        assert store.pending_hide_sync is False
+        store.async_save.assert_awaited()
+
+    asyncio.run(run())
+
+
+def test_failed_reset_keeps_the_previous_store():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"a": {"id": "a", "kind": KIND_SIMPLE}}
+        store.variables = {"custom": {"id": "custom"}}
+        store.themes = {"custom": {"id": "custom"}}
+        store.settings = {"automatically_update_lights_interval": 60}
+        store.managed_native_scene_ids = ["native"]
+        store.async_save.side_effect = OSError("disk full")
+        with pytest.raises(OSError, match="disk full"):
+            await store.async_reset_to_fresh()
+        assert list(store.scenes) == ["a"]
+        assert list(store.variables) == ["custom"]
+        assert list(store.themes) == ["custom"]
+        assert store.settings["automatically_update_lights_interval"] == 60
+        assert store.managed_native_scene_ids == ["native"]
+
+    asyncio.run(run())
+
+
+def test_settings_validation_is_atomic():
+    async def run():
+        store = _bare_store()
+        store.settings = dict(DEFAULT_SETTINGS)
+        with pytest.raises(HomeAssistantError, match="must be an integer"):
+            await store.async_update_settings(
+                {
+                    "dusk_minimum_time_of_day": 21 * 3600,
+                    "automatically_update_lights_interval": "invalid",
+                }
+            )
+        assert store.settings == DEFAULT_SETTINGS
+        store.async_save.assert_not_awaited()
+
+    asyncio.run(run())
+
+
+def test_failed_save_cannot_roll_back_a_later_scene_update():
+    async def run():
+        store = _bare_store()
+        store.scenes = {"a": {"id": "a", "kind": KIND_SIMPLE, SCENE_NAME: "First"}}
+        first_started = asyncio.Event()
+        release_first = asyncio.Event()
+        calls = 0
+
+        async def save():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                first_started.set()
+                await release_first.wait()
+                raise OSError("disk full")
+
+        store.async_save.side_effect = save
+        first = asyncio.create_task(
+            store.async_upsert({"id": "a", "kind": KIND_SIMPLE, SCENE_NAME: "Failed"})
+        )
+        await first_started.wait()
+        second = asyncio.create_task(
+            store.async_upsert({"id": "a", "kind": KIND_SIMPLE, SCENE_NAME: "Latest"})
+        )
+        release_first.set()
+        with pytest.raises(OSError, match="disk full"):
+            await first
+        await second
+        assert store.scenes["a"][SCENE_NAME] == "Latest"
+
+    asyncio.run(run())
+
+
+def test_event_adjustment_survives_normalization_and_editor_round_trip():
+    assignment = {
+        "palette_id": "p",
+        "assignment_seed": 3,
+        "brightness_adjustment": {"scale": 0.75, "ceiling": 127.5},
+    }
+    item = normalize_circadian_scene(
+        {
+            SCENE_NAME: "A",
+            "event_palettes": {"dawn": assignment},
+            "overrides": {"light.a": {"dawn": {"brightness": 32}}},
+        }
+    )
+    assert item["event_palettes"]["dawn"] == assignment
+    assert to_form_data(item)["event_palettes"]["dawn"] == assignment
+    assert item["overrides"]["light.a"]["dawn"] == {"brightness": 32}
+
+
+def test_inherited_event_brightness_survives_editor_round_trip():
+    assignment = {"brightness_adjustment": {"scale": 0.5, "ceiling": 127.5}}
+    item = normalize_circadian_scene(
+        {SCENE_NAME: "A", "event_palettes": {"dawn": assignment}}
+    )
+    assert to_form_data(item)["event_palettes"]["dawn"] == assignment

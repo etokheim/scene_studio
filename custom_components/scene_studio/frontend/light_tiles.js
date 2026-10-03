@@ -134,16 +134,11 @@ export const LIGHT_TILES_CSS = `
   }
   .light-mode-label.is-stuck::before {
     opacity: 1;
-    backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
-    -webkit-backdrop-filter: var(--glass-blur, blur(12px) saturate(1.15));
-    -webkit-mask-image: linear-gradient(
+    /* Solid fill. A masked backdrop-filter paints nothing in Safari. */
+    background-color: transparent;
+    background-image: linear-gradient(
       to right,
-      #000 calc(100% - var(--ramp-extra, 0px)),
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      to right,
-      #000 calc(100% - var(--ramp-extra, 0px)),
+      var(--group-fill, var(--card-background-color)) calc(100% - var(--ramp-extra, 0px)),
       transparent 100%
     );
   }
@@ -469,6 +464,13 @@ export const LIGHT_TILES_CSS = `
     .simple-light-selector.select-all-tile.select-mode {
     --hue-light-on-text-color: rgba(0, 0, 0, 0.8) !important;
     --hue-light-off-text-color: rgba(0, 0, 0, 0.72) !important;
+  }
+  .simple-light-tile ha-ripple {
+    z-index: 6;
+    border-radius: inherit;
+    pointer-events: none;
+    --ha-ripple-color: #fff;
+    --ha-ripple-pressed-opacity: 0.2;
   }
   .simple-light-tile {
     --hue-unfilled-mix: 50%;
@@ -852,15 +854,24 @@ export function lightTileValueLabel(fillPct, { onOff = false, onText = "On", off
   return `${Math.round(Number(fillPct) || 0)}%`;
 }
 
+const tilePaints = new WeakMap();
+
 export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLabel }) {
+  const tile = selector.querySelector(".simple-light-tile");
+  // Read geometry before writing styles; an unchanged tile needs no DOM writes.
+  const tileH = tile.clientHeight || 135;
   const channels = rgb || [0, 0, 0];
+  const pct = Number(fillPct) || 0;
+  const label = brightnessLabel === undefined ? `${Math.round(pct)}%` : brightnessLabel;
+  const key = JSON.stringify([channels, pct, label, tileH, Boolean(selected)]);
+  selector.classList.toggle("active", Boolean(selected));
+  if (tilePaints.get(selector) === key) return;
+  tilePaints.set(selector, key);
   const onBg = `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
   selector.style.setProperty("--hue-light-on-background", onBg);
   selector.style.setProperty("--hue-light-on-color", onBg);
   selector.style.setProperty("--hue-light-on-text-color", lightTileOnTextCss(channels));
   selector.style.setProperty("--hue-light-off-background", "#242022");
-  const tile = selector.querySelector(".simple-light-tile");
-  const pct = Number(fillPct) || 0;
   // A new tile's fill defaults to 0%. Setting the real level in the same
   // turn still animates if layout already saw that 0. Freeze the fill and
   // the clipped labels for this first paint. Later updates keep the transition.
@@ -880,16 +891,12 @@ export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLab
       }
     });
   }
-  const tileH = tile.clientHeight || 135;
   const rampPx =
     pct <= 0 || pct >= 100 ? 0 : Math.min(20, ((100 - pct) / 100) * tileH);
   tile.style.setProperty("--hue-light-ramp", `${rampPx}px`);
   tile.classList.toggle("is-off", pct <= 0);
-  selector.classList.toggle("active", Boolean(selected));
-  const label =
-    brightnessLabel === undefined ? `${Math.round(pct)}%` : brightnessLabel;
   for (const el of selector.querySelectorAll(".simple-light-bri")) {
-    el.textContent = label;
+    if (el.textContent !== label) el.textContent = label;
     el.hidden = label === "";
   }
   const power = selector.querySelector(".light-power");
@@ -897,6 +904,17 @@ export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLab
     const off = pct <= 0;
     power.classList.toggle("is-off", off);
     power.setAttribute("aria-pressed", off ? "false" : "true");
+  }
+}
+
+/** One default and selection treatment for every Select all surface. */
+export function paintSelectAllTile(selector, look) {
+  paintLightTile(selector, { ...look, rgb: [64, 60, 58] });
+  if (look.selected) {
+    const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
+    selector.style.setProperty("--hue-light-on-background", wash);
+    selector.style.setProperty("--hue-light-on-color", wash);
+    selector.style.setProperty("--hue-light-on-text-color", "#fff");
   }
 }
 
@@ -925,6 +943,32 @@ function makeLabels(layer, name, makeIcon) {
  * Viewport rects for tiles and group labels, keyed by `data-strip-key`.
  * Call before the strip is rebuilt, then `playLightStripLayout` after.
  */
+const stripFlights = new WeakMap();
+
+/** Settle old flights before changing their destination tree. */
+export function finishLightStripLayout(root) {
+  for (const finish of [...(stripFlights.get(root) || [])]) finish();
+}
+
+/** Move only changed children; unchanged tiles keep focus and pointer capture. */
+export function reconcileStripChildren(parent, nodes) {
+  const wanted = new Set(nodes);
+  for (const child of [...parent.children]) if (!wanted.has(child)) child.remove();
+  nodes.forEach((node, index) => {
+    if (parent.children[index] !== node) parent.insertBefore(node, parent.children[index] || null);
+  });
+}
+
+/** Controls and in-flight members intentionally live outside mode groups. */
+export function hasUngroupedLightTiles(root) {
+  return [...root.children].some(el =>
+    el.classList.contains("simple-light-selector") &&
+    !el.classList.contains("select-all-tile") &&
+    !el.classList.contains("add-light-tile") &&
+    el.style.position !== "absolute"
+  );
+}
+
 export function captureLightStripLayout(root) {
   const rects = new Map();
   if (!root?.isConnected) {
@@ -937,6 +981,7 @@ export function captureLightStripLayout(root) {
     }
     rects.set(key, el.getBoundingClientRect());
   }
+  finishLightStripLayout(root);
   return rects;
 }
 
@@ -970,6 +1015,7 @@ export function playLightStripLayout(root, before, { matchedOnly = false } = {})
     // Groups use backdrop-filter, which traps z-index. Lift the moving item
     // onto the strip for the flight so it paints above every group and tile.
     const host = el.parentElement;
+    const nextSibling = el.nextSibling;
     let placeholder = null;
     if (host && host !== root) {
       const rootBox = root.getBoundingClientRect();
@@ -997,11 +1043,14 @@ export function playLightStripLayout(root, before, { matchedOnly = false } = {})
       { duration: 280, easing: "cubic-bezier(0.2, 0, 0, 1)" }
     );
     let restored = false;
+    const jobs = stripFlights.get(root) || new Set();
+    stripFlights.set(root, jobs);
     const restore = () => {
       if (restored) {
         return;
       }
       restored = true;
+      jobs.delete(finish);
       el.style.position = "";
       el.style.left = "";
       el.style.top = "";
@@ -1011,8 +1060,13 @@ export function playLightStripLayout(root, before, { matchedOnly = false } = {})
       el.style.zIndex = "";
       if (placeholder?.isConnected) {
         placeholder.replaceWith(el);
+      } else if (host?.isConnected && el.parentElement === root) {
+        // Direct strip controls (Select all) retain their original slot.
+        host.insertBefore(el, nextSibling?.parentElement === host ? nextSibling : null);
       }
     };
+    const finish = () => { anim.cancel(); restore(); };
+    jobs.add(finish);
     anim.addEventListener("finish", restore);
     anim.addEventListener("cancel", restore);
   }
@@ -1034,11 +1088,13 @@ export function createLightTile({ entityId, name, makeIcon, tapOnly = false }) {
   fill.className = "simple-light-fill";
   const hit = document.createElement("div");
   hit.className = "simple-light-hit";
+  const ripple = document.createElement("ha-ripple");
   tile.append(
     fill,
     makeLabels("layer-off", name, makeIcon),
     makeLabels("layer-on", name, makeIcon),
-    hit
+    hit,
+    ripple
   );
   const frame = document.createElement("div");
   frame.className = "simple-light-frame";
@@ -1341,6 +1397,16 @@ const COLOR_GROUP_ORDER = ["color", "temp", "white", "brightness", "onoff"];
  * color_temp draft still belongs in the brightness group.
  */
 export function lightTileColorGroup(draft, caps, paletteIds, tempOnlyPaletteIds, mixedPaletteIds) {
+  // Capability wins over a theme color that was copied onto every light.
+  if (caps?.onOff || draft?.color_mode === "onoff") {
+    return "onoff";
+  }
+  if (caps?.known && !caps.hasColor && !caps.hasTemp) {
+    if (draft?.color_mode === "white") {
+      return "white";
+    }
+    return "brightness";
+  }
   const ref = draft?.variable_ref;
   const linked = Boolean(ref && paletteIds?.has?.(ref));
   const canDrawColor = caps?.known
@@ -1500,6 +1566,7 @@ export function bindLightTileBrightness(tile, hit, {
   setBrightness,
   onDragEnd,
   isBinary,
+  onBlocked,
 }) {
   let drag = null;
   let wheelAxis = null;
@@ -1582,6 +1649,7 @@ export function bindLightTileBrightness(tile, hit, {
       }
       drag.axis = "y";
       drag.suppressTap = true;
+      if (!isEditable()) { drag.axis = "blocked"; onBlocked?.(); endDrag(ev); return; }
       historyPending = true;
       tile.classList.add("dragging");
       try {
@@ -1591,7 +1659,7 @@ export function bindLightTileBrightness(tile, hit, {
       }
       return;
     }
-    if (drag.axis !== "y") {
+    if (drag.axis !== "y" || !isEditable()) {
       return;
     }
     ev.preventDefault();
@@ -1617,7 +1685,7 @@ export function bindLightTileBrightness(tile, hit, {
   };
 
   hit.addEventListener("pointerdown", (ev) => {
-    if (!isEditable() || (ev.button && ev.button !== 0)) {
+    if ((ev.button && ev.button !== 0) || (!isEditable() && !onBlocked)) {
       return;
     }
     historyPending = true;
@@ -1626,7 +1694,7 @@ export function bindLightTileBrightness(tile, hit, {
       pointerId: ev.pointerId,
       startX: ev.clientX,
       startY: ev.clientY,
-      startFill: currentFill(),
+      startFill: isEditable() ? currentFill() : 0,
       axis: null,
       suppressTap: false,
     };
@@ -1638,9 +1706,6 @@ export function bindLightTileBrightness(tile, hit, {
   tile.addEventListener(
     "wheel",
     (ev) => {
-      if (!isEditable()) {
-        return;
-      }
       const absX = Math.abs(ev.deltaX);
       const absY = Math.abs(ev.deltaY);
       const wantsHorizontal = ev.shiftKey || (absX > 0 && absX >= absY);
@@ -1652,9 +1717,8 @@ export function bindLightTileBrightness(tile, hit, {
         }, 180);
         return;
       }
-      if (absY === 0) {
-        return;
-      }
+      if (absY === 0) { return; }
+      if (!isEditable()) { onBlocked?.(); return; }
       if (wheelAxis !== "y") {
         historyPending = true;
       }
@@ -1662,6 +1726,7 @@ export function bindLightTileBrightness(tile, hit, {
       window.clearTimeout(wheelAxisTimer);
       wheelAxisTimer = window.setTimeout(() => {
         wheelAxis = null;
+        onDragEnd?.();
       }, 180);
       ev.preventDefault();
       tile.classList.add("wheel-adjusting");

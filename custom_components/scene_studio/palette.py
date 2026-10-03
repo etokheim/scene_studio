@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from homeassistant.exceptions import HomeAssistantError
 
 from .color_math import clamp_rgb, hs_to_rgb, kelvin_to_rgb, rgb_to_hs
-from .const import VARIABLE_REF
+from .const import KIND_SIMPLE, SOLAR_EVENTS, VARIABLE_REF
+
+# Stable path. The versioned panel asset URL changes on every frontend rev.
+GALLERY_DIR = Path(__file__).resolve().parent / "frontend" / "gallery"
+GALLERY_URL_PREFIX = "/api/scene_studio/gallery"
+# Shipped covers are immutable until the integration is reloaded. Discover them
+# once so entity attribute construction never performs synchronous file stats.
+GALLERY_COVER_IDS = frozenset(path.stem for path in GALLERY_DIR.glob("*.jpg"))
 
 PALETTE_SLOT_COUNT = 5
 KIND_COLOR = "color"
@@ -29,6 +37,74 @@ def optional_builtin_id(raw: Any) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def gallery_cover_url(builtin_id: str | None) -> str | None:
+    """URL of a shipped palette photo, or None when this id has no file."""
+    if not isinstance(builtin_id, str):
+        return None
+    name = builtin_id.strip()
+    if not name or any(part in name for part in ("/", "\\", "..")):
+        return None
+    if name not in GALLERY_COVER_IDS:
+        return None
+    return f"{GALLERY_URL_PREFIX}/{name}.jpg"
+
+
+def _palette_cover_url(
+    variables: dict[str, Any] | None, palette_id: str | None
+) -> str | None:
+    if not palette_id or not isinstance(variables, dict):
+        return None
+    var = variables.get(palette_id)
+    if not variable_is_palette(var):
+        return None
+    return gallery_cover_url(var.get("builtin_id"))
+
+
+def scene_palette_image_attributes(
+    scene: dict[str, Any] | None,
+    variables: dict[str, Any] | None,
+    themes: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Attribute map for the scene's palette photo, when it has one.
+
+    Simple scenes use their palette. Circadian scenes use each solar event's
+    palette, then that event on the theme. ``palette_image`` is noon when
+    that event has a photo, otherwise the earliest event that does.
+    """
+    if not isinstance(scene, dict):
+        return {}
+    if scene.get("kind") == KIND_SIMPLE:
+        url = _palette_cover_url(variables, scene.get("palette_id"))
+        return {"palette_image": url} if url else {}
+    event_palettes = scene.get("event_palettes") or {}
+    theme = (themes or {}).get(scene.get("theme_id") or "") or {}
+    theme_events = theme.get("events") or {} if isinstance(theme, dict) else {}
+    images: dict[str, str] = {}
+    for event in SOLAR_EVENTS:
+        entry = event_palettes.get(event) if isinstance(event_palettes, dict) else None
+        palette_id = entry.get("palette_id") if isinstance(entry, dict) else None
+        if not palette_id and isinstance(theme_events, dict):
+            ev = theme_events.get(event)
+            color = ev.get("color") if isinstance(ev, dict) else None
+            ref = color.get(VARIABLE_REF) if isinstance(color, dict) else None
+            if variable_is_palette(
+                variables.get(ref) if isinstance(variables, dict) and ref else None
+            ):
+                palette_id = ref
+        url = _palette_cover_url(variables, palette_id)
+        if url:
+            images[event] = url
+    if not images:
+        return {}
+    primary = images.get("noon")
+    if not primary:
+        for event in SOLAR_EVENTS:
+            if event in images:
+                primary = images[event]
+                break
+    return {"palette_image": primary, "palette_images": images}
 
 
 def variable_is_palette(var: dict[str, Any] | None) -> bool:

@@ -7,7 +7,7 @@
 | **`dev`** | Default place for work. Feature branches merge here. |
 | **`master`** | Released code. A merged PR into `master` publishes a GitHub / HACS release. |
 
-Do not open feature PRs against `master`. To ship: [`.cursor/skills/prepare-release-pr/SKILL.md`](../.cursor/skills/prepare-release-pr/SKILL.md) (translations + changelog, then `dev` → `master`). The merge runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which assigns the version. Details: [`RELEASE.md`](../RELEASE.md).
+Do not open feature PRs against `master`. To ship: [`.agents/skills/prepare-release-pr/SKILL.md`](../.agents/skills/prepare-release-pr/SKILL.md) (translations + changelog, then `dev` → `master`). The merge runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which assigns the version. Details: [`RELEASE.md`](../RELEASE.md).
 
 If `origin/dev` does not exist yet:
 
@@ -21,7 +21,7 @@ After clone, check out `dev` before starting work (`git checkout dev`). GitHub�
 ## What is versioned
 
 - Integration: `custom_components/scene_studio/`
-- Agent instructions: `AGENTS.md`, `.cursor/`, `docs/`
+- Agent instructions: `AGENTS.md`, `.agents/`, `.cursor/`, `docs/`
 - Local sandbox **starter** YAML: `dev/config/configuration.yaml`, `packages/`, `area_map.yaml`, `apply_area_map.py`, plus empty `automations.yaml` / `scripts.yaml`
 - Tooling: `docker-compose.yml`, `pyproject.toml`, `DEVELOPMENT.md`, CI under `.github/`
 
@@ -52,12 +52,8 @@ This integration is public. Do **not** copy live-home YAML, production tokens, o
 
 Rotate any exposed credentials, then rewrite history (e.g. `git filter-repo`) before pushing to a shared remote.
 
-## Commits without local git user
+## Identity, signing, and release review
 
-If `git commit` fails with “tell me who you are”, set author for one command only (does not write config):
+Keep the configured author and signing enabled. If identity is missing, ask the user to configure their real Git identity; do not invent one or override it for a command. If the 1Password signer fails, keep the change set staged and ask the user to unlock/approve signing before retrying. Continue independent work without bypassing signing or hooks.
 
-```bash
-GIT_AUTHOR_NAME='Your Name' GIT_AUTHOR_EMAIL='you@example.com' \
-GIT_COMMITTER_NAME='Your Name' GIT_COMMITTER_EMAIL='you@example.com' \
-git commit -m "message"
-```
+When an authorized release already has a `dev` → `master` PR, push focused commits and refresh that PR's description and verified checks. Do not open a duplicate. Leave merging and publication to review; the release workflow assigns the manifest version. The trial installation is a manually added HACS repository, not HACS default inclusion.

@@ -5,13 +5,17 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
+from homeassistant.auth.permissions.const import POLICY_CONTROL
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import Event, HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError, Unauthorized, UnknownUser
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
+from homeassistant.helpers.event import async_call_later
 
+from .activation_cache import unload_activation_cache
 from .const import (
     AREA,
     DATA_ADD_ENTITIES,
@@ -22,14 +26,17 @@ from .const import (
     LEGACY_DOMAINS,
     SCENE_NAME,
 )
-from .migrate_native import async_freeze_migrate
+from .editor_events import scene_operation_lock
+from .migrate_native import async_freeze_migrate, needs_native_freeze
 from .panel import async_setup_panel, async_unload_panel
+from .runtime import DATA_RUNTIME, unload_runtime
 from .store import SceneStudioStore
+from .update_controls import async_set_scene_updates_locked
 from .websocket_api import async_setup_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SCENE]
+PLATFORMS: list[Platform] = [Platform.SCENE, Platform.SWITCH]
 
 SERVICE_TURN_ON = "turn_on"
 ATTR_BRIGHTNESS_MODIFIER = "brightness_modifier"
@@ -76,33 +83,83 @@ async def async_setup(hass, config):
             brightness_modifier, transition, transition_percent
         )
 
+        owned = hass.data.get(DOMAIN, {}).get(DATA_ENTITIES, {})
+        scenes = {scene.entity_id: scene for scene in owned.values()}
         for entity_id in entity_ids:
             if not entity_id.startswith("scene."):
                 raise ServiceValidationError(
                     f"Entity {entity_id!r} is not a scene entity"
                 )
-            scene_entity = hass.states.get(entity_id)
-            if not scene_entity:
-                raise ServiceValidationError(
-                    f"Scene entity {entity_id!r} was not found"
-                )
-            scene_platform = hass.data.get("scene")
-            if not scene_platform:
-                raise ServiceValidationError("Scene platform is not loaded")
-            for scene in scene_platform.entities:
-                if scene.entity_id == entity_id:
-                    await scene.async_activate(
-                        transition=transition,
-                        brightness_modifier=brightness_modifier,
-                        transition_percent=transition_percent,
-                        target_date_time=target_date_time,
-                        location=location,
-                    )
-                    break
-            else:
+            if entity_id not in scenes or not hass.states.get(entity_id):
                 raise ServiceValidationError(
                     f"Scene entity {entity_id!r} is not owned by Scene Studio"
                 )
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None:
+                raise UnknownUser(context=call.context)
+            for entity_id in entity_ids:
+                if not user.permissions.check_entity(entity_id, POLICY_CONTROL):
+                    raise Unauthorized(context=call.context, entity_id=entity_id)
+        for entity_id in entity_ids:
+            await scenes[entity_id].async_activate(
+                transition=transition,
+                brightness_modifier=brightness_modifier,
+                transition_percent=transition_percent,
+                target_date_time=target_date_time,
+                location=location,
+                context=call.context,
+            )
+
+    async def handle_set_automatic_updates(call):
+        """Require control of every owned circadian target before a durable batch."""
+        ids = call.data["entity_id"]
+        if not ids:
+            raise ServiceValidationError(
+                "Select at least one circadian Scene Studio scene"
+            )
+        owned = hass.data.get(DOMAIN, {}).get(DATA_ENTITIES, {})
+        by_entity = {entity.entity_id: entity for entity in owned.values()}
+        for entity_id in ids:
+            entity = by_entity.get(entity_id)
+            if (
+                entity is None
+                or not hass.states.get(entity_id)
+                or not hasattr(entity, "async_preferences_changed")
+            ):
+                raise ServiceValidationError(
+                    "Automatic updates require circadian Scene Studio scenes"
+                )
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None:
+                raise UnknownUser(context=call.context)
+            for entity_id in ids:
+                if not user.permissions.check_entity(entity_id, POLICY_CONTROL):
+                    raise Unauthorized(context=call.context, entity_id=entity_id)
+        async with scene_operation_lock(hass):
+            await async_set_scene_updates_locked(
+                hass,
+                [by_entity[eid].unique_id for eid in ids],
+                call.data["enabled"],
+                context=call.context,
+            )
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_automatic_updates",
+        handle_set_automatic_updates,
+        schema=vol.Schema(
+            {
+                vol.Required("entity_id"): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="scene", integration=DOMAIN, multiple=True
+                    )
+                ),
+                vol.Required("enabled"): bool,
+            }
+        ),
+    )
 
     hass.services.async_register(
         DOMAIN,
@@ -199,17 +256,70 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             "panel_setup": False,
             "store_loaded": False,
             "legacy_entities_purged": False,
+            "freeze_start_unsub": None,
+            "freeze_retry_unsub": None,
+            "area_unsub": None,
+            "area_tasks": set(),
         },
     )
-
     store: SceneStudioStore = domain_data[DATA_STORE]
-    if not domain_data["store_loaded"]:
-        await store.async_load()
-        domain_data["store_loaded"] = True
+    forwarding_started = False
+    panel_attempted = False
+    try:
+        if not domain_data["store_loaded"]:
+            await store.async_load()
+            domain_data["store_loaded"] = True
+
+        async def _remember_areas(_event: Event | None = None) -> None:
+            names = {area.id: area.name for area in ar.async_get(hass).areas.values()}
+            await store.async_remember_area_names(names)
+            if runtime := domain_data.get(DATA_RUNTIME):
+                runtime.areas_changed(set(names))
+
+        await _remember_areas()
+        if domain_data["area_unsub"] is None:
+
+            def _queue_area_refresh(event: Event) -> None:
+                task = hass.async_create_task(_remember_areas(event))
+                if task is not None:
+                    domain_data["area_tasks"].add(task)
+                    task.add_done_callback(domain_data["area_tasks"].discard)
+
+            domain_data["area_unsub"] = hass.bus.async_listen(
+                ar.EVENT_AREA_REGISTRY_UPDATED,
+                _queue_area_refresh,
+            )
+
+        if not domain_data["legacy_entities_purged"]:
+            _purge_legacy_platform_entities(hass)
+            domain_data["legacy_entities_purged"] = True
+
+        if _is_legacy_entry(config_entry):
+            await store.async_import_legacy(
+                dict(config_entry.data), dict(config_entry.options)
+            )
+
+        if domain_data[DATA_CONFIG_ENTRY] is not None:
+            hass.async_create_task(
+                hass.config_entries.async_remove(config_entry.entry_id)
+            )
+            return True
 
         async def _freeze(_event: Event | None = None) -> None:
+            domain_data["freeze_start_unsub"] = None
+            domain_data["freeze_retry_unsub"] = None
+            if hass.data.get(DOMAIN) is not domain_data:
+                return
             changed = await async_freeze_migrate(hass, store)
             if not changed:
+                if (
+                    hass.is_running
+                    and any(needs_native_freeze(item) for item in store.list())
+                    and domain_data["freeze_retry_unsub"] is None
+                ):
+                    domain_data["freeze_retry_unsub"] = async_call_later(
+                        hass, 30, _freeze
+                    )
                 return
             entities = hass.data.get(DOMAIN, {}).get(DATA_ENTITIES) or {}
             for item in store.list():
@@ -217,37 +327,57 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
                 if entity is not None:
                     await entity.async_update_config(item)
 
-        if hass.data.get("scene"):
+        if hass.data.get("scene") or hass.is_running:
             await _freeze()
-        else:
-            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _freeze)
+        if not hass.is_running:
+            domain_data["freeze_start_unsub"] = hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, _freeze
+            )
 
-    if not domain_data["legacy_entities_purged"]:
-        _purge_legacy_platform_entities(hass)
-        domain_data["legacy_entities_purged"] = True
+        domain_data[DATA_CONFIG_ENTRY] = config_entry
+        if not domain_data["websocket_setup"]:
+            async_setup_websocket(hass)
+            domain_data["websocket_setup"] = True
+        if not domain_data["panel_setup"]:
+            panel_attempted = True
+            await async_setup_panel(hass)
+            domain_data["panel_setup"] = True
 
-    if _is_legacy_entry(config_entry):
-        await store.async_import_legacy(
-            dict(config_entry.data), dict(config_entry.options)
+        forwarding_started = True
+        await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+        hass.async_create_task(
+            _async_normalize_primary_entry(hass, config_entry.entry_id)
         )
-
-    if domain_data[DATA_CONFIG_ENTRY] is not None:
-        hass.async_create_task(hass.config_entries.async_remove(config_entry.entry_id))
         return True
-
-    domain_data[DATA_CONFIG_ENTRY] = config_entry
-    hass.async_create_task(_async_normalize_primary_entry(hass, config_entry.entry_id))
-
-    if not domain_data["websocket_setup"]:
-        async_setup_websocket(hass)
-        domain_data["websocket_setup"] = True
-
-    if not domain_data["panel_setup"]:
-        await async_setup_panel(hass)
-        domain_data["panel_setup"] = True
-
-    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
-    return True
+    except Exception:
+        if domain_data[DATA_CONFIG_ENTRY] not in (None, config_entry):
+            raise
+        if forwarding_started:
+            try:
+                await hass.config_entries.async_unload_platforms(
+                    config_entry, PLATFORMS
+                )
+            except Exception:
+                _LOGGER.exception("Failed to unload a partially set up scene platform")
+        if panel_attempted:
+            try:
+                await async_unload_panel(hass)
+            except Exception:
+                _LOGGER.exception(
+                    "Failed to remove a partially set up Scene Studio panel"
+                )
+        if unsubscribe := domain_data.get("freeze_start_unsub"):
+            unsubscribe()
+        if unsubscribe := domain_data.get("freeze_retry_unsub"):
+            unsubscribe()
+        if unsubscribe := domain_data.get("area_unsub"):
+            unsubscribe()
+        for task in domain_data["area_tasks"]:
+            task.cancel()
+        unload_activation_cache(hass)
+        unload_runtime(hass)
+        hass.data.pop(DOMAIN, None)
+        raise
 
 
 async def _async_normalize_primary_entry(hass: HomeAssistant, entry_id: str) -> None:
@@ -274,5 +404,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         await async_unload_panel(hass)
+        if unsubscribe := domain_data.get("freeze_start_unsub"):
+            unsubscribe()
+        if unsubscribe := domain_data.get("freeze_retry_unsub"):
+            unsubscribe()
+        if unsubscribe := domain_data.get("area_unsub"):
+            unsubscribe()
+        for task in domain_data["area_tasks"]:
+            task.cancel()
+        unload_activation_cache(hass)
+        unload_runtime(hass)
         hass.data.pop(DOMAIN, None)
     return unload_ok

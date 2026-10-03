@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
 
 from .color_math import entity_rgb
 from .const import KIND_CIRCADIAN, KIND_SIMPLE, SOLAR_EVENTS
-from .native_scene import lights_in_area
+from .native_scene import lights_in_area, without_redundant_light_groups
 from .resolve import (
     build_circadian_event_snapshot,
     build_simple_snapshot,
@@ -31,8 +32,18 @@ def supported_modes(hass: HomeAssistant, entity_id: str) -> set[str] | None:
 def scene_members(hass: HomeAssistant, scene: dict[str, Any]) -> list[str]:
     """Resolve membership for a stored scene."""
     area_id = scene.get("area")
+    if area_id and area_id not in ar.async_get(hass).areas:
+        return []
     area_lights = lights_in_area(hass, area_id) if area_id else []
-    return resolve_membership(area_lights, scene.get("membership") or {})
+    return without_redundant_light_groups(
+        hass, resolve_membership(area_lights, scene.get("membership") or {})
+    )
+
+
+def scene_area_exists(hass: HomeAssistant, scene: dict[str, Any]) -> bool:
+    """Whether a configured area is still present in Home Assistant."""
+    area_id = scene.get("area")
+    return not area_id or area_id in ar.async_get(hass).areas
 
 
 def modes_map(hass: HomeAssistant, entity_ids: list[str]) -> dict[str, set[str] | None]:
@@ -45,16 +56,22 @@ def circadian_anchor(
     store: SceneStudioStore,
     scene: dict[str, Any],
     event: str,
+    *,
+    members: list[str] | None = None,
+    modes: dict[str, set[str] | None] | None = None,
 ) -> dict[str, Any]:
     """In-memory scene dict for one solar event (extrapolate_entities shape)."""
-    members = scene_members(hass, scene)
+    if members is None:
+        members = scene_members(hass, scene)
+    if modes is None:
+        modes = modes_map(hass, members)
     entities = build_circadian_event_snapshot(
         scene,
         event,
         store.variables,
         store.themes,
         members,
-        modes_map(hass, members),
+        modes,
     )
     return {
         "name": event,
@@ -114,6 +131,7 @@ def card_colors(
         return {"kind": KIND_SIMPLE, "dots": dots}
     ramps = []
     if scene.get("kind") == KIND_CIRCADIAN:
+        modes = modes_map(hass, members)
         per_event = {
             event: build_circadian_event_snapshot(
                 scene,
@@ -121,7 +139,7 @@ def card_colors(
                 store.variables,
                 store.themes,
                 members,
-                modes_map(hass, members),
+                modes,
             )
             for event in SOLAR_EVENTS
         }

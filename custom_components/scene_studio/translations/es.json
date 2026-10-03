@@ -25,46 +25,64 @@
       "extrapolation_title": "Empieza a iluminar con el sol",
       "extrapolation_body": "Scene Studio mezcla las luces de la habitación entre eventos solares — amanecer civil, orto, mediodía, ocaso y crepúsculo — para que brillo y color sigan el día.",
       "extrapolation_example": "Crea una escena para una habitación a partir de un área, o configura automáticamente todas las áreas que tengan luces.",
-      "auto_configure_body": "Configurar automáticamente crea una escena circadiana para cada área con luces, usando el tema predeterminado. Puedes editar variables y temas aquí cuando quieras: las luces cambian la próxima vez que se ejecuta una escena.",
+      "auto_configure_body": "Configurar automáticamente crea una escena circadiana para cada área con luces usando el preajuste circadiano predeterminado. Puedes editar los preajustes de color y los circadianos aquí cuando quieras; las luces cambian la próxima vez que se ejecuta una escena.",
       "area_no_scenes": "Aún no hay escenas — crea una para esta área",
       "select_scene": "Selecciona una escena para empezar",
       "select_scene_body": "Elige una escena de la lista para editar sus luces a lo largo del día, o añade una escena desde un área.",
       "no_areas": "Aún no hay áreas de Home Assistant. Añade plantas y áreas en Ajustes, y vuelve.",
-      "learn_more": "Más información"
+      "learn_more": "Más información",
+      "library_no_colors": "Aún no hay preajustes de color: crea uno",
+      "library_no_palettes": "Aún no hay preajustes de escena: crea uno",
+      "library_no_themes": "Aún no hay preajustes circadianos: crea uno"
     },
     "library": {
-      "title": "Variables y temas",
-      "hint": "Cambiar una variable o un tema actualiza las escenas que aún lo usan. Las luces cambian en la siguiente activación o actualización automática, no al instante.",
-      "variables": "Variables",
-      "palettes": "Paletas",
+      "title": "Preajustes de color y preajustes circadianos",
+      "hint": "Cambiar un preajuste de color o uno circadiano actualiza las escenas que aún lo usan. Las luces cambian en la siguiente activación o actualización automática, no al instante.",
+      "variables": "Preajustes de color",
+      "palettes": "Preajustes de escena",
       "tab_scenes": "Escenas",
       "tab_library": "Biblioteca",
-      "themes": "Temas circadianos",
-      "variable_edit_hint": "El color y el brillo los comparten cada tema o luz que aún usa esta variable.",
-      "palette_edit_hint": "Una paleta son cinco colores. Las luces que la usan eligen una ranura; cambiar la paleta actualiza esas luces la próxima vez que se ejecuta una escena.",
-      "theme_hint": "Abre un tema para editar color y brillo en cada evento solar. Los cambios se aplican a cada escena circadiana que aún usa el tema. Las anulaciones por luz se quedan.",
-      "theme_edit_hint": "Editar {name} cambia cada escena circadiana que aún usa este tema. Las anulaciones por luz en esas escenas se quedan.",
-      "theme_event_subtitle": "Tema {name}",
-      "theme_missing": "Tema no encontrado",
+      "themes": "Preajustes circadianos",
+      "variable_edit_hint": "El color y el brillo se comparten con todos los preajustes circadianos y las luces que aún usan este preajuste de color.",
+      "palette_edit_hint": "Un preajuste de escena contiene cinco colores. Las luces que lo usan eligen una posición; cambiar el preajuste actualiza esas luces la próxima vez que se ejecuta una escena.",
+      "theme_hint": "Abre un preajuste circadiano para editar el color y el brillo en cada evento solar. Los cambios se aplican a todas las escenas circadianas que aún lo usan. Se conservan los ajustes individuales de cada luz.",
+      "theme_edit_hint": "Editar {name} cambia todas las escenas circadianas que aún usan este preajuste. Se conservan los ajustes individuales de cada luz.",
+      "theme_event_subtitle": "Preajuste circadiano {name}",
+      "theme_missing": "Preajuste circadiano no encontrado",
       "delete_menu": "Eliminar {name}",
-      "delete_variable": "¿Eliminar variable?",
-      "delete_palette": "¿Eliminar paleta?",
-      "delete_theme": "¿Eliminar tema?",
+      "delete_variable": "¿Eliminar preajuste de color?",
+      "delete_palette": "¿Eliminar preajuste de escena?",
+      "delete_theme": "¿Eliminar preajuste circadiano?",
       "delete_confirm": "¿Seguro que quieres eliminar {name}?",
-      "add_variable": "Añadir variable",
-      "add_new_variable": "Añadir nueva variable",
-      "add_palette": "Añadir paleta",
-      "add_theme": "Añadir tema",
-      "new_variable": "Nueva variable",
-      "new_palette": "Nueva paleta",
-      "new_theme": "Nuevo tema",
+      "add_variable": "Añadir preajuste de color",
+      "add_new_variable": "Añadir nuevo preajuste de color",
+      "add_palette": "Añadir preajuste de escena",
+      "add_theme": "Añadir preajuste circadiano",
+      "new_variable": "Nuevo preajuste de color",
+      "new_palette": "Nuevo preajuste de escena",
+      "new_theme": "Nuevo preajuste circadiano",
       "slot_label": "Ranura {n}",
       "slot": "Ranura",
       "kelvin": "Kelvin",
       "slot_custom": "Color personalizado",
       "randomize": "Aleatorio",
-      "variable_missing": "Variable no encontrada",
-      "palette_missing": "Paleta no encontrada"
+      "variable_missing": "Preajuste de color no encontrado",
+      "palette_missing": "Preajuste de escena no encontrado",
+      "duplicate": "Duplicar",
+      "item_menu": "Menú de {name}",
+      "reset_preset": "Restablecer el preajuste original",
+      "reset_preset_text": "Esto sustituye tus cambios por el preajuste original. Después puedes deshacerlo.",
+      "reset_preset_title": "¿Restablecer el preajuste original?",
+      "reusable": "Esta es la biblioteca. Contiene preajustes reutilizables. Los cambios aquí afectan a todas las escenas que los usan.",
+      "used_in": "Se usa en {count} escenas",
+      "used_in_one": "Se usa en 1 escena",
+      "uses_color_presets": "Usa {count} preajustes de color",
+      "uses_color_presets_one": "Usa 1 preajuste de color",
+      "uses_presets": "Usa {count} preajustes",
+      "uses_presets_one": "Usa 1 preajuste",
+      "uses_scene_presets": "Usa {count} preajustes de escena",
+      "uses_scene_presets_one": "Usa 1 preajuste de escena",
+      "pick_scene_preset": "Elegir preajuste de escena"
     },
     "kinds": {
       "circadian": "Escena circadiana",
@@ -87,12 +105,27 @@
       "automatically_update_lights_on_helper": "Tras activar una escena, las luces siguen ajustándose con el intervalo de Ajustes para que la habitación siga el sol. Toca para desactivarlo en todas las habitaciones.",
       "automatically_update_lights_off_helper": "Las actualizaciones automáticas están desactivadas. Activar una escena aplica las luces una vez. Toca para volver a activar las actualizaciones en todas las habitaciones.",
       "automatically_update_lights_interval": "Intervalo de actualización automática de luces",
-      "automatically_update_lights_interval_helper": "Tras activar una escena, sigue actualizando las luces con esa frecuencia y la misma duración de transición (objetivo = cómo debe verse la habitación al final de la transición). 0 desactiva las actualizaciones automáticas en todas las habitaciones — igual que el control de la parte superior de la lista.",
+      "automatically_update_lights_interval_helper": "Después de activar una escena, las luces se actualizan con este intervalo y la misma duración de transición (el objetivo es cómo debe verse la habitación al finalizar la transición). Usa Actualizaciones automáticas para pausar sin cambiar el intervalo.",
       "automatically_update_lights_interval_minutes": "Minutos",
       "scene_settings": "Ajustes de escena",
       "hidden_in_ha": "Oculta en Home Assistant",
       "dusk_minimum_time_of_day": "Hora más temprana para el crepúsculo",
-      "dusk_minimum_time_of_day_helper": "Para evitar que las luces se atenúen demasiado y demasiado pronto. Se aplica a todas las escenas circadianas y temas."
+      "dusk_minimum_time_of_day_helper": "Para evitar que las luces se atenúen demasiado y demasiado pronto. Se aplica a todas las escenas y preajustes circadianos.",
+      "reset": "Eliminar y restablecer todo",
+      "reset_confirm": "Esto elimina todas las escenas de Scene Studio y sus escenas de Home Assistant. Se eliminan los preajustes de escena y circadianos. Los preajustes de color se sustituyen por los cinco colores predeterminados y se restablecen los ajustes. Las luces, áreas y otras integraciones permanecen. Esta acción no se puede deshacer.",
+      "reset_title": "¿Eliminar y restablecer todo?",
+      "invalid_limit_time": "Introduce una hora válida.",
+      "dawn_maximum_time_of_day": "Amanecer más tardío",
+      "dawn_maximum_time_of_day_helper": "Adelanta el amanecer cuando el sol sale tarde. Se aplica a todas las escenas circadianas y ajustes predefinidos.",
+      "automatic_updates_enabled": "Actualizaciones automáticas",
+      "automatic_updates_enabled_helper": "Las escenas circadianas activadas siguen al sol. Las escenas pausadas siguen aplicándose una vez al activarlas.",
+      "respect_manual_changes": "Respetar cambios manuales",
+      "respect_manual_changes_helper": "Deja de actualizar las luces modificadas manualmente. Las luces temporalmente no disponibles esperan hasta volver a estar disponibles.",
+      "always_follow_scene": "Seguir siempre la escena",
+      "always_follow_scene_helper": "Devuelve estas luces a la escena incluso después de cambios manuales o de apagarlas.",
+      "always_respect_manual_changes": "Respetar siempre los cambios manuales",
+      "always_respect_manual_changes_helper": "Deja de actualizar estas luces tras cambios manuales, incluso cuando Respetar cambios manuales está desactivado.",
+      "invalid_interval": "Introduce un intervalo de 1 a 30 minutos."
     },
     "common": {
       "untitled": "Sin título",
@@ -122,10 +155,15 @@
       "scene": "Escena",
       "location": "Ubicación",
       "save": "Guardar",
-      "rename": "Renombrar"
+      "rename": "Renombrar",
+      "disabled": "Desactivada",
+      "edit": "Editar",
+      "hidden": "Oculta"
     },
     "actions": {
       "auto_configure": "Configurar automáticamente",
+      "auto_configure_hint": "Configura escenas circadianas automáticamente",
+      "manual_configuration": "Configuración manual",
       "add_scene": "Añadir escena",
       "live_edit": "Edición en vivo",
       "live_preview": "Vista previa en vivo",
@@ -139,10 +177,13 @@
       "preview_location": "Previsualizar otra ubicación",
       "use_home_location": "Usar ubicación de casa",
       "name_scene": "Nombrar escena",
-      "name_palette": "Nombrar paleta",
-      "name_variable": "Nombrar variable",
-      "name_theme": "Nombrar tema",
-      "reset_sun_now": "Restablecer el sol a la hora actual"
+      "name_palette": "Nombrar preajuste de escena",
+      "name_variable": "Nombrar preajuste de color",
+      "name_theme": "Nombrar preajuste circadiano",
+      "reset_sun_now": "Restablecer el sol a la hora actual",
+      "back_to_today": "Volver a hoy",
+      "choose_preview_date": "Elegir fecha de vista previa",
+      "live_edit_hint": "Aplicar la escena y los cambios en tiempo real"
     },
     "save_warn": {
       "title": "¿Actualizar escenas externas?",
@@ -158,7 +199,8 @@
       "banner": "Previsualizando otra ubicación",
       "dialog_title": "Previsualizar ubicación",
       "search_placeholder": "Ciudad o dirección",
-      "no_matches": "Sin coincidencias. Prueba un nombre de ciudad o mueve el mapa."
+      "no_matches": "Sin coincidencias. Prueba un nombre de ciudad o mueve el mapa.",
+      "search_disclosure": "Al buscar, tu consulta y la IP de tu navegador se envían a Photon (Komoot)."
     },
     "gallery": {
       "reset_slot": "Restablecer {name} al color original",
@@ -221,7 +263,8 @@
       "aquarium_night": "Noche de acuario",
       "signal_violet": "Violeta de señal",
       "ice_and_magenta": "Hielo y magenta",
-      "afterimage": "Imagen residual"
+      "afterimage": "Imagen residual",
+      "theme_default": "Predeterminado"
     },
     "dialogs": {
       "delete_scene_title": "¿Eliminar escena?",
@@ -229,23 +272,32 @@
       "linked_scenes": "Misma escena para amanecer civil, orto y ocaso",
       "new_scene_step": "{step}/2 Nueva escena circadiana",
       "scene_palette_title": "Nueva escena",
-      "scene_palette_hint": "Elige una de tus paletas, o empieza a partir de una imagen.",
-      "scene_palette_yours": "Tus paletas",
+      "scene_palette_hint": "Crea una escena a partir de un preajuste o empieza desde cero con la iluminación actual",
+      "scene_palette_yours": "Tus preajustes de escena",
       "scene_palette_custom": "Personalizada",
       "scene_palette_none": "Ninguna",
-      "scene_palette_select": "Seleccionar una paleta",
-      "scene_palette_edit": "Editar paleta",
-      "scene_theme_select": "Seleccionar un tema",
-      "scene_theme_edit": "Editar tema",
+      "scene_palette_select": "Seleccionar un preajuste de escena",
+      "scene_palette_edit": "Editar preajuste de escena",
+      "scene_theme_select": "Seleccionar un preajuste circadiano",
+      "scene_theme_edit": "Editar preajuste circadiano",
       "scene_theme_title": "Nueva escena circadiana",
-      "scene_theme_hint": "Elige uno de tus temas, o empieza a partir de un preajuste.",
-      "scene_theme_yours": "Tus temas",
-      "scene_theme_presets": "Preajustes",
-      "scene_theme_use": "Usar tema",
-      "scene_palette_use": "Usar paleta",
+      "scene_theme_hint": "Crea una escena circadiana a partir de un preajuste o empieza desde cero",
+      "scene_theme_yours": "Tus preajustes circadianos",
+      "scene_theme_presets": "Preajustes iniciales",
+      "scene_theme_use": "Usar preajuste circadiano",
+      "scene_palette_use": "Usar preajuste de escena",
       "scene_palette_randomize": "Aleatorio",
       "unsaved_title": "Cambios sin guardar",
-      "unsaved_text": "Tienes cambios sin guardar. ¿Descartarlos?"
+      "unsaved_text": "Tienes cambios sin guardar. ¿Descartarlos?",
+      "scene_palette_clear": "Quitar preajuste",
+      "scene_palette_create": "Crear desde cero",
+      "scene_palette_from_preset": "Crear a partir de este preajuste",
+      "scene_palette_from_scratch": "Crear desde cero",
+      "scene_palette_live_preview": "Vista previa en directo",
+      "scene_palette_start_scratch": "Empezar desde cero",
+      "scene_theme_from_preset": "Crear a partir de este preajuste",
+      "scene_theme_from_scratch": "Crear desde cero",
+      "scene_theme_start_scratch": "Empezar desde cero"
     },
     "chart": {
       "fallback_note": "* La hora usa un valor estacional de reserva porque el sol no sale o no se pone ese día.",
@@ -259,9 +311,9 @@
     "naming": {
       "circadian_scene": "{area} circadiana",
       "circadian_fallback": "Circadiana",
-      "variable": "Variable",
-      "palette": "Paleta",
-      "theme": "Tema"
+      "variable": "Preajuste de color",
+      "palette": "Preajuste de escena",
+      "theme": "Preajuste circadiano"
     },
     "fields": {
       "scene_name": {
@@ -319,8 +371,9 @@
       "color_brightness": "Brillo de color",
       "white_brightness": "Brillo blanco",
       "graph_sub": "0–100 % por evento solar",
+      "onoff_events_hint": "Activa o desactiva cada evento solar",
       "overrides": "Anulaciones",
-      "override_brightness": "Brillo {percent} % · tema {theme} %",
+      "override_brightness": "Brillo",
       "override_color": "Color",
       "solar_events": "Eventos solares",
       "select_all": "Seleccionar todo",
@@ -328,7 +381,7 @@
       "deselect": "Deseleccionar",
       "tiles_hint_brightness": "Arrastra o desplázate sobre las baldosas de luz para cambiar el brillo",
       "tiles_hint_pick": "Selecciona un evento solar o una luz para editarla, o arrastra el sol para previsualizar las luces en un momento",
-      "tiles_hint_palette": "Los cambios aquí se reflejan en todas las escenas que usan esta paleta",
+      "tiles_hint_palette": "Los cambios aquí afectan a todas las escenas que usan este preajuste de escena",
       "settings_named": "Ajustes de {name}",
       "mode_not_supported": "Esta luz no admite este modo",
       "group_color": "Color",
@@ -347,10 +400,67 @@
       "remove_named_from_scene": "Quitar {name} de la escena",
       "add_light_title": "Añadir luz",
       "add_light_help": "Añade una luz de otra zona (o cualquier luz que aún no esté en estas escenas). Su aspecto actual se copia en cada escena nativa asignada.",
-      "light": "Luz"
+      "light": "Luz",
+      "none": "Sin luces",
+      "select_event_first": "Selecciona un evento solar antes de cambiar las luces",
+      "reset_overrides": "Restablecer anulaciones",
+      "override_state": "Encendido/apagado",
+      "override_effect": "Efecto",
+      "select_all_count": "Seleccionar todo ({count})",
+      "n_selected_of_total": "{count} de {total} seleccionadas",
+      "overrides_title": "Anulaciones de luces",
+      "reset_all": "Restablecer todo",
+      "overrides_explanation": "Cambios respecto a {source} en {event}, incluidos los ajustes de brillo del evento y las capacidades de cada luz. Solo se aplican a esta escena y evento; los preajustes compartidos no cambian."
     },
     "defaults": {
       "circadian_scene": "Circadian"
+    },
+    "areas": {
+      "delete_confirm": "¿Eliminar las {count} escenas de {name}?",
+      "delete_title": "¿Eliminar escenas?",
+      "deleted": "Eliminada",
+      "move": "Mover",
+      "move_title": "Mover escenas",
+      "target": "Área de destino",
+      "unknown": "Área eliminada",
+      "unassigned": "Sin asignar"
+    },
+    "cards": {
+      "disabled": "Desactivada",
+      "hidden": "Oculta"
+    },
+    "conflict": {
+      "deleted": "Este elemento se eliminó. Tu borrador sin guardar sigue visible aquí para que puedas copiarlo.",
+      "field": "Elige un valor para {field}",
+      "mine": "Tu valor",
+      "reload": "Vuelve a cargar este elemento antes de guardar",
+      "saved": "Valor recién guardado",
+      "title": "Otra persona ha cambiado este elemento",
+      "use_mine": "Usar mi valor",
+      "use_saved": "Usar el valor recién guardado"
+    }
+  },
+  "entity": {
+    "switch": {
+      "automatic_updates": {
+        "name": "Actualizaciones automáticas de Scene Studio"
+      }
+    }
+  },
+  "services": {
+    "set_automatic_updates": {
+      "name": "Configurar actualizaciones automáticas",
+      "description": "Pausa o reanuda las actualizaciones automáticas de las escenas circadianas seleccionadas de Scene Studio. Activarlas mientras están pausadas aplica la iluminación una vez.",
+      "fields": {
+        "entity_id": {
+          "name": "Escenas",
+          "description": "Escenas circadianas de Scene Studio que se van a pausar o reanudar."
+        },
+        "enabled": {
+          "name": "Activado",
+          "description": "Activa las actualizaciones automáticas para estas escenas."
+        }
+      }
     }
   }
 }

@@ -23,7 +23,7 @@ PANEL_VERSION = json.loads(
     (Path(__file__).parent / "manifest.json").read_text(encoding="utf-8")
 ).get("version", "0")
 # Increment when panel.js changes without a manifest version bump.
-PANEL_ASSET_REV = "1"
+PANEL_ASSET_REV = "104"
 
 
 async def async_setup_panel(hass: HomeAssistant) -> None:
@@ -31,6 +31,9 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     # Versioned path so HA's frontend module cache picks up panel.js after a restart.
     # Bump manifest.json version for releases; increment PANEL_ASSET_REV for WIP frontend.
     static_url = f"/api/scene_studio/assets/{PANEL_VERSION}-{PANEL_ASSET_REV}"
+    # Gallery covers stay on a stable path so scene attributes do not change
+    # when PANEL_ASSET_REV bumps.
+    gallery_url = "/api/scene_studio/gallery"
     try:
         await hass.http.async_register_static_paths(
             [
@@ -38,7 +41,12 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
                     static_url,
                     str(FRONTEND_DIR),
                     cache_headers=False,
-                )
+                ),
+                StaticPathConfig(
+                    gallery_url,
+                    str(FRONTEND_DIR / "gallery"),
+                    cache_headers=False,
+                ),
             ]
         )
     except (ValueError, RuntimeError):

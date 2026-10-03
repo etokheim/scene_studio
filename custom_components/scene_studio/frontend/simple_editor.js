@@ -19,6 +19,7 @@ import {
   binaryDragPreview,
   binaryWheelPreview,
   captureLightStripLayout,
+  hasUngroupedLightTiles,
   createAddLightTile,
   createLightModeGroup,
   createLightTile,
@@ -30,6 +31,7 @@ import {
   lightTileGroupOrder,
   lightTileValueLabel,
   paintLightTile,
+  paintSelectAllTile,
   revealLightActionsNow,
   proportionalFillPercent,
   relativeFillPercent,
@@ -42,18 +44,43 @@ import {
 function wheelPinMorph(panel, ids) {
   const pins = panel._wheelMorphPins;
   if (!pins) {
+    panel._wheelMorphConsumedPins = null;
     return { pinFlip: panel._wheelPinFlip || null, fadePinIds: null };
   }
   panel._wheelMorphPins = null;
+  const byId = new Map();
+  for (const pin of pins) {
+    if (pin?.id) {
+      byId.set(pin.id, pin);
+    }
+  }
   const pinFlip = new Map();
   const fadePinIds = new Set();
-  ids.forEach((id, i) => {
-    if (pins[i]) {
-      pinFlip.set(id, { x: pins[i].x, y: pins[i].y });
-    } else {
-      fadePinIds.add(id);
+  const used = new Set();
+  for (const id of ids) {
+    const prev = byId.get(id);
+    if (!prev) {
+      continue;
     }
-  });
+    pinFlip.set(id, { x: prev.x, y: prev.y });
+    used.add(prev);
+  }
+  // Shared lights fly to themselves. Leftover pins (another area's lights)
+  // pair in list order so the first dot takes the new title and color
+  // instead of fading out while a new dot pops in.
+  const leftoverPins = pins.filter((pin) => pin && !used.has(pin));
+  const leftoverIds = ids.filter((id) => !pinFlip.has(id));
+  const shared = Math.min(leftoverPins.length, leftoverIds.length);
+  const consumed = new Set();
+  for (let i = 0; i < shared; i += 1) {
+    const prev = leftoverPins[i];
+    pinFlip.set(leftoverIds[i], { x: prev.x, y: prev.y });
+    consumed.add(prev);
+  }
+  for (let i = shared; i < leftoverIds.length; i += 1) {
+    fadePinIds.add(leftoverIds[i]);
+  }
+  panel._wheelMorphConsumedPins = consumed;
   return { pinFlip, fadePinIds };
 }
 
@@ -129,6 +156,7 @@ export const SIMPLE_EDITOR_CSS = `
   /* Same stage column as .sun-light-clock: full width, no extra inset. */
   :host([narrow]) .simple-editor {
     padding-top: 0;
+    padding-bottom: calc(16px + var(--scene-safe-bottom, 0px));
   }
   /* Presets overlay the chip strip, so the disk is not resized when they
      appear. The strip itself stays in the column and pushes the disk down. */
@@ -401,7 +429,7 @@ function lightIcon(panel, entityId) {
 export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   const scene = panel._formData || {};
   const lights = { ...(scene.lights || {}) };
-  let members = panel._simpleMembers || Object.keys(lights);
+  let members = [...new Set(panel._simpleMembers || Object.keys(lights))];
   let removedMembers = [];
   const variables = panel._variables || [];
   const wrap = document.createElement("div");
@@ -411,6 +439,10 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   wheels.className = "simple-wheels";
 
   const paletteBaseId = () => panel._formData?.palette_id || null;
+  const levelOnlyLight = (eid) => {
+    const flags = panel._lightModeFlags?.(eid);
+    return Boolean(flags?.onOff || flags?.brightnessOnly);
+  };
 
   const hydrateDraft = (raw, eid) => {
     const base = paletteBaseId();
@@ -430,13 +462,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
         entityId: eid,
         seed: Number(panel._formData?.assignment_seed) || 0,
         catalog: variables,
+        levelOnly: levelOnlyLight(eid),
       });
     }
     return draft;
   };
 
   // Opening the editor leaves every light unselected until the user clicks one.
-  let selectedIds = new Set();
+  // A palette pick restores the lights that were selected when the dialog opened.
+  let selectedIds = new Set(panel._simpleSelectedIds || []);
   let touchSelectMode = false;
   let peeledId = null;
   let anchorId = null;
@@ -570,10 +604,29 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     `${members
       .map((id) => `${id}:${lightIsUnavailable(id) ? "unavailable" : groupOf(id)}`)
       .join("|")}|${removedMembers.join(",")}`;
+  const stripHasUngroupedTiles = () => hasUngroupedLightTiles(tiles);
 
   const cardDots = () =>
     members.map((eid) => {
       const draft = drafts[eid] || {};
+      if (levelOnlyLight(eid)) {
+        const on =
+          (draft.state || "on") !== "off" &&
+          !(panel._lightModeFlags?.(eid)?.brightnessOnly &&
+            Number(draft.brightness) <= 0);
+        return {
+          entity_id: eid,
+          rgb: on
+            ? scaledCardRgb([255, 255, 255], {
+                ...draft,
+                state: "on",
+                brightness: panel._lightModeFlags?.(eid)?.onOff
+                  ? 255
+                  : draft.brightness,
+              })
+            : [48, 48, 48],
+        };
+      }
       return {
         entity_id: eid,
         rgb: scaledCardRgb(draftRgb(draft), draft),
@@ -689,7 +742,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           persistLight(eid);
         }
         const nextGroups = tileGroupSignature();
-        if (nextGroups !== stripGroupSignature) {
+        if (nextGroups !== stripGroupSignature || stripHasUngroupedTiles()) {
           syncTiles();
           return;
         }
@@ -725,6 +778,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     ...panel._wheelPalette(),
     onPickPalette: () => panel._pickSceneBasePalette?.(),
     onEditPalette: (id) => panel._go(`palette/${id}`),
+    onEditVariable: (id) => panel._go(`variable/${id}`),
   });
   panel._randomizeScenePalette = () => {
     const seed = (Math.random() * 0xffffffff) >>> 0;
@@ -743,6 +797,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
           entityId: eid,
           seed,
           catalog: variables,
+          levelOnly: levelOnlyLight(eid),
         });
       }
       persistLight(eid);
@@ -885,24 +940,15 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const ids = mode ? selectedMemberIds() : members;
     const count = selectedMemberIds().length;
     selector.classList.toggle("select-mode", mode);
-    const caption = mode
-      ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
-      : panel._t("frontend.lights.select_all", "Select all");
-    paintLightTile(selector, {
-      rgb: [64, 60, 58],
+    const caption = panel._selectAllCaption(members.length, mode ? count : 0);
+    paintSelectAllTile(selector, {
       fillPct: selectAllShownPct(ids),
       selected: mode,
       brightnessLabel: mode
         ? panel._t("frontend.lights.deselect", "Deselect")
         : undefined,
     });
-    if (mode) {
-      const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
-      selector.style.setProperty("--hue-light-on-background", wash);
-      selector.style.setProperty("--hue-light-on-color", wash);
-      selector.style.setProperty("--hue-light-on-text-color", "#fff");
-    }
-    for (const name of selector.querySelectorAll(".simple-light-name")) {
+for (const name of selector.querySelectorAll(".simple-light-name")) {
       name.textContent = caption;
     }
     selector.setAttribute(
@@ -912,6 +958,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
   };
 
   const paintTileSelection = () => {
+    panel._simpleSelectedIds = [...selectedIds];
     tiles.classList.toggle("select-mode", inSelectMode());
     for (const selector of tiles.querySelectorAll(".simple-light-selector")) {
       const eid = selector.dataset.entityId;
@@ -936,8 +983,11 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
 
   const paintSelector = (selector, eid, draft) => {
     const onOff = isOnOffLight(eid);
+    const flags = panel._lightModeFlags?.(eid);
+    const levelOnly = onOff || flags?.brightnessOnly;
+    const on = (draft?.state || "on") !== "off";
     paintLightTile(selector, {
-      rgb: draftRgb(draft),
+      rgb: levelOnly ? (on ? [255, 255, 255] : [48, 48, 48]) : draftRgb(draft),
       fillPct: fillPercent(draft, eid),
       selected: selectedIds.has(eid),
       brightnessLabel: onOff ? onOffLabel(draft) : undefined,
@@ -951,9 +1001,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       "icon",
       overridden ? "mdi:restore" : "mdi:close"
     );
-    const state = panel._hass?.states?.[eid];
-    const name =
-      state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+    const name = panel._lightDisplayName(eid);
     removeBtn.setAttribute(
       "aria-label",
       overridden
@@ -980,6 +1028,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       entityId: eid,
       seed: Number(panel._formData?.assignment_seed) || 0,
       catalog: variables,
+      levelOnly: levelOnlyLight(eid),
     });
     persistLight(eid);
     const selector = tiles.querySelector(
@@ -1365,8 +1414,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     for (const eid of stripOrderIds) {
       const draft = drafts[eid] || {};
       const state = panel._hass?.states?.[eid];
-      const name =
-        state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+      const name = panel._lightDisplayName(eid);
       const { selector, tile, hit } = createLightTile({
         entityId: eid,
         name,
@@ -1637,9 +1685,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       });
       tiles.appendChild(group);
       for (const eid of removedMembers) {
-        const state = panel._hass?.states?.[eid];
-        const name =
-          state?.attributes?.friendly_name || eid.replace(/^light\./, "");
+        const name = panel._lightDisplayName(eid);
         const { selector, tile } = createLightTile({
           entityId: eid,
           name: panel._t("frontend.lights.add_named", "Add {name}", { name }),
@@ -1676,6 +1722,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     syncGroupTitles();
     playLightStripLayout(tiles, beforeLayout);
+    panel._fitSidebarLightStrip?.();
     paintSelectAll();
     stripGroupSignature = tileGroupSignature();
     syncLevelHost();
@@ -1939,6 +1986,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
       ensureDraft(eid);
     }
     selectedIds = new Set([...selectedIds].filter((id) => members.includes(id)));
+    paintCard();
     syncTiles();
     wheel.sync();
     revealLightActionsNow(tiles);
@@ -2053,6 +2101,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     panel._beginSimpleUndo?.();
     working.slots[index] = draftToSlot(drafts[id]);
     panel._saveSoon();
+    panel._syncPresetReset?.();
   };
   const getState = () => ({
     scenes: ids.map((id, index) => ({
@@ -2115,7 +2164,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     getPalette: () =>
       (panel._variables || []).filter((item) => !variableIsPalette(item)),
     onAddPalette: (draft) => panel._addVariableFromCurrentDraft(draft),
-    addVariableLabel: panel._t("frontend.library.add_variable", "Add variable"),
+    addVariableLabel: panel._t("frontend.library.add_variable", "Add color preset"),
   });
   wheels.appendChild(wheel.el);
 
@@ -2293,8 +2342,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       const mode = selectedIds.size > 1;
       allSelector.classList.toggle("select-mode", mode);
       const targets = scrubTargets();
-      paintLightTile(allSelector, {
-        rgb: [64, 60, 58],
+      paintSelectAllTile(allSelector, {
         fillPct:
           selectAllDisplayedFill(targets.map((id) => fillPercent(drafts[id]))) ?? 0,
         selected: mode,
@@ -2302,12 +2350,6 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           ? panel._t("frontend.lights.deselect", "Deselect")
           : undefined,
       });
-      if (mode) {
-        const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
-        allSelector.style.setProperty("--hue-light-on-background", wash);
-        allSelector.style.setProperty("--hue-light-on-color", wash);
-        allSelector.style.setProperty("--hue-light-on-text-color", "#fff");
-      }
       const caption = mode
         ? panel._t("frontend.lights.n_selected", "{count} selected", {
             count: selectedIds.size,
@@ -2618,6 +2660,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     stripShape = paletteStripShape();
     paintAll();
     playLightStripLayout(tiles, beforeLayout);
+    panel._fitSidebarLightStrip?.();
   };
   const tileBlock = document.createElement("div");
   tileBlock.className = "light-tiles-block";
@@ -2626,7 +2669,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     createLightTilesHint(
       panel._t(
         "frontend.lights.tiles_hint_palette",
-        "Edits here are reflected in all scenes using this palette"
+        "Edits here are reflected in all scenes using this scene preset"
       )
     )
   );

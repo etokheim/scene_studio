@@ -236,7 +236,7 @@ async def extrapolate_entities(
         if ("state" in from_entity and from_entity["state"] == STATE_UNAVAILABLE) or (
             "state" in to_entity and to_entity["state"] == STATE_UNAVAILABLE
         ):
-            _LOGGER.warning("%s is unavailable and therefor skipped", from_entity_id)
+            _LOGGER.debug("%s is unavailable and skipped", from_entity_id)
             return None
 
         # Handle state
@@ -248,12 +248,9 @@ async def extrapolate_entities(
                 scene_transition_progress_percent,
             )
         else:
-            _LOGGER.error(
-                "From or to entity does not have a state and is therefor skipped. from_entity: %s, to_entity: %s",
-                from_entity,
-                to_entity,
+            raise HomeAssistantError(
+                f"Cannot extrapolate {from_entity_id}: an anchor is missing its state"
             )
-            return None
 
         # Let's make sure that if one of from/to_entities has a color mode, the other one has got one too.
         # If from_entity or to_entity is missing a color mode, we'll set it to the other's color mode
@@ -331,16 +328,6 @@ async def extrapolate_entities(
                 from_entity, to_entity, final_entity, scene_transition_progress_percent
             )
 
-        # Log summary for non-light entities (light details already logged above)
-        if not final_entity[ATTR_ENTITY_ID].startswith("light."):
-            attrs_summary = {
-                k: v
-                for k, v in final_entity.items()
-                if k not in (ATTR_ENTITY_ID, "state")
-            }
-            if attrs_summary:
-                _LOGGER.debug("    Attributes: %s", attrs_summary)
-
         return final_entity
 
     # Process all entities in parallel
@@ -406,28 +393,16 @@ def extrapolate_number(
     current_transition_difference = difference * scene_transition_progress_percent / 100
     final_transition_value = round(from_number + current_transition_difference)
 
-    # If the extrapolated value is higher than both from and to_number, then something's wrong
-    # TODO: Remove this if the error doesn't pop up in the near future. Was just a wrong -/+ value...
-    if final_transition_value > from_number and final_transition_value > to_number:
-        _LOGGER.warning(
-            "Math is hard... From number: %s, to_number %s, extrapolated: %s, transition_percent: %s",
-            from_number,
-            to_number,
-            final_transition_value,
-            scene_transition_progress_percent,
+    if (
+        not min(from_number, to_number)
+        <= final_transition_value
+        <= max(from_number, to_number)
+    ):
+        raise HomeAssistantError(
+            "Extrapolated value fell outside its endpoints: "
+            f"from={from_number}, to={to_number}, result={final_transition_value}, "
+            f"progress={scene_transition_progress_percent}%"
         )
-        raise HomeAssistantError("Extrapolation math error... Developer goes: Ugh...")
-
-    # Same, but if both are lower
-    if final_transition_value < from_number and final_transition_value < to_number:
-        _LOGGER.warning(
-            "Math is hard... From number: %s, to_number %s, extrapolated: %s, transition_percent: %s",
-            from_number,
-            to_number,
-            final_transition_value,
-            scene_transition_progress_percent,
-        )
-        raise HomeAssistantError("Extrapolation math error 2... Developer goes: Ugh...")
 
     return final_transition_value
 

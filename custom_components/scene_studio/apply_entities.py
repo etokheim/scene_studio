@@ -32,6 +32,36 @@ from .continuous import snapshot_from_command, snapshot_from_state, states_match
 _LOGGER = logging.getLogger(__name__)
 
 
+def _light_service_payload(entity: dict[str, Any]) -> dict[str, Any]:
+    """A captured HA state has derived colors; send only its declared mode."""
+    colors = {
+        "hs": "hs_color",
+        "xy": "xy_color",
+        "rgb": "rgb_color",
+        "rgbw": "rgbw_color",
+        "rgbww": "rgbww_color",
+        "color_temp": "color_temp_kelvin",
+        "white": "white",
+    }
+    payload = dict(entity)
+    mode = payload.pop("color_mode", None)
+    present = {key for key in colors.values() if payload.get(key) is not None}
+    selected = colors.get(mode)
+    if selected is not None:
+        if selected not in present:
+            raise HomeAssistantError(
+                f"Light {entity['entity_id']!r} is missing its {selected} value"
+            )
+        for key in colors.values():
+            if key != selected:
+                payload.pop(key, None)
+    elif len(present) > 1:
+        raise HomeAssistantError(
+            f"Light {entity['entity_id']!r} has ambiguous color values without a declared mode"
+        )
+    return payload
+
+
 async def apply_entities_parallel(
     entities,
     hass: HomeAssistant,
@@ -39,6 +69,7 @@ async def apply_entities_parallel(
     context=None,
     *,
     skip_noop: bool = False,
+    can_apply=None,
 ):
     """Apply multiple entity states in parallel for better performance.
 
@@ -47,6 +78,16 @@ async def apply_entities_parallel(
     """
     _LOGGER.debug("Starting parallel processing of %d entities", len(entities))
 
+    # Validate every light before scheduling any service: one malformed captured
+    # color must not partially apply the other lights.
+    entities = [
+        (
+            _light_service_payload(entity)
+            if str(entity.get(ATTR_ENTITY_ID, "")).startswith("light.")
+            else entity
+        )
+        for entity in entities
+    ]
     tasks = []
     for entity in entities:
         task = asyncio.create_task(
@@ -56,6 +97,7 @@ async def apply_entities_parallel(
                 transition_time,
                 context=context,
                 skip_noop=skip_noop,
+                can_apply=can_apply,
             )
         )
         tasks.append(task)
@@ -90,9 +132,12 @@ async def apply_single_entity(
     context=None,
     *,
     skip_noop: bool = False,
+    can_apply=None,
 ):
     """Apply a single entity state."""
     domain = entity[ATTR_ENTITY_ID].split(".")[0]
+    if domain == LIGHT_DOMAIN:
+        entity = _light_service_payload(entity)
     if "state" not in entity:
         raise HomeAssistantError(
             f"Entity {entity.get(ATTR_ENTITY_ID)!r} is missing a state property"
@@ -158,14 +203,19 @@ async def apply_single_entity(
             key: value for key, value in entity_applied.items() if value is not None
         }
 
-    _LOGGER.debug("%s.%s: %s", domain, service_type, entity_applied)
+    # Service data can contain sensitive attributes for migrated non-light
+    # entities. Keep debug logs useful without copying that payload.
+    _LOGGER.debug("Applying %s.%s to %s", domain, service_type, entity[ATTR_ENTITY_ID])
 
+    if can_apply is not None and not can_apply(entity[ATTR_ENTITY_ID]):
+        return False
     try:
         await hass.services.async_call(
             domain=domain,
             service=service_type,
             service_data=entity_applied,
             context=context,
+            blocking=True,
         )
     except Exception as error:  # pylint: disable=broad-exception-caught
         raise HomeAssistantError(
@@ -174,19 +224,3 @@ async def apply_single_entity(
         ) from error
 
     return True
-
-
-def get_scene_by_uuid(scenes, uuid):
-    """Searches through the supplied array after the supplied scene uuid. Then returns that."""
-    if uuid is None:
-        raise HomeAssistantError(
-            "Developer goes: Ehhh... Something's wrong. I'm searching for an non-existant uuid... You've probably deleted one of the configured scenes. Please reconfigure the integration."
-        )
-
-    for scene in scenes:
-        if scene["entity_id"] == uuid:
-            return scene
-
-    raise HomeAssistantError(
-        "Hey - you have to configure the extension first! A scene field is missing a value (or have an incorrect one set)"
-    )

@@ -1,22 +1,18 @@
-/** Deterministic, rasterized 2D color mesh for simple-scene cards. */
+/** Circular light blooms for simple-scene cards, painted on one canvas. */
 
-const GRID_COLUMNS = 4;
-const GRID_ROWS = 3;
+const EMPTY_COLOR = [35, 35, 35];
 
-function srgbToLinear(channel) {
-  const value = channel / 255;
-  return value <= 0.04045
-    ? value / 12.92
-    : ((value + 0.055) / 1.055) ** 2.4;
-}
-
-function linearToSrgb(channel) {
-  const value =
-    channel <= 0.0031308
-      ? channel * 12.92
-      : 1.055 * channel ** (1 / 2.4) - 0.055;
-  return Math.round(Math.max(0, Math.min(1, value)) * 255);
-}
+/** Scatter from the reference radial stack, plus one slot for an eighth color. */
+const LIGHT_POSITIONS = [
+  [0.4, 0.2],
+  [0.8, 0],
+  [0, 0.5],
+  [0.86, 0.46],
+  [0, 1],
+  [0.8, 1],
+  [0, 0],
+  [0.55, 0.78],
+];
 
 /** Chromatic RGB scaled by brightness. Off, or brightness at or below 0, is black. */
 export function scaledCardRgb(rgb, draft) {
@@ -50,79 +46,68 @@ export function meshColors(dots) {
   return colors;
 }
 
-function vertexColor(colors, column, row) {
-  if (!colors.length) {
-    return [35, 35, 35];
-  }
-  if (colors.length === 1) {
-    return colors[0];
-  }
-  // Prime strides avoid rows becoming repeated bands while keeping placement
-  // stable when the same scene is rendered again.
-  return colors[(column * 5 + row * 3 + column * row) % colors.length];
-}
-
-function mixLinear(colors, weights) {
-  return [0, 1, 2].map((channel) => {
-    const linear = colors.reduce(
-      (sum, color, index) =>
-        sum + srgbToLinear(color[channel]) * weights[index],
-      0
-    );
-    return linearToSrgb(linear);
-  });
-}
-
-/** Sample the triangle mesh at normalized coordinates. Exported for tests. */
-export function sampleMeshColor(colors, x, y) {
-  const safeColors = colors?.length ? colors : [[35, 35, 35]];
-  const px = Math.max(0, Math.min(1, x)) * (GRID_COLUMNS - 1);
-  const py = Math.max(0, Math.min(1, y)) * (GRID_ROWS - 1);
-  const column = Math.min(GRID_COLUMNS - 2, Math.floor(px));
-  const row = Math.min(GRID_ROWS - 2, Math.floor(py));
-  const fx = px - column;
-  const fy = py - row;
-  const topLeft = vertexColor(safeColors, column, row);
-  const topRight = vertexColor(safeColors, column + 1, row);
-  const bottomLeft = vertexColor(safeColors, column, row + 1);
-  const bottomRight = vertexColor(safeColors, column + 1, row + 1);
-
-  if (fx + fy <= 1) {
-    return mixLinear(
-      [topLeft, topRight, bottomLeft],
-      [1 - fx - fy, fx, fy]
-    );
-  }
-  return mixLinear(
-    [bottomRight, bottomLeft, topRight],
-    [fx + fy - 1, 1 - fx, 1 - fy]
+/** Half the distance from a unit-square point to the farthest corner. */
+export function lightPointRadius(x, y) {
+  const farthest = Math.max(
+    Math.hypot(x, y),
+    Math.hypot(1 - x, y),
+    Math.hypot(x, 1 - y),
+    Math.hypot(1 - x, 1 - y)
   );
+  return farthest / 2;
+}
+
+/**
+ * Base fill plus one circle per unique color.
+ * A single color is a flat fill. Positions stay put for the same colors.
+ */
+export function lightPointLayout(colors) {
+  const safe = colors?.length ? colors.slice(0, LIGHT_POSITIONS.length) : [EMPTY_COLOR];
+  const base = safe[0];
+  if (safe.length === 1) {
+    return { base, points: [] };
+  }
+  const points = safe.map((rgb, index) => {
+    const [x, y] = LIGHT_POSITIONS[index];
+    return { x, y, rgb, radius: lightPointRadius(x, y) };
+  });
+  return { base, points };
+}
+
+function rgbCss(rgb, alpha = 1) {
+  const [r, g, b] = rgb;
+  if (alpha === 1) {
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function paintMeshPixels(canvas, dots) {
-  const colors = meshColors(dots);
+  const layout = lightPointLayout(meshColors(dots));
   const context = canvas.getContext("2d", { alpha: false });
   if (!context || canvas.width < 1 || canvas.height < 1) {
     return;
   }
-  const image = context.createImageData(canvas.width, canvas.height);
-  for (let py = 0; py < canvas.height; py += 1) {
-    for (let px = 0; px < canvas.width; px += 1) {
-      const rgb = sampleMeshColor(
-        colors,
-        px / Math.max(1, canvas.width - 1),
-        py / Math.max(1, canvas.height - 1)
-      );
-      const offset = (py * canvas.width + px) * 4;
-      // A small single-pass darkening keeps white card labels legible without
-      // stacking translucent CSS gradient layers over the mesh.
-      image.data[offset] = Math.round(rgb[0] * 0.82);
-      image.data[offset + 1] = Math.round(rgb[1] * 0.82);
-      image.data[offset + 2] = Math.round(rgb[2] * 0.82);
-      image.data[offset + 3] = 255;
-    }
+  const width = canvas.width;
+  const height = canvas.height;
+  context.globalCompositeOperation = "source-over";
+  context.fillStyle = rgbCss(layout.base);
+  context.fillRect(0, 0, width, height);
+  for (const point of layout.points) {
+    const px = point.x * width;
+    const py = point.y * height;
+    const farthest = Math.max(
+      Math.hypot(px, py),
+      Math.hypot(width - px, py),
+      Math.hypot(px, height - py),
+      Math.hypot(width - px, height - py)
+    );
+    const gradient = context.createRadialGradient(px, py, 0, px, py, farthest / 2);
+    gradient.addColorStop(0, rgbCss(point.rgb));
+    gradient.addColorStop(1, rgbCss(point.rgb, 0));
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, width, height);
   }
-  context.putImageData(image, 0, 0);
 }
 
 export function paintSimpleCardMesh(canvas, dots) {

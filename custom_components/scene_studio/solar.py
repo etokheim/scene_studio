@@ -12,7 +12,7 @@ from astral.sun import elevation as sun_elevation
 from astral.sun import sun
 from homeassistant.core import HomeAssistant
 
-from .store import dusk_minimum_seconds
+from .store import dawn_maximum_seconds, dusk_minimum_seconds
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,6 +92,16 @@ def dusk_start_seconds(
     return solar_seconds, False, None
 
 
+def dawn_start_seconds(
+    dawn_time: datetime, maximum: int | None
+) -> tuple[int, bool, int | None]:
+    """Advance a late solar/fallback dawn, keeping its real position for the UI."""
+    solar_seconds = _seconds_since_midnight(dawn_time)
+    if maximum is not None and solar_seconds > maximum:
+        return maximum, True, solar_seconds
+    return solar_seconds, False, None
+
+
 def _format_time(seconds: int) -> str:
     seconds = int(seconds) % SECONDS_PER_DAY
     hours, remainder = divmod(seconds, 3600)
@@ -153,7 +163,7 @@ def resolve_solar_events(
             else:
                 events[name] = event_time.astimezone(tz)
     except ValueError:
-        _LOGGER.info(
+        _LOGGER.debug(
             "Could not calculate solar events for %s (sun always below/above horizon). "
             "Using seasonal fallback times",
             target.date(),
@@ -171,7 +181,7 @@ def resolve_solar_events(
             previous_plus_offset = events[prev_name] + timedelta(minutes=30)
             fallback_time = max(previous_plus_offset, seasonal)
             if fallback_time == previous_plus_offset:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Could not calculate %s for %s. Using %s + 30min: %s",
                     event_name,
                     target.date(),
@@ -179,7 +189,7 @@ def resolve_solar_events(
                     fallback_time.strftime("%H:%M"),
                 )
             else:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Could not calculate %s for %s. Using seasonal fallback "
                     "(later than %s + 30min): %02d:%02d",
                     event_name,
@@ -189,7 +199,7 @@ def resolve_solar_events(
                     minute,
                 )
         else:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Could not calculate %s for %s. Using seasonal fallback: %02d:%02d",
                 event_name,
                 target.date(),
@@ -243,7 +253,15 @@ def build_sun_path(
         overridden = False
         solar_time = None
         solar_seconds = None
-        if event_id == "dusk":
+        if event_id == "dawn":
+            seconds, overridden, solar_raw = dawn_start_seconds(
+                event_time, dawn_maximum_seconds(hass)
+            )
+            if overridden and solar_raw is not None:
+                solar_time = _format_time(solar_raw)
+                solar_seconds = solar_raw
+            event_time = start + timedelta(seconds=seconds)
+        elif event_id == "dusk":
             seconds, overridden, solar_raw = dusk_start_seconds(
                 event_time, start, dusk_minimum
             )

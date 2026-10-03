@@ -76,13 +76,10 @@ def freeze_scene_overrides(
             continue
         anchor = native.get(entity_id)
         if not anchor:
-            _LOGGER.warning(
-                "Freeze-migrate %s: native scene %s for %s is not loaded",
-                scene.get("id"),
-                entity_id,
-                event,
+            raise HomeAssistantError(
+                f"Native scene {entity_id!r} for {event} is not loaded; "
+                "the source references were retained"
             )
-            continue
         for light_id, raw in (anchor.get("entities") or {}).items():
             if not str(light_id).startswith("light."):
                 continue
@@ -130,25 +127,35 @@ async def async_freeze_migrate(hass: HomeAssistant, store: SceneStudioStore) -> 
     if not pending and not store.managed_native_scene_ids:
         return 0
     native = load_native_scenes(hass)
-    if pending and not native:
-        _LOGGER.info(
-            "Deferring native-scene freeze: Home Assistant scenes are not loaded yet"
-        )
+    if pending and any(
+        item.get(slot) and item[slot] not in native
+        for item in pending
+        for slot in SCENE_KEYS
+    ):
+        _LOGGER.debug("Deferring native-scene freeze until every anchor is loaded")
         return 0
-    changed = 0
+    frozen_items = {}
     for item in pending:
         area_id = item.get("area")
         area_lights = lights_in_area(hass, area_id) if area_id else []
         frozen = freeze_scene_overrides(item, native, area_lights)
-        store.scenes[frozen["id"]] = frozen
-        changed += 1
+        frozen_items[frozen["id"]] = frozen
+    changed = len(frozen_items)
+    if frozen_items:
+        # The migrator uses the store's internal transaction to keep all
+        # converted scenes together until their durable save completes.
+        await store._async_mutate(  # pylint: disable=protected-access
+            lambda: store.scenes.update(frozen_items)
+        )
     managed = list(store.managed_native_scene_ids)
     if managed:
         removed = await async_delete_managed_yaml(hass, managed)
-        _LOGGER.info("Removed %s managed native YAML scenes after freeze", removed)
-        store.managed_native_scene_ids = []
-    if changed or managed:
-        await store.async_save()
+        _LOGGER.debug("Removed %s managed native YAML scenes after freeze", removed)
+
+        def clear_managed_ids() -> None:
+            store.managed_native_scene_ids.clear()
+
+        await store._async_mutate(clear_managed_ids)  # pylint: disable=protected-access
     if changed:
-        _LOGGER.info("Freeze-migrated %s circadian scenes off native YAML", changed)
+        _LOGGER.debug("Freeze-migrated %s circadian scenes off native YAML", changed)
     return changed

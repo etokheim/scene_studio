@@ -7,15 +7,17 @@ Native HA YAML scenes are no longer the source of truth.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from copy import deepcopy
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 
+from .collaboration import ItemDeleted, RevisionConflict, merge_fields, revision_for
 from .const import (
     AREA,
     AUTOMATICALLY_UPDATE_LIGHTS,
@@ -45,8 +47,14 @@ from .const import (
     VARIABLE_REF,
 )
 from .palette import KIND_PALETTE, normalize_palette_slots, optional_builtin_id
+from .validation import (
+    validate_scene_input,
+    validate_theme_input,
+    validate_variable_input,
+)
 
 _LOGGER = logging.getLogger(__name__)
+_Result = TypeVar("_Result")
 
 # --- Storage version ---
 # v2 (dev-only): continuous → follow_up.
@@ -55,12 +63,20 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 4
 
 DEFAULT_DUSK_MINIMUM_SECONDS = 22 * 3600
+DEFAULT_DAWN_MAXIMUM_SECONDS = 6 * 3600
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    # Seconds; 0 disables. Same value is the light transition on auto-update ticks.
+    # Positive seconds; also the light transition on automatic-update ticks.
     "automatically_update_lights_interval": 300,
+    "automatic_updates_enabled": True,
+    "respect_manual_changes": True,
+    "always_follow_scene": [],
+    "always_respect_manual_changes": [],
     # Seconds since midnight; delays dusk until this clock time when solar dusk is earlier.
     SETTINGS_DUSK_MINIMUM_TIME_OF_DAY: DEFAULT_DUSK_MINIMUM_SECONDS,
+    "dusk_minimum_enabled": True,
+    "dawn_maximum_time_of_day": DEFAULT_DAWN_MAXIMUM_SECONDS,
+    "dawn_maximum_enabled": True,
 }
 
 # ---------------------------------------------------------------------------
@@ -74,6 +90,15 @@ _DEFAULT_VARIABLE_NAMES: dict[str, str] = {
     "sunset": "Sunset",
     "dusk": "Dusk",
 }
+
+
+def auto_configure_scene_name(themes: dict[str, dict[str, Any]] | None) -> str:
+    """Name auto-configured scenes from the default theme, never the area."""
+    theme = (themes or {}).get("default") or {}
+    name = theme.get("name") if isinstance(theme, dict) else None
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return "Circadian"
 
 
 def seed_variables() -> dict[str, dict[str, Any]]:
@@ -167,7 +192,9 @@ def strip_scene_dusk_minimum(scenes: dict[str, dict[str, Any]]) -> int | None:
     return found
 
 
-def dusk_minimum_seconds(hass: HomeAssistant, override: int | None = None) -> int:
+def dusk_minimum_seconds(
+    hass: HomeAssistant, override: int | None = None
+) -> int | None:
     """House-wide earliest dusk in seconds since midnight."""
     if override is not None:
         return int(override)
@@ -175,10 +202,23 @@ def dusk_minimum_seconds(hass: HomeAssistant, override: int | None = None) -> in
     store = domain_data.get(DATA_STORE)
     if store is None:
         return DEFAULT_DUSK_MINIMUM_SECONDS
+    if not store.settings.get("dusk_minimum_enabled", True):
+        return None
     return time_to_seconds(
         store.settings.get(
             SETTINGS_DUSK_MINIMUM_TIME_OF_DAY, DEFAULT_DUSK_MINIMUM_SECONDS
         )
+    )
+
+
+def dawn_maximum_seconds(hass: HomeAssistant) -> int | None:
+    """House-wide latest dawn, preserving the saved time while disabled."""
+    store = (hass.data.get(DOMAIN) or {}).get(DATA_STORE)
+    settings = store.settings if store is not None else DEFAULT_SETTINGS
+    if not settings.get("dawn_maximum_enabled", True):
+        return None
+    return time_to_seconds(
+        settings.get("dawn_maximum_time_of_day", DEFAULT_DAWN_MAXIMUM_SECONDS)
     )
 
 
@@ -197,7 +237,7 @@ def _optional_icon(raw: dict[str, Any]) -> str | None:
 
 
 def _normalize_event_palettes(raw: Any) -> dict[str, dict[str, Any]]:
-    """Keep a palette id and seed for each solar event that has one."""
+    """Keep event-local assignment and brightness without changing its preset."""
     if not isinstance(raw, dict):
         return {}
     result: dict[str, dict[str, Any]] = {}
@@ -206,12 +246,18 @@ def _normalize_event_palettes(raw: Any) -> dict[str, dict[str, Any]]:
         if not isinstance(entry, dict):
             continue
         palette_id = entry.get("palette_id") or None
-        if not palette_id:
+        if not palette_id and "brightness_adjustment" not in entry:
             continue
-        result[event] = {
-            "palette_id": palette_id,
-            "assignment_seed": int(entry.get("assignment_seed") or 0),
-        }
+        result[event] = {}
+        if palette_id:
+            result[event].update(
+                palette_id=palette_id,
+                assignment_seed=int(entry.get("assignment_seed") or 0),
+            )
+        if "brightness_adjustment" in entry:
+            result[event]["brightness_adjustment"] = dict(
+                entry["brightness_adjustment"]
+            )
     return result
 
 
@@ -325,17 +371,19 @@ def _migrate_preference_keys(item: dict[str, Any]) -> None:
 
 
 def _migrate_interval_settings(settings: dict[str, Any]) -> None:
-    """Map legacy interval keys onto automatically_update_lights_interval."""
-    if "automatically_update_lights_interval" in settings:
+    """Keep the legacy off preference while restoring a usable positive interval."""
+    if "automatically_update_lights_interval" not in settings:
         for alias in _INTERVAL_ALIASES:
-            settings.pop(alias, None)
-        return
+            if alias in settings:
+                settings["automatically_update_lights_interval"] = settings[alias]
+                break
     for alias in _INTERVAL_ALIASES:
-        if alias in settings:
-            settings["automatically_update_lights_interval"] = settings.pop(alias)
-            for leftover in _INTERVAL_ALIASES:
-                settings.pop(leftover, None)
-            return
+        settings.pop(alias, None)
+    if settings.get("automatically_update_lights_interval") == 0:
+        settings["automatic_updates_enabled"] = False
+        settings["automatically_update_lights_interval"] = DEFAULT_SETTINGS[
+            "automatically_update_lights_interval"
+        ]
 
 
 def _migrate_v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
@@ -345,7 +393,8 @@ def _migrate_v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
     (needs hass to load scenes.yaml). This structural migration:
     - Seeds variables + default theme if absent.
     - Adds kind=circadian and empty membership/overrides to old scene items.
-    - Drops managed_native_scene_ids, hide_managed_native_scenes.
+    - Keeps managed_native_scene_ids until managed YAML cleanup is durable.
+    - Drops hide_managed_native_scenes.
     - Keeps legacy scene_dawn…scene_dusk keys so the runtime migrator can
       look up native scenes before removing them.
     """
@@ -379,19 +428,21 @@ def _migrate_v3_to_v4(data: dict[str, Any]) -> dict[str, Any]:
         "themes": themes,
         "scenes": scenes,
         "settings": settings,
+        "managed_native_scene_ids": list(data.get("managed_native_scene_ids") or []),
     }
 
 
 def _migrate_store(old_version: int, data: dict[str, Any]) -> dict[str, Any]:
     """Migrate persisted store payloads between STORAGE_VERSION values."""
     if data is None:
-        variables = seed_variables()
-        themes = seed_default_theme(variables)
+        # Colors only. The Default circadian preset is a starter the user
+        # adds, or that Auto configure adds. A v3 upgrade still seeds it,
+        # because those scenes already point at theme id "default".
         return {
-            "variables": variables,
-            "themes": themes,
+            "variables": seed_variables(),
+            "themes": {},
             "scenes": [],
-            "settings": dict(DEFAULT_SETTINGS),
+            "settings": deepcopy(DEFAULT_SETTINGS),
         }
     # v1/v2/v3 → v4: structural migration.
     if old_version < 4:
@@ -515,6 +566,68 @@ def to_form_data(item: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def normalize_variable(raw: dict[str, Any], var_id: str) -> dict[str, Any]:
+    """Validate and shape one shared color or palette library item."""
+    validate_variable_input(raw)
+    kind = raw.get("kind") or ("palette" if raw.get("slots") else "color")
+    name = (raw.get("name") or "").strip()
+    if not name:
+        raise ValueError("Variable name is required")
+    if kind == "palette":
+        var = {
+            "id": var_id,
+            "name": name,
+            "kind": KIND_PALETTE,
+            "slots": normalize_palette_slots(raw.get("slots")),
+        }
+        builtin_id = optional_builtin_id(raw)
+        if builtin_id:
+            var["builtin_id"] = builtin_id
+        return var
+    color = raw.get("color")
+    if not color or not isinstance(color, dict):
+        raise ValueError("Variable must have a color dict")
+    return {
+        "id": var_id,
+        "name": name,
+        "kind": "color",
+        "color": color,
+        "brightness": raw.get("brightness", 255),
+    }
+
+
+def normalize_theme(raw: dict[str, Any], theme_id: str) -> dict[str, Any]:
+    """Validate and shape one shared circadian theme."""
+    validate_theme_input(raw)
+    name = (raw.get("name") or "").strip()
+    if not name:
+        raise ValueError("Theme name is required")
+    events = raw.get("events")
+    if not events or not isinstance(events, dict):
+        raise ValueError("Theme must have an events dict")
+    missing = [event for event in SOLAR_EVENTS if event not in events]
+    if missing:
+        raise ValueError(f"Theme is missing events: {', '.join(missing)}")
+    for event in SOLAR_EVENTS:
+        value = events[event]
+        if not isinstance(value, dict) or not isinstance(value.get("color"), dict):
+            raise ValueError(f"Theme event {event!r} must have a color dict")
+        brightness = value.get("brightness")
+        if (
+            not isinstance(brightness, (int, float))
+            or isinstance(brightness, bool)
+            or not 0 <= brightness <= 255
+        ):
+            raise ValueError(
+                f"Theme event {event!r} brightness must be a number from 0 to 255"
+            )
+    theme = {"id": theme_id, "name": name, "events": events}
+    builtin_id = optional_builtin_id(raw)
+    if builtin_id:
+        theme["builtin_id"] = builtin_id
+    return theme
+
+
 # ---------------------------------------------------------------------------
 # Store class
 # ---------------------------------------------------------------------------
@@ -533,7 +646,7 @@ class _ScenesStore(Store):
         return _migrate_store(old_major_version, old_data)
 
 
-class SceneStudioStore:
+class SceneStudioStore:  # pylint: disable=too-many-public-methods
     """Load and persist circadian scene configs, variables, and themes."""
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -546,10 +659,12 @@ class SceneStudioStore:
         self.variables: dict[str, dict[str, Any]] = {}
         self.themes: dict[str, dict[str, Any]] = {}
         self.scenes: dict[str, dict[str, Any]] = {}
-        self.settings: dict[str, Any] = dict(DEFAULT_SETTINGS)
+        self.area_names: dict[str, str] = {}
+        self.settings: dict[str, Any] = deepcopy(DEFAULT_SETTINGS)
         # Legacy — only populated during v3→v4 migration.
         self.managed_native_scene_ids: list[str] = []
         self.pending_hide_sync = False
+        self._mutation_lock = asyncio.Lock()
 
     async def async_load(self) -> None:
         """Load from disk (migrate from an older domain's store once)."""
@@ -578,9 +693,9 @@ class SceneStudioStore:
         self.variables = vars_raw
 
         # --- Themes ---
+        # An empty library stays empty. Default is added by Auto configure
+        # or by adopting the starter preset, not by opening the integration.
         themes_raw = raw.get("themes") or {}
-        if not themes_raw:
-            themes_raw = seed_default_theme(self.variables)
         if isinstance(themes_raw, list):
             themes_raw = {t["id"]: t for t in themes_raw if "id" in t}
         self.themes = themes_raw
@@ -601,9 +716,15 @@ class SceneStudioStore:
             for alias in ("continuous", "follow_up"):
                 item.pop(alias, None)
             self.scenes[item["id"]] = item
+        self.area_names = {
+            area_id: name
+            for area_id, name in (raw.get("area_names") or {}).items()
+            if isinstance(area_id, str) and isinstance(name, str) and name.strip()
+        }
 
         # --- Settings ---
         raw_settings = dict(raw.get("settings") or {})
+        _migrate_interval_settings(raw_settings)
         lifted = strip_scene_dusk_minimum(self.scenes)
         if SETTINGS_DUSK_MINIMUM_TIME_OF_DAY not in raw_settings and lifted is not None:
             raw_settings[SETTINGS_DUSK_MINIMUM_TIME_OF_DAY] = lifted
@@ -629,12 +750,56 @@ class SceneStudioStore:
             "variables": self.variables,
             "themes": self.themes,
             "scenes": list(self.scenes.values()),
+            "area_names": dict(self.area_names),
             "settings": dict(self.settings),
         }
         # Keep managed ids during migration transition; drop when empty.
         if self.managed_native_scene_ids:
             payload["managed_native_scene_ids"] = list(self.managed_native_scene_ids)
         await self._store.async_save(payload)
+
+    async def _async_mutate(
+        self, change: Callable[[], _Result], *, skip_if_unchanged: bool = False
+    ) -> _Result:
+        """Serialize a complete in-memory change and restore it if saving fails."""
+        async with self._mutation_lock:
+            previous = (
+                deepcopy(self.scenes),
+                deepcopy(self.area_names),
+                deepcopy(self.variables),
+                deepcopy(self.themes),
+                deepcopy(self.settings),
+                list(self.managed_native_scene_ids),
+                self.pending_hide_sync,
+            )
+            try:
+                result = change()
+                if (
+                    not skip_if_unchanged
+                    or (
+                        self.scenes,
+                        self.area_names,
+                        self.variables,
+                        self.themes,
+                        self.settings,
+                        self.managed_native_scene_ids,
+                        self.pending_hide_sync,
+                    )
+                    != previous
+                ):
+                    await self.async_save()
+            except Exception:
+                (
+                    self.scenes,
+                    self.area_names,
+                    self.variables,
+                    self.themes,
+                    self.settings,
+                    self.managed_native_scene_ids,
+                    self.pending_hide_sync,
+                ) = previous
+                raise
+            return result
 
     # --- Variable CRUD ---
 
@@ -649,42 +814,36 @@ class SceneStudioStore:
     async def async_upsert_variable(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a color variable."""
         var_id = raw.get("id") or str(uuid.uuid4())
-        kind = raw.get("kind") or ("palette" if raw.get("slots") else "color")
-        name = (raw.get("name") or "").strip()
-        if not name:
-            raise ValueError("Variable name is required")
-        if kind == "palette":
-            var = {
-                "id": var_id,
-                "name": name,
-                "kind": KIND_PALETTE,
-                "slots": normalize_palette_slots(raw.get("slots")),
-            }
-            builtin_id = optional_builtin_id(raw)
-            if builtin_id:
-                var["builtin_id"] = builtin_id
-        else:
-            color = raw.get("color")
-            if not color or not isinstance(color, dict):
-                raise ValueError("Variable must have a color dict")
-            var = {
-                "id": var_id,
-                "name": name,
-                "kind": "color",
-                "color": color,
-                "brightness": raw.get("brightness", 255),
-            }
-        previous = deepcopy(self.variables.get(var_id))
-        self.variables[var_id] = var
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            if previous is None:
-                self.variables.pop(var_id, None)
-            else:
-                self.variables[var_id] = previous
-            raise
-        return var
+        var = normalize_variable(raw, var_id)
+
+        def change() -> dict[str, Any]:
+            self.variables[var_id] = var
+            return var
+
+        return await self._async_mutate(change)
+
+    async def async_rebase_variable(
+        self, raw: dict[str, Any], base: dict[str, Any], base_revision: str
+    ) -> dict[str, Any]:
+        """Merge a variable update under the same lock as persistence."""
+        var_id = raw.get("id")
+        if not var_id or revision_for(base) != base_revision:
+            raise ValueError("Variable base snapshot and revision do not match")
+
+        def change() -> dict[str, Any]:
+            current = self.variables.get(var_id)
+            if current is None:
+                raise ItemDeleted("Variable was deleted")
+            merged, conflicts = merge_fields(base, raw, current)
+            if conflicts:
+                raise RevisionConflict(conflicts, current, revision_for(current))
+            if merged.get("id") != var_id:
+                raise ValueError("Variable ID cannot change")
+            item = normalize_variable(merged, var_id)
+            self.variables[var_id] = item
+            return item
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
 
     async def async_delete_variable(self, var_id: str) -> bool:
         """Delete a variable.  Raises if still referenced by themes or scenes."""
@@ -747,13 +906,9 @@ class SceneStudioStore:
                             )
                         ):
                             still_used(f"scene {scene_name}")
-        previous = self.variables.pop(var_id)
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.variables[var_id] = previous
-            raise
-        return True
+        return await self._async_mutate(
+            lambda: self.variables.pop(var_id, None) is not None
+        )
 
     # --- Theme CRUD ---
 
@@ -765,50 +920,111 @@ class SceneStudioStore:
         """Return one theme."""
         return self.themes.get(theme_id)
 
+    async def async_ensure_default_theme(self) -> dict[str, Any]:
+        """Return the Default circadian preset, creating it when missing.
+
+        Restores any of the five seed colors that were deleted, because the
+        preset references them. An existing theme with id ``default`` is
+        left as the user saved it.
+        """
+
+        def change() -> dict[str, Any]:
+            for var_id, var in seed_variables().items():
+                self.variables.setdefault(var_id, var)
+            theme = self.themes.get("default")
+            if theme is None:
+                theme = seed_default_theme(self.variables)["default"]
+                theme["builtin_id"] = "default"
+                self.themes["default"] = theme
+            return theme
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
+
+    async def async_auto_configure(
+        self, areas: list[tuple[str, str]]
+    ) -> tuple[list[dict[str, Any]], list[str], bool]:
+        """Create the starter theme and all area scenes in one durable write."""
+
+        def change() -> tuple[list[dict[str, Any]], list[str], bool]:
+            if self.scenes:
+                raise HomeAssistantError("Auto configure requires an empty scene store")
+            created_variables = []
+            for var_id, var in seed_variables().items():
+                if var_id not in self.variables:
+                    self.variables[var_id] = var
+                    created_variables.append(var_id)
+            created_theme = "default" not in self.themes
+            if created_theme:
+                theme = seed_default_theme(self.variables)["default"]
+                theme["builtin_id"] = "default"
+                self.themes["default"] = theme
+            items = []
+            for area_id, area_name in areas:
+                item = normalize_scene(
+                    {
+                        "kind": KIND_CIRCADIAN,
+                        SCENE_NAME: auto_configure_scene_name(self.themes),
+                        AREA: area_id,
+                        "theme_id": "default",
+                    }
+                )
+                self.scenes[item["id"]] = item
+                self.area_names[area_id] = area_name
+                items.append(item)
+            return items, created_variables, created_theme
+
+        return await self._async_mutate(change)
+
+    async def async_compensate_auto_configure(
+        self, scene_ids: list[str], variable_ids: list[str], created_theme: bool
+    ) -> None:
+        """Restore the previous empty state if entity registration fails."""
+
+        def change() -> None:
+            for scene_id in scene_ids:
+                item = self.scenes.pop(scene_id, None)
+                if item:
+                    self.area_names.pop(item.get(AREA), None)
+            for variable_id in variable_ids:
+                self.variables.pop(variable_id, None)
+            if created_theme:
+                self.themes.pop("default", None)
+
+        await self._async_mutate(change)
+
     async def async_upsert_theme(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Create or update a circadian theme."""
         theme_id = raw.get("id") or str(uuid.uuid4())
-        name = (raw.get("name") or "").strip()
-        if not name:
-            raise ValueError("Theme name is required")
-        events = raw.get("events")
-        if not events or not isinstance(events, dict):
-            raise ValueError("Theme must have an events dict")
-        missing = [e for e in SOLAR_EVENTS if e not in events]
-        if missing:
-            raise ValueError(f"Theme is missing events: {', '.join(missing)}")
-        for event in SOLAR_EVENTS:
-            value = events[event]
-            if not isinstance(value, dict) or not isinstance(value.get("color"), dict):
-                raise ValueError(f"Theme event {event!r} must have a color dict")
-            brightness = value.get("brightness")
-            if (
-                not isinstance(brightness, (int, float))
-                or isinstance(brightness, bool)
-                or not 0 <= brightness <= 255
-            ):
-                raise ValueError(
-                    f"Theme event {event!r} brightness must be a number from 0 to 255"
-                )
-        theme = {
-            "id": theme_id,
-            "name": name,
-            "events": events,
-        }
-        builtin_id = optional_builtin_id(raw)
-        if builtin_id:
-            theme["builtin_id"] = builtin_id
-        previous = deepcopy(self.themes.get(theme_id))
-        self.themes[theme_id] = theme
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            if previous is None:
-                self.themes.pop(theme_id, None)
-            else:
-                self.themes[theme_id] = previous
-            raise
-        return theme
+        theme = normalize_theme(raw, theme_id)
+
+        def change() -> dict[str, Any]:
+            self.themes[theme_id] = theme
+            return theme
+
+        return await self._async_mutate(change)
+
+    async def async_rebase_theme(
+        self, raw: dict[str, Any], base: dict[str, Any], base_revision: str
+    ) -> dict[str, Any]:
+        """Merge a theme update under the same lock as persistence."""
+        theme_id = raw.get("id")
+        if not theme_id or revision_for(base) != base_revision:
+            raise ValueError("Theme base snapshot and revision do not match")
+
+        def change() -> dict[str, Any]:
+            current = self.themes.get(theme_id)
+            if current is None:
+                raise ItemDeleted("Theme was deleted")
+            merged, conflicts = merge_fields(base, raw, current)
+            if conflicts:
+                raise RevisionConflict(conflicts, current, revision_for(current))
+            if merged.get("id") != theme_id:
+                raise ValueError("Theme ID cannot change")
+            item = normalize_theme(merged, theme_id)
+            self.themes[theme_id] = item
+            return item
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
 
     async def async_delete_theme(self, theme_id: str) -> bool:
         """Delete a theme.  Raises if still referenced by circadian scenes."""
@@ -820,13 +1036,9 @@ class SceneStudioStore:
                     f"Theme {theme_id!r} is still referenced by "
                     f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
                 )
-        previous = self.themes.pop(theme_id)
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.themes[theme_id] = previous
-            raise
-        return True
+        return await self._async_mutate(
+            lambda: self.themes.pop(theme_id, None) is not None
+        )
 
     # --- Scene CRUD ---
 
@@ -834,11 +1046,71 @@ class SceneStudioStore:
         """Return all scene configs."""
         return list(self.scenes.values())
 
+    async def async_remember_area_names(self, names: dict[str, str]) -> None:
+        """Retain the last known names of areas that own saved scenes."""
+
+        def change() -> None:
+            used = {item.get(AREA) for item in self.scenes.values()}
+            for area_id in used:
+                if area_id in names and names[area_id].strip():
+                    self.area_names[area_id] = names[area_id]
+
+        await self._async_mutate(change, skip_if_unchanged=True)
+
+    async def async_move_area(
+        self, old_area_id: str, target_area_id: str
+    ) -> list[dict[str, Any]]:
+        """Move every scene together; target membership comes from its area."""
+
+        def change() -> list[dict[str, Any]]:
+            moved = []
+            for scene_id, item in self.scenes.items():
+                if item.get(AREA) != old_area_id:
+                    continue
+                next_item = deepcopy(item)
+                next_item[AREA] = target_area_id
+                next_item["membership"] = {"exclude": [], "include": []}
+                self.scenes[scene_id] = next_item
+                moved.append(next_item)
+            self.area_names.pop(old_area_id, None)
+            return moved
+
+        return await self._async_mutate(change)
+
+    async def async_delete_area(self, area_id: str) -> list[dict[str, Any]]:
+        """Delete all scenes in a removed area and forget its name together."""
+
+        def change() -> list[dict[str, Any]]:
+            removed = [
+                item for item in self.scenes.values() if item.get(AREA) == area_id
+            ]
+            for item in removed:
+                self.scenes.pop(item["id"])
+            self.area_names.pop(area_id, None)
+            return removed
+
+        return await self._async_mutate(change)
+
+    async def async_restore_area(
+        self, scenes: list[dict[str, Any]], area_id: str, area_name: str | None
+    ) -> None:
+        """Compensate a failed HA entity update after an area batch write."""
+
+        def change() -> None:
+            for item in scenes:
+                self.scenes[item["id"]] = deepcopy(item)
+            if area_name:
+                self.area_names[area_id] = area_name
+
+        await self._async_mutate(change)
+
     def get(self, scene_id: str) -> dict[str, Any] | None:
         """Return one scene config."""
         return self.scenes.get(scene_id)
 
-    async def async_upsert(self, raw: dict[str, Any]) -> dict[str, Any]:
+    async def async_upsert(
+        self, raw: dict[str, Any], area_name: str | None = None
+    ) -> dict[str, Any]:
         """Create or update a scene config."""
         scene_id = raw.get("id")
         # Preserve play/pause preference when editor omits it.
@@ -855,71 +1127,174 @@ class SceneStudioStore:
                 ),
             }
         item = normalize_scene(raw, scene_id=scene_id)
-        previous = deepcopy(self.scenes.get(item["id"]))
-        self.scenes[item["id"]] = item
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            if previous is None:
-                self.scenes.pop(item["id"], None)
-            else:
-                self.scenes[item["id"]] = previous
-            raise
-        return item
+
+        def change() -> dict[str, Any]:
+            self.scenes[item["id"]] = item
+            if area_name and item.get(AREA):
+                self.area_names[item[AREA]] = area_name
+            return item
+
+        return await self._async_mutate(change)
+
+    async def async_rebase_scene(
+        self,
+        raw: dict[str, Any],
+        base: dict[str, Any],
+        base_revision: str,
+        form_of: Callable[[dict[str, Any]], dict[str, Any]],
+        area_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Validate and merge a scene update inside the persistence lock."""
+        scene_id = raw.get("id")
+        if not scene_id or not isinstance(base, dict):
+            raise ValueError("A saved scene and base snapshot are required")
+        if revision_for(base) != base_revision:
+            raise ValueError("Base snapshot and revision do not match")
+
+        def change() -> dict[str, Any]:
+            current = self.scenes.get(scene_id)
+            if current is None:
+                raise ItemDeleted("Scene was deleted")
+            current_form = form_of(current)
+            current_revision = revision_for(current_form)
+            merged, conflicts = merge_fields(base, raw, current_form)
+            if conflicts:
+                raise RevisionConflict(conflicts, current_form, current_revision)
+            if merged.get("id") != scene_id:
+                raise ValueError("Scene ID cannot change")
+            validate_scene_input(merged)
+            item = normalize_scene(merged, scene_id=scene_id)
+            self.scenes[scene_id] = item
+            if area_name and item.get(AREA):
+                self.area_names[item[AREA]] = area_name
+            return item
+
+        return await self._async_mutate(change, skip_if_unchanged=True)
 
     async def async_set_automatically_update_lights(
         self, scene_id: str, automatically_update_lights: bool
     ) -> dict[str, Any] | None:
         """Toggle per-scene automatic light-update preference."""
-        item = self.scenes.get(scene_id)
-        if item is None:
+        if scene_id not in self.scenes:
             return None
-        item[AUTOMATICALLY_UPDATE_LIGHTS] = bool(automatically_update_lights)
-        await self.async_save()
-        return item
+
+        def change() -> dict[str, Any]:
+            item = self.scenes[scene_id]
+            item[AUTOMATICALLY_UPDATE_LIGHTS] = bool(automatically_update_lights)
+            return item
+
+        return await self._async_mutate(change)
+
+    async def async_set_scene_updates(
+        self, scene_ids: list[str], enabled: bool
+    ) -> list[dict]:
+        """Validate every target and durably change the complete preference batch."""
+        if not isinstance(enabled, bool):
+            raise HomeAssistantError("enabled must be a boolean")
+
+        def change():
+            items = [deepcopy(self.scenes.get(scene_id)) for scene_id in scene_ids]
+            if any(
+                item is None or item.get("kind", "circadian") != "circadian"
+                for item in items
+            ):
+                raise HomeAssistantError(
+                    "Automatic updates require circadian Scene Studio scenes"
+                )
+            for item in items:
+                item[AUTOMATICALLY_UPDATE_LIGHTS] = enabled
+                self.scenes[item["id"]] = item
+            return items
+
+        return await self._async_mutate(change)
+
+    async def async_reset_to_fresh(self) -> None:
+        """Replace scenes, library, and settings with a fresh install.
+
+        The config entry stays. Managed YAML ids remain until cleanup is
+        confirmed, so a failed cleanup can be retried after restart.
+        """
+
+        def change() -> None:
+            self.scenes = {}
+            self.area_names = {}
+            self.variables = seed_variables()
+            self.themes = {}
+            self.settings = deepcopy(DEFAULT_SETTINGS)
+            # Keep cleanup metadata until managed YAML deletion succeeds.
+            self.pending_hide_sync = False
+
+        await self._async_mutate(change)
 
     async def async_delete(self, scene_id: str) -> bool:
         """Delete a scene config."""
         if scene_id not in self.scenes:
             return False
-        previous = self.scenes.pop(scene_id)
-        try:
-            await self.async_save()
-        except Exception:  # pylint: disable=broad-exception-caught
-            self.scenes[scene_id] = previous
-            raise
-        return True
+        return await self._async_mutate(
+            lambda: self.scenes.pop(scene_id, None) is not None
+        )
 
     async def async_update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
         """Merge integration-wide settings and persist."""
+        validated = {}
         for key, value in patch.items():
             if key not in DEFAULT_SETTINGS:
-                continue
+                raise HomeAssistantError(f"Unknown setting {key!r}")
             if key == "automatically_update_lights_interval":
-                try:
-                    value = int(value)
-                except (TypeError, ValueError) as err:
+                if isinstance(value, bool) or not isinstance(value, int):
                     raise HomeAssistantError(
                         "automatically_update_lights_interval must be an integer"
-                    ) from err
-                if value < 0 or value > 30 * 60:
-                    raise HomeAssistantError(
-                        "automatically_update_lights_interval must be 0–1800 seconds"
                     )
-            if key == SETTINGS_DUSK_MINIMUM_TIME_OF_DAY:
+                if value <= 0 or value > 30 * 60:
+                    raise HomeAssistantError(
+                        "automatically_update_lights_interval must be 1–1800 seconds"
+                    )
+            if key in (
+                "dusk_minimum_enabled",
+                "dawn_maximum_enabled",
+                "automatic_updates_enabled",
+                "respect_manual_changes",
+            ):
+                if not isinstance(value, bool):
+                    raise HomeAssistantError(f"{key} must be a boolean")
+            if key in (SETTINGS_DUSK_MINIMUM_TIME_OF_DAY, "dawn_maximum_time_of_day"):
+                if isinstance(value, bool) or (not isinstance(value, (str, int))):
+                    raise HomeAssistantError(f"{key} must be a time or whole seconds")
                 try:
                     value = time_to_seconds(value)
                 except (TypeError, ValueError) as err:
                     raise HomeAssistantError(
-                        "dusk_minimum_time_of_day must be a time or seconds since midnight"
+                        f"{key} must be a time or seconds since midnight"
                     ) from err
                 if value < 0 or value > 24 * 3600:
+                    raise HomeAssistantError(f"{key} must be 0–86400 seconds")
+            if key in ("always_follow_scene", "always_respect_manual_changes"):
+                if not isinstance(value, list) or any(
+                    not isinstance(eid, str)
+                    or not eid.startswith("light.")
+                    or len(eid) <= 6
+                    for eid in value
+                ):
                     raise HomeAssistantError(
-                        "dusk_minimum_time_of_day must be 0–86400 seconds"
+                        f"{key} must be a list of light entity IDs"
                     )
-            self.settings[key] = value
-        await self.async_save()
-        return dict(self.settings)
+                if len(set(value)) != len(value):
+                    raise HomeAssistantError(f"{key} contains duplicate lights")
+                value = list(value)
+            validated[key] = value
+
+        def change() -> dict[str, Any]:
+            settings = {**self.settings, **validated}
+            if set(settings.get("always_follow_scene", [])) & set(
+                settings.get("always_respect_manual_changes", [])
+            ):
+                raise HomeAssistantError(
+                    "A light cannot always follow and always respect manual changes"
+                )
+            self.settings.update(validated)
+            return dict(self.settings)
+
+        return await self._async_mutate(change)
 
     # --- Legacy helpers (migration only, will be removed) ---
 
@@ -928,18 +1303,20 @@ class SceneStudioStore:
         cid = str(config_id)
         if cid in self.managed_native_scene_ids:
             return
-        self.managed_native_scene_ids.append(cid)
-        await self.async_save()
+        await self._async_mutate(lambda: self.managed_native_scene_ids.append(cid))
 
     async def async_unregister_managed_native_scene(self, config_id: str) -> None:
         """Drop a managed YAML scene id after delete."""
         cid = str(config_id)
         if cid not in self.managed_native_scene_ids:
             return
-        self.managed_native_scene_ids = [
-            item for item in self.managed_native_scene_ids if item != cid
-        ]
-        await self.async_save()
+        await self._async_mutate(
+            lambda: setattr(
+                self,
+                "managed_native_scene_ids",
+                [item for item in self.managed_native_scene_ids if item != cid],
+            )
+        )
 
     async def async_import_legacy(
         self, entry_data: dict[str, Any], options: dict[str, Any]
@@ -953,6 +1330,5 @@ class SceneStudioStore:
             _LOGGER.exception("Could not migrate legacy %s entry", DOMAIN)
             return None
         if item["id"] not in self.scenes:
-            self.scenes[item["id"]] = item
-            await self.async_save()
+            await self._async_mutate(lambda: self.scenes.__setitem__(item["id"], item))
         return item

@@ -6,6 +6,32 @@ export function variableIsPalette(variable) {
   return Boolean(variable && (variable.kind === "palette" || variable.slots));
 }
 
+/** A scene event palette takes precedence over the shared theme event. */
+export function sceneEventPaletteId(scene, eventId) {
+  return scene?.event_palettes?.[eventId]?.palette_id || null;
+}
+
+/** A color preset (not a scene preset) stored as kelvin. */
+export function variableIsTemperaturePreset(variable) {
+  if (!variable || variableIsPalette(variable)) {
+    return false;
+  }
+  const color =
+    variable.color && typeof variable.color === "object" ? variable.color : variable;
+  return slotIsTemperature(color);
+}
+
+/**
+ * Show a color preset when any selected light can take it.
+ * Temperature presets need kelvin; the rest need color.
+ */
+export function colorPresetShownForCaps(variable, { anyColor = false, anyTemp = false } = {}) {
+  if (!variable || variableIsPalette(variable)) {
+    return false;
+  }
+  return variableIsTemperaturePreset(variable) ? Boolean(anyTemp) : Boolean(anyColor);
+}
+
 /** Kelvin slot. A hue or RGB channel means this slot is not temperature. */
 export function slotIsTemperature(color) {
   if (!color || typeof color !== "object") {
@@ -126,7 +152,7 @@ export function samplePaletteWheel(palette, t, r, variables, draftRgb) {
   const rim = [0, 1, 2].map((c) => lerp(rgbA[c], rgbB[c], frac));
   const mixed = rim.map((c) => lerp(255, c, sat)).map(clampByte);
   const bri = Math.round(
-    lerp(Number(a.brightness) || 255, Number(b.brightness) || 255, frac)
+    lerp(Number(a.brightness ?? 255), Number(b.brightness ?? 255), frac)
   );
   return { rgb: mixed, brightness: Math.max(0, Math.min(255, bri)) };
 }
