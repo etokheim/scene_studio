@@ -1993,6 +1993,7 @@ for (const name of selector.querySelectorAll(".simple-light-name")) {
       ensureDraft(eid);
     }
     selectedIds = new Set([...selectedIds].filter((id) => members.includes(id)));
+    paintCard();
     syncTiles();
     wheel.sync();
     revealLightActionsNow(tiles);

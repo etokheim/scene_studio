@@ -13985,6 +13985,12 @@ class SceneStudioPanel extends HTMLElement {
       : this._t("frontend.lights.select_all_count", "Select all ({count})", { count: total });
   }
 
+  _circadianSelectionBrightness(id) {
+    if (this._sidebarEventId) return this._dialEventBrightness(this._sidebarEventId, id);
+    const light = this._sunPath.lights.find(row => row.entity_id === id);
+    return this._clockLegendTileLook(light, this._clockSunIdleSeconds()).fillPct * 255 / 100;
+  }
+
   _createCircadianSelectAll() {
     const { selector, tile, hit } = createLightTile({
       entityId: "__select_all__",
@@ -13999,8 +14005,8 @@ class SceneStudioPanel extends HTMLElement {
     };
     const binary = id => this._lightModeFlags(id).onOff;
     const displayed = () => {
-      const values = targets().filter(id => !binary(id)).map(id => this._dialEventBrightness(this._sidebarEventId, id) * 100 / 255);
-      return selectAllDisplayedFill(values) ?? (targets().some(id => this._dialEventBrightness(this._sidebarEventId, id) > 0) ? 100 : 0);
+      const values = targets().filter(id => !binary(id)).map(id => this._circadianSelectionBrightness(id) * 100 / 255);
+      return selectAllDisplayedFill(values) ?? (targets().some(id => this._circadianSelectionBrightness(id) > 0) ? 100 : 0);
     };
     const pickAll = ev => {
       ev.stopPropagation();
@@ -17437,6 +17443,7 @@ class SceneStudioPanel extends HTMLElement {
     const item = this._stampListPreset();
     if (item) {
       syncSceneCardFace(this, item);
+      if (item.kind !== "simple") this._syncThemePreviewSurfaces();
     }
   }
 

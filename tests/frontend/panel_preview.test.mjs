@@ -367,3 +367,26 @@ test("event deselection closes its editor while preserving shared light selectio
   assert.equal(panel._sidebarEventId, null);
   assert.equal(panel._legendSelectedIds, selected);
 });
+
+test("ordinary editor refresh paints the card from resolved destination drafts", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../../custom_components/scene_studio/frontend/simple_editor.js", import.meta.url), "utf8");
+  const body = source.match(/const refreshFromPanel = \(\) => \{([\s\S]*?)\n  \};/)[1];
+  const calls = [];
+  const panel = { _simpleMembershipLists: () => ({ members: ["light.new"], removed: [] }) };
+  const refresh = new Function("panel", "ensureDraft", "paintCard", "syncTiles", "wheel", "revealLightActionsNow", "tiles", `let members=[], removedMembers=[], selectedIds=new Set(); ${body}`);
+  refresh(panel, id => calls.push(`resolve:${id}`), () => calls.push("card"), () => calls.push("tiles"), { sync() {} }, () => {}, {});
+  assert.deepEqual(calls, ["resolve:light.new", "card", "tiles"]);
+});
+
+
+test("Select all before event selection uses the current preview instead of a null event", () => {
+  const light = { entity_id: "light.a" };
+  const panel = { _sidebarEventId: null, _sunPath: { lights: [light] },
+    _clockSunIdleSeconds: () => 123,
+    _clockLegendTileLook(row, seconds) { assert.equal(row, light); assert.equal(seconds, 123); return { fillPct: 40 }; },
+    _dialEventBrightness(event, id) { assert.equal(event, "dawn"); assert.equal(id, "light.a"); return 200; } };
+  assert.equal(methods._circadianSelectionBrightness.call(panel, "light.a"), 102);
+  panel._sidebarEventId = "dawn";
+  assert.equal(methods._circadianSelectionBrightness.call(panel, "light.a"), 200);
+});
