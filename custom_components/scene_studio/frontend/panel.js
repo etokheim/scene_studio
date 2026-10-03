@@ -1,7 +1,7 @@
 import { EventGuidance, EVENT_EDITOR_CSS, eventSourceChanged, lightOverrideRows } from "./event_editor.js";
 import { resolveEventDraft, eventOverrideAfterEdit, eventBrightnessAdjustment } from "./event_inheritance.js";
 import { editorPath, editorRoute, libraryItemRoute } from "./editor_routes.js";
-import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, fitLightStripGutter, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
+import { editorGeometry, EDITOR_CONTAINER_CSS, capturePreviewExit, crossfadePreview, createTransitionGate, EDITOR_SHELL_MOTION_CSS, EDITOR_LIBRARY_PREVIEW_CSS, createEditorShell, fitLightStripGutter, fitSidebarLightStrip, EDITOR_SHELL_CSS, EDITOR_SHELL_LAYOUT_CSS, mountEditorRegions, waitForSurfaceAnimation } from "./editor_shell.js";
 import {
   buildClientSunDay,
   resampleLightsForEvents,
@@ -372,10 +372,6 @@ class SceneStudioPanel extends HTMLElement {
     this._previewGeneration = 0;
     this._hashSyncing = false;
     this._hashSyncQueued = false;
-    this._sidebarMotionGeneration = 0;
-    this._sidebarMotionRaf = undefined;
-    this._sidebarMotionTimer = undefined;
-    this._sidebarLayoutInProgress = false;
     this._onHashChange = () => this._syncHash();
     this._onLocationChanged = () => this._syncHash();
     this._onPanelNavClick = (ev) => this._handlePanelHomeClick(ev);
@@ -587,14 +583,7 @@ class SceneStudioPanel extends HTMLElement {
       window.cancelAnimationFrame(this._hoverRaf);
       this._hoverRaf = undefined;
     }
-    if (this._sidebarMotionRaf) {
-      window.cancelAnimationFrame(this._sidebarMotionRaf);
-      this._sidebarMotionRaf = undefined;
-    }
-    if (this._sidebarMotionTimer) {
-      window.clearTimeout(this._sidebarMotionTimer);
-      this._sidebarMotionTimer = undefined;
-    }
+
     this._cancelSunPathMorph();
     this._stopScenePlay({ restore: false });
     this._clearScenePreviewApplyTimer();
@@ -638,7 +627,6 @@ class SceneStudioPanel extends HTMLElement {
           background: var(--primary-background-color);
           color: var(--primary-text-color);
           --scene-sidebar-gutter: 0px;
-          --scene-sidebar-content-gutter: 0px;
           --selected-ring-color: rgb(255 255 255 / 75%);
           /* Night wedges: warm gray in light; near-black in dark. */
           --clock-night-outer: ${CLOCK_NIGHT_OUTER_LIGHT};
@@ -4320,12 +4308,6 @@ class SceneStudioPanel extends HTMLElement {
         .page.dial-wide {
           overflow-x: clip;
         }
-        /* Keep full-panel backgrounds at workspace width. Only the content
-           stage yields to the overlay drawer, so horizon graphics remain
-           visible beneath its translucent surface. */
-        :host([data-sidebar-docked]) .workspace .stage-col {
-          margin-right: var(--scene-sidebar-content-gutter);
-        }
         /* Sidebar open: keep path/face overflow visible for chips / underpaint;
            leave page-shell x-clipped so the horizontal scrollbar stays gone. */
         :host([data-sidebar-docked]) .sun-path.dial-view,
@@ -6560,6 +6542,8 @@ class SceneStudioPanel extends HTMLElement {
       if (!this._editorShellObserver) {
         this._editorShellObserver = new ResizeObserver(() => this._sizeSharedEditorPreview());
         this._editorShellObserver.observe(shell.preview);
+        this._editorShellObserver.observe(shell.toolbar);
+        this._editorShellObserver.observe(shell.lights);
       }
       this._sizeSharedEditorPreview();
       const ready = !dial || (Boolean(visual.querySelector(".sun-light-clock")) && this._sunPathMatchesChart());
@@ -6593,6 +6577,9 @@ class SceneStudioPanel extends HTMLElement {
     const usableHeight = this.shadowRoot.querySelector(".page-shell")?.clientHeight || window.innerHeight;
     const geometry = editorGeometry(shell.el.clientWidth, shell.el.clientHeight, usableHeight);
     fitLightStripGutter(shell);
+    const toolbarHeight = shell.toolbar.getBoundingClientRect().height;
+    shell.el.style.setProperty("--editor-toolbar-height", `${toolbarHeight}px`);
+    this._fitSidebarLightStrip();
     shell.el.style.setProperty("--editor-preview-floor", `${geometry.floor}px`);
     shell.el.dataset.overlap = String(geometry.overlap);
     const cap = shell.el.dataset.kind === "dial" ? DIAL_FACE_MAX_PX : WHEEL_FACE_MAX_PX;
@@ -13931,83 +13918,16 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _setSidebarDocked(docked) {
-    // The drawer overlays full-width background graphics. Only the dial's
-    // content stage yields, then FLIP animates its scale/position smoothly.
-    const on = Boolean(docked && !this._isEditorNarrow());
-    const wasOn = this.hasAttribute("data-sidebar-docked");
-    if (on === wasOn) {
-      return;
-    }
-    const face = this.shadowRoot?.querySelector(".sun-light-clock-face");
-    const before = face?.getBoundingClientRect();
-    this._sidebarLayoutInProgress = true;
-    this.style.setProperty("--scene-sidebar-gutter", "0px");
-    this.style.setProperty(
-      "--scene-sidebar-content-gutter",
-      on ? "calc(var(--scene-sidebar-width, 375px) + 16px)" : "0px"
-    );
-    this.toggleAttribute("data-sidebar-docked", on);
+    this.toggleAttribute("data-sidebar-docked", Boolean(docked && !this._isEditorNarrow()));
     this._syncYearScrubLayout();
-    const after = face?.getBoundingClientRect();
-    this._animateSidebarDial(face, before, after);
+    this._fitSidebarLightStrip();
   }
 
-  _animateSidebarDial(face, before, after) {
-    this._sidebarMotionGeneration += 1;
-    const generation = this._sidebarMotionGeneration;
-    const duration = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")
-      .matches
-      ? 1
-      : SIDEBAR_ANIMATION_MS;
-    if (this._sidebarMotionRaf) {
-      cancelAnimationFrame(this._sidebarMotionRaf);
-    }
-    if (this._sidebarMotionTimer) {
-      clearTimeout(this._sidebarMotionTimer);
-    }
-    const finish = () => {
-      if (generation !== this._sidebarMotionGeneration) {
-        return;
-      }
-      this._sidebarMotionRaf = undefined;
-      this._sidebarMotionTimer = undefined;
-      this._sidebarLayoutInProgress = false;
-      if (face) {
-        face.style.transition = "";
-        face.style.transform = "";
-        face.style.willChange = "";
-      }
-      this._layoutDialChromeFn?.();
-    };
-    if (!face || !before || !after || after.width < 1) {
-      finish();
-      return;
-    }
-    const dx =
-      before.left + before.width / 2 - (after.left + after.width / 2);
-    const dy =
-      before.top + before.height / 2 - (after.top + after.height / 2);
-    const scale = before.width / after.width;
-    if (
-      Math.abs(dx) < 0.5 &&
-      Math.abs(dy) < 0.5 &&
-      Math.abs(scale - 1) < 0.001
-    ) {
-      finish();
-      return;
-    }
-    face.style.transition = "none";
-    face.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`;
-    face.style.willChange = "transform";
-    face.getBoundingClientRect();
-    this._sidebarMotionRaf = requestAnimationFrame(() => {
-      if (generation !== this._sidebarMotionGeneration) {
-        return;
-      }
-      face.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0, 0, 1)`;
-      face.style.transform = "translate3d(0, 0, 0) scale(1)";
-      this._sidebarMotionTimer = window.setTimeout(finish, duration + 50);
-    });
+  _fitSidebarLightStrip() {
+    const shell = this._sharedEditorShell;
+    if (!shell?.el.isConnected) return;
+    const sidebar = this.shadowRoot.querySelector(".scene-sidebar.desktop");
+    fitSidebarLightStrip(shell, sidebar, Boolean(this.hasAttribute("data-sidebar-docked")));
   }
 
   _fillSidebarHeader(header, { title, subtitle, actionItems, host }) {
@@ -14058,10 +13978,16 @@ class SceneStudioPanel extends HTMLElement {
     return { body, footer };
   }
 
+  _selectAllCaption(total, selected = 0) {
+    return selected
+      ? this._t("frontend.lights.n_selected_of_total", "{count} of {total} selected", { count: selected, total })
+      : this._t("frontend.lights.select_all_count", "Select all ({count})", { count: total });
+  }
+
   _createCircadianSelectAll() {
     const { selector, tile, hit } = createLightTile({
       entityId: "__select_all__",
-      name: this._t("frontend.lights.select_all", "Select all"),
+      name: this._selectAllCaption(this._circadianMemberIds().length),
       makeIcon: () => { const icon = document.createElement("ha-icon"); icon.setAttribute("icon", "mdi:select-all"); return icon; },
     });
     selector.classList.add("select-all-tile");
@@ -14109,7 +14035,11 @@ class SceneStudioPanel extends HTMLElement {
       onDragEnd: () => { base = null; },
     });
     this._syncCircadianSelectAll = () => {
-      if (!tile.isConnected || !this._sidebarEventId) return;
+      if (!tile.isConnected) return;
+      const caption = this._selectAllCaption(this._circadianMemberIds().length, this._legendSelectedIds?.size > 1 ? this._legendSelectedIds.size : 0);
+      for (const name of selector.querySelectorAll(".simple-light-name")) if (name.textContent !== caption) name.textContent = caption;
+      tile.setAttribute("aria-label", caption);
+      if (!this._sidebarEventId) return;
       const fillPct = displayed();
       paintLightTile(selector, { rgb: [255, 255, 255], fillPct, selected: this._legendSelectedIds?.size > 1, brightnessLabel: targets().every(binary) ? this._lightTileValueLabel(targets()[0], fillPct) : undefined });
     };
@@ -14202,6 +14132,17 @@ class SceneStudioPanel extends HTMLElement {
     this._refreshCircadianEvent();
   }
 
+  _resetCircadianEventLightOverrides() {
+    if (!this._requireCircadianEvent()) return;
+    const eventId = this._sidebarEventId;
+    const ids = Object.keys(this._formData.overrides || {}).filter(id =>
+      Object.keys(this._formData.overrides[id]?.[eventId] || {}).length);
+    if (!ids.length) return;
+    this._commitUndo({ type: "event-lights", eventId });
+    for (const id of ids) this._deleteLightEventOverride(id, eventId);
+    this._refreshCircadianEvent();
+  }
+
   _refreshCircadianEvent() {
     this._clearPreviewCache();
     this._refreshInheritedLightDrafts?.();
@@ -14272,11 +14213,28 @@ class SceneStudioPanel extends HTMLElement {
       source.dataset.renderKey = sourceKey;
     }
     const rows = lightOverrideRows(scene, theme, eventId, this._variables, (id, state) => this._editorLightState(id, state));
-    const summaryKey = JSON.stringify([eventId, rows, rows.map(row => this._lightDisplayName(row.id))]);
+    const baselineName = palette?.name || theme.name || scene.scene_name;
+    const summaryKey = JSON.stringify([eventId, baselineName, event?.name, rows, rows.map(row => this._lightDisplayName(row.id))]);
     if (summary.dataset.renderKey === summaryKey) return;
     const focusedLight = summary.contains(this.shadowRoot.activeElement) ? this.shadowRoot.activeElement?.dataset.lightId : null;
     summary.replaceChildren();
     summary.dataset.renderKey = summaryKey;
+    const heading = document.createElement("div");
+    heading.className = "event-overrides-heading";
+    const sectionTitle = document.createElement("strong");
+    sectionTitle.textContent = this._t("frontend.lights.overrides_title", "Light overrides");
+    const resetAll = resetButton(() => this._resetCircadianEventLightOverrides());
+    resetAll.textContent = this._t("frontend.lights.reset_all", "Reset all");
+    resetAll.disabled = !rows.length;
+    resetAll.dataset.lightId = "__all__";
+    heading.append(sectionTitle, resetAll);
+    const explanation = document.createElement("p");
+    explanation.className = "event-overrides-explanation";
+    explanation.textContent = this._t("frontend.lights.overrides_explanation",
+      "Changes from {source} at {event}, including event brightness adjustments and each light’s capabilities. They apply only to this scene and event; shared presets stay unchanged.",
+      { source: baselineName, event: event?.name || eventId });
+    summary.append(heading, explanation);
+    if (focusedLight === "__all__") resetAll.focus({ preventScroll: true });
     const valueText = (state, field) => {
       if (field === "color") {
         if (state.color_temp_kelvin != null) return `${state.color_temp_kelvin} K`;
@@ -17123,12 +17081,10 @@ class SceneStudioPanel extends HTMLElement {
       if (this._yearScrubbing) return;
       const vertical = shell.el.clientWidth >= shell.el.clientHeight;
       shell.el.dataset.timeline = vertical ? "vertical" : "horizontal";
-      const timelineHidden = this._sceneSidebarIsOpen();
-      shell.timeline.hidden = timelineHidden;
-      shell.el.dataset.timelineHidden = String(timelineHidden);
+      shell.timeline.hidden = false;
       if (this._yearScrub.parentNode !== shell.timeline) shell.timeline.replaceChildren(this._yearScrub);
       this._yearScrub.classList.toggle("vertical", vertical);
-      this._yearScrub.setAttribute("aria-hidden", String(timelineHidden));
+      this._yearScrub.setAttribute("aria-hidden", "false");
       this._clockScrubRail.hidden = true;
       this._sunPathStage?.classList.remove("landscape-clock-scrub", "scrub-collapsed");
       const chrome = this._ensureToolbarChrome();
@@ -20462,9 +20418,6 @@ class SceneStudioPanel extends HTMLElement {
     this._clockResizeObserver?.disconnect();
     if (typeof ResizeObserver === "function") {
       this._clockResizeObserver = new ResizeObserver(() => {
-        if (this._sidebarLayoutInProgress) {
-          return;
-        }
         layoutDialChrome();
       });
       this._clockResizeObserver.observe(face);
@@ -20715,6 +20668,7 @@ class SceneStudioPanel extends HTMLElement {
     reconcileStripChildren(tilesEl, desired);
     playLightStripLayout(tilesEl, beforeLayout);
     tilesEl.parentElement?._groupTitleStick?.();
+    this._fitSidebarLightStrip();
   }
 
   _toggleLegendLightPower(entityId) {

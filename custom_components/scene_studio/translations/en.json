@@ -429,7 +429,12 @@
       "select_event_first": "Select a solar event before changing lights",
       "reset_overrides": "Reset overrides",
       "override_state": "Power",
-      "override_effect": "Effect"
+      "override_effect": "Effect",
+      "select_all_count": "Select all ({count})",
+      "n_selected_of_total": "{count} of {total} selected",
+      "overrides_title": "Light overrides",
+      "reset_all": "Reset all",
+      "overrides_explanation": "Changes from {source} at {event}, including event brightness adjustments and each light’s capabilities. They apply only to this scene and event; shared presets stay unchanged."
     },
     "defaults": {
       "circadian_scene": "Circadian"

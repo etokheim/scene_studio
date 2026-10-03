@@ -55,6 +55,8 @@ export const EVENT_EDITOR_CSS = `
   .event-required-message .event-copy { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--divider-color); border-radius: 50%; background: var(--card-background-color); }
   .event-source { margin-bottom: 16px; }
   .event-overrides { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; }
+  .event-overrides-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .event-overrides-explanation { margin: 0; color: var(--secondary-text-color); }
   .event-override-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .event-override-description { flex: 1; min-width: 0; }
   .event-override-description p { margin: 4px 0; color: var(--secondary-text-color); }

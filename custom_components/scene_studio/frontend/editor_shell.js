@@ -60,8 +60,11 @@ export function createEditorShell() {
   timeline.hidden = true;
   const background = document.createElement("div");
   background.className = "editor-background";
-  el.append(background, toolbar, timeline, preview, lights);
-  return { el, toolbar, timeline, preview, lights, background, lightGate: createTransitionGate(), previewGate: createTransitionGate() };
+  const stage = document.createElement("div");
+  stage.className = "editor-stage";
+  stage.append(preview, timeline);
+  el.append(background, toolbar, stage, lights);
+  return { el, toolbar, timeline, preview, lights, stage, background, lightGate: createTransitionGate(), previewGate: createTransitionGate() };
 }
 
 export function mountEditorRegions(shell, { mount, visual, toolbar, lights, animateLights = false, reducedMotion = false }) {
@@ -230,6 +233,7 @@ export const EDITOR_SHELL_LAYOUT_CSS = `
   }
   .editor-lights .light-tiles-hint { margin: 4px 0 0; }
   :host([narrow]) .editor-lights .light-tiles-hint { min-height: 48px; }
+  .editor-lights .light-tiles { padding-right: calc(24px + var(--sidebar-strip-end-room, 0px)); }
   .editor-lights .light-tiles-scroller {
     padding-inline: 0;
     padding-bottom: var(--light-strip-bottom-padding, 64px);
@@ -387,9 +391,9 @@ export function editorGeometry(width, height, windowHeight) {
 }
 
 export const EDITOR_CONTAINER_CSS = `
-  .editor-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
+  .editor-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
   .editor-background { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
-  .editor-toolbar { grid-column: 1; grid-row: 1; isolation: isolate; }
+  .editor-toolbar { grid-column: 1 / -1; grid-row: 1; isolation: isolate; }
   .editor-toolbar::before {
     content: "";
     position: absolute;
@@ -399,18 +403,18 @@ export const EDITOR_CONTAINER_CSS = `
     opacity: .75;
     background: linear-gradient(to bottom, var(--app-header-background-color, var(--sidebar-background-color)) 0%, var(--app-header-background-color, var(--sidebar-background-color)) calc(100% - 24px), transparent 100%);
   }
-  .editor-timeline { grid-column: 1; grid-row: 2; min-height: 50px; padding: 0 16px; z-index: 12; }
+  .editor-stage { grid-column: 1 / -1; grid-row: 2; position: relative; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+  .editor-preview { grid-column: 1; grid-row: 1; }
+  .editor-lights { grid-column: 1 / -1; grid-row: 3; }
+  .editor-timeline { z-index: 12; box-sizing: border-box; }
   .editor-timeline[hidden] { display: none; }
-  .editor-preview { grid-column: 1; grid-row: 3; }
-  .editor-lights { grid-column: 1; grid-row: 4; }
-  .editor-shell[data-timeline="vertical"] { grid-template-columns: minmax(0, 1fr) 64px; grid-template-rows: auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
-  .editor-shell[data-timeline="vertical"] .editor-timeline { grid-column: 2; grid-row: 2; height: 100%; padding: 12px 12px 12px 0; box-sizing: border-box; }
+  .editor-shell[data-timeline="vertical"] .editor-timeline { position: absolute; inset: 0 0 0 auto; width: 64px; padding: 12px 12px 12px 0; }
   .editor-shell[data-timeline="vertical"] .sun-year-scrub { height: 100%; min-height: 0; margin: 0; }
-  .editor-shell[data-timeline="vertical"] .editor-preview { grid-row: 2; }
-  .editor-shell[data-timeline="vertical"] .editor-lights { grid-row: 3; }
-  .editor-shell[data-timeline-hidden="true"] { grid-template-columns: minmax(0, 1fr); }
-  .editor-shell[data-overlap="true"] .editor-preview { grid-row: 1 / 4; }
-  .editor-shell[data-overlap="true"][data-timeline="vertical"] .editor-preview { grid-row: 1 / 3; }
+  .editor-shell[data-timeline="horizontal"] { grid-template-rows: auto minmax(calc(var(--editor-preview-floor, 300px) + 98px), 1fr) auto; }
+  .editor-shell[data-timeline="horizontal"] .editor-stage { grid-template-rows: auto minmax(0, 1fr); }
+  .editor-shell[data-timeline="horizontal"] .editor-timeline { grid-column: 1; grid-row: 1; min-height: 50px; padding: 0 16px; }
+  .editor-shell[data-timeline="horizontal"] .editor-preview { grid-row: 2; }
+  .editor-shell[data-overlap="true"] .editor-preview { margin-top: calc(-1 * var(--editor-toolbar-height, 0px)); }
   :host .editor-shell .sun-path.dial-view .sun-light-clock { padding: 0; }
   :host .editor-shell .sun-light-clock-face { width: min(100cqi, 100cqb, var(--dial-face-max, 900px)); }
   :host .editor-shell .hue-wheel-face { align-items: center; justify-content: center; }
@@ -428,3 +432,24 @@ export const EDITOR_CONTAINER_CSS = `
   :host([narrow]) .editor-toolbar .sun-hover-play-split { display: none; }
   :host([narrow]) .content:has(> .editor-shell) { overflow-y: auto; }
 `;
+
+/** End room is based on natural content width, never compensated scrollWidth. */
+export function lightStripEndRoom({ contentWidth, viewportWidth, overlap, open }) {
+  return open && contentWidth > viewportWidth + 1 ? Math.max(0, overlap) : 0;
+}
+
+export function fitSidebarLightStrip(shell, sidebar, open) {
+  const scroller = shell.lights.querySelector(".light-tiles-scroller");
+  const tiles = scroller?.querySelector(".light-tiles");
+  if (!tiles) return;
+  const current = parseFloat(tiles.style.getPropertyValue("--sidebar-strip-end-room")) || 0;
+  const contentWidth = tiles.getBoundingClientRect().width - current;
+  const viewport = scroller.getBoundingClientRect();
+  const drawer = sidebar?.getBoundingClientRect();
+  // The end room uses the drawer’s final position, independent of its slide.
+  const slide = sidebar ? new DOMMatrixReadOnly(getComputedStyle(sidebar).transform).m41 : 0;
+  const overlap = drawer && drawer.bottom > viewport.top && drawer.top < viewport.bottom
+    ? viewport.right - Math.max(viewport.left, drawer.left - slide) + 16 : 0;
+  const room = lightStripEndRoom({ contentWidth, viewportWidth: scroller.clientWidth, overlap, open });
+  if (room !== current) tiles.style.setProperty("--sidebar-strip-end-room", `${room}px`);
+}

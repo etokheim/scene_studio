@@ -946,9 +946,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const ids = mode ? selectedMemberIds() : members;
     const count = selectedMemberIds().length;
     selector.classList.toggle("select-mode", mode);
-    const caption = mode
-      ? panel._t("frontend.lights.n_selected", "{count} selected", { count })
-      : panel._t("frontend.lights.select_all", "Select all");
+    const caption = panel._selectAllCaption(members.length, mode ? count : 0);
     paintLightTile(selector, {
       rgb: [64, 60, 58],
       fillPct: selectAllShownPct(ids),
@@ -1737,6 +1735,7 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     }
     syncGroupTitles();
     playLightStripLayout(tiles, beforeLayout);
+    panel._fitSidebarLightStrip?.();
     paintSelectAll();
     stripGroupSignature = tileGroupSignature();
     syncLevelHost();
@@ -2680,6 +2679,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
     stripShape = paletteStripShape();
     paintAll();
     playLightStripLayout(tiles, beforeLayout);
+    panel._fitSidebarLightStrip?.();
   };
   const tileBlock = document.createElement("div");
   tileBlock.className = "light-tiles-block";

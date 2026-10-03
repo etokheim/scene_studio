@@ -295,3 +295,24 @@ test("Select all does not make an unchanged circadian legend ungrouped", () => {
   // Any rebuild would require geometry/DOM APIs absent from this strip.
   methods._placeLegendModeGroups.call(panel, strip);
 });
+
+test("Select all names include total membership before and after selecting lights", () => {
+  const panel = { _t: (_key, fallback, args) => fallback.replace(/\{(\w+)\}/g, (_match, name) => args[name]) };
+  assert.equal(methods._selectAllCaption.call(panel, 35), "Select all (35)");
+  assert.equal(methods._selectAllCaption.call(panel, 35, 2), "2 of 35 selected");
+  assert.equal(methods._selectAllCaption.call(panel, 35, 35), "35 of 35 selected");
+});
+
+test("Reset all is one event-local undo frame and retains the event source and other events", () => {
+  const scene = { event_palettes: { dawn: { palette_id: "p", assignment_seed: 7, brightness_adjustment: { scale: 0.5 } } }, overrides: { a: { dawn: { brightness: 20 }, noon: { effect: "saved" } }, b: { dawn: { rgb_color: [1, 2, 3] } } } };
+  const source = structuredClone(scene.event_palettes);
+  let undo = 0, refresh = 0;
+  const panel = { _formData: scene, _sidebarEventId: "dawn", _requireCircadianEvent: () => true, _commitUndo: () => undo++, _refreshCircadianEvent: () => refresh++ };
+  panel._deleteLightEventOverride = (id, eventId) => methods._deleteLightEventOverride.call(panel, id, eventId);
+  methods._resetCircadianEventLightOverrides.call(panel);
+  assert.equal(undo, 1); assert.equal(refresh, 1);
+  assert.deepEqual(scene.event_palettes, source);
+  assert.deepEqual(scene.overrides, { a: { noon: { effect: "saved" } } });
+  methods._resetCircadianEventLightOverrides.call(panel);
+  assert.equal(undo, 1); assert.equal(refresh, 1);
+});

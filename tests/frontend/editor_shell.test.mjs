@@ -153,3 +153,38 @@ test("light-strip gutters fit desktop footer space and retain the existing mobil
   fitLightStripGutter({ lights });
   assert.deepEqual(values.pop(), ["--light-strip-bottom-padding", "44px"]);
 });
+
+test("sidebar end room applies only to natural overflow, independent of existing compensation", async () => {
+  const { lightStripEndRoom } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  const input = { contentWidth: 1200, viewportWidth: 800, overlap: 391, open: true };
+  assert.equal(lightStripEndRoom(input), 391);
+  assert.equal(lightStripEndRoom({ ...input, contentWidth: 250 }), 0);
+  assert.equal(lightStripEndRoom({ ...input, contentWidth: 800 }), 0);
+  assert.equal(lightStripEndRoom({ ...input, open: false }), 0);
+  assert.equal(lightStripEndRoom({ ...input, overlap: -10 }), 0);
+});
+
+test("timeline belongs to the stage, outside the toolbar and light hosts", async () => {
+  const { createEditorShell } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  globalThis.document = { createElement: () => { const node = new Region(); node.append = (...items) => items.forEach(item => node.appendChild(item)); node.setAttribute = () => {}; return node; } };
+  const shell = createEditorShell();
+  assert.deepEqual(shell.stage.children, [shell.preview, shell.timeline]);
+  assert.deepEqual(shell.el.children, [shell.background, shell.toolbar, shell.stage, shell.lights]);
+});
+
+test("scroll compensation never makes a short strip overflow itself", async () => {
+  const { fitSidebarLightStrip } = await import("../../custom_components/scene_studio/frontend/editor_shell.js");
+  let room = 0, width = 1200, writes = 0;
+  globalThis.getComputedStyle = () => ({ transform: "none" });
+  globalThis.DOMMatrixReadOnly = class { constructor() { this.m41 = 0; } };
+  const tiles = { getBoundingClientRect: () => ({ width: width + room }), style: { getPropertyValue: () => String(room), setProperty: (_key, value) => { room = parseFloat(value); writes++; } } };
+  const scroller = { clientWidth: 800, querySelector: () => tiles, getBoundingClientRect: () => ({ left: 0, right: 800, top: 500, bottom: 700 }) };
+  const shell = { lights: { querySelector: () => scroller } };
+  const sidebar = { getBoundingClientRect: () => ({ left: 425, top: 80, bottom: 780 }) };
+  fitSidebarLightStrip(shell, sidebar, true); assert.equal(room, 391);
+  for (let i = 0; i < 30; i++) fitSidebarLightStrip(shell, sidebar, true);
+  assert.equal(writes, 1);
+  width = 250; fitSidebarLightStrip(shell, sidebar, true); assert.equal(room, 0);
+  width = 1200; fitSidebarLightStrip(shell, sidebar, true); assert.equal(room, 391);
+  fitSidebarLightStrip(shell, sidebar, false); assert.equal(room, 0);
+});
