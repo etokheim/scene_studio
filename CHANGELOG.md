@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [6.1.0] - 2026-10-03
+
 ### Summary:
 
 Scene Studio is easier to start with and safer to share. Give each solar event its own look, choose when lights should follow the sun, and keep your place while editing together.
