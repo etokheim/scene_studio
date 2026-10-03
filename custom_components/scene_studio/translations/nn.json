@@ -405,7 +405,12 @@
       "select_event_first": "Vel eit soltidspunkt før du endrar lys",
       "reset_overrides": "Tilbakestill overstyringar",
       "override_state": "Straum",
-      "override_effect": "Effekt"
+      "override_effect": "Effekt",
+      "select_all_count": "Vel alle ({count})",
+      "n_selected_of_total": "{count} av {total} valde",
+      "overrides_title": "Lysoverstyringar",
+      "reset_all": "Tilbakestill alle",
+      "overrides_explanation": "Endringar frå {source} ved {event}, inkludert lysstyrkejusteringane for hendinga og funksjonane lysa støttar. Dei gjeld berre denne scena og hendinga; delte førehandsinnstillingar er uendra."
     },
     "defaults": {
       "circadian_scene": "Circadian"

@@ -405,7 +405,12 @@
       "select_event_first": "Wähle ein Sonnenereignis aus, bevor du die Lichter änderst",
       "reset_overrides": "Überschreibungen zurücksetzen",
       "override_state": "Ein/Aus",
-      "override_effect": "Effekt"
+      "override_effect": "Effekt",
+      "select_all_count": "Alle auswählen ({count})",
+      "n_selected_of_total": "{count} von {total} ausgewählt",
+      "overrides_title": "Lichtüberschreibungen",
+      "reset_all": "Alle zurücksetzen",
+      "overrides_explanation": "Änderungen gegenüber {source} bei {event}, einschließlich der Helligkeitsanpassungen des Ereignisses und der Fähigkeiten jedes Lichts. Sie gelten nur für diese Szene und dieses Ereignis; gemeinsame Voreinstellungen bleiben unverändert."
     },
     "defaults": {
       "circadian_scene": "Circadian"

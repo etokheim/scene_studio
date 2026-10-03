@@ -405,7 +405,12 @@
       "select_event_first": "Selecciona un evento solar antes de cambiar las luces",
       "reset_overrides": "Restablecer anulaciones",
       "override_state": "Encendido/apagado",
-      "override_effect": "Efecto"
+      "override_effect": "Efecto",
+      "select_all_count": "Seleccionar todo ({count})",
+      "n_selected_of_total": "{count} de {total} seleccionadas",
+      "overrides_title": "Anulaciones de luces",
+      "reset_all": "Restablecer todo",
+      "overrides_explanation": "Cambios respecto a {source} en {event}, incluidos los ajustes de brillo del evento y las capacidades de cada luz. Solo se aplican a esta escena y evento; los preajustes compartidos no cambian."
     },
     "defaults": {
       "circadian_scene": "Circadian"
