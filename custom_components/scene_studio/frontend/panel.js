@@ -88,7 +88,7 @@ import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
 import { snapshotWheelEditor, applyWheelMorph } from "./wheel_morph.js";
-import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, tileSelectionAfterClick, proportionalFillPercent, selectAllDisplayedFill, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, reconcileStripChildren, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
+import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, tileSelectionAfterClick, proportionalFillPercent, selectAllDisplayedFill, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, paintSelectAllTile, reconcileStripChildren, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
 const DOMAIN = "scene_studio";
 const PANEL_URL_PATH = "scene_studio";
@@ -14039,10 +14039,10 @@ class SceneStudioPanel extends HTMLElement {
       const caption = this._selectAllCaption(this._circadianMemberIds().length, this._legendSelectedIds?.size > 1 ? this._legendSelectedIds.size : 0);
       for (const name of selector.querySelectorAll(".simple-light-name")) if (name.textContent !== caption) name.textContent = caption;
       tile.setAttribute("aria-label", caption);
-      if (!this._sidebarEventId) return;
       const fillPct = displayed();
-      paintLightTile(selector, { rgb: [255, 255, 255], fillPct, selected: this._legendSelectedIds?.size > 1, brightnessLabel: targets().every(binary) ? this._lightTileValueLabel(targets()[0], fillPct) : undefined });
+      paintSelectAllTile(selector, { fillPct, selected: this._legendSelectedIds?.size > 1, brightnessLabel: targets().every(binary) ? this._lightTileValueLabel(targets()[0], fillPct) : undefined });
     };
+    paintSelectAllTile(selector, { fillPct: displayed(), selected: false });
     return selector;
   }
 

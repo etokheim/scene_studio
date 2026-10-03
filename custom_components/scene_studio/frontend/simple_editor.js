@@ -30,6 +30,7 @@ import {
   lightTileGroupOrder,
   lightTileValueLabel,
   paintLightTile,
+  paintSelectAllTile,
   revealLightActionsNow,
   proportionalFillPercent,
   relativeFillPercent,
@@ -947,21 +948,14 @@ export function renderSimpleEditor(panel, host, { glowHost } = {}) {
     const count = selectedMemberIds().length;
     selector.classList.toggle("select-mode", mode);
     const caption = panel._selectAllCaption(members.length, mode ? count : 0);
-    paintLightTile(selector, {
-      rgb: [64, 60, 58],
+    paintSelectAllTile(selector, {
       fillPct: selectAllShownPct(ids),
       selected: mode,
       brightnessLabel: mode
         ? panel._t("frontend.lights.deselect", "Deselect")
         : undefined,
     });
-    if (mode) {
-      const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
-      selector.style.setProperty("--hue-light-on-background", wash);
-      selector.style.setProperty("--hue-light-on-color", wash);
-      selector.style.setProperty("--hue-light-on-text-color", "#fff");
-    }
-    for (const name of selector.querySelectorAll(".simple-light-name")) {
+for (const name of selector.querySelectorAll(".simple-light-name")) {
       name.textContent = caption;
     }
     selector.setAttribute(
@@ -2354,8 +2348,7 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
       const mode = selectedIds.size > 1;
       allSelector.classList.toggle("select-mode", mode);
       const targets = scrubTargets();
-      paintLightTile(allSelector, {
-        rgb: [64, 60, 58],
+      paintSelectAllTile(allSelector, {
         fillPct:
           selectAllDisplayedFill(targets.map((id) => fillPercent(drafts[id]))) ?? 0,
         selected: mode,
@@ -2363,12 +2356,6 @@ export function renderPaletteEditor(panel, host, { glowHost } = {}) {
           ? panel._t("frontend.lights.deselect", "Deselect")
           : undefined,
       });
-      if (mode) {
-        const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
-        allSelector.style.setProperty("--hue-light-on-background", wash);
-        allSelector.style.setProperty("--hue-light-on-color", wash);
-        allSelector.style.setProperty("--hue-light-on-text-color", "#fff");
-      }
       const caption = mode
         ? panel._t("frontend.lights.n_selected", "{count} selected", {
             count: selectedIds.size,

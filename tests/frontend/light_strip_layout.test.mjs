@@ -51,3 +51,19 @@ test("unchanged tile painting retains labels and styles, but selection and resiz
   tile.clientHeight = 150; paintLightTile(selector, look); assert.ok(writes > initial);
   paintLightTile(selector, { ...look, brightnessLabel: "On" }); assert.equal(label.value, "On");
 });
+
+test("Select all uses the shared gray default and restores it after selection", async () => {
+  const { paintSelectAllTile } = await import("../../custom_components/scene_studio/frontend/light_tiles.js");
+  const values = new Map();
+  const style = { setProperty: (key, value) => values.set(key, value) };
+  const classList = { toggle() {} };
+  const tile = { clientHeight: 135, dataset: { fillReady: "1" }, style, classList };
+  const selector = { style, classList, querySelector: key => key === ".simple-light-tile" ? tile : null, querySelectorAll: () => [] };
+  const look = { rgb: [255, 255, 255], fillPct: 50, selected: false };
+  paintSelectAllTile(selector, look);
+  assert.equal(values.get("--hue-light-on-background"), "rgb(64, 60, 58)");
+  paintSelectAllTile(selector, { ...look, selected: true });
+  assert.match(values.get("--hue-light-on-background"), /primary-color/);
+  paintSelectAllTile(selector, look);
+  assert.equal(values.get("--hue-light-on-background"), "rgb(64, 60, 58)");
+});

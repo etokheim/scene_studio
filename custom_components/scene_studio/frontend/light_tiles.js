@@ -907,6 +907,17 @@ export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLab
   }
 }
 
+/** One default and selection treatment for every Select all surface. */
+export function paintSelectAllTile(selector, look) {
+  paintLightTile(selector, { ...look, rgb: [64, 60, 58] });
+  if (look.selected) {
+    const wash = "color-mix(in srgb, var(--primary-color) 32%, transparent)";
+    selector.style.setProperty("--hue-light-on-background", wash);
+    selector.style.setProperty("--hue-light-on-color", wash);
+    selector.style.setProperty("--hue-light-on-text-color", "#fff");
+  }
+}
+
 function makeLabels(layer, name, makeIcon) {
   const labels = document.createElement("div");
   labels.className = `simple-light-labels ${layer}`;
