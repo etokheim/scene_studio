@@ -6391,6 +6391,7 @@ class SceneStudioPanel extends HTMLElement {
 
   _parkSunPath() {
     this._parkPageBanners();
+    if (this._editorMotionKind() !== "dial") this._clearClockBackgrounds({ keepOverlay: true });
     if (!this._sunPathEl) {
       return;
     }
@@ -19560,7 +19561,17 @@ class SceneStudioPanel extends HTMLElement {
    * the body with the linear chart, those nodes are detached — patching them
    * would succeed and skip rebuilding the visible dial.
    */
+  _clearClockBackgrounds({ keepOverlay = false } = {}) {
+    for (const node of this.shadowRoot?.querySelectorAll(".clock-horizon-back") || []) {
+      // Outgoing pixels belong to their exit layer until its animation finishes.
+      // All other skies belong to the current dial and must not survive a rebuild.
+      if (keepOverlay && this._outgoingStageLayer?.contains(node)) continue;
+      node.remove();
+    }
+  }
+
   _forgetClockDom({ keepOverlay = false } = {}) {
+    this._clearClockBackgrounds({ keepOverlay });
     if (this._clockOutsideClick) {
       this.shadowRoot?.removeEventListener("click", this._clockOutsideClick);
       this._clockOutsideClick = null;
@@ -19572,7 +19583,6 @@ class SceneStudioPanel extends HTMLElement {
     this._clockGlowLayer = undefined;
     this._layoutDialChromeFn = undefined;
     if (!keepOverlay) {
-      this._clockHorizonBackEl?.remove();
       if (!this._sharedEditorShell?.lights.contains(this._clockLegendEl)) this._dropClockLegends();
     }
     this._clockHorizonBackEl = undefined;
@@ -19820,6 +19830,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _buildLightClock(events) {
+    this._clearClockBackgrounds({ keepOverlay: true });
     this._dropClockLegends();
     this._lightNameLabels = [];
     const lights = this._sunPath.lights || [];

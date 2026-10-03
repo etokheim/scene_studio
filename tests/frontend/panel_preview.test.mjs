@@ -316,3 +316,26 @@ test("Reset all is one event-local undo frame and retains the event source and o
   methods._resetCircadianEventLightOverrides.call(panel);
   assert.equal(undo, 1); assert.equal(refresh, 1);
 });
+
+test("dial cleanup removes unreferenced horizons but retains only the owned exit pixels", () => {
+  const live = { remove() { this.removed = true; } };
+  const orphan = { remove() { this.removed = true; } };
+  const outgoing = { remove() { this.removed = true; } };
+  const panel = { shadowRoot: { querySelectorAll: () => [live, orphan, outgoing] }, _outgoingStageLayer: { contains: node => node === outgoing } };
+  methods._clearClockBackgrounds.call(panel, { keepOverlay: true });
+  assert.equal(live.removed, true); assert.equal(orphan.removed, true);
+  assert.equal(outgoing.removed, undefined);
+  methods._clearClockBackgrounds.call(panel);
+  assert.equal(outgoing.removed, true);
+});
+
+test("parking a non-circadian editor removes horizons even without a sun-path reference", () => {
+  let cleared = false;
+  const panel = { _parkPageBanners() {}, _editorMotionKind: () => "none", _clearClockBackgrounds: options => { assert.equal(options.keepOverlay, true); cleared = true; } };
+  methods._parkSunPath.call(panel);
+  assert.equal(cleared, true);
+  cleared = false;
+  panel._editorMotionKind = () => "dial";
+  methods._parkSunPath.call(panel);
+  assert.equal(cleared, false);
+});
