@@ -36,7 +36,7 @@ Scene Studio is easier to start with and safer to share. Give each solar event i
 - Circadian scenes use one solar-event sidebar for all their lights. Select lights from tiles, dial bands, or disk dots; group them, switch color modes, or adjust the selection’s brightness together. The event stays selected when you close the sidebar; select it again or move preview time to deselect it.
 - Select a solar event before changing its lights. A short reminder points to the event buttons if you try to edit before choosing one.
 - Event sources and individual lights have separate Reset overrides actions. The sidebar explains the current event baseline and lists inherited and overridden values by light. Reset all clears that event’s individual-light overrides in one undoable action, keeping its source and other events; saved effects remain visible and usable, while the effect picker is removed.
-- Dial previews can grow to 900px, with consistent space above and below the preview and a shaded toolbar that remains readable.
+- Dial previews can grow to 900px, with consistent space above and below the preview and Now/sun-angle labels on a permanent row below the controls. Toolbars have no shadow ramp.
 - Solar events inherit their assigned scene preset per field. Brightness adjustments and randomization belong to that event; explicit light overrides and shared presets stay intact. Event disks show only the selected event’s light assignments.
 - Both new-scene preset pickers have more room to scroll. Start from scratch stays the same action, becoming secondary when you select a preset.
 - Live edit defaults to on; Reset restores that default in the browser performing the reset.
@@ -54,10 +54,10 @@ Scene Studio is easier to start with and safer to share. Give each solar event i
 - Ordinary day-position attributes follow local time; explicit preview times land on the right local date through midnight and daylight-saving changes.
 - A collaborator's delayed save or deletion no longer overwrites a newer draft or silently brings a deleted item back.
 - Loading or refreshing the panel no longer claims that Home Assistant has no areas before the area catalog is available, or leaves the desktop area list empty after those areas arrive.
-- Light tiles stay put during selection, brightness changes, and periodic preview updates. Select all stays first in both scene editors and always shows the total light count; unchanged tile paints skip repeated work.
+- Light tiles stay put during selection, brightness changes, and periodic preview updates. Select all stays first in both scene editors and always shows the total light count; unchanged tile paints skip repeated work. Moving a light between disks keeps its tile flight running while color updates continue.
 - Scene-preset → circadian-preset navigation removes the old color wheel after the transition, including interrupted navigation.
 - Event brightness edits remain local to the scene even without an assigned scene preset. Undo restores the complete previous assignment, and wheel brightness finishes its gesture so changes can save.
-- Temperature-only light bands and graphs no longer preview colors the light cannot use. Responsive toolbar controls no longer appear twice when the window narrows.
+- Temperature-only light bands and graphs no longer preview colors the light cannot use. Responsive toolbar controls no longer appear twice when the window narrows, and preset controls stay in the toolbar when a light override is added.
 - Activation sends one declared color value to Home Assistant and preserves on/off state when adapting color palettes to temperature lights.
 - The preview-date reset icon reserves its own space beside the date suggestions. Interrupted editor navigation keeps the latest destination without removing outgoing preview pixels early or leaving stale light actions behind.
 
