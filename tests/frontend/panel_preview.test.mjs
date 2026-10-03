@@ -290,7 +290,7 @@ test("brightness painting does not regroup the light strip", () => {
 
 test("Select all does not make an unchanged circadian legend ungrouped", () => {
   const selectAll = { classList: { contains: key => key === "select-all-tile" }, style: {} };
-  const strip = { _groupSignature: "", querySelectorAll: () => [selectAll] };
+  const strip = { _groupSignature: "", children: [selectAll], querySelectorAll: () => [selectAll] };
   const panel = { _lightNameLabels: [], _variables: [] };
   // Any rebuild would require geometry/DOM APIs absent from this strip.
   methods._placeLegendModeGroups.call(panel, strip);

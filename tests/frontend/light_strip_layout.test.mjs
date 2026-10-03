@@ -67,3 +67,17 @@ test("Select all uses the shared gray default and restores it after selection", 
   paintSelectAllTile(selector, look);
   assert.equal(values.get("--hue-light-on-background"), "rgb(64, 60, 58)");
 });
+
+
+test("Add and Select all do not restart a member flight during color painting", async () => {
+  const { hasUngroupedLightTiles } = await import("../../custom_components/scene_studio/frontend/light_tiles.js");
+  const node = (classes, position = "") => ({ classList: { contains: name => classes.includes(name) }, style: { position } });
+  const flying = node(["simple-light-selector"], "absolute");
+  const root = { children: [node(["simple-light-selector", "select-all-tile"]), node(["light-mode-group"]), node(["simple-light-selector", "add-light-tile"]), flying] };
+  for (let i = 0; i < 30; i++) {
+    flying.style.color = `rgb(${i}, 0, 0)`;
+    assert.equal(hasUngroupedLightTiles(root), false);
+  }
+  root.children.push(node(["simple-light-selector"]));
+  assert.equal(hasUngroupedLightTiles(root), true);
+});

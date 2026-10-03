@@ -88,7 +88,7 @@ import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
 import { snapshotWheelEditor, applyWheelMorph } from "./wheel_morph.js";
-import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, tileSelectionAfterClick, proportionalFillPercent, selectAllDisplayedFill, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, paintSelectAllTile, reconcileStripChildren, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
+import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, hasUngroupedLightTiles, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, tileSelectionAfterClick, proportionalFillPercent, selectAllDisplayedFill, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, paintSelectAllTile, reconcileStripChildren, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
 const DOMAIN = "scene_studio";
 const PANEL_URL_PATH = "scene_studio";
@@ -20591,10 +20591,7 @@ class SceneStudioPanel extends HTMLElement {
       .join("|");
     // A matching signature is not enough: a rebuilt legend is a flat list,
     // and a tile flight can leave selectors on the strip until it is restored.
-    const ungrouped = [...tilesEl.querySelectorAll(":scope > .simple-light-selector")].some(
-      (el) =>
-        !el.classList.contains("add-light-tile") && !el.classList.contains("select-all-tile") && el.style.position !== "absolute"
-    );
+    const ungrouped = hasUngroupedLightTiles(tilesEl);
     if (signature === tilesEl._groupSignature && !ungrouped) {
       return;
     }
