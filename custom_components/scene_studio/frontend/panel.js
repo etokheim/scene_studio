@@ -17334,6 +17334,11 @@ class SceneStudioPanel extends HTMLElement {
     return readout;
   }
 
+  _presetControlsHost(editor) {
+    const shell = this._sharedEditorShell;
+    return editor && shell?.preview.contains(editor) ? shell.toolbar : editor;
+  }
+
   _replaceSceneUsed(host, strip) {
     // Responsive layout briefly detaches the readout. A document query cannot
     // see its existing controls then; reconcile its own children first.
@@ -17345,7 +17350,7 @@ class SceneStudioPanel extends HTMLElement {
     }
     if (!host || !strip) previous?.remove();
     else if (previous) previous.replaceWith(strip);
-    else host.append(strip);
+    else host.insertBefore(strip, host.querySelector(":scope > .sun-time-row"));
   }
 
   _syncSceneUsed() {
@@ -17358,7 +17363,7 @@ class SceneStudioPanel extends HTMLElement {
     }
     if (this._view === "palette") {
       const strip = renderPaletteUsed(this);
-      const host = this.shadowRoot?.querySelector(".simple-editor");
+      const host = this._presetControlsHost(this.shadowRoot?.querySelector(".simple-editor"));
       this._replaceSceneUsed(host, strip);
       this._syncLibraryUsedBy();
       return;
@@ -17370,7 +17375,7 @@ class SceneStudioPanel extends HTMLElement {
         : null;
     const chrome = this._toolbarChrome;
     const host =
-      simple ||
+      this._presetControlsHost(simple) ||
       (this._view === "edit" && this._formData?.kind !== "simple" ? (this._hoverReadout || chrome) : null);
     this._replaceSceneUsed(host, strip);
     this._syncLibraryUsedBy();
@@ -17393,7 +17398,7 @@ class SceneStudioPanel extends HTMLElement {
     } else if (this._view === "palette" && this._variableId) {
       kind = "palette";
       id = this._variableId;
-      host = this.shadowRoot?.querySelector(".simple-editor");
+      host = this._presetControlsHost(this.shadowRoot?.querySelector(".simple-editor"));
     } else if (this._view === "variable" && this._variableId) {
       kind = "variable";
       id = this._variableId;
@@ -17590,14 +17595,17 @@ class SceneStudioPanel extends HTMLElement {
       });
       resetSlot.appendChild(reset);
     }
+    const timeRow = document.createElement("div");
+    timeRow.className = "sun-time-row";
+    timeRow.append(time, sun, resetSlot);
     if (this._canPlayScenePreview()) {
-      readout.append(this._ensureScenePlayButton(), time, sun, resetSlot);
+      readout.append(this._ensureScenePlayButton(), timeRow);
     } else {
-      readout.append(time, sun, resetSlot);
+      readout.append(timeRow);
     }
     this._syncSceneUsed();
     const used = readout.querySelector(".scene-used, .library-used-by");
-    if (used) readout.insertBefore(used, time);
+    if (used) readout.insertBefore(used, timeRow);
     this._syncNarrowPlayAction();
   }
 

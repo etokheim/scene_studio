@@ -390,3 +390,35 @@ test("Select all before event selection uses the current preview instead of a nu
   panel._sidebarEventId = "dawn";
   assert.equal(methods._circadianSelectionBrightness.call(panel, "light.a"), 200);
 });
+
+
+test("time and sun stay in a dedicated row after Play and preset controls", () => {
+  class Element {
+    constructor() { this.children = []; }
+    append(...nodes) { this.children.push(...nodes); }
+    replaceChildren(...nodes) { this.children = nodes; }
+    setAttribute() {}
+    removeAttribute() {}
+    querySelector() { return this.children.find(node => node.className === "scene-used") || null; }
+    insertBefore(node, target) { this.children = this.children.filter(child => child !== node); this.children.splice(this.children.indexOf(target), 0, node); }
+  }
+  globalThis.document = { createElement: () => new Element() };
+  const readout = new Element(), used = new Element(), play = new Element(); used.className = "scene-used";
+  const panel = { _hoverReadout: readout, _updateLightNameBrightness() {}, _canPlayScenePreview: () => true,
+    _ensureScenePlayButton: () => play, _syncSceneUsed: () => readout.append(used), _syncNarrowPlayAction() {} };
+  methods._fillHoverReadout.call(panel, 12300, { hovering: false });
+  assert.equal(readout.children[0], play);
+  assert.equal(readout.children[1], used);
+  assert.equal(readout.children[2].className, "sun-time-row");
+  assert.deepEqual(readout.children[2].children.map(node => node.className), ["sun-hover-time", "sun-hover-elev", "sun-hover-reset-slot"]);
+  delete globalThis.document;
+});
+
+
+test("preset controls stay in the shared toolbar after an override refresh", () => {
+  const editor = {}, freshEditor = {}, toolbar = {};
+  const panel = { _sharedEditorShell: { toolbar, preview: { contains: node => node === editor } } };
+  assert.equal(methods._presetControlsHost.call(panel, editor), toolbar);
+  assert.equal(methods._presetControlsHost.call(panel, freshEditor), freshEditor);
+  assert.equal(methods._presetControlsHost.call(panel, null), null);
+});

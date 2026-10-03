@@ -8,6 +8,12 @@ Durable product and architecture guidance for Scene Studio. Keep current constra
 - **Decision:** All Select all surfaces use one gray default renderer, with the existing primary selection wash. Event sidebar dismissal retains selection; clicking the selected event or changing preview time deselects it. Ordinary editor refreshes paint the card from freshly resolved drafts; circadian source changes stamp current assignments before repainting ramps. Each active dial owns one horizon background. Rebuilds remove earlier backgrounds from the separate stage host; only an outgoing layer's captured sky survives until its exit finishes.
 - **Why:** Independent tile defaults drifted to white. Closing a scene sidebar intentionally retained its event, so it could not implement an explicit deselection. Card refresh previously waited for a light edit or later saved catalog. Moving the horizon outside the face for stage coverage means removing the face or replacing a pointer alone cannot clean it up.
 
+## Continuous tile flights and unshaded toolbar
+
+- **Date:** 2026-10-03
+- **Decision:** Add light and Select all are loose strip controls, not ungrouped members. Color updates during a mode-change flight paint the current moving tile without rebuilding unchanged groups. Preset/source controls reconcile in the mounted shared toolbar, not their former preview parent. Remove the toolbar ramp in every editor and place Now/sun labels in a permanent second row.
+- **Why:** Treating Add as a member restarted every ordinary wheel drag's strip animation. Refreshing a source in its old parent dropped it below the shared toolbar after an override. The user chose layout separation instead of shading over overlaps.
+
 ## Event-local proportional brightness
 
 - **Date:** 2026-10-01

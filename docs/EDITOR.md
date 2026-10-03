@@ -34,7 +34,7 @@ Deleted HA areas remain listed with a struck-through retained name and Deleted l
 
 ## Layout, cards, and navigation
 
-The shared CSS Grid shell has a full-width toolbar, flexible preview with timeline, and full-width bottom light/slot section. Preview floors are 300px, capped by available editor width and usable window height; short stages may scroll. Dial previews cap at 900px, ordinary disks retain their size limit, and both have 24px vertical gaps. At editor widths of at least 1100px, previews extend behind clickable toolbar controls. Play scene live is hidden on mobile.
+The shared CSS Grid shell has a full-width toolbar, flexible preview with timeline, and full-width bottom light/slot section. Preview floors are 300px, capped by available editor width and usable window height; short stages may scroll. Dial previews cap at 900px, ordinary disks retain their size limit, and both have 24px vertical gaps. At editor widths of at least 1100px, previews extend behind clickable toolbar controls. Play scene live is hidden on mobile. There is no toolbar shadow ramp; Now and sun-angle labels always occupy a separate row below the controls. Preset controls remain in the shared toolbar when overrides refresh.
 
 Timeline orientation follows editor-container dimensions: vertical in landscape, horizontal in portrait. Its track stays within the preview region. Sidebars overlay the toolbar, preview, and lights below the app header without resizing the preview. Only naturally overflowing light strips gain trailing room so their last tile can clear the sidebar; short strips keep their position.
 

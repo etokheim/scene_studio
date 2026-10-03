@@ -391,18 +391,9 @@ export function editorGeometry(width, height, windowHeight) {
 }
 
 export const EDITOR_CONTAINER_CSS = `
-  .editor-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
+  .editor-shell { container-type: inline-size; container-name: editor-shell; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(calc(var(--editor-preview-floor, 300px) + 48px), 1fr) auto; }
   .editor-background { position: absolute; inset: 0; overflow: clip; pointer-events: none; }
   .editor-toolbar { grid-column: 1 / -1; grid-row: 1; isolation: isolate; }
-  .editor-toolbar::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 -24px;
-    z-index: -1;
-    pointer-events: none;
-    opacity: .75;
-    background: linear-gradient(to bottom, var(--app-header-background-color, var(--sidebar-background-color)) 0%, var(--app-header-background-color, var(--sidebar-background-color)) calc(100% - 24px), transparent 100%);
-  }
   .editor-stage { grid-column: 1 / -1; grid-row: 2; position: relative; min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
   .editor-preview { grid-column: 1; grid-row: 1; }
   .editor-lights { grid-column: 1 / -1; grid-row: 3; }
@@ -425,7 +416,12 @@ export const EDITOR_CONTAINER_CSS = `
   :host .editor-shell .simple-editor:not(.chrome-aside) .hue-wheel-chrome {
     position: absolute; top: 0; left: 0; right: 0; z-index: 5;
   }
-  .editor-toolbar .sun-toolbar-chrome { display: flex; flex-wrap: wrap; width: 100%; justify-content: space-between; }
+  .editor-toolbar .sun-toolbar-chrome { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; width: 100%; }
+  :host .editor-toolbar .sun-hover-readout { width: 100%; flex-wrap: wrap; }
+  .editor-toolbar .sun-time-row { display: flex; align-items: center; gap: 8px 16px; flex: 1 0 100%; min-width: 0; min-height: 32px; }
+  @container editor-shell (max-width: 600px) {
+    .editor-toolbar .sun-toolbar-chrome { grid-template-columns: minmax(0, 1fr); }
+  }
   .editor-toolbar .sun-date-tools { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; width: auto; margin-left: auto; }
   .editor-toolbar .sun-chip-row { flex-wrap: nowrap; width: auto; }
   .editor-toolbar .sun-scrub-date { flex: 0 0 auto; width: max-content; }
