@@ -140,7 +140,7 @@ gh label create release:minor --color "1D76DB" --description "Minor release when
 gh label create release:major --color "B60205" --description "Major release when merged to master" 2>/dev/null || true
 ```
 
-If a PR from `dev` to `master` is already open, stop after the push (do not open a second one). Otherwise:
+If a PR from `dev` to `master` is already open, update its title/body and validation results to describe the final shipped behavior when that update is authorized. Use `gh pr edit --body-file` with a saved Markdown file; do not open a second PR. Otherwise:
 
 ```bash
 cat > /tmp/scene-studio-release-pr-body.md <<'EOF'

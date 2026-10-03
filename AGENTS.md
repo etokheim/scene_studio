@@ -20,6 +20,18 @@ This file is the shared instruction source for Codex and Cursor. Cursor `.mdc` r
 - **Secrets** — never browse whole secret stores, `.env`, HA auth/config-entry storage, backups, or SSH keys. Extract only required keys and use credentials without printing them; disclose any accidental secret read immediately. See [`.cursor/rules/secrets-handling.mdc`](.cursor/rules/secrets-handling.mdc).
 - **Tests** — `pytest tests/` and `node --test tests/frontend/*.test.mjs` (pin grouping, tile selection, card dots). Do not add Playwright; panel layout stays on Chrome DevTools MCP. See [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
+## Product and editing contract
+
+- Preserve the current pixels, layout, motion, fade timing, copy, and interaction unless the user approves a specific visible change. Performance work and refactors do not authorize UI changes. Separate privacy/bug fixes, behavior-preserving refactors, performance changes, and release preparation into focused signed commits.
+- Keep the existing plain ES modules. A broad `panel.js` split, new framework, bundler, visual redesign, or deeper performance pass requires a separate approved plan. Measure actual hot-path costs before proposing performance changes; record acceptance measurements and whether a remedy changes the UI.
+- Follow [the editor guide](docs/EDITOR.md) and current [decisions](docs/DECISIONS.md). The shared shell owns toolbar, preview/timeline, and bottom light-section layout and transition lifetime. Existing editors own data and interactions. The app header remains visible above overlay sidebars.
+- Circadian scene edits belong to that scene and selected event, never its shared circadian preset. Keep Library preset editing distinct. Require an event before event-specific light edits; keep membership and HA settings independent. Ordinary sidebar dismissal retains event selection; clicking the selected event or moving preview time deselects it.
+- Keep Select all first, with total membership count and the shared gray default in every editor. Painting selection/brightness or an idle update must not regroup unchanged strips or lose focus, pointer capture, ordering, or scroll position.
+- Retain outgoing preview pixels until animation completion; interrupted navigation must settle on the latest destination. One active dial owns one horizon; horizons must not survive outside a circadian editor except inside its temporary outgoing layer.
+- Use canonical `/scene_studio/scenes` and `/scene_studio/library/...` paths; normalize old hashes only at the routing boundary. Back, refresh, and deselection preserve the originating tab.
+- Ask about material product, privacy, license, structure, or UI ambiguities. Do not substitute another external provider or silently disclose a new data transfer. Optional Photon search is explicitly approved only on Search/Enter, with its disclosure; HA map tiles may load when its dialog opens. Activation and solar calculations remain local.
+- Trial releases use a manually added HACS repository. Update the existing release PR when authorized; leave merging, publication, version assignment, brand decisions, HACS default submission, and public announcement to the user/release workflow.
+
 ## Local sandbox
 
 - Docker + starter YAML: [`DEVELOPMENT.md`](DEVELOPMENT.md). Python changes need `docker compose restart`.

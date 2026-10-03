@@ -23,3 +23,16 @@ Use official Chrome DevTools MCP tools exposed by the current host. Tool prefixe
 - Inspect console errors and relevant failed network requests. Distinguish pre-existing sandbox errors from regressions; do not claim a clean console without checking it.
 
 Temporary in-page CSS or method patches are exploratory previews. Remove them with a normal reload, then verify final source through the revision/restart sequence before reporting it tested. If restart, login, MCP, or revision verification is blocked, report the limitation and checks that ran; do not label a preview as final verification.
+
+## Shared editor regression matrix
+
+For changes touching shared chrome, selection, or preview ownership, include:
+
+- Normal scene, circadian scene, and Library presets: Select all first, total membership count, gray default, and primary wash only when selected. Check deselection restores gray.
+- Circadian → circadian → deselect, circadian → normal/Library, and interrupted navigation: one live horizon, no obsolete wheel/sky after exit, retained outgoing pixels until completion, and destination-owned handlers.
+- Event selection from tiles/bands/dots; closing the sidebar retains the event, clicking its selected button or changing preview time clears it. Verify blocked light edits and reminder cancellation.
+- Final-source card gradients/thumbnails immediately after changing a scene preset, including collaborative refresh. Restore any test edits with undo or the saved snapshot; never leave fixtures silently changed.
+- Full-width toolbar and light section; 300px capped preview floor, 24px vertical gaps, dial's 900px cap, and overlap around the 1100px editor-container breakpoint. Timeline follows container aspect ratio and remains within the preview. Sidebar overlays below the app header without resizing preview; overflowing strips can expose the last tile, short strips retain their position.
+- Desktop, short desktop, and mobile; date/reset spacing, ordered toolbar wrapping without duplicates, selection scaling rather than hover scaling, and animation interruption/reduced motion where affected.
+
+For strip performance, wait until the destination catalog and preview are ready before collecting a baseline. Measure representative small/large memberships during idle updates and repeated selection/brightness interactions. Record structural mutations, grouping signatures, geometry reads, animations, focus/pointer continuity, node identity, ordering, and scroll position. Unchanged groups must not rebuild or animate. Do not infer live performance from unit tests or a blank/disconnected browser. Broader optimization needs a separate measured report and approved plan.

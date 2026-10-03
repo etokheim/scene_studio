@@ -52,12 +52,8 @@ This integration is public. Do **not** copy live-home YAML, production tokens, o
 
 Rotate any exposed credentials, then rewrite history (e.g. `git filter-repo`) before pushing to a shared remote.
 
-## Commits without local git user
+## Identity, signing, and release review
 
-If `git commit` fails with “tell me who you are”, set author for one command only (does not write config):
+Keep the configured author and signing enabled. If identity is missing, ask the user to configure their real Git identity; do not invent one or override it for a command. If the 1Password signer fails, keep the change set staged and ask the user to unlock/approve signing before retrying. Continue independent work without bypassing signing or hooks.
 
-```bash
-GIT_AUTHOR_NAME='Your Name' GIT_AUTHOR_EMAIL='you@example.com' \
-GIT_COMMITTER_NAME='Your Name' GIT_COMMITTER_EMAIL='you@example.com' \
-git commit -m "message"
-```
+When an authorized release already has a `dev` → `master` PR, push focused commits and refresh that PR's description and verified checks. Do not open a duplicate. Leave merging and publication to review; the release workflow assigns the manifest version. The trial installation is a manually added HACS repository, not HACS default inclusion.

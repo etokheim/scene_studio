@@ -9,7 +9,7 @@ The workspace **stage** (`.stage-col`, the wide column beside the area rail) is 
 
 ## Do this
 
-- Open **scenes**, **variables**, **palettes**, and **circadian themes** in that column (`#edit/<id>`, `#variable/<id>`, `#variable/new`, `#palette/<id>`, `#palette/new`, `#theme/<id>`, `#theme/new`).
+- Open **scenes**, **variables**, **palettes**, and **circadian themes** in that column (`/scene_studio/scenes/<id>`, `/scene_studio/library/color-presets/<id>`, `/scene_studio/library/scene-presets/<id>`, `/scene_studio/library/circadian-presets/<id>`; creation opens the corresponding stage editor).
 - Create and edit them there (name, color wheel, palette slots, theme dial). Autosave like other editors.
 
 ## Do not
@@ -18,3 +18,5 @@ The workspace **stage** (`.stage-col`, the wide column beside the area rail) is 
 - Do not use a separate full-page library column as the editor (the rail stays a picker).
 
 Rationale: [`docs/DECISIONS.md`](../../docs/DECISIONS.md) (“Main column is the editor”).
+
+Current layout, selection, event-local editing, and navigation contract: [docs/EDITOR.md](../../docs/EDITOR.md). Legacy hash links are accepted only at the routing boundary.

@@ -36,6 +36,8 @@ v4 renamed `scene_extrapolation` to `circadian_scenes`. If that store is the onl
 
 Create a scene in the Scene Studio sidebar and choose its Home Assistant area. A circadian scene starts from a built-in day-to-evening look; edit the colors and brightness at dawn, sunrise, noon, sunset, and dusk in the main editor. You can also create a fixed scene or reuse looks from the library. Scene Studio creates the Home Assistant scene entity for you.
 
+For event editing, collaboration, update controls, and navigation, see the [editor guide](docs/EDITOR.md). The panel is admin-only; generated scenes can be activated through normal HA permissions. Optional alternative-location search sends its query and browser IP to Photon only when Search or Enter is used; opening the HA map can also load external tiles. Activation and solar calculation stay local.
+
 An older installation that used native Home Assistant scenes can migrate its saved light looks into Scene Studio when all required source scenes are available. Native scenes are no longer needed for new scenes.
 
 You might already have fixed scenes like this:
@@ -54,7 +56,7 @@ A typical result:
 
 1. **Simple** — it is still “just a scene”: activate it when you want that look; turn lights off normally when you don’t.
 2. **Any colors** — not limited to white / warm white.
-3. **Effects** — e.g. fireplace after sunset, or Christmas lights that still follow the day.
+3. **Saved effects** still follow the day; the editor does not provide an effect picker.
 4. **Turn lights off or on** by time of day (bright undimmable lamp off in the evening; cozy lamp on only then).
 5. **Area-aware light membership** — a scene follows the area's lights, with per-light changes when you need them.
 6. **Automatic light updates** — keep the room tracking the sun after activation without fighting a “force lights on” loop.
@@ -62,7 +64,7 @@ A typical result:
 ## Limitations
 
 1. Scene Studio currently controls lights. Existing native-scene migration keeps the light looks; other entity types from those source scenes are not imported.
-2. Automatic light updates run only while a Scene Studio scene owns its area. An unavailable light is skipped until it is available again.
+2. Automatic light updates run only while a Scene Studio scene owns its lights. An unavailable light is skipped until it is available again.
 
 ### Alternatives
 
@@ -104,6 +106,8 @@ In polar regions the sun may never set (midnight sun) or never rise (polar night
 
 - **Winter:** Dawn 8:45, Sunrise 10:30, Noon 12:00, Sunset 13:00, Dusk 22:00
 - **Summer:** Dawn 2:15, Sunrise 4:00, Noon 13:00, Sunset 22:00, Dusk 23:55
+
+Latest dawn is enabled at **06:00** by default, so a later solar or fallback dawn is advanced to that time. Earliest dusk retains your saved limit. Both have enable switches; the seasonal values above describe fallback input before these limits.
 
 When only some events fail, it keeps chronological order by taking the later of:
 
