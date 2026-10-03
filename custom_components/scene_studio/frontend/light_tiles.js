@@ -854,15 +854,24 @@ export function lightTileValueLabel(fillPct, { onOff = false, onText = "On", off
   return `${Math.round(Number(fillPct) || 0)}%`;
 }
 
+const tilePaints = new WeakMap();
+
 export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLabel }) {
+  const tile = selector.querySelector(".simple-light-tile");
+  // Read geometry before writing styles; an unchanged tile needs no DOM writes.
+  const tileH = tile.clientHeight || 135;
   const channels = rgb || [0, 0, 0];
+  const pct = Number(fillPct) || 0;
+  const label = brightnessLabel === undefined ? `${Math.round(pct)}%` : brightnessLabel;
+  const key = JSON.stringify([channels, pct, label, tileH, Boolean(selected)]);
+  selector.classList.toggle("active", Boolean(selected));
+  if (tilePaints.get(selector) === key) return;
+  tilePaints.set(selector, key);
   const onBg = `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
   selector.style.setProperty("--hue-light-on-background", onBg);
   selector.style.setProperty("--hue-light-on-color", onBg);
   selector.style.setProperty("--hue-light-on-text-color", lightTileOnTextCss(channels));
   selector.style.setProperty("--hue-light-off-background", "#242022");
-  const tile = selector.querySelector(".simple-light-tile");
-  const pct = Number(fillPct) || 0;
   // A new tile's fill defaults to 0%. Setting the real level in the same
   // turn still animates if layout already saw that 0. Freeze the fill and
   // the clipped labels for this first paint. Later updates keep the transition.
@@ -882,16 +891,12 @@ export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLab
       }
     });
   }
-  const tileH = tile.clientHeight || 135;
   const rampPx =
     pct <= 0 || pct >= 100 ? 0 : Math.min(20, ((100 - pct) / 100) * tileH);
   tile.style.setProperty("--hue-light-ramp", `${rampPx}px`);
   tile.classList.toggle("is-off", pct <= 0);
-  selector.classList.toggle("active", Boolean(selected));
-  const label =
-    brightnessLabel === undefined ? `${Math.round(pct)}%` : brightnessLabel;
   for (const el of selector.querySelectorAll(".simple-light-bri")) {
-    el.textContent = label;
+    if (el.textContent !== label) el.textContent = label;
     el.hidden = label === "";
   }
   const power = selector.querySelector(".light-power");
