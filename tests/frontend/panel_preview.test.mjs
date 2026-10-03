@@ -339,3 +339,31 @@ test("parking a non-circadian editor removes horizons even without a sun-path re
   methods._parkSunPath.call(panel);
   assert.equal(cleared, false);
 });
+
+
+test("clicking a selected scene event deselects instead of reopening its editor", async () => {
+  const calls = [];
+  const panel = { _view: "edit", _sidebarEventId: "dawn",
+    _clearSelectedSolarEvent: () => calls.push("clear"),
+    _toggleThemeEventSidebar: () => calls.push("open") };
+  await methods._toggleEventSceneDialog.call(panel, { id: "dawn" });
+  await methods._toggleEventSceneDialog.call(panel, { id: "noon" });
+  assert.deepEqual(calls, ["clear", "open"]);
+});
+
+test("moving preview time clears the event even without scene playback", () => {
+  const calls = [];
+  const panel = { _clearSelectedSolarEvent: () => calls.push("clear"), _scenePlayActive: () => false };
+  methods._stopScenePlayBecauseTimeChanged.call(panel);
+  assert.deepEqual(calls, ["clear"]);
+});
+
+test("event deselection closes its editor while preserving shared light selection", () => {
+  const selected = new Set(["light.a"]);
+  const panel = { _sidebarEventId: "dawn", _legendSelectedIds: selected,
+    _setSidebarEvent(id) { this._sidebarEventId = id; },
+    _closeSceneSidebar(options) { assert.deepEqual(options, { animate: true, clearSelection: false }); } };
+  methods._clearSelectedSolarEvent.call(panel);
+  assert.equal(panel._sidebarEventId, null);
+  assert.equal(panel._legendSelectedIds, selected);
+});

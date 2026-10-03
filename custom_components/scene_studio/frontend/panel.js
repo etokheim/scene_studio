@@ -15034,7 +15034,17 @@ class SceneStudioPanel extends HTMLElement {
     });
   }
 
+  _clearSelectedSolarEvent() {
+    if (!this._sidebarEventId) return;
+    this._setSidebarEvent(null);
+    this._closeSceneSidebar({ animate: true, clearSelection: false });
+  }
+
   async _toggleEventSceneDialog(event) {
+    if (this._sidebarEventId === event.id && this._view === "edit") {
+      this._clearSelectedSolarEvent();
+      return;
+    }
     await this._toggleThemeEventSidebar(event);
   }
 
@@ -15401,6 +15411,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _stopScenePlayBecauseTimeChanged() {
+    this._clearSelectedSolarEvent();
     if (!this._scenePlayActive()) {
       return;
     }
@@ -17584,6 +17595,7 @@ class SceneStudioPanel extends HTMLElement {
   }
 
   _resetClockSunToNow() {
+    this._clearSelectedSolarEvent();
     if (this._scenePlayActive()) {
       this._stopScenePlay({ restore: !this._roomPreview });
     }
@@ -19447,10 +19459,6 @@ class SceneStudioPanel extends HTMLElement {
             this._stopScenePlayBecauseTimeChanged();
           }
           this._clockSunDragging = true;
-          // Keep the event sidebar open while dragging; close on release.
-          if (this._sidebarEventId) {
-            this._clockCloseSidebarAfterDrag = true;
-          }
         }
       }
       if (!this._clockSunDragging) {
