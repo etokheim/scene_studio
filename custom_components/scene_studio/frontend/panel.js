@@ -88,7 +88,7 @@ import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { SIMPLE_EDITOR_CSS, renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
 import { snapshotWheelEditor, applyWheelMorph } from "./wheel_morph.js";
-import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, tileSelectionAfterClick, proportionalFillPercent, selectAllDisplayedFill, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
+import { bindGroupTitleStick, bindLightTileBrightness, captureLightStripLayout, createAddLightTile, createLightModeGroup, createLightTile, createLightTilesHint, attachLightActions, groupSelectionAfterClick, tileSelectionAfterClick, proportionalFillPercent, selectAllDisplayedFill, lightTileColorGroup, lightTileGroupOrder, lightTileValueLabel, paintLightTile, reconcileStripChildren, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
 
 const DOMAIN = "scene_studio";
 const PANEL_URL_PATH = "scene_studio";
@@ -14209,6 +14209,7 @@ class SceneStudioPanel extends HTMLElement {
     this._syncOpenSceneCardFace();
     this._syncEventOverrideControls?.();
     this._syncClockLegendBrightEdit();
+    this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
     this._schedulePreview();
     this._saveSoon();
   }
@@ -14322,6 +14323,7 @@ class SceneStudioPanel extends HTMLElement {
     }
     this._syncEventSelection();
     this._syncClockLegendBrightEdit();
+    this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
     if (this._clockSunEl && this._sunPath?.curve) {
       this._clockSunLive = false;
       this._moveClockSunTo(this._clockSunIdleSeconds());
@@ -17703,7 +17705,6 @@ class SceneStudioPanel extends HTMLElement {
       pct.textContent = `${Math.round(sample.brightness)}%`;
       el.appendChild(pct);
     }
-    this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
   }
 
   _secondsFromClockPointer(ev, face) {
@@ -19747,6 +19748,7 @@ class SceneStudioPanel extends HTMLElement {
       this._clockStickySeconds ??
       this._clockSunDisplayedSeconds ??
       this._clockSunIdleSeconds();
+    if (!morphing) this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
     this._applyClockSunAppearance(seconds, { skipHorizonGlow: morphing });
     if (this._hoverReadout) {
       this._fillHoverReadout(seconds, { hovering: false });
@@ -20612,12 +20614,12 @@ class SceneStudioPanel extends HTMLElement {
     // and a tile flight can leave selectors on the strip until it is restored.
     const ungrouped = [...tilesEl.querySelectorAll(":scope > .simple-light-selector")].some(
       (el) =>
-        !el.classList.contains("add-light-tile") && el.style.position !== "absolute"
+        !el.classList.contains("add-light-tile") && !el.classList.contains("select-all-tile") && el.style.position !== "absolute"
     );
-    if (signature === this._legendGroupSignature && !ungrouped) {
+    if (signature === tilesEl._groupSignature && !ungrouped) {
       return;
     }
-    this._legendGroupSignature = signature;
+    tilesEl._groupSignature = signature;
     const beforeLayout = captureLightStripLayout(tilesEl);
     const grouped = new Map(lightTileGroupOrder().map((key) => [key, []]));
     const unavailable = [];
@@ -20664,8 +20666,8 @@ class SceneStudioPanel extends HTMLElement {
       });
     const groupOrder = lightTileGroupOrder(paletteKeys);
     const selectAll = tilesEl.querySelector(".select-all-tile");
-    tilesEl.replaceChildren();
-    if (selectAll) tilesEl.append(selectAll);
+    const existingGroups = new Map([...tilesEl.querySelectorAll(":scope > .light-mode-group")].map(group => [group.dataset.group, group]));
+    const desired = selectAll ? [selectAll] : [];
     for (const key of groupOrder) {
       const rows = grouped.get(key) || [];
       if (!rows.length) {
@@ -20675,59 +20677,42 @@ class SceneStudioPanel extends HTMLElement {
       const label = paletteId
         ? (this._variables || []).find((item) => item.id === paletteId)?.name || paletteId
         : labels[key] || key;
-      const ids = rows.map((entry) => entry.light.entity_id);
-      const { group, row } = createLightModeGroup({
-        label,
-        selectAllLabel,
-        groupKey: key,
-        onSelectAll: (ev) => {
-          if (this._view === "edit" && !this._requireCircadianEvent()) return;
-          const result = groupSelectionAfterClick({
-            ids,
-            selected: [...(this._legendSelectedIds || [])],
-            toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey || ev?.shiftKey),
-          });
-          this._legendSelectedIds = new Set(result.selected);
-          this._syncOpenSceneWheel?.();
-          this._syncClockLightSelection();
-          this._syncCircadianSelectAll?.();
-          this._reopenCircadianEvent();
-          revealLightActionsNow(this.shadowRoot);
-        },
-      });
-      for (const entry of rows) {
-        row.appendChild(entry.selector);
+      let group = existingGroups.get(key);
+      if (!group) {
+        ({ group } = createLightModeGroup({
+          label, selectAllLabel, groupKey: key,
+          onSelectAll: (ev) => {
+            if (this._view === "edit" && !this._requireCircadianEvent()) return;
+            const result = groupSelectionAfterClick({
+              ids: group._memberIds,
+              selected: [...(this._legendSelectedIds || [])],
+              toggleKey: Boolean(ev?.metaKey || ev?.ctrlKey || ev?.shiftKey),
+            });
+            this._legendSelectedIds = new Set(result.selected);
+            this._syncOpenSceneWheel?.();
+            this._syncClockLightSelection();
+            this._syncCircadianSelectAll?.();
+            this._reopenCircadianEvent();
+            revealLightActionsNow(this.shadowRoot);
+          },
+        }));
       }
-      tilesEl.appendChild(group);
+      group._memberIds = rows.map(entry => entry.light.entity_id);
+      group.querySelector(".light-mode-name").textContent = label;
+      group.querySelector(".light-mode-label").setAttribute("aria-label", `${label}. ${selectAllLabel}`);
+      reconcileStripChildren(group.querySelector(".light-mode-row"), rows.map(entry => entry.selector));
+      desired.push(group);
     }
-    if (unavailable.length || orphanUnavailable.length) {
-      const { group, row } = createLightModeGroup({
-        label: this._t("frontend.lights.unavailable", "Unavailable"),
-        plain: true,
-        groupKey: "unavailable",
-      });
-      for (const entry of unavailable) {
-        row.appendChild(entry.selector);
-      }
-      for (const node of orphanUnavailable) {
-        row.appendChild(node);
-      }
-      tilesEl.appendChild(group);
-    }
-    if (leftovers.length) {
-      const { group, row } = createLightModeGroup({
-        label: this._t("frontend.lights.removed", "Removed"),
-        plain: true,
-        groupKey: "removed",
-      });
-      for (const node of leftovers) {
-        row.appendChild(node);
-      }
-      tilesEl.appendChild(group);
-    }
-    if (add) {
-      tilesEl.appendChild(add);
-    }
+    const plainGroup = (key, label, nodes) => {
+      if (!nodes.length) return;
+      const group = existingGroups.get(key) || createLightModeGroup({ label, plain: true, groupKey: key }).group;
+      reconcileStripChildren(group.querySelector(".light-mode-row"), nodes);
+      desired.push(group);
+    };
+    plainGroup("unavailable", this._t("frontend.lights.unavailable", "Unavailable"), [...unavailable.map(entry => entry.selector), ...orphanUnavailable]);
+    plainGroup("removed", this._t("frontend.lights.removed", "Removed"), leftovers);
+    if (add) desired.push(add);
+    reconcileStripChildren(tilesEl, desired);
     playLightStripLayout(tilesEl, beforeLayout);
     tilesEl.parentElement?._groupTitleStick?.();
   }

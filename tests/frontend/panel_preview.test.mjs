@@ -279,3 +279,19 @@ test("collaborative scene saves refresh the open event editor without resetting 
   assert.equal(panel._sidebarEventId, "dawn");
   assert.deepEqual([...panel._legendSelectedIds], ["light.a"]);
 });
+
+test("brightness painting does not regroup the light strip", () => {
+  const panel = {
+    _lightNameLabels: [],
+    _placeLegendModeGroups: () => assert.fail("brightness-only updates must not restructure tiles"),
+  };
+  for (let i = 0; i < 30; i++) methods._updateLightNameBrightness.call(panel, i);
+});
+
+test("Select all does not make an unchanged circadian legend ungrouped", () => {
+  const selectAll = { classList: { contains: key => key === "select-all-tile" }, style: {} };
+  const strip = { _groupSignature: "", querySelectorAll: () => [selectAll] };
+  const panel = { _lightNameLabels: [], _variables: [] };
+  // Any rebuild would require geometry/DOM APIs absent from this strip.
+  methods._placeLegendModeGroups.call(panel, strip);
+});

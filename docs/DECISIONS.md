@@ -898,3 +898,11 @@ Override summaries compare the current capability-adapted inherited event target
 Effects remain stored and are listed, but there is no effect-editing control.
 Guidance owns one cancellable timer lifecycle; navigation and event selection
 cancel both pending notifications and dial-button animations.
+
+### Stable light-strip structure
+
+Brightness and sun-position painting do not regroup the circadian light strip.
+Structural reconciliation runs when event drafts, membership, or capabilities
+change, retaining group controls and destination-owned member IDs. Layout flights
+settle before a new structural change; direct strip controls return to their
+original slot rather than being appended after the groups.

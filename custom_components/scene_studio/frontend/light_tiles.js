@@ -927,6 +927,22 @@ function makeLabels(layer, name, makeIcon) {
  * Viewport rects for tiles and group labels, keyed by `data-strip-key`.
  * Call before the strip is rebuilt, then `playLightStripLayout` after.
  */
+const stripFlights = new WeakMap();
+
+/** Settle old flights before changing their destination tree. */
+export function finishLightStripLayout(root) {
+  for (const finish of [...(stripFlights.get(root) || [])]) finish();
+}
+
+/** Move only changed children; unchanged tiles keep focus and pointer capture. */
+export function reconcileStripChildren(parent, nodes) {
+  const wanted = new Set(nodes);
+  for (const child of [...parent.children]) if (!wanted.has(child)) child.remove();
+  nodes.forEach((node, index) => {
+    if (parent.children[index] !== node) parent.insertBefore(node, parent.children[index] || null);
+  });
+}
+
 export function captureLightStripLayout(root) {
   const rects = new Map();
   if (!root?.isConnected) {
@@ -939,6 +955,7 @@ export function captureLightStripLayout(root) {
     }
     rects.set(key, el.getBoundingClientRect());
   }
+  finishLightStripLayout(root);
   return rects;
 }
 
@@ -972,6 +989,7 @@ export function playLightStripLayout(root, before, { matchedOnly = false } = {})
     // Groups use backdrop-filter, which traps z-index. Lift the moving item
     // onto the strip for the flight so it paints above every group and tile.
     const host = el.parentElement;
+    const nextSibling = el.nextSibling;
     let placeholder = null;
     if (host && host !== root) {
       const rootBox = root.getBoundingClientRect();
@@ -999,11 +1017,14 @@ export function playLightStripLayout(root, before, { matchedOnly = false } = {})
       { duration: 280, easing: "cubic-bezier(0.2, 0, 0, 1)" }
     );
     let restored = false;
+    const jobs = stripFlights.get(root) || new Set();
+    stripFlights.set(root, jobs);
     const restore = () => {
       if (restored) {
         return;
       }
       restored = true;
+      jobs.delete(finish);
       el.style.position = "";
       el.style.left = "";
       el.style.top = "";
@@ -1014,9 +1035,12 @@ export function playLightStripLayout(root, before, { matchedOnly = false } = {})
       if (placeholder?.isConnected) {
         placeholder.replaceWith(el);
       } else if (host?.isConnected && el.parentElement === root) {
-        host.appendChild(el);
+        // Direct strip controls (Select all) retain their original slot.
+        host.insertBefore(el, nextSibling?.parentElement === host ? nextSibling : null);
       }
     };
+    const finish = () => { anim.cancel(); restore(); };
+    jobs.add(finish);
     anim.addEventListener("finish", restore);
     anim.addEventListener("cancel", restore);
   }
