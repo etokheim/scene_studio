@@ -16,6 +16,8 @@ from typing import Any, Callable, TypeVar
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
+from homeassistant.util.file import WriteError
+from homeassistant.util.json import SerializationError
 
 from .collaboration import ItemDeleted, RevisionConflict, merge_fields, revision_for
 from .const import (
@@ -47,6 +49,7 @@ from .const import (
     VARIABLE_REF,
 )
 from .palette import KIND_PALETTE, normalize_palette_slots, optional_builtin_id
+from .store_transaction import StoreSnapshot
 from .validation import (
     validate_scene_input,
     validate_theme_input,
@@ -636,6 +639,15 @@ def normalize_theme(raw: dict[str, Any], theme_id: str) -> dict[str, Any]:
 class _ScenesStore(Store):
     """HA Store that migrates scene_studio.scenes between major versions."""
 
+    async def _async_write_data(self, data: dict) -> None:
+        """Let transaction callers observe failures that HA otherwise only logs."""
+        try:
+            await super()._async_write_data(data)
+        except (SerializationError, WriteError) as err:
+            # Store._async_handle_write_data suppresses these two types. Convert
+            # at the write boundary so rollback/notifications await durability.
+            raise HomeAssistantError("Could not persist Scene Studio data") from err
+
     async def _async_migrate_func(
         self,
         old_major_version: int,
@@ -652,7 +664,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the store."""
         self.hass = hass
-        self._store = _ScenesStore(hass, STORAGE_VERSION, STORE_KEY)
+        self._store = _ScenesStore(hass, STORAGE_VERSION, STORE_KEY, atomic_writes=True)
         self._legacy_stores = [
             _ScenesStore(hass, STORAGE_VERSION, key) for key in LEGACY_STORE_KEYS
         ]
@@ -759,45 +771,21 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
         await self._store.async_save(payload)
 
     async def _async_mutate(
-        self, change: Callable[[], _Result], *, skip_if_unchanged: bool = False
+        self,
+        change: Callable[[], _Result],
+        *,
+        skip_if_unchanged: bool = False,
+        scope: dict[str, list[str] | None] | None = None,
     ) -> _Result:
-        """Serialize a complete in-memory change and restore it if saving fails."""
+        """Serialize a durable change; rollback its declared write set on failure."""
         async with self._mutation_lock:
-            previous = (
-                deepcopy(self.scenes),
-                deepcopy(self.area_names),
-                deepcopy(self.variables),
-                deepcopy(self.themes),
-                deepcopy(self.settings),
-                list(self.managed_native_scene_ids),
-                self.pending_hide_sync,
-            )
+            previous = StoreSnapshot(self, scope)
             try:
                 result = change()
-                if (
-                    not skip_if_unchanged
-                    or (
-                        self.scenes,
-                        self.area_names,
-                        self.variables,
-                        self.themes,
-                        self.settings,
-                        self.managed_native_scene_ids,
-                        self.pending_hide_sync,
-                    )
-                    != previous
-                ):
+                if not skip_if_unchanged or not previous.unchanged(self):
                     await self.async_save()
             except Exception:
-                (
-                    self.scenes,
-                    self.area_names,
-                    self.variables,
-                    self.themes,
-                    self.settings,
-                    self.managed_native_scene_ids,
-                    self.pending_hide_sync,
-                ) = previous
+                previous.restore(self)
                 raise
             return result
 
@@ -820,7 +808,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
             self.variables[var_id] = var
             return var
 
-        return await self._async_mutate(change)
+        return await self._async_mutate(change, scope={"variables": [var_id]})
 
     async def async_rebase_variable(
         self, raw: dict[str, Any], base: dict[str, Any], base_revision: str
@@ -843,7 +831,9 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
             self.variables[var_id] = item
             return item
 
-        return await self._async_mutate(change, skip_if_unchanged=True)
+        return await self._async_mutate(
+            change, skip_if_unchanged=True, scope={"variables": [var_id]}
+        )
 
     async def async_delete_variable(self, var_id: str) -> bool:
         """Delete a variable.  Raises if still referenced by themes or scenes."""
@@ -907,7 +897,8 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                         ):
                             still_used(f"scene {scene_name}")
         return await self._async_mutate(
-            lambda: self.variables.pop(var_id, None) is not None
+            lambda: self.variables.pop(var_id, None) is not None,
+            scope={"variables": [var_id]},
         )
 
     # --- Theme CRUD ---
@@ -1001,7 +992,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
             self.themes[theme_id] = theme
             return theme
 
-        return await self._async_mutate(change)
+        return await self._async_mutate(change, scope={"themes": [theme_id]})
 
     async def async_rebase_theme(
         self, raw: dict[str, Any], base: dict[str, Any], base_revision: str
@@ -1024,7 +1015,9 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
             self.themes[theme_id] = item
             return item
 
-        return await self._async_mutate(change, skip_if_unchanged=True)
+        return await self._async_mutate(
+            change, skip_if_unchanged=True, scope={"themes": [theme_id]}
+        )
 
     async def async_delete_theme(self, theme_id: str) -> bool:
         """Delete a theme.  Raises if still referenced by circadian scenes."""
@@ -1037,7 +1030,8 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                     f"scene {sc.get(SCENE_NAME, sc['id'])!r}"
                 )
         return await self._async_mutate(
-            lambda: self.themes.pop(theme_id, None) is not None
+            lambda: self.themes.pop(theme_id, None) is not None,
+            scope={"themes": [theme_id]},
         )
 
     # --- Scene CRUD ---
@@ -1055,7 +1049,9 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                 if area_id in names and names[area_id].strip():
                     self.area_names[area_id] = names[area_id]
 
-        await self._async_mutate(change, skip_if_unchanged=True)
+        await self._async_mutate(
+            change, skip_if_unchanged=True, scope={"area_names": None}
+        )
 
     async def async_move_area(
         self, old_area_id: str, target_area_id: str
@@ -1134,7 +1130,9 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                 self.area_names[item[AREA]] = area_name
             return item
 
-        return await self._async_mutate(change)
+        return await self._async_mutate(
+            change, scope={"scenes": [item["id"]], "area_names": None}
+        )
 
     async def async_rebase_scene(
         self,
@@ -1169,7 +1167,11 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                 self.area_names[item[AREA]] = area_name
             return item
 
-        return await self._async_mutate(change, skip_if_unchanged=True)
+        return await self._async_mutate(
+            change,
+            skip_if_unchanged=True,
+            scope={"scenes": [scene_id], "area_names": None},
+        )
 
     async def async_set_automatically_update_lights(
         self, scene_id: str, automatically_update_lights: bool
@@ -1183,7 +1185,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
             item[AUTOMATICALLY_UPDATE_LIGHTS] = bool(automatically_update_lights)
             return item
 
-        return await self._async_mutate(change)
+        return await self._async_mutate(change, scope={"scenes": [scene_id]})
 
     async def async_set_scene_updates(
         self, scene_ids: list[str], enabled: bool
@@ -1206,7 +1208,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
                 self.scenes[item["id"]] = item
             return items
 
-        return await self._async_mutate(change)
+        return await self._async_mutate(change, scope={"scenes": scene_ids})
 
     async def async_reset_to_fresh(self) -> None:
         """Replace scenes, library, and settings with a fresh install.
@@ -1231,7 +1233,8 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
         if scene_id not in self.scenes:
             return False
         return await self._async_mutate(
-            lambda: self.scenes.pop(scene_id, None) is not None
+            lambda: self.scenes.pop(scene_id, None) is not None,
+            scope={"scenes": [scene_id]},
         )
 
     async def async_update_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
@@ -1294,7 +1297,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
             self.settings.update(validated)
             return dict(self.settings)
 
-        return await self._async_mutate(change)
+        return await self._async_mutate(change, scope={"settings": None})
 
     # --- Legacy helpers (migration only, will be removed) ---
 

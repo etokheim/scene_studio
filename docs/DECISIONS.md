@@ -903,3 +903,63 @@ Structural reconciliation runs when event drafts, membership, or capabilities
 change, retaining group controls and destination-owned member IDs. Layout flights
 settle before a new structural change; direct strip controls return to their
 original slot rather than being appended after the groups.
+
+Scene Studio's HA storage adapter translates serialization/write errors into a
+propagating persistence error: HA Store otherwise logs and suppresses those
+errors, bypassing transaction rollback and allowing premature success notices.
+Current-store writes are atomic so failed writes retain the previous disk data.
+Tests exercise HA's actual write boundary, including recovery on the next save.
+
+Light tiles have a fixed 135px content height and 5px padding at every breakpoint.
+CSS and fill painting share those constants (145px client height), avoiding
+per-tile geometry reads after style writes. Dial scrubs/morphs paint light values
+once and retain time/reset/play/source controls; source controls refresh on data
+or selection changes. This preserves the fill ramp, pixels and animation timing.
+
+Collaboration refreshes use admin-only scoped catalog patches for scene/theme/
+variable notices. Requested IDs missing from a patch mean deletion. Palette-slot
+references are followed transitively before resolving affected scene cards. Full
+snapshots remain for reconnect, settings, area operations and reset. Refreshes
+are serialized; notices received in flight are drained, not discarded. Existing
+Library ordering and unrelated rail cards remain mounted for scene-only patches.
+
+Localized store mutations declare their write set and snapshot only those items;
+settings and retained area names remain small whole-field snapshots. Insertions
+and deletions distinguish absent keys from stored values. Reset, migration,
+auto-configure and area transactions retain full snapshots. The mutation lock,
+revision merge, durable save and failure rollback ordering remain unchanged.
+Serialization remains on HA's event loop: moving it to a worker needs a separate
+immutability audit. Atomic disk writes intentionally take precedence over small-
+store write latency; the scoped snapshot removes the measured catalog-size cost.
+
+## Panel stylesheet ownership
+
+`frontend/panel_styles.js` owns the shadow stylesheet, retaining its original rule order and component-style tail. `panel_constants.js` is the shared source of geometry/timing values used by both styles and behavior. `panel.js` mounts the stylesheet; it does not own CSS. The extraction preserves the evaluated stylesheet, including whitespace, and introduces no build step.
+
+## Explicit frontend method owners
+
+The approved split keeps panel state and orchestration in `SceneStudioPanel`.
+History, catalog/autosave, dialogs, Library and event editing, preview control,
+timeline chrome and dial layers are explicit plain-module method owners. They
+retain the original panel receiver and method bodies; registration rejects
+duplicate owners before installing any methods. This gives readable boundaries
+without changing callbacks, timing or introducing a framework/inheritance chain.
+See `docs/FRONTEND.md` for the responsibility map.
+
+## Retained dial SVG frames and backend boundaries
+
+Measured date morphs repeatedly recreated solar marks and brightness-gradient
+stops. Painter-local frames now retain those nodes, updating the same attributes
+and reconciling paint order only when topology changes. Outgoing and incoming
+roots have independent frame pools. Unchanged labels keep their text nodes.
+Timing, samples, colors and light transitions are unchanged. Geometry parity
+and zero-mutation tests cover this boundary; measurements are in
+`docs/PERFORMANCE.md`.
+
+Keep activation serialization: one pending context and ownership transfer rely
+on its critical section, and actual sandbox handler measurements do not justify
+weakening it. Keep event-loop store serialization until saved records are
+immutable or executor completion is explicitly cancellation-safe; a transaction
+lock alone cannot prevent an unfinished serializer from racing later mutation
+or rollback. Avoid a full
+on-loop copy that restores the snapshot cost already removed.

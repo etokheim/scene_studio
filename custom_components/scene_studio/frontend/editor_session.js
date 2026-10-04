@@ -1,7 +1,5 @@
-/* Editor session helpers: form defaults, clock/date formatting, and ISO day math.
-   Draft localStorage load/save/persist still live as SceneStudioPanel methods
-   in panel.js (key building + serialization are class-bound today). Revisit when
-   those can be free functions without changing behavior. */
+/* Pure form defaults and local calendar/clock helpers. Editor history and
+ * snapshots live in editor_history.js; browser preferences remain panel-owned. */
 
 const SECONDS_PER_DAY = 24 * 3600;
 

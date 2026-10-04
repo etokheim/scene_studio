@@ -1,5 +1,10 @@
 /** Shared light tiles (huemane-inspired). Used by simple scenes and the circadian dial. */
 
+// Content-box dimensions shared by CSS and fill painting; client height includes padding.
+export const LIGHT_TILE_CONTENT_HEIGHT = 135;
+export const LIGHT_TILE_PADDING = 5;
+export const LIGHT_TILE_HEIGHT = LIGHT_TILE_CONTENT_HEIGHT + 2 * LIGHT_TILE_PADDING;
+
 export const LIGHT_TILES_CSS = `
   .light-tiles-scroller {
     display: flex;
@@ -488,8 +493,8 @@ export const LIGHT_TILES_CSS = `
     z-index: 1;
     /* Huemane light tile: 85×(90+45 switch slot), 5px pad, radius 24. No switch painted. */
     width: 85px;
-    height: 135px;
-    padding: 5px;
+    height: ${LIGHT_TILE_CONTENT_HEIGHT}px;
+    padding: ${LIGHT_TILE_PADDING}px;
     border: 0;
     border-radius: 24px;
     overflow: hidden;
@@ -858,8 +863,8 @@ const tilePaints = new WeakMap();
 
 export function paintLightTile(selector, { rgb, fillPct, selected, brightnessLabel }) {
   const tile = selector.querySelector(".simple-light-tile");
-  // Read geometry before writing styles; an unchanged tile needs no DOM writes.
-  const tileH = tile.clientHeight || 135;
+  // Tiles have one fixed content-box height at every breakpoint.
+  const tileH = LIGHT_TILE_HEIGHT;
   const channels = rgb || [0, 0, 0];
   const pct = Number(fillPct) || 0;
   const label = brightnessLabel === undefined ? `${Math.round(pct)}%` : brightnessLabel;

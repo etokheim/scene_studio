@@ -103,8 +103,8 @@ Run the CI checks from the repository environment before delivery:
 .venv/bin/python .github/scripts/check_translations.py
 ```
 
-During development, add copy only to English. Synchronize nb/nn/de/es and write Unreleased notes during release preparation. Update the existing release PR; do not assign a version or merge it.
+During development, add copy only to English. Synchronize nb/nn/de/es and write Unreleased notes during release preparation. Open or update a release PR only when requested; do not assign a version or merge it.
 
 Follow the browser verification skill after asset bumps, sandbox restarts, and normal reloads. Wait for the destination editor to finish loading before measuring updates. Restore any sandbox scene edits used for verification with undo or the exact saved snapshot. Record viewport, scene/light counts, DOM mutations, geometry reads, animation work, focus/drag continuity, and scroll retention. Unchanged grouping must produce no structural mutations or layout animation.
 
-A deeper performance investigation is a separate report-only pass, measuring activation, automatic ticks, durable writes, WebSocket payloads, and frame/layout work before presenting an unchanged-UI improvement plan. A broad panel split is a separately approved behavior-preserving follow-up: styles, editor session/history, supporting dialogs, preview ownership, then dial rendering/interaction. Keep plain modules; no framework, bundler, or UI rewrite.
+The approved performance follow-up and panel split preserve behavior and the existing plain-module loading pattern. See [docs/FRONTEND.md](docs/FRONTEND.md) for module ownership and extraction checks, and [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for measured costs and retained backend safety boundaries. Further optimization needs measurements and unchanged-UI acceptance checks. Keep refactor and performance commits separate; no framework, bundler, or UI rewrite.

@@ -1,5 +1,5 @@
 /* Dial / sun-path geometry and light-sample morph helpers.
-   CLOCK_* layout constants stay in panel.js — these free functions do not use them. */
+   Shared CLOCK_* values live in panel_constants.js; these helpers take explicit geometry. */
 
 import { formatClockHm } from "./editor_session.js";
 
