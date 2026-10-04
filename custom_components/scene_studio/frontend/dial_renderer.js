@@ -2,11 +2,31 @@ import { beginSvgFrame, setTextIfChanged } from "./dial_svg_frame.js";
 /* dial renderer owns these panel methods.
  * The receiver is the panel: navigation, rendering and saving remain host hooks.
  * Keep closures bound to that receiver; do not bind methods to a separate object. */
-import { SECONDS_PER_DAY, CLOCK_VIEW, CLOCK_CX, CLOCK_CY, CLOCK_EVENT_BTN_PX, CLOCK_TICK_MINOR_LEN, CLOCK_HOUR_LABEL_OUTSET_PX, CLOCK_EVENT_GAP_FROM_PATH_PX } from "./panel_constants.js";
+import {
+  SECONDS_PER_DAY,
+  CLOCK_VIEW,
+  CLOCK_CX,
+  CLOCK_CY,
+  CLOCK_EVENT_BTN_PX,
+  CLOCK_TICK_MINOR_LEN,
+  CLOCK_HOUR_LABEL_OUTSET_PX,
+  CLOCK_EVENT_GAP_FROM_PATH_PX,
+} from "./panel_constants.js";
 import { polarEaseClosedPathD, THEME_BRIGHTNESS_SNAP } from "./color_ui.js";
 import { nowSecondsSinceMidnight, formatClock } from "./editor_session.js";
-import { interpolateElevation, skyLookFromElevation, conicGradientFromSamples } from "./dial_clock.js";
-import { bindGroupTitleStick, captureLightStripLayout, createAddLightTile, createLightTilesHint, playLightStripLayout, revealLightActionsNow } from "./light_tiles.js";
+import {
+  interpolateElevation,
+  skyLookFromElevation,
+  conicGradientFromSamples,
+} from "./dial_clock.js";
+import {
+  bindGroupTitleStick,
+  captureLightStripLayout,
+  createAddLightTile,
+  createLightTilesHint,
+  playLightStripLayout,
+  revealLightActionsNow,
+} from "./light_tiles.js";
 
 export const dialRendererMethods = {
   _drawSunPath() {
@@ -464,6 +484,10 @@ export const dialRendererMethods = {
     dots.finish();
   },
 
+  /**
+   * Place event labels to avoid collisions around the dial.
+   * Top → above; bottom → below; left/right → first (topmost) above, rest below.
+   */
   _layoutClockEventMetas(anchors) {
     if (!anchors?.length) {
       return;
@@ -510,6 +534,7 @@ export const dialRendererMethods = {
     right.forEach((anchor, index) => setBelow(anchor, index !== 0));
   },
 
+  /** Retarget dashed spokes from path dots to mark chrome; clamp links ghost→button. */
   _layoutClockEventSpokes() {
     const spokes = this._clockEventSpokeEls;
     const links = this._clockEventClampLinkEls;
@@ -618,6 +643,19 @@ export const dialRendererMethods = {
     this._clockHandleOuterEl = handleOuter;
   },
 
+  /**
+   * Update an existing dial face for year scrub without replaceChildren.
+   * Returns false when the light set changed and a full rebuild is required.
+   *
+   * morphing: mid refine/date morph — update ring fills + sun only. Skip bloom
+   * clones and horizon wedge rebuilds (those are translucent layers that stack
+   * and flash under the dial when destroyed/recreated every frame).
+   */
+  /**
+   * Year-scrub / date morph may patch rings in place. After the list replaces
+   * the body with the linear chart, those nodes are detached — patching them
+   * would succeed and skip rebuilding the visible dial.
+   */
   _clearClockBackgrounds({ keepOverlay = false } = {}) {
     for (const node of this.shadowRoot?.querySelectorAll(".clock-horizon-back") || []) {
       // Outgoing pixels belong to their exit layer until its animation finishes.
@@ -770,6 +808,7 @@ export const dialRendererMethods = {
     return true;
   },
 
+  /** Reposition / relabel event buttons mid-scrub (ghosts move with solar marks). */
   _syncClockEventAnchorsForScrub(events) {
     const anchors = this._clockEventAnchors || [];
     for (const anchor of anchors) {

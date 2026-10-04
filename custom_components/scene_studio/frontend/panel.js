@@ -12,19 +12,52 @@ import { panelDialogMethods } from "./panel_dialogs.js";
 import { installPanelMethods } from "./panel_composition.js";
 import { editorHistoryMethods } from "./editor_history.js";
 import { PANEL_STYLES } from "./panel_styles.js";
-import { DOMAIN, PANEL_URL_PATH, LEGACY_DOMAINS, WHEEL_FACE_MIN_PX, DIAL_FACE_MIN_PX, WHEEL_FACE_MAX_PX, DIAL_FACE_MAX_PX, SIDEBAR_ANIMATION_MS, SIDEBAR_SWAP_MS, LIVE_EDIT_STORAGE_VERSION, ROOM_PREVIEW_STORAGE_VERSION, SCENE_PLAY_STORAGE_VERSION, SCENE_PLAY_TRANSITION_SEC, SCENE_PLAY_DURATION_DEFAULT_SEC, SCENE_PLAY_DURATION_OPTIONS_SEC, CLOCK_FEATHER_PCT, LINKED_EVENTS, EVENT_LIGHT_DEFAULTS, EVENT_SCENE_KEYS, LABELS } from "./panel_constants.js";
-
+import {
+  DOMAIN,
+  PANEL_URL_PATH,
+  LEGACY_DOMAINS,
+  WHEEL_FACE_MIN_PX,
+  DIAL_FACE_MIN_PX,
+  WHEEL_FACE_MAX_PX,
+  DIAL_FACE_MAX_PX,
+  SIDEBAR_ANIMATION_MS,
+  SIDEBAR_SWAP_MS,
+  LIVE_EDIT_STORAGE_VERSION,
+  ROOM_PREVIEW_STORAGE_VERSION,
+  SCENE_PLAY_STORAGE_VERSION,
+  SCENE_PLAY_TRANSITION_SEC,
+  SCENE_PLAY_DURATION_DEFAULT_SEC,
+  SCENE_PLAY_DURATION_OPTIONS_SEC,
+  CLOCK_FEATHER_PCT,
+  LINKED_EVENTS,
+  EVENT_LIGHT_DEFAULTS,
+  EVENT_SCENE_KEYS,
+  LABELS,
+} from "./panel_constants.js";
 
 import { editorPath, editorRoute } from "./editor_routes.js";
-import { editorGeometry, crossfadePreview, createTransitionGate, createEditorShell, fitLightStripGutter, fitSidebarLightStrip, mountEditorRegions } from "./editor_shell.js";
-
+import {
+  editorGeometry,
+  crossfadePreview,
+  createTransitionGate,
+  createEditorShell,
+  fitLightStripGutter,
+  fitSidebarLightStrip,
+  mountEditorRegions,
+} from "./editor_shell.js";
 
 import { rgb2hsv, hueTempToRgb } from "./color_ui.js";
 import { galleryCopyName } from "./gallery.js";
 
 import { todayIso, emptyFormData, timeToSeconds, secondsToTime } from "./editor_session.js";
 
-import { renderLanding, renderListStageEmpty, sceneCoverUrl, syncSceneCardFace, bindStickyTitles } from "./landing.js";
+import {
+  renderLanding,
+  renderListStageEmpty,
+  sceneCoverUrl,
+  syncSceneCardFace,
+  bindStickyTitles,
+} from "./landing.js";
 import { lightDisplayName } from "./display_names.js";
 
 import { defaultOnPreference, sceneRailCatalogKey } from "./panel_state.js";
@@ -32,7 +65,6 @@ import { panelLoadIsCurrent } from "./load_guard.js";
 import { paintSimpleCardMesh } from "./card_mesh.js";
 import { renderSimpleEditor, renderPaletteEditor } from "./simple_editor.js";
 import { snapshotWheelEditor, applyWheelMorph } from "./wheel_morph.js";
-
 
 /* @property in the shadow stylesheet does not register for animation;
    CSS.registerProperty on the document does. Call once per page load. */
@@ -2003,9 +2035,6 @@ class SceneStudioPanel extends HTMLElement {
     );
   }
 
-  // Simple-scene light edits share the global undo stack. The snapshot is the
-  // scene before the write; a drag or scroll stays one entry until the gesture ends.
-
   async _autoConfigure() {
     try {
       await this._hass.callWS({ type: `${DOMAIN}/auto_configure` });
@@ -2252,12 +2281,6 @@ class SceneStudioPanel extends HTMLElement {
     }
     void this._ensureThemeDraft().then(() => this._ensureSunPath());
   }
-
-  /** Selected lamp for dial brightness, else theme (including `theme:` ids). */
-
-  /** On/off is only on or off. Brightness-only keeps level and drops color. */
-
-  /** Replace ring samples with the solar-event resample. Does not paint. */
 
   _buildEmptyState({ icon, title, paragraphs, learnMore = false }) {
     const el = document.createElement("div");
@@ -4196,8 +4219,6 @@ class SceneStudioPanel extends HTMLElement {
     return { body, footer };
   }
 
-  /** Drop ring hover highlight (touch scrub / mouse leave). */
-
   _closeSceneSidebar({ animate = false, clearSelection = true } = {}) {
     // Opening a replacement sidebar passes clearSelection:false — otherwise the
     // pre-await ring highlight (_setSidebarLight before _openSceneSidebar) is
@@ -4775,8 +4796,6 @@ class SceneStudioPanel extends HTMLElement {
     });
   }
 
-  /** Theme rings (`theme:…`) and suggested/removed rows are not HA lights. */
-
   async _save() {
     await this._saveNow();
   }
@@ -4838,18 +4857,6 @@ class SceneStudioPanel extends HTMLElement {
     };
   }
 
-  /**
-   * Animate the dial through each calendar day from→to, then refine with HA.
-   */
-
-
-  /**
-   * Mid-drag year scrub: local sun geometry + 5-event ring knots (CSS ramps
-   * between them). HA Astral preview reconciles on pointer-up via _ensureSunPath.
-   */
-
-  /** Wide enough for the dual-gutter landscape scrub rail. */
-
   _stampListPreset() {
     const scene = this._formData;
     if (!scene?.id) {
@@ -4879,119 +4886,6 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
-  /** Ease the sun along the path when it relocates (event pin, reset, etc.). */
-
-  /** Shortest signed seconds delta on the 24h circle (for arc lerps). */
-
-
-  /** Clockwise seconds from `from` to `to` on the 24h circle (0..86400). */
-
-  /**
-   * Ease the sun along the elevation curve by chasing time-of-day.
-   * Retargeting mid-flight only updates the goal — exponential smoothing
-   * keeps motion on the arc without restarting a CSS/tween chord.
-   */
-
-
-  /** Today's peak elevation from the sun curve (may be ≤0 in polar night). */
-
-
-  /**
-   * Perfect-circle path radius for the preview day: larger in summer (high
-   * peak), smaller in winter. Clamped between planet+pad and face−pad so the
-   * stroke (and large night sun) clear the dial and the core edge.
-   */
-
-  /** Smallest at daytime zenith; largest at sunrise/sunset; fixed max at night. */
-
-  /** True solar time for path/sky marks (ignores earliest-dusk clamp). */
-
-
-  /** Effective scene time (clamped when earliest-dusk applies). */
-
-  /** Prefer connected core sun/hit nodes over detached paint leftovers. */
-
-  /**
-   * Continuous core→outer RGB stops for the horizon rim (then → surface).
-   * Colorful gold→pink→purple only through civil twilight; at dusk (sun −6°,
-   * “last light”) and below the rim is dark blue only — no afterglow pinks.
-   * Elevation keyframes share the same stop count so scrub never jumps.
-   */
-
-
-  /** Color along spectrum for band weight 1 (event) → 0 (surface). */
-
-
-  /**
-   * Day-wedge sky from elevation (smooth; light = crispy blue).
-   */
-
-  /** Sky wash removed — dial relies on night wedges + horizon rim glow only. */
-
-  /** Timed ease along the elevation curve (used for the clock enter sweep). */
-
-  /**
-   * Place event labels to avoid collisions around the dial.
-   * Top → above; bottom → below; left/right → first (topmost) above, rest below.
-   */
-
-
-  /** Retarget dashed spokes from path dots to mark chrome; clamp links ghost→button. */
-
-  /** Snap to a solar event only when the pointer is within the capture window. */
-
-  /**
-   * Update an existing dial face for year scrub without replaceChildren.
-   * Returns false when the light set changed and a full rebuild is required.
-   *
-   * morphing: mid refine/date morph — update ring fills + sun only. Skip bloom
-   * clones and horizon wedge rebuilds (those are translucent layers that stack
-   * and flash under the dial when destroyed/recreated every frame).
-   */
-  /**
-   * Year-scrub / date morph may patch rings in place. After the list replaces
-   * the body with the linear chart, those nodes are detached — patching them
-   * would succeed and skip rebuilding the visible dial.
-   */
-
-  /** Update night/day wedge path `d` in place during morph (no node churn). */
-
-
-  /** Reposition / relabel event buttons mid-scrub (ghosts move with solar marks). */
-
-}
-
-function entitySelector(hass, domain, areaId, nativeScenesOnly, extraIds) {
-  const config = { domain, multiple: false };
-  const include = [];
-  const entities = hass.entities || {};
-  for (const [entityId, meta] of Object.entries(entities)) {
-    if (!entityId.startsWith(`${domain}.`)) {
-      continue;
-    }
-    if (nativeScenesOnly) {
-      if (meta.platform && meta.platform !== "homeassistant") {
-        continue;
-      }
-      const state = hass.states[entityId];
-      if (state && state.attributes.integration === DOMAIN) {
-        continue;
-      }
-    }
-    if (areaId && meta.area_id !== areaId) {
-      continue;
-    }
-    include.push(entityId);
-  }
-  for (const extra of extraIds || []) {
-    if (extra && !include.includes(extra)) {
-      include.push(extra);
-    }
-  }
-  if (areaId || nativeScenesOnly) {
-    config.include_entities = include;
-  }
-  return { entity: config };
 }
 
 installPanelMethods(SceneStudioPanel.prototype, {

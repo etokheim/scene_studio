@@ -2,11 +2,26 @@ import { beginSvgFrame } from "./dial_svg_frame.js";
 /* dial sky owns these panel methods.
  * The receiver is the panel: navigation, rendering and saving remain host hooks.
  * Keep closures bound to that receiver; do not bind methods to a separate object. */
-import { SECONDS_PER_DAY, CLOCK_VIEW, CLOCK_CX, CLOCK_CY, CLOCK_RINGS_OUTER, CLOCK_SUN_PATH_PAD, CLOCK_SUN_PATH_WIDTH_PX, CLOCK_SKY_R, CLOCK_DAY_SKY_LIGHT, CLOCK_SUN_R_VIEW, CLOCK_SUN_SCALE_MAX, CLOCK_TICK_OUTER, CLOCK_OVERRIDE_R } from "./panel_constants.js";
+import {
+  SECONDS_PER_DAY,
+  CLOCK_VIEW,
+  CLOCK_CX,
+  CLOCK_CY,
+  CLOCK_RINGS_OUTER,
+  CLOCK_SUN_PATH_PAD,
+  CLOCK_SUN_PATH_WIDTH_PX,
+  CLOCK_SKY_R,
+  CLOCK_DAY_SKY_LIGHT,
+  CLOCK_SUN_R_VIEW,
+  CLOCK_SUN_SCALE_MAX,
+  CLOCK_TICK_OUTER,
+  CLOCK_OVERRIDE_R,
+} from "./panel_constants.js";
 import { nowSecondsSinceMidnight } from "./editor_session.js";
 import { sunStrokePathRuns, interpolateElevation } from "./dial_clock.js";
 
 export const dialSkyMethods = {
+  /** Today's peak elevation from the sun curve (may be ≤0 in polar night). */
   _clockDayPeakElevation() {
     const curve = this._sunPath?.curve;
     if (!curve?.length) {
@@ -19,6 +34,11 @@ export const dialSkyMethods = {
     return peak;
   },
 
+  /**
+   * Perfect-circle path radius for the preview day: larger in summer (high
+   * peak), smaller in winter. Clamped between planet+pad and face−pad so the
+   * stroke (and large night sun) clear the dial and the core edge.
+   */
   _clockSunPathRadius() {
     const sunClear = CLOCK_SUN_R_VIEW * CLOCK_SUN_SCALE_MAX;
     const rMin = CLOCK_RINGS_OUTER + CLOCK_SUN_PATH_PAD + sunClear;
@@ -42,6 +62,7 @@ export const dialSkyMethods = {
     return this._clockSunPathRadius();
   },
 
+  /** Smallest at daytime zenith; largest at sunrise/sunset; fixed max at night. */
   _clockSunScale(elevation) {
     if (elevation < 0) {
       return CLOCK_SUN_SCALE_MAX;
@@ -97,6 +118,7 @@ export const dialSkyMethods = {
     return this._eventMarkSeconds(event);
   },
 
+  /** True solar time for path/sky marks (ignores earliest-dusk clamp). */
   _eventMarkSeconds(event) {
     if (!event || event.seconds == null) {
       return null;
@@ -107,10 +129,12 @@ export const dialSkyMethods = {
     return event.seconds;
   },
 
+  /** Effective scene time (clamped when earliest-dusk applies). */
   _eventButtonSeconds(event) {
     return event?.seconds != null ? event.seconds : null;
   },
 
+  /** Prefer connected core sun/hit nodes over detached paint leftovers. */
   _ensureLiveClockSunEls() {
     const core =
       this._clockFaceEl?.querySelector(".sun-light-clock-core") ||
@@ -374,6 +398,12 @@ export const dialSkyMethods = {
     ];
   },
 
+  /**
+   * Continuous core→outer RGB stops for the horizon rim (then → surface).
+   * Colorful gold→pink→purple only through civil twilight; at dusk (sun −6°,
+   * “last light”) and below the rim is dark blue only — no afterglow pinks.
+   * Elevation keyframes share the same stop count so scrub never jumps.
+   */
   _horizonSpectrumStops(elev) {
     const light = !this.hasAttribute("data-dark-mode");
     // 5 stops: near-sun → mid → far, then caller mixes into surface.
@@ -508,6 +538,7 @@ export const dialSkyMethods = {
     return lo.stops.map((a, i) => this._lerpRgb(a, hi.stops[i], t));
   },
 
+  /** Color along spectrum for band weight 1 (event) → 0 (surface). */
   _horizonBandColor(weight, spectrumStops) {
     const SURFACE = "var(--primary-background-color)";
     const u = 1 - Math.min(1, Math.max(0, weight));
@@ -532,6 +563,9 @@ export const dialSkyMethods = {
     return this._rgbCss(this._lerpRgb(spectrumStops[i], spectrumStops[i + 1], f));
   },
 
+  /**
+   * Day-wedge sky from elevation (smooth; light = crispy blue).
+   */
   _horizonDaySky(elev, spectrumStops) {
     const light = !this.hasAttribute("data-dark-mode");
     if (light) {
@@ -613,6 +647,7 @@ export const dialSkyMethods = {
     }
   },
 
+  /** Sky wash removed — dial relies on night wedges + horizon rim glow only. */
   _layoutClockSunFill(pos, scale) {
     const fill = this._clockSunFillEl;
     const glow = this._clockSunGlowEl;
@@ -919,6 +954,7 @@ export const dialSkyMethods = {
     this._cancelClockSunArc();
   },
 
+  /** Update night/day wedge path `d` in place during morph (no node churn). */
   _syncHorizonShadowPaths(events) {
     const sky = this._clockHorizonSkyEl;
     if (!sky) {

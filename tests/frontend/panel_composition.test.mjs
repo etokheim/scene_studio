@@ -46,3 +46,26 @@ test("undo retains the destination and own edit rather than remote replacement",
   assert.deepEqual(panel._redoStack[0].after.form, { name: "after" });
   assert.deepEqual(panel.restored, [entry, "before"]);
 });
+
+test("the registered panel exposes each owner's original methods directly", async () => {
+  const registry = new Map();
+  globalThis.HTMLElement = class {};
+  globalThis.customElements = { get: name => registry.get(name), define: (name, value) => registry.set(name, value) };
+  await import("../../custom_components/scene_studio/frontend/panel.js");
+  const prototype = registry.get("scene-studio-panel").prototype;
+  const owners = ["editor_history", "panel_dialogs", "preview_controller", "preview_timeline",
+    "dial_sky", "dial_interaction", "dial_renderer", "dial_light_strip",
+    "circadian_editor", "panel_catalog", "library_editor"];
+  const names = new Set();
+  for (const owner of owners) {
+    const module = await import(`../../custom_components/scene_studio/frontend/${owner}.js`);
+    const methods = Object.values(module)[0];
+    for (const [name, fn] of Object.entries(methods)) {
+      assert.equal(names.has(name), false, `${name} has more than one owner`);
+      names.add(name);
+      assert.equal(prototype[name], fn, `${owner}.${name} lost its original call path`);
+      assert.equal(Object.getOwnPropertyDescriptor(prototype, name).enumerable, false);
+    }
+  }
+  assert.ok(names.size > 300);
+});

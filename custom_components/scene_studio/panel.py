@@ -22,8 +22,8 @@ FRONTEND_DIR = Path(__file__).parent / "frontend"
 PANEL_VERSION = json.loads(
     (Path(__file__).parent / "manifest.json").read_text(encoding="utf-8")
 ).get("version", "0")
-# Increment when panel.js changes without a manifest version bump.
-PANEL_ASSET_REV = "14"
+# Increment for frontend module or style changes without a manifest version bump.
+PANEL_ASSET_REV = "16"
 
 
 async def async_setup_panel(hass: HomeAssistant) -> None:
