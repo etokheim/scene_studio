@@ -241,7 +241,7 @@ def _catalog_changes_payload(hass: HomeAssistant, changes: list[dict]) -> dict:
 
     # Palette slots can refer to colors; retain the transitive closure so a
     # changed color also refreshes scenes using a referencing palette/theme.
-    while True:
+    while variables:
         expanded = variables | {
             key for key, item in store.variables.items() if references(item, variables)
         }
@@ -249,12 +249,15 @@ def _catalog_changes_payload(hass: HomeAssistant, changes: list[dict]) -> dict:
             break
         variables = expanded
     themes = ids["theme"] | {
-        key for key, item in store.themes.items() if references(item, variables)
+        key
+        for key, item in store.themes.items()
+        if variables and references(item, variables)
     }
     scenes = ids["scene"] | {
         key
-        for key, item in store.scenes.items()
-        if item.get("theme_id") in themes or references(item, variables)
+        for key, item in (store.scenes.items() if themes or variables else ())
+        if (themes and item.get("theme_id") in themes)
+        or (variables and references(item, variables))
     }
     return {
         "partial": True,

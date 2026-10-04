@@ -54,3 +54,24 @@ def test_missing_items_are_explicit_deletions_without_card_work():
     assert result["scene_ids"] == ["deleted"]
     assert result["scenes"] == []
     resolved.assert_not_called()
+
+
+def test_scene_only_change_does_not_scan_other_scenes():
+    class NoScan(dict):
+        def items(self):
+            raise AssertionError("scene-only refresh must not scan unrelated scenes")
+
+    store = SimpleNamespace(
+        variables={}, themes={}, scenes=NoScan({"one": {"id": "one"}})
+    )
+    with (
+        patch(
+            "custom_components.scene_studio.websocket_api._store", return_value=store
+        ),
+        patch(
+            "custom_components.scene_studio.websocket_api._scene_payload",
+            side_effect=lambda _hass, item: item,
+        ),
+    ):
+        result = _catalog_changes_payload(None, [{"kind": "scene", "id": "one"}])
+    assert result["scenes"] == [{"id": "one"}]
