@@ -903,3 +903,9 @@ Structural reconciliation runs when event drafts, membership, or capabilities
 change, retaining group controls and destination-owned member IDs. Layout flights
 settle before a new structural change; direct strip controls return to their
 original slot rather than being appended after the groups.
+
+Scene Studio's HA storage adapter translates serialization/write errors into a
+propagating persistence error: HA Store otherwise logs and suppresses those
+errors, bypassing transaction rollback and allowing premature success notices.
+Current-store writes are atomic so failed writes retain the previous disk data.
+Tests exercise HA's actual write boundary, including recovery on the next save.

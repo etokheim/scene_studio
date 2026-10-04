@@ -16,6 +16,8 @@ from typing import Any, Callable, TypeVar
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
+from homeassistant.util.file import WriteError
+from homeassistant.util.json import SerializationError
 
 from .collaboration import ItemDeleted, RevisionConflict, merge_fields, revision_for
 from .const import (
@@ -636,6 +638,15 @@ def normalize_theme(raw: dict[str, Any], theme_id: str) -> dict[str, Any]:
 class _ScenesStore(Store):
     """HA Store that migrates scene_studio.scenes between major versions."""
 
+    async def _async_write_data(self, data: dict) -> None:
+        """Let transaction callers observe failures that HA otherwise only logs."""
+        try:
+            await super()._async_write_data(data)
+        except (SerializationError, WriteError) as err:
+            # Store._async_handle_write_data suppresses these two types. Convert
+            # at the write boundary so rollback/notifications await durability.
+            raise HomeAssistantError("Could not persist Scene Studio data") from err
+
     async def _async_migrate_func(
         self,
         old_major_version: int,
@@ -652,7 +663,7 @@ class SceneStudioStore:  # pylint: disable=too-many-public-methods
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the store."""
         self.hass = hass
-        self._store = _ScenesStore(hass, STORAGE_VERSION, STORE_KEY)
+        self._store = _ScenesStore(hass, STORAGE_VERSION, STORE_KEY, atomic_writes=True)
         self._legacy_stores = [
             _ScenesStore(hass, STORAGE_VERSION, key) for key in LEGACY_STORE_KEYS
         ]
