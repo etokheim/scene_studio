@@ -1,3 +1,4 @@
+import { beginSvgFrame, setTextIfChanged } from "./dial_svg_frame.js";
 /* dial renderer owns these panel methods.
  * The receiver is the panel: navigation, rendering and saving remain host hooks.
  * Keep closures bound to that receiver; do not bind methods to a separate object. */
@@ -296,15 +297,15 @@ export const dialRendererMethods = {
     const pct = this._clockBrightPct(bri);
     const heading = anchor.querySelector(".clock-event-heading");
     if (heading) {
-      heading.textContent = `${event.name} · ${timeText}`;
+      setTextIfChanged(heading, `${event.name} · ${timeText}`);
     }
     const brightEl = anchor.querySelector(".clock-event-bright");
     if (brightEl) {
-      brightEl.textContent = this._t(
+      setTextIfChanged(brightEl, this._t(
         "frontend.clock.event_bright_pct",
         "{percent}%",
         { percent: pct }
-      );
+      ));
     }
     const btn = anchor.querySelector(".clock-event");
     if (!btn) {
@@ -383,19 +384,13 @@ export const dialRendererMethods = {
       return;
     }
     grad.setAttribute("r", String(r1));
-    while (grad.firstChild) {
-      grad.removeChild(grad.firstChild);
-    }
+    const stops = beginSvgFrame(grad);
+    let stopIndex = 0;
     const lightMode = !this.hasAttribute("data-dark-mode");
     const mk = (offset, opacity) => {
-      const stop = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "stop"
-      );
-      stop.setAttribute("offset", offset);
-      stop.setAttribute("stop-color", lightMode ? "#000" : "#fff");
-      stop.setAttribute("stop-opacity", String(opacity));
-      grad.appendChild(stop);
+      stops.node(`stop:${stopIndex++}`, "stop", {
+        offset, "stop-color": lightMode ? "#000" : "#fff", "stop-opacity": opacity,
+      });
     };
     const innerPct = (r0 / r1) * 100;
     // Light mode: gray near 0% (path) so the annulus reads on a pale sky;
@@ -410,6 +405,7 @@ export const dialRendererMethods = {
       mk(`${Math.min(100, innerPct + (100 - innerPct) * 0.55).toFixed(2)}%`, 0.035);
       mk("100%", 0.08);
     }
+    stops.finish();
     const polar = (seconds, radius) => {
       const deg = this._clockAngleDeg(seconds);
       const rad = ((deg - 90) * Math.PI) / 180;
@@ -440,9 +436,10 @@ export const dialRendererMethods = {
     if (!host) {
       return;
     }
-    host.replaceChildren();
+    const dots = beginSvgFrame(host);
     const lightId = this._dialBrightnessLightId();
     if (!lightId || r0 == null || !(r1 > r0)) {
+      dots.finish();
       return;
     }
     for (const event of this._sunPath?.events || []) {
@@ -458,13 +455,13 @@ export const dialRendererMethods = {
       const deg = this._clockAngleDeg(seconds);
       const rad = ((deg - 90) * Math.PI) / 180;
       const radius = r0 + (themeBri / 255) * (r1 - r0);
-      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      dot.setAttribute("class", "clock-theme-bright-dot");
-      dot.setAttribute("cx", (50 + Math.cos(rad) * radius).toFixed(2));
-      dot.setAttribute("cy", (50 + Math.sin(rad) * radius).toFixed(2));
-      dot.setAttribute("r", "1.15");
-      host.appendChild(dot);
+      dots.node(`brightness:${event.id}`, "circle", {
+        class: "clock-theme-bright-dot",
+        cx: (50 + Math.cos(rad) * radius).toFixed(2),
+        cy: (50 + Math.sin(rad) * radius).toFixed(2), r: "1.15",
+      });
     }
+    dots.finish();
   },
 
   _layoutClockEventMetas(anchors) {
@@ -746,15 +743,6 @@ export const dialRendererMethods = {
         }
       }
     }
-    for (const sel of [
-      ".clock-sun-day",
-      ".clock-sun-path-night",
-      ".clock-event-dot",
-      ".clock-event-ray",
-      ".clock-event-clamp-link",
-    ]) {
-      overlay.querySelectorAll(sel).forEach((el) => el.remove());
-    }
     this._paintClockSunPath(overlay, payload.events, { includeSun: false });
     if (!morphing) {
       const sky = this._clockHorizonSkyEl;
@@ -821,7 +809,7 @@ export const dialRendererMethods = {
       const timeText = event.fallback ? `${event.time}*` : event.time;
       const heading = anchor.querySelector(".clock-event-heading");
       if (heading) {
-        heading.textContent = `${event.name} · ${timeText}`;
+        setTextIfChanged(heading, `${event.name} · ${timeText}`);
       }
       const btn = anchor.querySelector(".clock-event");
       if (btn) {

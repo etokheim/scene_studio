@@ -1,3 +1,4 @@
+import { beginSvgFrame } from "./dial_svg_frame.js";
 /* dial sky owns these panel methods.
  * The receiver is the panel: navigation, rendering and saving remain host hooks.
  * Keep closures bound to that receiver; do not bind methods to a separate object. */
@@ -715,6 +716,7 @@ export const dialSkyMethods = {
   _paintClockSunPath(overlay, events, { includeSun = true } = {}) {
     const curve = this._sunPath?.curve;
     if (!curve?.length) {
+      beginSvgFrame(overlay, overlay.querySelector(".clock-sun-day-group")).finish();
       return;
     }
     this._paintSunDayClip(overlay, events);
@@ -732,6 +734,8 @@ export const dialSkyMethods = {
       const large = span / SECONDS_PER_DAY > 0.5 ? 1 : 0;
       return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
     };
+    const marks = beginSvgFrame(overlay, overlay.querySelector(".clock-sun-day-group"));
+    let runIndex = 0;
     // Night dashed arcs only below the horizon (no full-circle underlay).
     for (const run of sunStrokePathRuns(curve, () => CLOCK_SUN_PATH_WIDTH_PX)) {
       const from = run.points[0][0];
@@ -740,19 +744,12 @@ export const dialSkyMethods = {
       if (!d) {
         continue;
       }
-      const path = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path"
-      );
-      if (run.night) {
-        path.setAttribute("class", "clock-sun-path-night");
-      } else {
-        path.setAttribute("class", "clock-sun-day");
-      }
-      path.setAttribute("d", d);
-      path.setAttribute("vector-effect", "non-scaling-stroke");
-      path.setAttribute("stroke-width", "1px");
-      overlay.appendChild(path);
+      marks.node(`sun-run:${runIndex++}`, "path", {
+        class: run.night ? "clock-sun-path-night" : "clock-sun-day",
+        d,
+        "vector-effect": "non-scaling-stroke",
+        "stroke-width": "1px",
+      });
     }
 
     const spokeOuter = Math.min(96, CLOCK_TICK_OUTER - 1);
@@ -766,28 +763,17 @@ export const dialSkyMethods = {
       }
       const pos = this._clockSunXy(markSeconds);
       const outer = this._clockPolar(markSeconds, spokeOuter);
-      const spoke = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "line"
-      );
-      spoke.setAttribute("class", "clock-event-ray");
-      // Outer tip retargeted to mark chrome (ghost or button) in layout.
-      spoke.setAttribute("x1", outer.x.toFixed(2));
-      spoke.setAttribute("y1", outer.y.toFixed(2));
-      spoke.setAttribute("x2", pos.x.toFixed(2));
-      spoke.setAttribute("y2", pos.y.toFixed(2));
-      spoke.dataset.eventId = event.id;
-      overlay.appendChild(spoke);
+      const spoke = marks.node(`ray:${event.id}`, "line", {
+        class: "clock-event-ray",
+        x1: outer.x.toFixed(2), y1: outer.y.toFixed(2),
+        x2: pos.x.toFixed(2), y2: pos.y.toFixed(2),
+        "data-event-id": event.id,
+      });
       this._clockEventSpokeEls.push(spoke);
-      const dot = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "circle"
-      );
-      dot.setAttribute("class", "clock-event-dot");
-      dot.setAttribute("cx", pos.x.toFixed(2));
-      dot.setAttribute("cy", pos.y.toFixed(2));
-      // r set in _layoutClockEventDots for a fixed screen size.
-      overlay.appendChild(dot);
+      const dot = marks.node(`dot:${event.id}`, "circle", {
+        class: "clock-event-dot", cx: pos.x.toFixed(2), cy: pos.y.toFixed(2),
+      });
+      // r is still set by layout for a fixed screen size.
       this._clockEventDotEls.push(dot);
       const buttonSeconds = this._eventButtonSeconds(event);
       if (
@@ -795,17 +781,14 @@ export const dialSkyMethods = {
         buttonSeconds != null &&
         buttonSeconds !== markSeconds
       ) {
-        const link = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "path"
-        );
-        link.setAttribute("class", "clock-event-clamp-link");
-        link.setAttribute("fill", "none");
-        link.dataset.eventId = event.id;
-        overlay.appendChild(link);
+        const link = marks.node(`clamp:${event.id}`, "path", {
+          class: "clock-event-clamp-link", fill: "none", "data-event-id": event.id,
+        });
         this._clockEventClampLinkEls.push(link);
       }
     }
+
+    marks.finish();
 
     // Year-scrub patch only refreshes path/marks — recreating sun chrome here
     // would replace _clockSunEl with a detached node and skip spoke layout.
@@ -813,7 +796,7 @@ export const dialSkyMethods = {
     // otherwise paints the path on top of the fill; HTML outline is separate).
     if (!includeSun) {
       const dayGroup = overlay.querySelector(".clock-sun-day-group");
-      if (dayGroup) {
+      if (dayGroup && dayGroup !== overlay.lastChild) {
         overlay.appendChild(dayGroup);
       }
       return;
