@@ -104,3 +104,49 @@ export function patchInPlace(target, source) {
   }
   return structuredClone(source);
 }
+
+
+/** Merge a scoped durable catalog response; omitted requested IDs were deleted. */
+export function mergeCatalogPatch(catalog, patch) {
+  if (!patch.partial) return patch;
+  const merge = (name, ids) => {
+    const requested = new Set(patch[ids]);
+    const updates = new Map(patch[name].map(item => [item.id, item]));
+    const result = [];
+    for (const item of catalog[name] || []) {
+      if (!requested.has(item.id)) result.push(item);
+      else if (updates.has(item.id)) result.push(updates.get(item.id));
+      updates.delete(item.id);
+    }
+    return [...result, ...updates.values()];
+  };
+  return {
+    ...catalog,
+    scenes: merge("scenes", "scene_ids").sort((a, b) => (() => { const left = (a.scene_name || "").toLowerCase(), right = (b.scene_name || "").toLowerCase(); return left < right ? -1 : left > right ? 1 : 0; })()),
+    variables: merge("variables", "variable_ids"),
+    themes: merge("themes", "theme_ids"),
+  };
+}
+
+/** Serialize refreshes and coalesce same-turn notices without losing queued saves. */
+export function createCatalogRefresher(refresh) {
+  const pending = new Map();
+  let running;
+  return event => {
+    pending.set(`${event.kind}:${event.id || ""}`, event);
+    if (!running) {
+      running = Promise.resolve().then(async () => {
+        try {
+          while (pending.size) {
+            const events = [...pending.values()];
+            pending.clear();
+            await refresh(events);
+          }
+        } finally {
+          running = undefined;
+        }
+      });
+    }
+    return running;
+  };
+}

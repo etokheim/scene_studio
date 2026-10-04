@@ -6,7 +6,7 @@ import {
   buildClientSunDay,
   resampleLightsForEvents,
 } from "./client_solar.js";
-import { mergeFields, patchInPlace, railCatalogChanges, reconcileSaveResponse, useSavedField } from "./collaboration.js";
+import { createCatalogRefresher, mergeCatalogPatch, mergeFields, patchInPlace, railCatalogChanges, reconcileSaveResponse, useSavedField } from "./collaboration.js";
 import {
   draftRgb,
   draftWheelMode,
@@ -68,6 +68,7 @@ import {
   LANDING_CSS,
   PALETTE_RANDOMIZE_ICON,
   renderLanding,
+  renderSceneCard,
   renderListStageEmpty,
   renderSceneUsed,
   renderPaletteUsed,
@@ -7326,17 +7327,20 @@ class SceneStudioPanel extends HTMLElement {
     const scroll = rail.querySelector('.area-rail-body:not([hidden])');
     const scrollTab = scroll?.dataset.tab || "scenes";
     const scrollTop = scroll?.scrollTop || 0;
-    const replacement = renderLanding(this, { includeStage: false }).querySelector(".area-rail");
+    const replacement = changes.rebuild || changes.sharedChanged
+      ? renderLanding(this, { includeStage: false }).querySelector(".area-rail") : null;
     if (!changes.rebuild) {
       // Keep the rail, its scroll container, and any focused control mounted.
       this._roomPreviewSwitch = rail.querySelector(".area-rail-body[data-tab=\"scenes\"] ha-switch");
       const selector = ".scene-card[data-scene-id], .scene-card[data-item-id], .var-chip[data-item-id]";
       const existingCards = [...rail.querySelectorAll(selector)];
-      const updatedCards = [...replacement.querySelectorAll(selector)];
+      const updatedCards = replacement ? [...replacement.querySelectorAll(selector)] : [];
       for (let index = 0; index < existingCards.length; index += 1) {
         const oldCard = existingCards[index];
-        const newCard = updatedCards[index];
         const sceneId = oldCard.dataset.sceneId;
+        const newCard = replacement ? updatedCards[index]
+          : changes.sceneIds.has(sceneId)
+            ? renderSceneCard(this, this._items.find(item => item.id === sceneId)).querySelector(".scene-card") : null;
         if (sceneId && !changes.sharedChanged && !changes.sceneIds.has(sceneId)) continue;
         if (!sceneId && !changes.sharedChanged) continue;
         const oldHost = oldCard.closest(".scene-card-slot") || oldCard.closest(".var-row > div");
@@ -7512,16 +7516,26 @@ class SceneStudioPanel extends HTMLElement {
     scroll.prepend(banner);
   }
 
-  async _receiveSavedChange(event) {
+  _receiveSavedChange(event) {
+    this._catalogRefresher ||= createCatalogRefresher(events => this._refreshSavedChanges(events));
+    return this._catalogRefresher(event);
+  }
+
+  async _refreshSavedChanges(events) {
     const generation = ++this._collabRefreshGeneration;
     try {
-      const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      const scoped = events.every(event => event.id && ["scene", "theme", "variable"].includes(event.kind));
+      const response = await this._hass.callWS(scoped
+        ? { type: `${DOMAIN}/catalog_changes`, changes: events.map(({ kind, id }) => ({ kind, id })) }
+        : { type: `${DOMAIN}/list` });
+      const payload = mergeCatalogPatch({ scenes: this._items, variables: this._variables,
+        themes: this._themes, floors: this._floors, settings: this._settings }, response);
       if (!this.isConnected || generation !== this._collabRefreshGeneration) return;
       const before = this._sceneBase;
       const openId = this._view === "edit" ? this._editId : null;
       const saved = openId && (payload.scenes || []).find((item) => item.id === openId);
       this._applyAreaCatalog(payload);
-      if (event.kind === "settings") this._refreshDuskVisuals();
+      if (events.some(event => event.kind === "settings")) this._refreshDuskVisuals();
       if (this._themeDraft?.id) {
         await this._applyRemoteLibrary(
           "theme", this._themeDraft.id,
@@ -7534,7 +7548,7 @@ class SceneStudioPanel extends HTMLElement {
           this._variables.find((item) => item.id === this._variableId) || null
         );
       }
-      if (event.kind === "theme" || event.kind === "variable") {
+      if (events.some(event => event.kind === "theme" || event.kind === "variable")) {
         this._clearPreviewCache();
         this._patchDialFromSession({ applyTheme: true });
         this._refreshInheritedLightDrafts?.();
@@ -11846,7 +11860,7 @@ class SceneStudioPanel extends HTMLElement {
           history.replaceState(null, "", this._hashHref(`theme/${saved.id}`));
         }
       }
-      await this._refreshListItemsSilent();
+      await this._refreshListItemsSilent({ kind: "theme", id: saved.id });
       if (this._themeDraft) {
         this._syncThemePreviewSurfaces();
       }
@@ -11855,9 +11869,10 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
-  async _refreshListItemsSilent() {
+  async _refreshListItemsSilent(change) {
     try {
-      const payload = await this._hass.callWS({ type: `${DOMAIN}/list` });
+      const response = await this._hass.callWS({ type: `${DOMAIN}/catalog_changes`, changes: [change] });
+      const payload = mergeCatalogPatch({ scenes: this._items, variables: this._variables, themes: this._themes }, response);
       this._items = payload?.scenes || this._items;
       this._themes = payload?.themes || this._themes;
       this._variables = payload?.variables || this._variables;

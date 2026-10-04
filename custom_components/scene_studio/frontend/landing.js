@@ -2025,7 +2025,7 @@ function appendCardPalette(body, palette, catalog) {
   }
 }
 
-function renderSceneCard(panel, scene) {
+export function renderSceneCard(panel, scene) {
   const slot = document.createElement("div");
   slot.className = "scene-card-slot";
   if (scene.disabled) {

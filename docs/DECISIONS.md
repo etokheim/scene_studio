@@ -915,3 +915,10 @@ CSS and fill painting share those constants (145px client height), avoiding
 per-tile geometry reads after style writes. Dial scrubs/morphs paint light values
 once and retain time/reset/play/source controls; source controls refresh on data
 or selection changes. This preserves the fill ramp, pixels and animation timing.
+
+Collaboration refreshes use admin-only scoped catalog patches for scene/theme/
+variable notices. Requested IDs missing from a patch mean deletion. Palette-slot
+references are followed transitively before resolving affected scene cards. Full
+snapshots remain for reconnect, settings, area operations and reset. Refreshes
+are serialized; notices received in flight are drained, not discarded. Existing
+Library ordering and unrelated rail cards remain mounted for scene-only patches.

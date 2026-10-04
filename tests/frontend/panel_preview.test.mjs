@@ -265,7 +265,7 @@ test("collaborative scene saves refresh the open event editor without resetting 
   const saved = { kind: "circadian", overrides: { "light.a": { dawn: { brightness: 80 } } } };
   let refreshes = 0;
   const panel = {
-    isConnected: true, _collabRefreshGeneration: 0, _view: "edit", _editId: "s",
+    isConnected: true, _collabRefreshGeneration: 0, _refreshSavedChanges: methods._refreshSavedChanges, _view: "edit", _editId: "s",
     _sceneBase: base, _formData: structuredClone(base), _sceneRevision: "old",
     _sidebarEventId: "dawn", _legendSelectedIds: new Set(["light.a"]),
     _hass: { callWS: async () => ({ scenes: [{ id: "s", revision: "new", form: saved }] }) },

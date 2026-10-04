@@ -26,6 +26,7 @@ from .const import (
     DATA_ENTITIES,
     DATA_STORE,
     DOMAIN,
+    VARIABLE_REF,
 )
 from .editor_events import EDITOR_CHANGED_SIGNAL as _CHANGED_SIGNAL
 from .editor_events import SETTINGS_CHANGED_SIGNAL
@@ -50,6 +51,7 @@ _LOGGER = logging.getLogger(__name__)
 def async_setup_websocket(hass: HomeAssistant) -> None:
     """Register websocket commands."""
     websocket_api.async_register_command(hass, ws_list)
+    websocket_api.async_register_command(hass, ws_catalog_changes)
     websocket_api.async_register_command(hass, ws_subscribe_changes)
     websocket_api.async_register_command(hass, ws_get)
     websocket_api.async_register_command(hass, ws_save)
@@ -211,6 +213,91 @@ def _list_payload(hass: HomeAssistant) -> dict[str, Any]:
         "floors": _area_tree(hass),
         "settings": dict(store.settings),
     }
+
+
+def _catalog_changes_payload(hass: HomeAssistant, changes: list[dict]) -> dict:
+    """Resolve changed items and transitive preset dependents, including deletions."""
+    store = _store(hass)
+    ids = {
+        kind: {c["id"] for c in changes if c["kind"] == kind}
+        for kind in ("scene", "theme", "variable")
+    }
+    variables = set(ids["variable"])
+
+    def references(value: Any, targets: set[str]) -> bool:
+        if isinstance(value, dict):
+            return any(
+                (
+                    key in (VARIABLE_REF, "palette_id")
+                    and isinstance(child, str)
+                    and child in targets
+                )
+                or references(child, targets)
+                for key, child in value.items()
+            )
+        if isinstance(value, list):
+            return any(references(child, targets) for child in value)
+        return False
+
+    # Palette slots can refer to colors; retain the transitive closure so a
+    # changed color also refreshes scenes using a referencing palette/theme.
+    while True:
+        expanded = variables | {
+            key for key, item in store.variables.items() if references(item, variables)
+        }
+        if expanded == variables:
+            break
+        variables = expanded
+    themes = ids["theme"] | {
+        key for key, item in store.themes.items() if references(item, variables)
+    }
+    scenes = ids["scene"] | {
+        key
+        for key, item in store.scenes.items()
+        if item.get("theme_id") in themes or references(item, variables)
+    }
+    return {
+        "partial": True,
+        "scene_ids": sorted(scenes),
+        "variable_ids": sorted(ids["variable"]),
+        "theme_ids": sorted(ids["theme"]),
+        "scenes": [
+            _scene_payload(hass, store.scenes[key])
+            for key in sorted(scenes)
+            if key in store.scenes
+        ],
+        "variables": [
+            _revisioned(store.variables[key])
+            for key in sorted(ids["variable"])
+            if key in store.variables
+        ],
+        "themes": [
+            _revisioned(store.themes[key])
+            for key in sorted(ids["theme"])
+            if key in store.themes
+        ],
+    }
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/catalog_changes",
+        vol.Required("changes"): vol.All(
+            [
+                {
+                    vol.Required("kind"): vol.In(("scene", "theme", "variable")),
+                    vol.Required("id"): vol.All(str, vol.Length(min=1)),
+                }
+            ],
+            vol.Length(min=1),
+        ),
+    }
+)
+@websocket_api.require_admin
+@callback
+def ws_catalog_changes(hass, connection, msg) -> None:
+    """Admin-only catalog patches; full list remains the reconnect snapshot."""
+    connection.send_result(msg["id"], _catalog_changes_payload(hass, msg["changes"]))
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list"})

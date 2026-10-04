@@ -89,3 +89,43 @@ test("event brightness transforms conflict atomically while separate light field
   assert.equal(result.value.overrides["light.a"].dawn.brightness, 70);
   assert.equal(result.value.event_palettes.dawn.brightness_adjustment.ceiling, 128);
 });
+
+const { mergeCatalogPatch, createCatalogRefresher } = await import("../../custom_components/scene_studio/frontend/collaboration.js");
+
+test("scoped catalog patches retain unrelated objects and remove deleted items", () => {
+  const a = { id: "a", scene_name: "A" }, b = { id: "b", scene_name: "B" };
+  const catalog = { scenes: [a, b], variables: [{ id: "v" }], themes: [], floors: [{ id: "room" }] };
+  const updated = { ...a, scene_name: "Changed" };
+  const next = mergeCatalogPatch(catalog, { partial: true, scene_ids: ["a"], variable_ids: [], theme_ids: [], scenes: [updated], variables: [], themes: [] });
+  assert.equal(next.scenes.find(s => s.id === "b"), b);
+  assert.equal(next.floors, catalog.floors);
+  const deleted = mergeCatalogPatch(next, { partial: true, scene_ids: ["a"], variable_ids: ["v"], theme_ids: [], scenes: [], variables: [], themes: [] });
+  assert.deepEqual(deleted.scenes, [b]);
+  assert.deepEqual(deleted.variables, []);
+});
+
+test("refresh bursts coalesce and notices during an in-flight request are drained", async () => {
+  const batches = []; let release;
+  const refresh = createCatalogRefresher(async events => {
+    batches.push(events);
+    if (batches.length === 1) await new Promise(resolve => { release = resolve; });
+  });
+  const waiting = refresh({ kind: "scene", id: "a", action: "save" });
+  refresh({ kind: "scene", id: "a", action: "delete" });
+  refresh({ kind: "theme", id: "t" });
+  await Promise.resolve();
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0][0].action, "delete");
+  refresh({ kind: "scene", id: "b" });
+  refresh({ kind: "catalog", action: "resync" });
+  release(); await waiting;
+  assert.deepEqual(batches[1].map(e => e.kind), ["scene", "catalog"]);
+  await refresh({ kind: "scene", id: "c" });
+  assert.equal(batches.length, 3);
+});
+
+test("updating an existing shared item preserves library order", () => {
+  const variables = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const patch = { partial: true, scenes: [], scene_ids: [], themes: [], theme_ids: [], variable_ids: ["b"], variables: [{ id: "b", name: "New" }] };
+  assert.deepEqual(mergeCatalogPatch({ scenes: [], variables, themes: [] }, patch).variables.map(v => v.id), ["a", "b", "c"]);
+});
