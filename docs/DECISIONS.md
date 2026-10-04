@@ -922,3 +922,12 @@ references are followed transitively before resolving affected scene cards. Full
 snapshots remain for reconnect, settings, area operations and reset. Refreshes
 are serialized; notices received in flight are drained, not discarded. Existing
 Library ordering and unrelated rail cards remain mounted for scene-only patches.
+
+Localized store mutations declare their write set and snapshot only those items;
+settings and retained area names remain small whole-field snapshots. Insertions
+and deletions distinguish absent keys from stored values. Reset, migration,
+auto-configure and area transactions retain full snapshots. The mutation lock,
+revision merge, durable save and failure rollback ordering remain unchanged.
+Serialization remains on HA's event loop: moving it to a worker needs a separate
+immutability audit. Atomic disk writes intentionally take precedence over small-
+store write latency; the scoped snapshot removes the measured catalog-size cost.

@@ -16,7 +16,8 @@ from custom_components.scene_studio.store import SceneStudioStore
 @pytest.mark.parametrize(
     "error", [WriteError("disk full"), SerializationError("bad JSON")]
 )
-def test_actual_storage_failure_rolls_back_and_allows_retry(tmp_path, error):
+@pytest.mark.parametrize("scoped", [False, True])
+def test_actual_storage_failure_rolls_back_and_allows_retry(tmp_path, error, scoped):
     async def run():
         hass = HomeAssistant(str(tmp_path))
         store = SceneStudioStore(hass)
@@ -38,7 +39,8 @@ def test_actual_storage_failure_rolls_back_and_allows_retry(tmp_path, error):
             )
             with boundary, pytest.raises(HomeAssistantError, match="Could not persist"):
                 await store._async_mutate(  # pylint: disable=protected-access
-                    lambda: store.scenes["room"].update(scene_name="After")
+                    lambda: store.scenes["room"].update(scene_name="After"),
+                    scope={"scenes": ["room"]} if scoped else None,
                 )
                 completed.append(True)
         assert not completed
