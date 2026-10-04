@@ -935,3 +935,31 @@ store write latency; the scoped snapshot removes the measured catalog-size cost.
 ## Panel stylesheet ownership
 
 `frontend/panel_styles.js` owns the shadow stylesheet, retaining its original rule order and component-style tail. `panel_constants.js` is the shared source of geometry/timing values used by both styles and behavior. `panel.js` mounts the stylesheet; it does not own CSS. The extraction preserves the evaluated stylesheet, including whitespace, and introduces no build step.
+
+## Explicit frontend method owners
+
+The approved split keeps panel state and orchestration in `SceneStudioPanel`.
+History, catalog/autosave, dialogs, Library and event editing, preview control,
+timeline chrome and dial layers are explicit plain-module method owners. They
+retain the original panel receiver and method bodies; registration rejects
+duplicate owners before installing any methods. This gives readable boundaries
+without changing callbacks, timing or introducing a framework/inheritance chain.
+See `docs/FRONTEND.md` for the responsibility map.
+
+## Retained dial SVG frames and backend boundaries
+
+Measured date morphs repeatedly recreated solar marks and brightness-gradient
+stops. Painter-local frames now retain those nodes, updating the same attributes
+and reconciling paint order only when topology changes. Outgoing and incoming
+roots have independent frame pools. Unchanged labels keep their text nodes.
+Timing, samples, colors and light transitions are unchanged. Geometry parity
+and zero-mutation tests cover this boundary; measurements are in
+`docs/PERFORMANCE.md`.
+
+Keep activation serialization: one pending context and ownership transfer rely
+on its critical section, and actual sandbox handler measurements do not justify
+weakening it. Keep event-loop store serialization until saved records are
+immutable or executor completion is explicitly cancellation-safe; a transaction
+lock alone cannot prevent an unfinished serializer from racing later mutation
+or rollback. Avoid a full
+on-loop copy that restores the snapshot cost already removed.
