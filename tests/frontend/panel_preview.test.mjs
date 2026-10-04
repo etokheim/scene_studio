@@ -394,16 +394,18 @@ test("Select all before event selection uses the current preview instead of a nu
 
 test("time and sun stay in a dedicated row after Play and preset controls", () => {
   class Element {
-    constructor() { this.children = []; }
-    append(...nodes) { this.children.push(...nodes); }
-    replaceChildren(...nodes) { this.children = nodes; }
+    constructor() { this.children = []; this.parentElement = null; }
+    append(...nodes) { for (const n of nodes) this.insertBefore(n, null); }
     setAttribute() {}
     removeAttribute() {}
-    querySelector() { return this.children.find(node => node.className === "scene-used") || null; }
-    insertBefore(node, target) { this.children = this.children.filter(child => child !== node); this.children.splice(this.children.indexOf(target), 0, node); }
+    get firstElementChild() { return this.children[0] || null; }
+    get nextSibling() { return this.parentElement?.children[this.parentElement.children.indexOf(this) + 1] || null; }
+    querySelector(selector) { const classes = selector.split(",").map(s => s.trim().split(".").pop()); return this.children.find(node => classes.includes(node.className)) || null; }
+    insertBefore(node, target) { node.remove(); const i = target ? this.children.indexOf(target) : this.children.length; this.children.splice(i, 0, node); node.parentElement = this; }
+    remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(n => n !== this); this.parentElement = null; }
   }
   globalThis.document = { createElement: () => new Element() };
-  const readout = new Element(), used = new Element(), play = new Element(); used.className = "scene-used";
+  const readout = new Element(), used = new Element(), play = new Element(); used.className = "scene-used"; play.className = "sun-hover-play-split";
   const panel = { _hoverReadout: readout, _updateLightNameBrightness() {}, _canPlayScenePreview: () => true,
     _ensureScenePlayButton: () => play, _syncSceneUsed: () => readout.append(used), _syncNarrowPlayAction() {} };
   methods._fillHoverReadout.call(panel, 12300, { hovering: false });
@@ -411,6 +413,16 @@ test("time and sun stay in a dedicated row after Play and preset controls", () =
   assert.equal(readout.children[1], used);
   assert.equal(readout.children[2].className, "sun-time-row");
   assert.deepEqual(readout.children[2].children.map(node => node.className), ["sun-hover-time", "sun-hover-elev", "sun-hover-reset-slot"]);
+  const nodes = [...readout.children];
+  const labels = [...nodes[2].children];
+  let paints = 0;
+  panel._updateLightNameBrightness = () => paints++;
+  panel._syncSceneUsed = () => { throw new Error("frame must retain source controls"); };
+  methods._fillHoverReadout.call(panel, 12360, { hovering: true, paintLights: false });
+  assert.deepEqual(readout.children, nodes);
+  assert.deepEqual(nodes[2].children, labels);
+  assert.equal(paints, 0);
+  assert.equal(labels[0].textContent, "03:26");
   delete globalThis.document;
 });
 

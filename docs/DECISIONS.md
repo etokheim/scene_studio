@@ -909,3 +909,9 @@ propagating persistence error: HA Store otherwise logs and suppresses those
 errors, bypassing transaction rollback and allowing premature success notices.
 Current-store writes are atomic so failed writes retain the previous disk data.
 Tests exercise HA's actual write boundary, including recovery on the next save.
+
+Light tiles have a fixed 135px content height and 5px padding at every breakpoint.
+CSS and fill painting share those constants (145px client height), avoiding
+per-tile geometry reads after style writes. Dial scrubs/morphs paint light values
+once and retain time/reset/play/source controls; source controls refresh on data
+or selection changes. This preserves the fill ramp, pixels and animation timing.

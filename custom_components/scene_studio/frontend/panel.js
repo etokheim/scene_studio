@@ -17477,7 +17477,7 @@ class SceneStudioPanel extends HTMLElement {
       this._syncEditorChrome();
       this._ensureHoverReadout();
       this._syncYearScrubLayout();
-      this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false });
+      this._fillHoverReadout(this._idleReadoutSeconds(), { hovering: false, paintLights: false });
       this._syncSceneUsed();
       return;
     }
@@ -17544,8 +17544,8 @@ class SceneStudioPanel extends HTMLElement {
     }
   }
 
-  _fillHoverReadout(seconds, { hovering }) {
-    this._updateLightNameBrightness(seconds);
+  _fillHoverReadout(seconds, { hovering, paintLights = true }) {
+    if (paintLights) this._updateLightNameBrightness(seconds);
     const readout = this._hoverReadout;
     if (!readout) {
       return;
@@ -17570,42 +17570,54 @@ class SceneStudioPanel extends HTMLElement {
     const curve = this._sunPath?.curve;
     const elev = curve ? interpolateElevation(curve, seconds) : null;
     const sunLabel = elev == null ? "" : `Sun ${elev.toFixed(1)}°`;
-    readout.replaceChildren();
-    const time = document.createElement("span");
-    time.className = "sun-hover-time";
-    time.textContent = timeLabel;
-    const sun = document.createElement("span");
-    sun.className = "sun-hover-elev";
-    sun.textContent = sunLabel;
-    // Always reserve the reset slot so time/° do not shift when sticky.
-    const resetSlot = document.createElement("span");
-    resetSlot.className = "sun-hover-reset-slot";
-    if (sticky && this._isDialView()) {
-      const reset = document.createElement("button");
-      reset.type = "button";
-      reset.className = "sun-hover-reset";
-      reset.title = "Reset to now";
-      reset.setAttribute("aria-label", "Reset sun to current time");
+    let timeRow = readout.querySelector(":scope > .sun-time-row");
+    const firstPaint = !timeRow;
+    if (!timeRow) {
+      timeRow = document.createElement("div");
+      timeRow.className = "sun-time-row";
+      const time = document.createElement("span");
+      time.className = "sun-hover-time";
+      const sun = document.createElement("span");
+      sun.className = "sun-hover-elev";
+      const resetSlot = document.createElement("span");
+      resetSlot.className = "sun-hover-reset-slot";
+      timeRow.append(time, sun, resetSlot);
+      readout.append(timeRow);
+    }
+    const time = timeRow.querySelector(".sun-hover-time");
+    const sun = timeRow.querySelector(".sun-hover-elev");
+    if (time.textContent !== timeLabel) time.textContent = timeLabel;
+    if (sun.textContent !== sunLabel) sun.textContent = sunLabel;
+    const resetSlot = timeRow.querySelector(".sun-hover-reset-slot");
+    const reset = resetSlot.firstElementChild;
+    const wantReset = sticky && this._isDialView();
+    if (wantReset && !reset) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "sun-hover-reset";
+      button.title = "Reset to now";
+      button.setAttribute("aria-label", "Reset sun to current time");
       const icon = document.createElement("ha-icon");
       icon.setAttribute("icon", "mdi:restore");
-      reset.appendChild(icon);
-      reset.addEventListener("click", (ev) => {
+      button.appendChild(icon);
+      button.addEventListener("click", (ev) => {
         ev.stopPropagation();
         this._resetClockSunToNow();
       });
-      resetSlot.appendChild(reset);
+      resetSlot.appendChild(button);
+    } else if (!wantReset && reset) {
+      reset.remove();
     }
-    const timeRow = document.createElement("div");
-    timeRow.className = "sun-time-row";
-    timeRow.append(time, sun, resetSlot);
     if (this._canPlayScenePreview()) {
-      readout.append(this._ensureScenePlayButton(), timeRow);
+      const play = this._ensureScenePlayButton();
+      if (play.parentElement !== readout) readout.insertBefore(play, timeRow);
     } else {
-      readout.append(timeRow);
+      readout.querySelector(":scope > .sun-hover-play-split")?.remove();
     }
-    this._syncSceneUsed();
-    const used = readout.querySelector(".scene-used, .library-used-by");
-    if (used) readout.insertBefore(used, timeRow);
+    // Preset/usage controls refresh on data and selection changes, not each frame.
+    if (firstPaint) this._syncSceneUsed();
+    const used = readout.querySelector(":scope > .scene-used, :scope > .library-used-by");
+    if (used && used.nextSibling !== timeRow) readout.insertBefore(used, timeRow);
     this._syncNarrowPlayAction();
   }
 
@@ -19457,7 +19469,7 @@ class SceneStudioPanel extends HTMLElement {
       this._hoverSeconds = seconds;
       this._clockStickySeconds = seconds;
       this._applyClockSunAppearance(seconds);
-      this._fillHoverReadout(seconds, { hovering: true });
+      this._fillHoverReadout(seconds, { hovering: true, paintLights: false });
       this._scheduleScenePreviewApply({
         transition: SCENE_PLAY_TRANSITION_SEC,
       });
@@ -19740,7 +19752,7 @@ class SceneStudioPanel extends HTMLElement {
     if (!morphing) this._placeLegendModeGroups(this._clockLegendEl?.querySelector(".light-tiles"));
     this._applyClockSunAppearance(seconds, { skipHorizonGlow: morphing });
     if (this._hoverReadout) {
-      this._fillHoverReadout(seconds, { hovering: false });
+      this._fillHoverReadout(seconds, { hovering: false, paintLights: false });
     }
     return true;
   }

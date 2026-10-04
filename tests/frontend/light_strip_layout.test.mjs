@@ -35,20 +35,20 @@ test("Select all stays first after animation completion and interruption", () =>
   finishLightStripLayout(root); assert.deepEqual(root.children, [all, group]);
 });
 
-test("unchanged tile painting retains labels and styles, but selection and resize still update", async () => {
+test("fixed-height tile painting retains labels/styles without reading layout", async () => {
   const { paintLightTile } = await import("../../custom_components/scene_studio/frontend/light_tiles.js");
   let writes = 0, labelWrites = 0;
   const style = { setProperty: () => writes++ };
   const classes = new Set();
   const classList = { toggle: (key, on) => on ? classes.add(key) : classes.delete(key) };
   const label = { get textContent() { return this.value; }, set textContent(v) { this.value = v; labelWrites++; } };
-  const tile = { clientHeight: 135, dataset: { fillReady: "1" }, style, classList };
+  const tile = { get clientHeight() { throw new Error("painting must not read layout"); }, dataset: { fillReady: "1" }, style, classList };
   const selector = { style, classList, querySelector: key => key === ".simple-light-tile" ? tile : null, querySelectorAll: () => [label] };
   const look = { rgb: [255, 120, 0], fillPct: 40, selected: true };
   paintLightTile(selector, look); const initial = writes;
   for (let i = 0; i < 30; i++) paintLightTile(selector, { ...look, selected: true });
   assert.equal(writes, initial); assert.equal(labelWrites, 1); assert.ok(classes.has("active"));
-  tile.clientHeight = 150; paintLightTile(selector, look); assert.ok(writes > initial);
+  paintLightTile(selector, { ...look, selected: false }); assert.ok(writes > initial);
   paintLightTile(selector, { ...look, brightnessLabel: "On" }); assert.equal(label.value, "On");
 });
 
@@ -57,7 +57,7 @@ test("Select all uses the shared gray default and restores it after selection", 
   const values = new Map();
   const style = { setProperty: (key, value) => values.set(key, value) };
   const classList = { toggle() {} };
-  const tile = { clientHeight: 135, dataset: { fillReady: "1" }, style, classList };
+  const tile = { get clientHeight() { throw new Error("painting must not read layout"); }, dataset: { fillReady: "1" }, style, classList };
   const selector = { style, classList, querySelector: key => key === ".simple-light-tile" ? tile : null, querySelectorAll: () => [] };
   const look = { rgb: [255, 255, 255], fillPct: 50, selected: false };
   paintSelectAllTile(selector, look);
