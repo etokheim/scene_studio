@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
 ### Changed
 
+- Dial previews do less repeated work while you move through the day, keeping the same motion, colors, and fade timing.
+- Saving an edit refreshes the changed scene or preset and its dependents instead of fetching the whole library. Small saves also avoid copying unrelated scenes for rollback.
+
 ### Fixed
+
+- A storage failure now reaches the editor instead of looking like a successful save. Failed changes roll back, and other editors are notified only after the save succeeds.
+- Light-tile brightness painting uses the tiles' fixed dimensions without repeatedly measuring their height; unchanged dial labels and controls stay in place.
 
 ## [6.1.0] - 2026-10-03
 
