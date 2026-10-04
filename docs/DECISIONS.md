@@ -931,3 +931,7 @@ revision merge, durable save and failure rollback ordering remain unchanged.
 Serialization remains on HA's event loop: moving it to a worker needs a separate
 immutability audit. Atomic disk writes intentionally take precedence over small-
 store write latency; the scoped snapshot removes the measured catalog-size cost.
+
+## Panel stylesheet ownership
+
+`frontend/panel_styles.js` owns the shadow stylesheet, retaining its original rule order and component-style tail. `panel_constants.js` is the shared source of geometry/timing values used by both styles and behavior. `panel.js` mounts the stylesheet; it does not own CSS. The extraction preserves the evaluated stylesheet, including whitespace, and introduces no build step.
