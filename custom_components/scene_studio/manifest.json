@@ -4,7 +4,7 @@
   "config_flow": true,
   "documentation": "https://github.com/etokheim/scene_studio/blob/master/README.md",
   "issue_tracker": "https://github.com/etokheim/scene_studio/issues",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "requirements": [],
   "ssdp": [],
   "zeroconf": [],

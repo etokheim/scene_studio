@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+## [6.1.1] - 2026-10-04
+
 ### Changed
 
 - Dial previews do less repeated work while you move through the day, keeping the same motion, colors, and fade timing.
